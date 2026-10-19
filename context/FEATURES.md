@@ -1,6 +1,6 @@
 # Features and acceptance checks
 
-Build order: F1, F2, F4, F3, F5, then F6. F2 and F4 are the demo. Cut F5 and F6 first if time is short.
+Build order: F1, F2, F4, F7, F3, F5, then F6. F2 and F4 are the demo. Cut F5 and F6 first if time is short.
 
 ## F1. Data layer
 - Pull the last 12 months of 311 noise complaints and crashes, keeping only rows with coordinates.
@@ -34,3 +34,6 @@ Build order: F1, F2, F4, F3, F5, then F6. F2 and F4 are the demo. Cut F5 and F6 
 - A time-of-day slider.
 - A "Data caveats" panel.
 - [ ] Each one works on 3 test addresses.
+
+## F7. Voice (main)
+Push-to-talk questions and spoken answers on top of the F4 chat. See AI_VOICE.md for the model, the key handling, and the acceptance checks.
