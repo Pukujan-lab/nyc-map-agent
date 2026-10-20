@@ -1,6 +1,6 @@
 import {
   Box,
-  Footprints,
+  Camera,
   MessageSquare,
   SlidersHorizontal,
   Square,
@@ -50,7 +50,10 @@ export function MapHud({ buckets, maxValue, onOpenControls }: MapHudProps) {
               variant="ghost"
               size="sm"
               aria-label="Legend and color ranges"
-              className="h-8 shrink-0 gap-1.5 rounded-full px-2 text-[11px]"
+              // Below `sm` the dock has to carry the street-level button, the
+              // layer switch and navigation in 350 px — the legend is also in
+              // the control drawer, so it steps aside here.
+              className="hidden h-8 shrink-0 gap-1.5 rounded-full px-2 text-[11px] sm:inline-flex"
             >
               <span className="flex items-center gap-0.5" aria-hidden="true">
                 {buckets.map((bucket) => (
@@ -74,51 +77,52 @@ export function MapHud({ buckets, maxValue, onOpenControls }: MapHudProps) {
           </PopoverContent>
         </Popover>
 
-        <Separator orientation="vertical" className="mx-0.5 h-6" />
+        <Separator orientation="vertical" className="mx-0.5 hidden h-6 sm:block" />
 
         <LayerToggle compact />
 
-        <Button
-          type="button"
-          size="icon"
-          variant={tilted ? "default" : "ghost"}
-          aria-label={
-            tilted ? "Flatten the map to north-up" : "Tilt the map into 3D"
-          }
-          aria-pressed={tilted}
-          className="h-8 w-8 shrink-0 rounded-full"
-          onClick={() => {
-            // Leaving a walk already restores north-up; toggling on top of
-            // that would fight the ease that is about to run.
-            if (walking) {
-              stopWalk();
-              return;
+        {/* The tilt is the overhead view's business. Street level is already
+            pitched to the ceiling, so the button would only be able to undo it. */}
+        {walking ? null : (
+          <Button
+            type="button"
+            size="icon"
+            variant={tilted ? "default" : "ghost"}
+            aria-label={
+              tilted ? "Flatten the map to north-up" : "Tilt the map into 3D"
             }
-            setTilted(!tilted);
-          }}
-        >
-          {tilted ? (
-            <Square className="h-4 w-4" />
-          ) : (
-            <Box className="h-4 w-4" />
-          )}
-        </Button>
+            aria-pressed={tilted}
+            className="h-8 w-8 shrink-0 rounded-full"
+            onClick={() => setTilted(!tilted)}
+          >
+            {tilted ? (
+              <Square className="h-4 w-4" />
+            ) : (
+              <Box className="h-4 w-4" />
+            )}
+          </Button>
+        )}
 
+        {/*
+          The headline control: one press puts the camera at eye level and hands
+          you the city to walk through. Named, not an icon alone — a camera icon
+          with no label was invisible to anyone who did not guess at it.
+        */}
         <Button
           type="button"
           size="sm"
           variant={walking ? "default" : "ghost"}
           aria-label={
-            walking ? "Leave street level" : "Walk the street at ground level"
+            walking
+              ? "Leave street level and return to the overhead map"
+              : "Switch to the street-level camera and walk the city"
           }
           aria-pressed={walking}
-          className="h-8 shrink-0 gap-1.5 rounded-full px-2 text-[11px]"
+          className="h-8 shrink-0 gap-1.5 rounded-full px-2.5 text-[11px] font-medium"
           onClick={() => (walking ? stopWalk() : startWalk())}
         >
-          <Footprints className="h-4 w-4" />
-          {/* Named, not just an icon: street level was invisible to anyone who
-              did not guess what footprints meant. */}
-          <span className="hidden sm:inline">Walk</span>
+          <Camera className="h-4 w-4" />
+          Street
         </Button>
 
         <Button
@@ -135,6 +139,7 @@ export function MapHud({ buckets, maxValue, onOpenControls }: MapHudProps) {
         <Button
           type="button"
           size="icon"
+          variant="ghost"
           aria-label="Ask the map"
           className="h-8 w-8 shrink-0 rounded-full"
           onClick={() => setChatOpen(true)}

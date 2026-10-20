@@ -217,7 +217,7 @@ function DetailsBody({
                 onClick={openStreetView}
               >
                 <Camera className="h-3.5 w-3.5" />
-                Street view
+                Street photos
               </Button>
             </div>
           </div>

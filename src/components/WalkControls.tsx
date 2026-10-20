@@ -2,9 +2,9 @@ import type { PointerEvent } from "react";
 import {
   ArrowLeft,
   ArrowRight,
+  Camera,
   ChevronDown,
   ChevronUp,
-  Footprints,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -56,8 +56,9 @@ function HoldButton({
 }
 
 /**
- * The only chrome walk mode adds: a strip that says how to move, and a d-pad for
- * touch, where there is no keyboard to hold down.
+ * The only chrome the street-level camera adds: a strip that says where you are
+ * and how to move, and a d-pad for touch, where there is no keyboard to hold
+ * down.
  */
 export function WalkControls({
   place,
@@ -75,14 +76,19 @@ export function WalkControls({
 
   return (
     <>
-      <div className="pointer-events-none absolute inset-x-0 top-3 z-30 flex justify-center px-3">
+      {/*
+        Top-left rather than top-centre: the data-loading chip lives in the
+        centre, and a window switch while walking must not put the two on top
+        of each other.
+      */}
+      <div className="pointer-events-none absolute left-3 top-3 z-30 flex max-w-[calc(100%-1.5rem)]">
         <div className="pointer-events-auto max-w-full rounded-xl border border-border/70 bg-card/90 py-1.5 pl-3 pr-1 shadow-xl backdrop-blur-md">
           <div className="flex items-center gap-2">
-            <Footprints
+            <Camera
               className="h-3.5 w-3.5 shrink-0 text-primary"
               aria-hidden="true"
             />
-            <span className="text-[11px] font-medium">Walking</span>
+            <span className="text-[11px] font-medium">Street level</span>
             {place ? (
               <>
                 <span aria-hidden="true" className="text-[11px] text-muted-foreground">
@@ -97,7 +103,7 @@ export function WalkControls({
               type="button"
               size="icon"
               variant="ghost"
-              aria-label="Stop walking"
+              aria-label="Leave street level and return to the overhead map"
               className="ml-auto h-7 w-7 shrink-0 rounded-full"
               onClick={onExit}
             >
@@ -114,7 +120,7 @@ export function WalkControls({
               </span>
             ) : null}
             <span className="hidden sm:inline">
-              W/S move · A/D turn · Shift run · Esc to exit
+              W/S move · A/D look · Shift run · Esc to exit
             </span>
             <span className="sm:hidden">Use the pad</span>
           </div>
@@ -123,7 +129,7 @@ export function WalkControls({
 
       <div
         role="group"
-        aria-label="Walk controls"
+        aria-label="Street-level camera controls"
         className="absolute bottom-20 left-3 z-30 grid grid-cols-3 grid-rows-3 gap-1"
       >
         <span />
@@ -133,11 +139,11 @@ export function WalkControls({
           sprint: false,
         })}
         <span />
-        {pad("Turn left", ArrowLeft, { forward: 0, turn: -1, sprint: false })}
+        {pad("Look left", ArrowLeft, { forward: 0, turn: -1, sprint: false })}
         <span aria-hidden="true" className="self-center justify-self-center">
           <span className="block h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
         </span>
-        {pad("Turn right", ArrowRight, { forward: 0, turn: 1, sprint: false })}
+        {pad("Look right", ArrowRight, { forward: 0, turn: 1, sprint: false })}
         <span />
         {pad("Walk backwards", ChevronDown, {
           forward: -1,

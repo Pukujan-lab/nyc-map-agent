@@ -54,6 +54,12 @@ const TILT_PITCH = 62;
 const TILT_MIN_ZOOM = 13.4;
 /** Past this many degrees the map counts as tilted — for the button and the camera. */
 const TILT_EPSILON = 5;
+/**
+ * Coming back up from street level lands on a block-scale overhead rather than
+ * at `WALK_ZOOM`: a flat map at 21 shows ~50 m of ground, which is no map at
+ * all. Only applied when the camera is tighter than this.
+ */
+const WALK_EXIT_ZOOM = 15.5;
 
 type Picked =
   | { kind: "neighborhood"; datum: NeighborhoodDatum }
@@ -225,6 +231,55 @@ export function MapView({
     [blockByKey, ntaIndex, nameByCode, layer],
   );
 
+  /**
+   * `describeAt` changes identity whenever the data does — a finished
+   * aggregation, a layer switch, a new window. Read through a ref so those
+   * changes cannot restart the walk: restarting the enter effect would fly the
+   * camera back to where the walk began, and restarting the loop would drop
+   * whatever keys are held.
+   */
+  const describeAtRef = useRef(describeAt);
+  useEffect(() => {
+    describeAtRef.current = describeAt;
+  }, [describeAt]);
+
+  /** The block grid, held in a ref for the same reason as `describeAt`. */
+  const blocksRef = useRef(model.blocks);
+  useEffect(() => {
+    blocksRef.current = model.blocks;
+  }, [model.blocks]);
+
+  /** Ditto for the picked block — it decides where a walk starts. */
+  const selectedKeyRef = useRef(selectedBlockKey);
+  useEffect(() => {
+    selectedKeyRef.current = selectedBlockKey;
+  }, [selectedBlockKey]);
+
+  /**
+   * The nearest square that actually has records — where a walk starts when the
+   * user pressed the button without picking a block first. Dropping the camera
+   * into the middle of the East River is not a street.
+   */
+  const nearestPopulatedBlock = useCallback(
+    (lat: number, lon: number): [number, number] | null => {
+      const cosLat = Math.max(Math.cos((lat * Math.PI) / 180), 0.01);
+      let best: BlockDatum | null = null;
+      let bestDistance = Number.POSITIVE_INFINITY;
+      for (const block of blocksRef.current) {
+        if (block.value <= 0) continue;
+        const dy = block.center.lat - lat;
+        const dx = (block.center.lon - lon) * cosLat;
+        const distance = dx * dx + dy * dy;
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = block;
+        }
+      }
+      return best ? [best.center.lon, best.center.lat] : null;
+    },
+    [],
+  );
+
   const handleLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
     if (!map) return;
@@ -305,6 +360,9 @@ export function MapView({
 
   const handleMouseMove = useCallback(
     (event: MapLayerMouseEvent) => {
+      // At eye level a hover card would sit on top of the street you are
+      // walking down, and the pavement underfoot is the whole point.
+      if (walking) return;
       const picked = pickAt(event.point.x, event.point.y, event.lngLat);
       const map = mapRef.current?.getMap();
       if (map) {
@@ -315,11 +373,13 @@ export function MapView({
         return { ...picked, x: event.point.x, y: event.point.y };
       });
     },
-    [pickAt],
+    [pickAt, walking],
   );
 
   const handleClick = useCallback(
     (event: MapLayerMouseEvent) => {
+      // A click while walking would open the details sheet over the street.
+      if (walking) return;
       const picked = pickAt(event.point.x, event.point.y, event.lngLat);
       if (!picked) return;
       if (picked.kind === "block") {
@@ -328,7 +388,7 @@ export function MapView({
         selectNta(picked.datum.ntaCode);
       }
     },
-    [pickAt, selectBlock, selectNta],
+    [pickAt, selectBlock, selectNta, walking],
   );
 
   const handleMoveEnd = useCallback(() => {
@@ -362,17 +422,18 @@ export function MapView({
       showBlocks || walking ? "visible" : "none",
     );
     // At eye level a block column is 60–1800 m of wall that you are standing
-    // *inside*, so the prisms flatten into a translucent carpet over the real
-    // street and the basemap's buildings supply the perspective.
+    // *inside*, so the prisms drop to a painted pavement and the basemap's own
+    // buildings supply the city you walk through. A hand's width of height
+    // keeps the pavement off the ground plane, where it would z-fight.
     map.setPaintProperty(
       LAYER_IDS.blocks,
       "fill-extrusion-height",
-      walking ? 0 : ["get", "height"],
+      walking ? 0.5 : ["get", "height"],
     );
     map.setPaintProperty(
       LAYER_IDS.blocks,
       "fill-extrusion-opacity",
-      walking ? 0.5 : 0.8,
+      walking ? 0.3 : 0.8,
     );
     // Same for the picked block's rim: a wall standing above the column from
     // above, a painted curb around the block you are walking through.
@@ -490,11 +551,22 @@ export function MapView({
     if (!ready || !walking) return;
     const map = mapRef.current?.getMap();
     if (!map) return;
+
     const center = map.getCenter();
-    const target: [number, number] = [
-      walkRequest?.lon ?? center.lng,
-      walkRequest?.lat ?? center.lat,
-    ];
+    const picked = selectedKeyRef.current
+      ? blocksRef.current.find((block) => block.key === selectedKeyRef.current)
+      : undefined;
+    const target: [number, number] = walkRequest
+      ? [walkRequest.lon, walkRequest.lat]
+      : picked
+        ? [picked.center.lon, picked.center.lat]
+        : // Standing in the middle of the East River is not a walk, so fall in
+          // on the nearest square that actually has records.
+          (nearestPopulatedBlock(center.lat, center.lng) ?? [
+            center.lng,
+            center.lat,
+          ]);
+
     map.easeTo({
       center: target,
       pitch: WALK_PITCH,
@@ -502,8 +574,10 @@ export function MapView({
       zoom: Math.max(map.getZoom(), WALK_ZOOM),
       duration: reducedMotion ? 0 : 900,
     });
-    setWalkPlace(describeAt(target[1], target[0]));
-  }, [ready, walking, walkRequest, reducedMotion, describeAt]);
+    setWalkPlace(describeAtRef.current(target[1], target[0]));
+    // `describeAt` is deliberately read through a ref: its identity changes
+    // with the data, and re-running this would yank the camera back.
+  }, [ready, walking, walkRequest, reducedMotion, nearestPopulatedBlock]);
 
   // Leaving a walk must not strand the camera nose-down at 85° over a rooftop,
   // so the pitch comes back up on its own — the tilt flag never went true while
@@ -522,6 +596,7 @@ export function MapView({
     map.easeTo({
       pitch: 0,
       bearing: 0,
+      zoom: Math.min(map.getZoom(), WALK_EXIT_ZOOM),
       duration: reducedMotion ? 0 : 700,
     });
   }, [walking, ready, reducedMotion, setTilted]);
@@ -585,17 +660,21 @@ export function MapView({
           input,
           dt,
         );
-        // Pitch is pinned while walking: moving cancels any camera animation in
-        // flight, and a top-down map is not a walk.
+        // Pitch and zoom are both pinned while walking: moving cancels any
+        // camera animation in flight, and if the ease into street level had
+        // only got halfway there the first keypress would otherwise freeze the
+        // camera at rooftop height — a top-down map is not a walk, and neither
+        // is 85° from 100 m up.
         map.jumpTo({
           center: [next.lon, next.lat],
           bearing: next.bearing,
           pitch: WALK_PITCH,
+          zoom: WALK_ZOOM,
         });
         const key = blockKey(next.lat, next.lon).key;
         if (key !== standingOn) {
           standingOn = key;
-          setWalkPlace(describeAt(next.lat, next.lon));
+          setWalkPlace(describeAtRef.current(next.lat, next.lon));
         }
       }
       frame = requestAnimationFrame(tick);
@@ -610,7 +689,9 @@ export function MapView({
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
     };
-  }, [ready, walking, stopWalk, describeAt]);
+    // `describeAt` comes through a ref so a data refresh cannot tear down the
+    // loop and drop the keys the walker is holding.
+  }, [ready, walking, stopWalk]);
 
   useEffect(() => {
     if (!ready || !navCommand) return;
