@@ -48,7 +48,12 @@ export function parseMapScale(value: string | null): MapScale {
 
 export type BucketIndex = 0 | 1 | 2 | 3;
 
-type Rgba = [number, number, number, number];
+export type Rgba = [number, number, number, number];
+
+/** MapLibre paint properties take CSS color strings, not channel tuples. */
+export function rgbaToCss(rgba: Rgba): string {
+  return `rgba(${rgba[0]}, ${rgba[1]}, ${rgba[2]}, ${(rgba[3] / 255).toFixed(3)})`;
+}
 
 interface PaletteEntry {
   label: string;
@@ -144,6 +149,23 @@ export function formatBucketRange(bucket: Bucket): string {
   return `${formatCount(bucket.min)}–${formatCount(bucket.max)}`;
 }
 
+/**
+ * Column height is a *second* reading of the same number the color encodes, so
+ * the four-color legend still works on its own. The square root keeps one
+ * extreme neighborhood from flattening everywhere else into the pavement.
+ */
+export const MIN_COLUMN_METERS = 60;
+export const MAX_COLUMN_METERS = 1800;
+
+export function heightFor(value: number, maxValue: number): number {
+  if (value <= 0) return 0;
+  const ceiling = Math.max(maxValue, 1);
+  const ratio = Math.sqrt(Math.min(value, ceiling) / ceiling);
+  return Math.round(
+    MIN_COLUMN_METERS + ratio * (MAX_COLUMN_METERS - MIN_COLUMN_METERS),
+  );
+}
+
 export interface NeighborhoodDatum {
   id: string;
   ntaCode: string;
@@ -153,6 +175,8 @@ export interface NeighborhoodDatum {
   value: number;
   bucket: BucketIndex;
   fill: Rgba;
+  /** Column height in meters; 0 for areas with no records. */
+  height: number;
   nightShare: number;
   noiseCount: number;
   crashCount: number;
@@ -168,6 +192,8 @@ export interface BlockDatum {
   value: number;
   bucket: BucketIndex;
   fill: Rgba;
+  /** Column height in meters; 0 for squares with no records. */
+  height: number;
   nightCount: number;
   noiseCount: number;
   crashCount: number;
@@ -313,6 +339,10 @@ export function buildMapModel(params: {
 
   const neighborhoodValues = rows.map((row) => row.value);
   const thresholds = thresholdsFor(neighborhoodValues);
+  const neighborhoodMax = neighborhoodValues.reduce(
+    (max, value) => (value > max ? value : max),
+    0,
+  );
 
   const neighborhoods: NeighborhoodDatum[] = [];
   for (const row of rows) {
@@ -326,6 +356,7 @@ export function buildMapModel(params: {
         value: row.value,
         bucket: bucketFor(row.value, thresholds),
         fill: fillFor(row.value, thresholds),
+        height: heightFor(row.value, neighborhoodMax),
         nightShare: row.nightShare,
         noiseCount: row.noiseAgg.count,
         crashCount: row.crashAgg.count,
@@ -347,6 +378,10 @@ export function buildMapModel(params: {
   }
 
   const blockThresholds = thresholdsFor(blockValues);
+  const blockMax = blockValues.reduce(
+    (max, value) => (value > max ? value : max),
+    0,
+  );
   const blocks: BlockDatum[] = blockRows.map(({ key, entry, value }) => ({
     key,
     ntaCode: entry.ntaCode,
@@ -354,6 +389,7 @@ export function buildMapModel(params: {
     value,
     bucket: bucketFor(value, blockThresholds),
     fill: fillFor(value, blockThresholds),
+    height: heightFor(value, blockMax),
     nightCount: entry.nightCount,
     noiseCount: entry.noiseCount,
     crashCount: entry.crashCount,

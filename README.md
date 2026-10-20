@@ -2,9 +2,9 @@
 
 Ask anything about how loud or how dangerous a NYC street is, and watch the answer appear on the map.
 
-Two datasets are joined to 2020 Neighborhood Tabulation Areas in the browser and drawn as flat colored blocks: **311 noise complaints** (`erm2-nwe9`) and **motor vehicle crashes** (`h9gi-nx95`). A chat panel answers in plain language, and every answer moves or highlights the map.
+Two datasets are joined to 2020 Neighborhood Tabulation Areas in the browser and drawn as colored columns: **311 noise complaints** (`erm2-nwe9`) and **motor vehicle crashes** (`h9gi-nx95`). A chat panel answers in plain language, and every answer moves or highlights the map.
 
-The map is deliberately simple: no tilt, no 3D, no rotation. Switch between **Neighborhoods** and **Blocks** (~300 m squares), and read the value off four colors — blue, green, yellow, red — whose ranges are printed in the legend.
+The map opens flat and north-up. Switch between **Neighborhoods** and **Blocks** (~300 m squares), read the value off four colors — blue, green, yellow, red — whose ranges are printed in the legend, then press the box button to tilt the camera and compare column heights. Both encodings come from the same number: color is the bucket, height is a square-root scale of the value.
 
 ![one screen: full-bleed map, control card, legend, chat](context/BRIEF.md)
 
@@ -44,7 +44,7 @@ Socrata SODA ──► src/lib/api/{socrata,noise,crashes,nta}.ts
               TanStack Query ──► localStorage (aggregate only, never rows)
                         │
                         ▼
-   MapStateContext ──► MapView (deck.gl flat fills) + DetailsSheet
+   MapStateContext ──► MapView (MapLibre fill-extrusion) + DetailsSheet
                         ▲
   ChatPanel ──► AgentClient (mock | http) ──► execute.ts ──► same MapStateContext
                         ▲
@@ -53,7 +53,8 @@ Socrata SODA ──► src/lib/api/{socrata,noise,crashes,nta}.ts
 
 - **The join is the real work.** Neither dataset carries a neighborhood code, so `src/lib/geo/ntaIndex.ts` buckets the city into 0.01° (~1.1 km) cells that map to candidate NTAs; each point then ray-casts 1–2 polygons instead of 262. It runs off the main thread so the map stays at 60fps.
 - **Rollup, not raw points.** Per neighborhood we keep counts, a 24-slot hour histogram, month histogram, night and weekend-night counts, top complaint types/descriptors/contributing factors, injuries, deaths and cyclist injuries. The same pass also fills a fixed ~300 m block grid, so the Blocks view needs no extra fetch. ~262 neighborhood rows plus a few thousand block cells, cached; the raw rows are thrown away.
-- **Color, not height.** `src/lib/layers.ts` cuts the non-zero values into quartiles and maps them to four flat colors, so each band covers roughly a quarter of the areas with data. The legend reads its ranges and counts from the same function, so the two cannot drift.
+- **One renderer.** MapLibre draws the columns itself with `fill-extrusion` layers over two GeoJSON sources (`src/lib/map/style.ts`). No deck.gl, no overlay control, no second canvas — so the prisms depth-sort against the basemap and picking goes through `queryRenderedFeatures`, with an O(1) grid/index fallback if a query comes back empty.
+- **Color, then height.** `src/lib/layers.ts` cuts the non-zero values into quartiles and maps them to four colors, so each band covers roughly a quarter of the areas with data. `heightFor()` turns the same value into column meters on a square-root scale. The legend reads its ranges, counts and peak from the same function, so the two cannot drift.
 - **Time windows.** Noise uses the selected window (90 days or 12 months). Crashes always use the **newest 12 months**, because the NYPD dataset lags about four months — a 90-day crash window can be empty. Every surface that shows crash numbers says so.
 - **Nothing is silently dropped.** Points outside every neighborhood land in `unassignedCount`, malformed rows in `malformedCount`, and both are reported in the caveats sheet (Legend → Details).
 

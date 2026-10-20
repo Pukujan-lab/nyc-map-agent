@@ -8,7 +8,8 @@ Project guidance for the NYC Map Agent. Read this before writing code. Product s
 - **React Router** for routing. All routes live in `src/App.tsx`; pages live in `src/pages/`.
 - **Tailwind CSS** for all styling. No CSS-in-JS, no styled-components, no hand-written `.css` files beyond `src/index.css`.
 - **shadcn/ui** (Radix primitives) for every standard control: buttons, dialogs, sheets, tabs, tooltips, selects, sliders, toasts.
-- **deck.gl** (`@deck.gl/core`, `@deck.gl/layers`, `@deck.gl/mapbox`) draws the map through a `MapboxOverlay` registered as a MapLibre control. The map is **flat and north-up** (no extrusion, no pitch, no bearing): neighborhoods and ~300 m block squares are filled with one of four categorical colors. Do **not** wrap the map in `@deck.gl/react`'s `<DeckGL>` — two React render roots over one canvas is the main source of interop bugs.
+- **MapLibre draws the data layers itself.** Neighborhoods and ~300 m block squares are `fill-extrusion` layers on two GeoJSON sources defined in `src/lib/map/style.ts`; heights and colors arrive as feature properties, and updates are `source.setData()` / `setPaintProperty()` calls. There is **no second renderer** — no deck.gl, no `<DeckGL>` wrapper, no overlay control. One canvas, one render pass, correct depth sorting against the basemap.
+- The camera is **north-up and flat on load** (`pitch: 0`), and the user can tilt to 52° with the "3D" button or by right-dragging. `maxPitch` is 60 — never a globe. Tilt state lives in `MapStateContext.tilted`, so the button and the camera cannot disagree.
 - **MapLibre GL + react-map-gl** (`react-map-gl/maplibre`) provides the map canvas and camera control, with OpenStreetMap raster tiles and an "© OpenStreetMap contributors" attribution.
 - **TanStack Query** owns all server state: Socrata fetches, cell/neighborhood aggregates, caching, retries.
 - **Recharts** (via the shadcn `chart` component) for the hour-of-day and breakdown charts.
@@ -21,11 +22,13 @@ Project guidance for the NYC Map Agent. Read this before writing code. Product s
 | Need | Use | Never use |
 | --- | --- | --- |
 | Any UI control | shadcn/ui from `src/components/ui/` | Raw unstyled `<div>` buttons, MUI, Chakra, Ant |
-| Layout, spacing, color, responsive | Tailwind utility classes | inline `style` (except deck.gl/map props), CSS modules |
+| Layout, spacing, color, responsive | Tailwind utility classes | inline `style` (except map/hover-position props), CSS modules |
 | Icons | `lucide-react` | Font Awesome, emoji as icons |
-| Neighborhood / block fills | deck.gl `PolygonLayer` via `MapboxOverlay`, one datum per polygon part | Three.js from scratch, CSS 3D transforms, `@deck.gl/react`, extruded columns |
-| Color encoding | four categorical buckets (blue → green → yellow → red) from quartiles in `src/lib/layers.ts` | continuous gradients, height encoding |
-| Basemap, camera, fly-to | MapLibre + react-map-gl; camera moves go through `MapStateContext.cameraTarget` / `navCommand` → `map.flyTo`/`jumpTo`/`zoomIn` | Google Maps, a hand-rolled canvas renderer, tilting or rotating the camera |
+| Neighborhood / block columns | MapLibre `fill-extrusion` layers declared in `src/lib/map/style.ts`, one GeoJSON feature per polygon part | Three.js from scratch, CSS 3D transforms, deck.gl, a second canvas |
+| Color encoding | four categorical buckets (blue → green → yellow → red) from quartiles in `src/lib/layers.ts` | continuous gradients, color ramps |
+| Column height | `heightFor()` in `src/lib/layers.ts`, a sqrt scale of the same value | a second metric, a hand-rolled scale in a component |
+| Basemap, camera, fly-to | MapLibre + react-map-gl; camera moves go through `MapStateContext.cameraTarget` / `navCommand` → `map.flyTo`/`jumpTo`/`zoomIn` | Google Maps, a hand-rolled canvas renderer |
+| Tilt | `MapStateContext.tilted` → `map.easeTo({ pitch })`, 0° or 52°, `maxPitch` 60 | pitch set from a component, globe projection |
 | Off-main-thread work (paging, spatial join, rollups) | a module Web Worker in `src/lib/geo/` | blocking the main thread, a second dev server |
 | Fetching Socrata / any HTTP | `fetch` inside TanStack Query hooks in `src/lib/api/` | `axios`, raw `useEffect` + `fetch`, SWR |
 | Charts and histograms | Recharts via shadcn `chart` | Chart.js, D3, Highcharts |
@@ -58,7 +61,7 @@ If a task seems to need a library not on this list, prefer the closest listed op
 - Rollups produced per NTA: count, night count (10pm–4am), weekend-night count (Fri/Sat 10pm–4am), 24-slot hour histogram, month histogram, `helicopterMonths`, top types/descriptors/factors, injuries, deaths, cyclists, severity. Plus borough totals and top intersections.
 - The same pass also fills a **fixed ~300 m block grid** (`src/lib/geo/blocks.ts`, `BLOCK_GRID_DEG = 0.003`, key `row:col`) so noise and crashes stack on the same square. Each `BlockCell` carries count, night count, injuries, deaths and cyclists — no per-block type breakdown, because that would multiply the cache for little gain.
 - **Cache the aggregate, never the rows.** `src/lib/cache/aggregateCache.ts` stores the ~262 NTA rows plus the block cells per `dataset:window` in `localStorage`; a repeat visit is instant. Raw rows are discarded after aggregation. Bump `VERSION` whenever the result shape changes.
-- `src/lib/layers.ts` is the only place that turns aggregates into colors: `buildMapModel` computes each area's value, its bucket, and the legend's thresholds together, so the map and the legend can never disagree.
+- `src/lib/layers.ts` is the only place that turns aggregates into colors and heights: `buildMapModel` computes each area's value, its bucket, its column height, and the legend's thresholds together, so the map and the legend can never disagree. Height re-encodes the same number the color does — never a different metric.
 - Rows outside every polygon go to `unassignedCount` and rows that fail zod to `malformedCount`. Both are surfaced in the caveats sheet — never silently dropped.
 
 ## Agent seam

@@ -9,7 +9,7 @@ Ask anything about how loud or how dangerous a NYC street is, and watch the answ
 - Journalists and community boards looking for hotspots
 
 ## Main features
-1. **Block map:** a flat, north-up view of NYC on OpenStreetMap. Every neighborhood — or every ~300 m block — is a colored square, and the four colors (blue, green, yellow, red) band the incident counts from low to high. No tilt, no rotation: pan, zoom, click.
+1. **Block map:** a north-up view of NYC on OpenStreetMap. Every neighborhood — or every ~300 m block — is a colored column, and the four colors (blue, green, yellow, red) band the incident counts from low to high while the column height repeats the same number. It opens flat; one button tilts the camera so the columns can be compared. Pan, zoom, tilt, click.
 2. **AI chat:** questions in plain language get answered with real numbers from the data, and the map moves or filters to show the answer.
 
 ## Demo story (2 minutes)

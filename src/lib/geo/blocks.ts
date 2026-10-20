@@ -31,7 +31,7 @@ export function blockKey(lat: number, lon: number): BlockKey {
   };
 }
 
-/** Closed square ring for one block, ready for deck.gl's PolygonLayer. */
+/** Closed square ring for one block, ready for a GeoJSON polygon. */
 export function blockPolygon(lon: number, lat: number): PolygonRings {
   return [
     [

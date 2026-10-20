@@ -1,4 +1,12 @@
-import { AlertTriangle, LocateFixed, RefreshCw, ZoomIn, ZoomOut } from "lucide-react";
+import {
+  AlertTriangle,
+  Box,
+  LocateFixed,
+  RefreshCw,
+  Square,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -48,6 +56,8 @@ export function MapControls({
     window: windowId,
     scale,
     setScale,
+    tilted,
+    setTilted,
     selectedNtaCode,
     selectNta,
     navigate,
@@ -148,6 +158,23 @@ export function MapControls({
           View
         </span>
         <div className="flex items-center gap-1">
+          <Button
+            type="button"
+            size="icon"
+            variant={tilted ? "default" : "outline"}
+            aria-label={
+              tilted ? "Flatten the map to north-up" : "Tilt the map into 3D"
+            }
+            aria-pressed={tilted}
+            className="h-7 w-7"
+            onClick={() => setTilted(!tilted)}
+          >
+            {tilted ? (
+              <Square className="h-3.5 w-3.5" />
+            ) : (
+              <Box className="h-3.5 w-3.5" />
+            )}
+          </Button>
           <Button
             type="button"
             size="icon"

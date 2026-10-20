@@ -60,8 +60,12 @@ export function Legend({ layer, scale, buckets, maxValue }: LegendProps) {
 
       <p className="mt-1.5 text-[10px] leading-snug text-muted-foreground">
         {scale === "blocks"
-          ? `~300 m blocks · ${formatCount(areasWithData)} with records · peak ${formatCount(maxValue)}`
-          : `Neighborhoods · ${formatCount(areasWithData)} with records · peak ${formatCount(maxValue)}`}
+          ? `~300 m blocks · ${formatCount(areasWithData)} with records`
+          : `Neighborhoods · ${formatCount(areasWithData)} with records`}
+      </p>
+
+      <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
+        Height = {LAYER_METRICS[layer].value} · peak {formatCount(maxValue)}
       </p>
 
       {layer === "combined" ? (

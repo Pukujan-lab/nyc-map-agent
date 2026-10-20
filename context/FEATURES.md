@@ -9,9 +9,10 @@ Build order: F1, F2, F4, F7, F3, F5, then F6. F2 and F4 are the demo. Cut F5 and
 - [ ] The counts match a direct API count for the same filter (within 1%).
 
 ## F2. Block map (main)
-- Flat, north-up fills on an OpenStreetMap basemap: neighborhoods, or ~300 m blocks, colored in four bands (blue → green → yellow → red) cut at the quartiles of the current layer's counts.
-- A layer toggle switches between Noise, Crashes, and Combined. A scale toggle switches Neighborhoods / Blocks. Zoom and reset buttons live in the same card, and the camera never tilts or rotates.
+- Colored columns on an OpenStreetMap basemap, drawn by MapLibre's `fill-extrusion` layers: neighborhoods, or ~300 m blocks, colored in four bands (blue → green → yellow → red) cut at the quartiles of the current layer's counts, with height as a square-root scale of the same value.
+- A layer toggle switches between Noise, Crashes, and Combined. A scale toggle switches Neighborhoods / Blocks. Zoom, tilt and reset buttons live in the same card; the map opens flat and north-up.
 - [ ] All five boroughs load flat, with the legend's four ranges matching the colors on screen.
+- [ ] The tilt button pitches to 52°, the button reads as pressed, and reset returns to flat north-up.
 - [ ] The toggles switch layer and scale.
 - [ ] Hovering over a neighborhood or a block shows its counts.
 

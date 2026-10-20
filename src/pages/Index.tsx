@@ -91,7 +91,7 @@ export default function Index() {
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-background">
-      <MapView model={model} />
+      <MapView model={model} boundaries={data.boundaries} />
 
       <div className="absolute left-3 top-3 z-20 max-w-[calc(100%-4.5rem)]">
         <MapControls

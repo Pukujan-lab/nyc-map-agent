@@ -14,7 +14,7 @@ export interface CameraTarget {
   lon: number;
   lat: number;
   zoom?: number;
-  /** Kept for the `fly_to` tool contract; the map itself stays flat. */
+  /** Omitted means "keep the tilt the user is already looking at". */
   pitch?: number;
   /** Bumped on every request so repeat flights to the same place still fire. */
   nonce: number;
@@ -36,6 +36,8 @@ interface MapState {
   layer: LayerId;
   window: WindowId;
   scale: MapScale;
+  /** True while the camera is pitched; drives the "3D" toggle's pressed state. */
+  tilted: boolean;
   selectedNtaCode: string | null;
   selectedBlockKey: string | null;
   highlightedNtaCodes: string[];
@@ -50,6 +52,7 @@ interface MapStateActions {
   setLayer: (layer: LayerId) => void;
   setWindow: (window: WindowId) => void;
   setScale: (scale: MapScale) => void;
+  setTilted: (tilted: boolean) => void;
   selectNta: (ntaCode: string | null) => void;
   selectBlock: (block: { key: string; ntaCode: string } | null) => void;
   setHighlights: (ntaCodes: string[]) => void;
@@ -72,6 +75,7 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
   const windowId = parseWindowId(searchParams.get("window"));
   const scale = parseMapScale(searchParams.get("scale"));
 
+  const [tilted, setTilted] = useState(false);
   const [selectedNtaCode, setSelectedNtaCode] = useState<string | null>(null);
   const [selectedBlockKey, setSelectedBlockKey] = useState<string | null>(null);
   const [highlightedNtaCodes, setHighlighted] = useState<string[]>([]);
@@ -148,6 +152,7 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
       layer,
       window: windowId,
       scale,
+      tilted,
       selectedNtaCode,
       selectedBlockKey,
       highlightedNtaCodes,
@@ -159,6 +164,7 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
       setLayer,
       setWindow,
       setScale,
+      setTilted,
       selectNta,
       selectBlock,
       setHighlights,
@@ -173,6 +179,7 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
       layer,
       windowId,
       scale,
+      tilted,
       selectedNtaCode,
       selectedBlockKey,
       highlightedNtaCodes,

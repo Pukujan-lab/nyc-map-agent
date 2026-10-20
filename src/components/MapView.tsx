@@ -1,65 +1,56 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import MapLibreMap, { type MapRef } from "react-map-gl/maplibre";
-import type { StyleSpecification } from "maplibre-gl";
-import { MapboxOverlay } from "@deck.gl/mapbox";
+import MapLibreMap, {
+  type MapLayerMouseEvent,
+  type MapRef,
+} from "react-map-gl/maplibre";
+import type { GeoJSONSource } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import type { NtaBoundary } from "@/lib/api/nta";
 import { formatCount, formatPercent } from "@/lib/format";
+import { blockKey } from "@/lib/geo/blocks";
+import { NtaIndex } from "@/lib/geo/ntaIndex";
 import {
   HOME_VIEW,
   LAYER_METRICS,
+  rgbaToCss,
   type BlockDatum,
   type MapModel,
   type NeighborhoodDatum,
 } from "@/lib/layers";
+import {
+  blockSelectionToGeoJson,
+  blocksToGeoJson,
+  emphasisToGeoJson,
+  neighborhoodsToGeoJson,
+} from "@/lib/map/geojson";
+import { LAYER_IDS, SOURCE_IDS, buildMapStyle } from "@/lib/map/style";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
-import { buildMapLayers, type HoverInfo } from "./MapLayers";
 
-const TILE_URL =
-  import.meta.env.VITE_TILE_URL ??
-  "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+/** How far the camera may tilt. Enough to read column height, never a globe. */
+const MAX_PITCH = 60;
+/** The one tilt the "3D" button applies. */
+const TILT_PITCH = 52;
+/** Past this many degrees the map counts as tilted — for the button and the camera. */
+const TILT_EPSILON = 5;
 
-const mapStyle: StyleSpecification = {
-  version: 8,
-  sources: {
-    osm: {
-      type: "raster",
-      tiles: [TILE_URL],
-      tileSize: 256,
-      maxzoom: 19,
-      attribution:
-        '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors',
-    },
-  },
-  layers: [
-    {
-      id: "osm-raster",
-      type: "raster",
-      source: "osm",
-      paint: {
-        // Lightened just enough that four saturated fills stay readable.
-        "raster-brightness-min": 0.08,
-        "raster-brightness-max": 0.7,
-        "raster-saturation": -0.35,
-        "raster-contrast": 0.05,
-      },
-    },
-  ],
-};
+type Picked =
+  | { kind: "neighborhood"; datum: NeighborhoodDatum }
+  | { kind: "block"; datum: BlockDatum };
+
+type HoverInfo = Picked & { x: number; y: number };
 
 function initialZoom(): number {
   if (typeof window === "undefined") return HOME_VIEW.neighborhoodZoom;
-  // The map is flat, so the viewport width decides how much of the city fits.
   if (window.innerWidth < 640) return 9.9;
   if (window.innerWidth < 1024) return 10.5;
   return HOME_VIEW.neighborhoodZoom;
 }
 
-function cssColor(rgba: [number, number, number, number]): string {
-  return `rgba(${rgba[0]}, ${rgba[1]}, ${rgba[2]}, ${(rgba[3] / 255).toFixed(2)})`;
-}
-
-function detailForNeighborhood(datum: NeighborhoodDatum, layer: MapModel["layer"]): string {
+function detailForNeighborhood(
+  datum: NeighborhoodDatum,
+  layer: MapModel["layer"],
+): string {
   if (layer === "noise") return `${formatPercent(datum.nightShare)} after 10pm`;
   if (layer === "crashes") {
     return `${formatCount(datum.injured)} injured · ${formatCount(datum.killed)} killed`;
@@ -75,15 +66,22 @@ function detailForBlock(datum: BlockDatum, layer: MapModel["layer"]): string {
   return `${formatCount(datum.noiseCount)} noise · ${formatCount(datum.crashCount)} crashes`;
 }
 
-export function MapView({ model }: { model: MapModel }) {
+export function MapView({
+  model,
+  boundaries,
+}: {
+  model: MapModel;
+  boundaries: NtaBoundary[] | null;
+}) {
   const mapRef = useRef<MapRef | null>(null);
-  const overlayRef = useRef<MapboxOverlay | null>(null);
   const [ready, setReady] = useState(false);
   const [hover, setHover] = useState<HoverInfo | null>(null);
 
   const {
     layer,
     scale,
+    tilted,
+    setTilted,
     cameraTarget,
     navCommand,
     highlightedNtaCodes,
@@ -105,6 +103,57 @@ export function MapView({ model }: { model: MapModel }) {
     [],
   );
 
+  const neighborhoodGeoJson = useMemo(
+    () => neighborhoodsToGeoJson(model.neighborhoods),
+    [model.neighborhoods],
+  );
+
+  const blockGeoJson = useMemo(
+    () => blocksToGeoJson(model.blocks),
+    [model.blocks],
+  );
+
+  const emphasisGeoJson = useMemo(
+    () =>
+      emphasisToGeoJson(
+        model.neighborhoods,
+        highlightedNtaCodes,
+        selectedNtaCode,
+      ),
+    [model.neighborhoods, highlightedNtaCodes, selectedNtaCode],
+  );
+
+  const selectionGeoJson = useMemo(
+    () =>
+      blockSelectionToGeoJson(
+        selectedBlockKey
+          ? (model.blocks.find((block) => block.key === selectedBlockKey) ??
+              null)
+          : null,
+      ),
+    [model.blocks, selectedBlockKey],
+  );
+
+  const neighborhoodById = useMemo(() => {
+    const map = new Map<string, NeighborhoodDatum>();
+    for (const datum of model.neighborhoods) map.set(datum.id, datum);
+    return map;
+  }, [model.neighborhoods]);
+
+  const neighborhoodByCode = useMemo(() => {
+    const map = new Map<string, NeighborhoodDatum>();
+    for (const datum of model.neighborhoods) {
+      if (!map.has(datum.ntaCode)) map.set(datum.ntaCode, datum);
+    }
+    return map;
+  }, [model.neighborhoods]);
+
+  const blockByKey = useMemo(() => {
+    const map = new Map<string, BlockDatum>();
+    for (const block of model.blocks) map.set(block.key, block);
+    return map;
+  }, [model.blocks]);
+
   const nameByCode = useMemo(() => {
     const map = new Map<string, string>();
     for (const datum of model.neighborhoods) {
@@ -113,78 +162,163 @@ export function MapView({ model }: { model: MapModel }) {
     return map;
   }, [model.neighborhoods]);
 
-  const handleLoad = useCallback(() => {
-    const map = mapRef.current?.getMap();
-    if (!map || overlayRef.current) return;
-    const overlay = new MapboxOverlay({ interleaved: false, layers: [] });
-    // deck.gl's IControl typings pin a different maplibre build than the one
-    // react-map-gl ships; the runtime contract is identical.
+  const ntaIndex = useMemo(
+    () => (boundaries ? new NtaIndex(boundaries) : null),
+    [boundaries],
+  );
+
+  const handleLoad = useCallback(() => setReady(true), []);
+
+  /**
+   * Prefer MapLibre's own 3D picking; fall back to arithmetic when a query
+   * comes back empty. Blocks are an exact grid and neighborhoods are indexed,
+   * so both fallbacks are O(1) — the map stays clickable even if a layer's
+   * render pass yields nothing.
+   */
+  const pickAt = useCallback(
     (
-      map as unknown as { addControl: (control: MapboxOverlay) => void }
-    ).addControl(overlay);
-    overlayRef.current = overlay;
-    setReady(true);
-  }, []);
+      x: number,
+      y: number,
+      lngLat: { lat: number; lng: number },
+    ): Picked | null => {
+      const map = mapRef.current?.getMap();
+      const pickLayer =
+        scale === "blocks" ? LAYER_IDS.blocks : LAYER_IDS.neighborhoods;
+      // `getLayer` is undefined until the style has loaded, which is also when
+      // querying would throw.
+      const feature =
+        map && map.getLayer(pickLayer)
+          ? map.queryRenderedFeatures([x, y], { layers: [pickLayer] })[0]
+          : undefined;
+      const id = feature?.id;
 
-  const handleHover = useCallback((info: HoverInfo | null) => {
-    setHover(info);
-  }, []);
+      if (id !== undefined && id !== null) {
+        const key = String(id);
+        if (scale === "blocks") {
+          const datum = blockByKey.get(key);
+          if (datum) return { kind: "block", datum };
+        } else {
+          const datum = neighborhoodById.get(key);
+          if (datum) return { kind: "neighborhood", datum };
+        }
+      }
 
-  const handleSelectNta = useCallback(
-    (ntaCode: string) => {
-      selectNta(ntaCode);
+      if (scale === "blocks") {
+        const datum = blockByKey.get(blockKey(lngLat.lat, lngLat.lng).key);
+        return datum ? { kind: "block", datum } : null;
+      }
+      const code = ntaIndex?.assignCode(lngLat.lat, lngLat.lng) ?? null;
+      const datum = code ? neighborhoodByCode.get(code) : undefined;
+      return datum ? { kind: "neighborhood", datum } : null;
     },
-    [selectNta],
+    [
+      scale,
+      blockByKey,
+      neighborhoodById,
+      neighborhoodByCode,
+      ntaIndex,
+    ],
   );
 
-  const handleSelectBlock = useCallback(
-    (block: BlockDatum) => {
-      selectBlock({ key: block.key, ntaCode: block.ntaCode });
+  const handleMouseMove = useCallback(
+    (event: MapLayerMouseEvent) => {
+      const picked = pickAt(event.point.x, event.point.y, event.lngLat);
+      const map = mapRef.current?.getMap();
+      if (map) {
+        map.getCanvas().style.cursor = picked ? "pointer" : "";
+      }
+      setHover((current) => {
+        if (!picked) return current ? null : current;
+        return { ...picked, x: event.point.x, y: event.point.y };
+      });
     },
-    [selectBlock],
+    [pickAt],
   );
+
+  const handleClick = useCallback(
+    (event: MapLayerMouseEvent) => {
+      const picked = pickAt(event.point.x, event.point.y, event.lngLat);
+      if (!picked) return;
+      if (picked.kind === "block") {
+        selectBlock({ key: picked.datum.key, ntaCode: picked.datum.ntaCode });
+      } else {
+        selectNta(picked.datum.ntaCode);
+      }
+    },
+    [pickAt, selectBlock, selectNta],
+  );
+
+  const handleMoveEnd = useCallback(() => {
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    // Keep the toggle honest when the user tilts with the mouse or touch.
+    setTilted(map.getPitch() > TILT_EPSILON);
+  }, [setTilted]);
+
+  // Data: one `setData` per scale, plus the layout switch between the two.
+  useEffect(() => {
+    if (!ready) return;
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    const showBlocks = scale === "blocks";
+
+    (map.getSource(SOURCE_IDS.neighborhoods) as GeoJSONSource | undefined)
+      ?.setData(neighborhoodGeoJson);
+    (map.getSource(SOURCE_IDS.blocks) as GeoJSONSource | undefined)?.setData(
+      blockGeoJson,
+    );
+
+    map.setLayoutProperty(
+      LAYER_IDS.blocks,
+      "visibility",
+      showBlocks ? "visible" : "none",
+    );
+    // With blocks on, neighborhoods drop to a flat tinted ground so the block
+    // prisms are what carries height.
+    map.setPaintProperty(
+      LAYER_IDS.neighborhoods,
+      "fill-extrusion-height",
+      showBlocks ? 0 : ["get", "height"],
+    );
+    map.setPaintProperty(
+      LAYER_IDS.neighborhoods,
+      "fill-extrusion-opacity",
+      showBlocks ? 0.45 : 1,
+    );
+    map.setPaintProperty(
+      LAYER_IDS.neighborhoodOutline,
+      "line-opacity",
+      showBlocks ? 0.3 : 1,
+    );
+  }, [ready, neighborhoodGeoJson, blockGeoJson, scale]);
 
   useEffect(() => {
     if (!ready) return;
-    const layers = buildMapLayers({
-      neighborhoods: model.neighborhoods,
-      blocks: model.blocks,
-      layer,
-      scale,
-      highlightedNtaCodes,
-      selectedNtaCode,
-      selectedBlockKey,
-      animate: !reducedMotion,
-      onHover: handleHover,
-      onSelectNta: handleSelectNta,
-      onSelectBlock: handleSelectBlock,
-    });
-    overlayRef.current?.setProps({ layers });
-  }, [
-    ready,
-    model.neighborhoods,
-    model.blocks,
-    layer,
-    scale,
-    highlightedNtaCodes,
-    selectedNtaCode,
-    selectedBlockKey,
-    reducedMotion,
-    handleHover,
-    handleSelectNta,
-    handleSelectBlock,
-  ]);
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    (map.getSource(SOURCE_IDS.emphasis) as GeoJSONSource | undefined)?.setData(
+      emphasisGeoJson,
+    );
+    (
+      map.getSource(SOURCE_IDS.blockSelection) as GeoJSONSource | undefined
+    )?.setData(selectionGeoJson);
+  }, [ready, emphasisGeoJson, selectionGeoJson]);
 
   useEffect(() => {
     if (!ready || !cameraTarget) return;
     const map = mapRef.current?.getMap();
     if (!map) return;
-    // The map is flat by design: no pitch, no bearing, no accidental tilt.
+    // The camera keeps whatever tilt and bearing the user chose; only a
+    // `fly_to` that names a pitch changes it.
+    const pitch =
+      typeof cameraTarget.pitch === "number"
+        ? Math.min(Math.max(cameraTarget.pitch, 0), MAX_PITCH)
+        : map.getPitch();
     const camera = {
       center: [cameraTarget.lon, cameraTarget.lat] as [number, number],
       zoom: cameraTarget.zoom ?? 13,
-      pitch: 0,
-      bearing: 0,
+      pitch,
+      bearing: map.getBearing(),
     };
     if (reducedMotion) {
       map.jumpTo(camera);
@@ -192,6 +326,21 @@ export function MapView({ model }: { model: MapModel }) {
       map.flyTo({ ...camera, duration: 1200, essential: true });
     }
   }, [ready, cameraTarget, reducedMotion]);
+
+  useEffect(() => {
+    if (!ready) return;
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    // Only act when the camera disagrees with the requested state, so a
+    // `fly_to` that carries its own pitch is not snapped back afterwards.
+    const isTilted = map.getPitch() > TILT_EPSILON;
+    if (tilted === isTilted) return;
+    map.easeTo({
+      pitch: tilted ? TILT_PITCH : 0,
+      bearing: tilted ? map.getBearing() : 0,
+      duration: reducedMotion ? 0 : 700,
+    });
+  }, [ready, tilted, reducedMotion]);
 
   useEffect(() => {
     if (!ready || !navCommand) return;
@@ -212,23 +361,29 @@ export function MapView({ model }: { model: MapModel }) {
       pitch: 0,
       bearing: 0,
     });
-  }, [ready, navCommand, reducedMotion]);
+    setTilted(false);
+  }, [ready, navCommand, reducedMotion, setTilted]);
 
   const hoverNtaName =
-    hover?.kind === "block" ? nameByCode.get(hover.datum.ntaCode) ?? null : null;
+    hover?.kind === "block"
+      ? (nameByCode.get(hover.datum.ntaCode) ?? null)
+      : null;
 
   return (
     <div className="absolute inset-0">
       <MapLibreMap
         ref={mapRef}
-        mapStyle={mapStyle}
+        mapStyle={buildMapStyle()}
         initialViewState={viewState}
-        maxPitch={0}
-        dragRotate={false}
-        touchPitch={false}
+        maxPitch={MAX_PITCH}
         minZoom={9}
         maxZoom={17}
+        dragRotate
+        touchPitch
         onLoad={handleLoad}
+        onMouseMove={handleMouseMove}
+        onClick={handleClick}
+        onMoveEnd={handleMoveEnd}
         style={{ position: "absolute", inset: 0 }}
       />
 
@@ -264,7 +419,7 @@ export function MapView({ model }: { model: MapModel }) {
             <span
               aria-hidden="true"
               className="h-2.5 w-2.5 shrink-0 self-center rounded-sm"
-              style={{ backgroundColor: cssColor(hover.datum.fill) }}
+              style={{ backgroundColor: rgbaToCss(hover.datum.fill) }}
             />
             <span className="text-base font-semibold tabular-nums text-foreground">
               {formatCount(hover.datum.value)}
@@ -281,7 +436,9 @@ export function MapView({ model }: { model: MapModel }) {
           </div>
 
           <div className="mt-1 border-t border-border/60 pt-1 text-[10px] text-muted-foreground/80">
-            {hover.kind === "block" ? "Click to open this neighborhood" : "Click for details"}
+            {hover.kind === "block"
+              ? "Click to open this neighborhood"
+              : "Click for details"}
           </div>
         </div>
       ) : null}
