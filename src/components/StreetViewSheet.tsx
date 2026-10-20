@@ -26,7 +26,8 @@ import {
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  findNearestImage,
+  findNearestImageWidening,
+  SEARCH_RADII_METRES,
   hasMapillaryToken,
   MAPILLARY_TOKEN,
   mapillaryImageLink,
@@ -94,15 +95,18 @@ export function StreetViewSheet({
   // The nearest photo is a real API lookup, so it is server state like any
   // other: cached per block, and skipped entirely without a token.
   const query = useQuery({
-    queryKey: ["mapillary", "nearest", block?.key ?? "none"],
-    queryFn: async () => (block ? findNearestImage(block.center) : null),
+    queryKey: ["mapillary", "nearest-widening", block?.key ?? "none"],
+    queryFn: async () =>
+      block ? findNearestImageWidening(block.center) : null,
     enabled: open && hasMapillaryToken && block !== null,
     staleTime: 10 * 60_000,
     gcTime: 10 * 60_000,
     retry: false,
   });
 
-  const image = query.data ?? null;
+  const image = query.data?.image ?? null;
+  const searchRadius = query.data?.radius ?? SEARCH_RADII_METRES[0];
+  const maxRadius = SEARCH_RADII_METRES[SEARCH_RADII_METRES.length - 1];
 
   useEffect(() => {
     setDistanceFromBlock(image ? image.distance : null);
@@ -262,6 +266,12 @@ export function StreetViewSheet({
           <div className="truncate text-[11px] text-muted-foreground">
             {caption} in this ~300 m block
           </div>
+          {image && searchRadius > SEARCH_RADII_METRES[0] ? (
+            <div className="text-[11px] text-amber-600 dark:text-amber-400">
+              No photo nearby — widened the search to {formatCount(searchRadius)} m;
+              this photo is {formatCount(Math.round(image.distance))} m away.
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -270,7 +280,8 @@ export function StreetViewSheet({
 
         {!hasMapillaryToken ? (
           <Notice icon={<KeyRound className="h-4 w-4" />} title="No Mapillary token">
-            Add <code className="font-mono">VITE_MAPILLARY_TOKEN</code> to{" "}
+            Add <code className="font-mono">VITE_MAPILLARY_TOKEN</code> (or{" "}
+            <code className="font-mono">MAPILLARY_TOKEN</code>) to{" "}
             <code className="font-mono">.env</code> — a free client token from{" "}
             <a
               className="underline"
@@ -286,7 +297,8 @@ export function StreetViewSheet({
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-background/90">
             <Skeleton className="h-2 w-40" />
             <div className="text-[11px] text-muted-foreground">
-              Looking for photos near this block…
+              Looking for photos near this block (widening up to{" "}
+              {formatCount(maxRadius)} m)…
             </div>
           </div>
         ) : query.isError ? (
@@ -308,10 +320,11 @@ export function StreetViewSheet({
         ) : image === null ? (
           <Notice
             icon={<ImageOff className="h-4 w-4" />}
-            title="No photos within 250 m"
+            title={`No photos within ${(maxRadius / 1000).toLocaleString("en-US")} km`}
           >
-            Mapillary coverage in New York is patchy — try a block near an
-            avenue.
+            Searched {SEARCH_RADII_METRES.map((r) => `${formatCount(r)} m`).join(", then ")}{" "}
+            around this block and Mapillary returned nothing. Coverage in New
+            York is patchy — try a block near an avenue.
           </Notice>
         ) : viewerError ? (
           <Notice

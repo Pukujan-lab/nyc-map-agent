@@ -74,6 +74,23 @@ export function heightFor(value: number, maxValue: number): number {
   );
 }
 
+/** One source's contribution to an area under the per-source / Average views. */
+export interface SourceBreakdown {
+  sourceId: string;
+  value: number;
+  /** Percentile rank 0–100; only set under the Average view. */
+  percentile?: number;
+}
+
+/** Set when the map shows a registry source or the Average composite. */
+export interface ViewInfo {
+  kind: "source" | "average";
+  label: string;
+  unit: string;
+  /** Source ids that fed the value, in display order. */
+  contributors: string[];
+}
+
 export interface NeighborhoodDatum {
   id: string;
   ntaCode: string;
@@ -93,6 +110,7 @@ export interface NeighborhoodDatum {
   addresses: CountPair[];
   /** Street names from crash records — that dataset carries no house number. */
   streets: CountPair[];
+  breakdown?: SourceBreakdown[];
 }
 
 export interface BlockDatum {
@@ -114,6 +132,7 @@ export interface BlockDatum {
   addresses: CountPair[];
   /** Street names from crash records — that dataset carries no house number. */
   streets: CountPair[];
+  breakdown?: SourceBreakdown[];
 }
 
 export interface MapModel {
@@ -125,6 +144,8 @@ export interface MapModel {
   maxValue: number;
   /** Areas on the current scale with at least one record. */
   areasWithData: number;
+  /** Absent under the classic noise / crashes / combined layers. */
+  view?: ViewInfo;
 }
 
 const EMPTY_AGGREGATE: NtaAggregate = {

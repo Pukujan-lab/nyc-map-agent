@@ -1,5 +1,12 @@
 import { useMemo, useState } from "react";
 import { CaveatsSheet } from "@/components/CaveatsSheet";
+import { DataSourcesDrawer } from "@/components/DataSourcesDrawer";
+import { RoutePanel } from "@/components/RoutePanel";
+import { useWalkingRoute } from "@/lib/api/routing";
+import { SOURCE_BY_ID } from "@/lib/datasets/registry";
+import { useSourceCounts } from "@/lib/datasets/useSourceCounts";
+import { applyView } from "@/lib/datasets/view";
+import { useDataView } from "@/lib/store/DataViewContext";
 import { ChatPanel } from "@/components/ChatPanel";
 import { ControlDrawer } from "@/components/ControlDrawer";
 import { DetailsSheet } from "@/components/DetailsSheet";
@@ -25,6 +32,8 @@ export default function Index() {
     selectedBlockKey,
   } = useMapState();
   const [controlsOpen, setControlsOpen] = useState(false);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const { enabledSources, viewMode, routeStart, routeEnd } = useDataView();
   const isDesktop = useMediaQuery("(min-width: 1024px)");
   const data = useMapData(windowId);
   const { label: windowLabel } = windowBounds(windowId);
@@ -32,16 +41,33 @@ export default function Index() {
     ? windowBounds(data.crashes.windowId).label
     : windowBounds("12mo").label;
 
-  const model = useMemo(
-    () =>
-      buildMapModel({
-        boundaries: data.boundaries,
-        noise: data.noise,
-        crashes: data.crashes,
-        layer,
-        scale,
-      }),
-    [data.boundaries, data.noise, data.crashes, layer, scale],
+  const sourceState = useSourceCounts({
+    enabled: enabledSources,
+    windowId,
+    boundaries: data.boundaries,
+    noise: data.noise,
+    crashes: data.crashes,
+  });
+
+  const routeQuery = useWalkingRoute(routeStart, routeEnd);
+  const route = routeQuery.data ?? null;
+
+  const model = useMemo(() => {
+    // Non-classic views re-score a combined model, so every populated block
+    // (noise or crash) exists to carry its detail through.
+    const base = buildMapModel({
+      boundaries: data.boundaries,
+      noise: data.noise,
+      crashes: data.crashes,
+      layer: viewMode.kind === "legacy" ? layer : "combined",
+      scale,
+    });
+    return applyView(base, viewMode, sourceState.counts);
+  }, [data.boundaries, data.noise, data.crashes, layer, scale, viewMode, sourceState.counts]);
+
+  const selectedDatum = useMemo(
+    () => model.neighborhoods.find((d) => d.ntaCode === selectedNtaCode) ?? null,
+    [model.neighborhoods, selectedNtaCode],
   );
 
   const noiseByCode = useMemo(() => {
@@ -75,8 +101,27 @@ export default function Index() {
 
   // The street-view sheet repeats the block's numbers over the photo, so the
   // panorama can never be read as a different square's evidence.
+  const sourceTotals = useMemo(
+    () =>
+      enabledSources.map((id) => {
+        const counts = sourceState.counts[id];
+        const source = SOURCE_BY_ID[id];
+        return {
+          id,
+          label: source?.label ?? id,
+          unit: source?.unit ?? "",
+          nta: selectedNtaCode ? (counts?.byNta[selectedNtaCode] ?? 0) : 0,
+          block: selectedBlockKey ? (counts?.blocks[selectedBlockKey]?.count ?? 0) : null,
+        };
+      }),
+    [enabledSources, sourceState.counts, selectedNtaCode, selectedBlockKey],
+  );
+
   const blockCaption = useMemo(() => {
     if (!selectedBlock) return "";
+    if (model.view) {
+      return `${formatCount(selectedBlock.value)} ${model.view.unit} (${model.view.label})`;
+    }
     if (layer === "noise") {
       return `${formatCount(selectedBlock.noiseCount)} noise complaints`;
     }
@@ -86,7 +131,7 @@ export default function Index() {
     return `${formatCount(selectedBlock.noiseCount)} noise · ${formatCount(
       selectedBlock.crashCount,
     )} crashes`;
-  }, [selectedBlock, layer]);
+  }, [selectedBlock, layer, model.view]);
 
   const neighborhoods = useMemo(() => {
     if (!data.boundaries || !data.noise) return [];
@@ -103,12 +148,22 @@ export default function Index() {
     const sources = [];
     if (data.noise) sources.push(...data.noise.sources);
     if (data.crashes) sources.push(...data.crashes.sources);
+    for (const id of enabledSources) {
+      if (id === "noise" || id === "crashes") continue;
+      sources.push(...(sourceState.counts[id]?.sources ?? []));
+    }
     return sources;
-  }, [data.noise, data.crashes]);
+  }, [data.noise, data.crashes, enabledSources, sourceState.counts]);
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-background">
-      <MapView model={model} boundaries={data.boundaries} />
+      <MapView model={model} boundaries={data.boundaries} route={route} />
+
+      <RoutePanel
+        route={route}
+        isLoading={routeQuery.isFetching}
+        error={routeQuery.error ? routeQuery.error.message : null}
+      />
 
       <MapStatusChip
         windowId={windowId}
@@ -119,7 +174,17 @@ export default function Index() {
         onRetry={data.retry}
       />
 
-      <MapHud onOpenControls={() => setControlsOpen(true)} />
+      <MapHud
+        onOpenControls={() => setControlsOpen(true)}
+        onOpenSources={() => setSourcesOpen(true)}
+      />
+
+      <DataSourcesDrawer
+        open={sourcesOpen}
+        onOpenChange={setSourcesOpen}
+        counts={sourceState.counts}
+        status={sourceState.status}
+      />
 
       <ControlDrawer
         open={controlsOpen}
@@ -132,6 +197,11 @@ export default function Index() {
         onRetry={data.retry}
         maxValue={model.maxValue}
         areasWithData={model.areasWithData}
+        view={model.view}
+        onOpenSources={() => {
+          setControlsOpen(false);
+          setSourcesOpen(true);
+        }}
       />
 
       <ChatPanel
@@ -168,6 +238,10 @@ export default function Index() {
         crashWindowLabel={crashWindowLabel}
         sources={detailSources}
         isDesktop={isDesktop}
+        view={model.view}
+        viewValue={selectedDatum?.value}
+        breakdown={selectedBlock?.breakdown ?? selectedDatum?.breakdown}
+        sourceTotals={sourceTotals}
       />
 
       <StreetViewSheet

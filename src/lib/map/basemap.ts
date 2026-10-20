@@ -78,12 +78,18 @@ export function installDataLayers(map: MapLibreMap): void {
  * street you are standing on.
  */
 export function applyAtmosphere(map: MapLibreMap, street = false): void {
-  map.setFog({
-    range: street ? [12, 50] : [1.2, 9],
-    color: "#eaf2fb",
-    "high-color": "#a9c7ea",
-    "space-color": "#eaf2fb",
-    "horizon-blend": 0.1,
-    "star-intensity": 0,
+  // MapLibre has no Mapbox-style `setFog`; its horizon haze is the `sky`
+  // spec. The previous `map.setFog(...)` did not type-check against
+  // maplibre-gl 4.7 and threw at runtime on load.
+  if (typeof map.setSky !== "function") return;
+  map.setSky({
+    "sky-color": "#a9c7ea",
+    "horizon-color": "#eaf2fb",
+    "fog-color": "#eaf2fb",
+    // Street level: fog only at the far end of the view, never on the block.
+    "fog-ground-blend": street ? 0.9 : 0.5,
+    "horizon-fog-blend": street ? 0.2 : 0.5,
+    "sky-horizon-blend": 0.6,
+    "atmosphere-blend": 0,
   });
 }
