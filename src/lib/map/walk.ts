@@ -11,12 +11,22 @@
  */
 export const WALK_PITCH = 85;
 /**
- * Street level, and it is the zoom that does most of the work: MapLibre has no
- * altitude control, so the camera height is
- * `1.5 × viewport height × metres-per-pixel × cos(pitch)` — about 110 m at
- * zoom 17, but roughly 8 m here, which is a person on the pavement.
+ * Street level, and it is the zoom that does all of the work. MapLibre has no
+ * altitude control — no free camera, no eye-height property — so the camera
+ * height is `1.5 × viewport height in px × metres-per-pixel × cos(pitch)`, and
+ * at 85° that last term is only 0.087. Metres-per-pixel at this latitude is
+ * `118,700 / 2^zoom`:
+ *
+ * | zoom | height (900 px viewport) |
+ * | ---- | ------------------------ |
+ * | 17   | ~110 m — a rooftop       |
+ * | 19.5 | ~19 m — above the lights |
+ * | 21   | ~7 m — a second-floor sill |
+ *
+ * 21 is the stop where the street fills the frame without pushing the vector
+ * tiles so far past their native zoom that the road geometry turns to mush.
  */
-export const WALK_ZOOM = 19.5;
+export const WALK_ZOOM = 21;
 /** Metres per second, before sprinting. */
 export const WALK_SPEED = 12;
 /** Shift multiplier. A run, not a teleport. */

@@ -88,7 +88,12 @@ export function MapHud({ buckets, maxValue, onOpenControls }: MapHudProps) {
           aria-pressed={tilted}
           className="h-8 w-8 shrink-0 rounded-full"
           onClick={() => {
-            if (walking) stopWalk();
+            // Leaving a walk already restores north-up; toggling on top of
+            // that would fight the ease that is about to run.
+            if (walking) {
+              stopWalk();
+              return;
+            }
             setTilted(!tilted);
           }}
         >

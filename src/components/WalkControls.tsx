@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { WALK_IDLE, type WalkInput } from "@/lib/map/walk";
 
 interface WalkControlsProps {
+  /** The block underfoot, so the strip reports what you are walking through. */
+  place: { name: string; detail: string } | null;
   /** Fires on press and release; the map reads it every frame. */
   onInput: (input: WalkInput) => void;
   onExit: () => void;
@@ -57,7 +59,11 @@ function HoldButton({
  * The only chrome walk mode adds: a strip that says how to move, and a d-pad for
  * touch, where there is no keyboard to hold down.
  */
-export function WalkControls({ onInput, onExit }: WalkControlsProps) {
+export function WalkControls({
+  place,
+  onInput,
+  onExit,
+}: WalkControlsProps) {
   const pad = (label: string, icon: typeof ChevronUp, input: WalkInput) => (
     <HoldButton
       label={label}
@@ -70,28 +76,48 @@ export function WalkControls({ onInput, onExit }: WalkControlsProps) {
   return (
     <>
       <div className="pointer-events-none absolute inset-x-0 top-3 z-30 flex justify-center px-3">
-        <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-border/70 bg-card/90 py-1 pl-3 pr-1 shadow-xl backdrop-blur-md">
-          <Footprints
-            className="h-3.5 w-3.5 shrink-0 text-primary"
-            aria-hidden="true"
-          />
-          <span className="text-[11px] font-medium">Walking</span>
-          <span className="hidden text-[11px] text-muted-foreground sm:inline">
-            W/S move · A/D turn · Shift run · Esc to exit
-          </span>
-          <span className="text-[11px] text-muted-foreground sm:hidden">
-            Use the pad
-          </span>
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            aria-label="Stop walking"
-            className="h-7 w-7 shrink-0 rounded-full"
-            onClick={onExit}
-          >
-            <X className="h-3.5 w-3.5" />
-          </Button>
+        <div className="pointer-events-auto max-w-full rounded-xl border border-border/70 bg-card/90 py-1.5 pl-3 pr-1 shadow-xl backdrop-blur-md">
+          <div className="flex items-center gap-2">
+            <Footprints
+              className="h-3.5 w-3.5 shrink-0 text-primary"
+              aria-hidden="true"
+            />
+            <span className="text-[11px] font-medium">Walking</span>
+            {place ? (
+              <>
+                <span aria-hidden="true" className="text-[11px] text-muted-foreground">
+                  ·
+                </span>
+                <span className="max-w-[38vw] truncate text-[11px] font-medium sm:max-w-none">
+                  {place.name}
+                </span>
+              </>
+            ) : null}
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              aria-label="Stop walking"
+              className="ml-auto h-7 w-7 shrink-0 rounded-full"
+              onClick={onExit}
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+          <div className="flex items-center gap-1.5 pr-1 text-[11px] text-muted-foreground">
+            {place ? (
+              <span className="tabular-nums">{place.detail}</span>
+            ) : null}
+            {place ? (
+              <span aria-hidden="true" className="hidden sm:inline">
+                ·
+              </span>
+            ) : null}
+            <span className="hidden sm:inline">
+              W/S move · A/D turn · Shift run · Esc to exit
+            </span>
+            <span className="sm:hidden">Use the pad</span>
+          </div>
         </div>
       </div>
 

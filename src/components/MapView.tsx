@@ -100,6 +100,13 @@ export function MapView({
   const [styleEpoch, setStyleEpoch] = useState(0);
   const fellBack = useRef(false);
   const [hover, setHover] = useState<HoverInfo | null>(null);
+  /** Where the walker is standing — the strip names the block, not just "Walking". */
+  const [walkPlace, setWalkPlace] = useState<{
+    name: string;
+    detail: string;
+  } | null>(null);
+  /** So leaving walk mode can restore the overhead camera exactly once. */
+  const wasWalking = useRef(false);
 
   const {
     layer,
@@ -194,6 +201,28 @@ export function MapView({
   const ntaIndex = useMemo(
     () => (boundaries ? new NtaIndex(boundaries) : null),
     [boundaries],
+  );
+
+  /**
+   * What is underfoot. Read from the block grid rather than by ray-casting the
+   * boundaries, so walking can call this every time you cross a square edge
+   * without paying for a point-in-polygon test.
+   */
+  const describeAt = useCallback(
+    (lat: number, lon: number) => {
+      const key = blockKey(lat, lon).key;
+      const block = blockByKey.get(key);
+      const ntaCode = block?.ntaCode ?? ntaIndex?.assignCode(lat, lon) ?? null;
+      const name = ntaCode ? nameByCode.get(ntaCode) : undefined;
+      if (!name) return null;
+      return {
+        name,
+        detail: block
+          ? `${formatCount(block.value)} ${LAYER_METRICS[layer].unit} in this block`
+          : "No records in this block",
+      };
+    },
+    [blockByKey, ntaIndex, nameByCode, layer],
   );
 
   const handleLoad = useCallback(() => {
@@ -305,9 +334,12 @@ export function MapView({
   const handleMoveEnd = useCallback(() => {
     const map = mapRef.current?.getMap();
     if (!map) return;
+    // A walk is always pitched to the ceiling, so it would report the map as
+    // "tilted" the whole time and light up the dock's 3D button.
+    if (walking) return;
     // Keep the toggle honest when the user tilts with the mouse or touch.
     setTilted(map.getPitch() > TILT_EPSILON);
-  }, [setTilted]);
+  }, [walking, setTilted]);
 
   // Data: one `setData` per scale, plus the layout switch between the two.
   useEffect(() => {
@@ -470,7 +502,29 @@ export function MapView({
       zoom: Math.max(map.getZoom(), WALK_ZOOM),
       duration: reducedMotion ? 0 : 900,
     });
-  }, [ready, walking, walkRequest, reducedMotion]);
+    setWalkPlace(describeAt(target[1], target[0]));
+  }, [ready, walking, walkRequest, reducedMotion, describeAt]);
+
+  // Leaving a walk must not strand the camera nose-down at 85° over a rooftop,
+  // so the pitch comes back up on its own — the tilt flag never went true while
+  // walking, so nothing else would restore it.
+  useEffect(() => {
+    if (walking) {
+      wasWalking.current = true;
+      return;
+    }
+    if (!wasWalking.current) return;
+    wasWalking.current = false;
+    setWalkPlace(null);
+    setTilted(false);
+    const map = mapRef.current?.getMap();
+    if (!map || !ready) return;
+    map.easeTo({
+      pitch: 0,
+      bearing: 0,
+      duration: reducedMotion ? 0 : 700,
+    });
+  }, [walking, ready, reducedMotion, setTilted]);
 
   // The walk loop. Each frame moves the camera in ground metres along its own
   // bearing, so speed is constant at any zoom and the horizon stays level.
@@ -512,6 +566,9 @@ export function MapView({
 
     let frame = 0;
     let last = performance.now();
+    // Crossing a block edge is the only thing worth a React update: the strip
+    // then says which block you are standing in and what happened there.
+    let standingOn = blockKey(map.getCenter().lat, map.getCenter().lng).key;
     const tick = (now: number) => {
       const dt = (now - last) / 1000;
       last = now;
@@ -535,6 +592,11 @@ export function MapView({
           bearing: next.bearing,
           pitch: WALK_PITCH,
         });
+        const key = blockKey(next.lat, next.lon).key;
+        if (key !== standingOn) {
+          standingOn = key;
+          setWalkPlace(describeAt(next.lat, next.lon));
+        }
       }
       frame = requestAnimationFrame(tick);
     };
@@ -548,7 +610,7 @@ export function MapView({
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
     };
-  }, [ready, walking, stopWalk]);
+  }, [ready, walking, stopWalk, describeAt]);
 
   useEffect(() => {
     if (!ready || !navCommand) return;
@@ -587,19 +649,20 @@ export function MapView({
         initialViewState={viewState}
         maxPitch={MAX_PITCH}
         minZoom={9}
-        // Walking needs the extra stop: at zoom 19.5 the camera is ~8 m above
-        // the pavement, which is the difference between a street and a roof.
-        maxZoom={20}
-        dragRotate
+        // Walking needs the headroom: zoom is the only altitude control the map
+        // has, so `WALK_ZOOM` (21) has to be reachable.
+        maxZoom={22}
         // The built-in arrow-key panning has to stand down while walking, or
         // every keypress would move the camera twice.
         keyboard={!walking}
         // Eye level is a function of zoom, so zooming out mid-walk would lift
-        // the camera back over the rooftops. Walking is a fixed eye height.
+        // the camera back over the rooftops. Walking is a fixed eye height —
+        // and a right-drag must not tip the pitch away from the street either.
         scrollZoom={!walking}
         doubleClickZoom={!walking}
         touchZoomRotate={!walking}
-        touchPitch
+        dragRotate={!walking}
+        touchPitch={!walking}
         onLoad={handleLoad}
         onError={handleError}
         onMouseMove={handleMouseMove}
@@ -610,6 +673,7 @@ export function MapView({
 
       {walking ? (
         <WalkControls
+          place={walkPlace}
           onInput={(input) => {
             walkPad.current = input;
           }}
