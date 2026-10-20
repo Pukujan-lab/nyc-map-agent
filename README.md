@@ -57,9 +57,17 @@ The server-side rollup is `floor(lat / 0.003), floor(lon / 0.003)`, which is the
 
 **Not wired:** DOB complaints (`eabe-havv`) has no coordinates; traffic volume counts (`7ym2-wayt`) are WKT in NY State Plane feet and would need a reprojection library; building footprints (`5zhs-2jue`) are ~1M polygons with no centroid column.
 
-### Views: single source vs. Average
+### Views: single source vs. Concern score (Average)
 
-The view dropdown in the dock (and in the settings drawer) can show the classic noise / crashes / both layers, **any single enabled source**, or **Average**. Average turns each ticked source into a 0–100 percentile rank per area (ties share their rank, areas with no records rank 0) and averages those ranks. The legend lists the contributing sources, and the details sheet shows each source's raw count and percentile. Inventories such as trees or ramps count assets, not problems, so a high average means a lot is recorded there. It does not mean the area is worse. View state lives in the URL (`view=avg|src:<id>|legacy`, `sources=…`, `avg=…`).
+The view dropdown in the dock (and in the settings drawer) can show the classic noise / crashes / both layers, **any single enabled source**, or the **Concern score**, which is an average across sources. Each ticked source becomes a 0–100 percentile rank per area (ties share their rank, areas with no records rank 0).
+
+Every registry entry has a default `polarity`:
+- **Higher is worse:** 311, noise, crashes and HPD violations count as is.
+- **Higher is better:** trees, ramps, speed humps, street improvements and residential units count as `100 − percentile`.
+
+So a high score always means more concern. The data-sources drawer has a button on each source in the average to flip its direction. The legend marks each contributor ↑ (higher is worse) or ↓ (higher is better). The details sheet shows each source's raw count, percentile, direction and concern contribution.
+
+View state lives in the URL: `view=avg|src:<id>|legacy`, `sources=…`, `avg=…`, and `flip=…` for the sources whose default direction was flipped.
 
 ## Walking directions
 

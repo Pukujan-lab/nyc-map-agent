@@ -60,13 +60,30 @@ function BreakdownList({ view, breakdown }: { view: ViewInfo; breakdown: SourceB
         const source = SOURCE_BY_ID[part.sourceId];
         return (
           <li key={part.sourceId} className="flex items-baseline justify-between gap-2 text-[11px]">
-            <span className="truncate">{source?.label ?? part.sourceId}</span>
+            <span className="truncate">
+              {source?.label ?? part.sourceId}
+              {view.kind === "average" ? (
+                <span
+                  className={part.inverted ? "ml-1 text-emerald-600 dark:text-emerald-400" : "ml-1 text-amber-600 dark:text-amber-400"}
+                >
+                  {part.inverted ? "↓ higher is better" : "↑ higher is worse"}
+                </span>
+              ) : null}
+            </span>
             <span className="shrink-0 tabular-nums text-muted-foreground">
               {formatCount(part.value)} {source?.unit}
               {view.kind === "average" && part.percentile !== undefined
                 ? ` · p${Math.round(part.percentile)}`
                 : ""}
+              {view.kind === "average" && part.concern !== undefined
+                ? ` → concern ${Math.round(part.concern)}`
+                : ""}
             </span>
+            {view.kind === "average" ? (
+              <span className="sr-only">
+                {part.inverted ? "higher is better" : "higher is worse"}
+              </span>
+            ) : null}
           </li>
         );
       })}
@@ -305,14 +322,15 @@ function DetailsBody({
           {view && breakdown ? (
             <AccordionItem value="view">
               <AccordionTrigger className="py-2 text-xs">
-                {view.kind === "average" ? "What went into the average" : view.label}
+                {view.kind === "average" ? "What went into the concern score" : view.label}
               </AccordionTrigger>
               <AccordionContent>
                 <BreakdownList view={view} breakdown={breakdown} />
                 {view.kind === "average" ? (
                   <p className="mt-1.5 text-[10px] leading-snug text-muted-foreground">
-                    p = percentile rank among {block ? "blocks" : "neighborhoods"}; the
-                    average of those ranks is the column height.
+                    p = percentile rank among {block ? "blocks" : "neighborhoods"}.
+                    “Higher is better” sources count as 100 − p. The average of the
+                    concern values is the concern score (column height).
                   </p>
                 ) : null}
               </AccordionContent>

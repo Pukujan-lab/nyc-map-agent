@@ -9,7 +9,9 @@ import {
 import { useSearchParams } from "react-router-dom";
 import {
   DEFAULT_ENABLED_SOURCES,
+  effectivePolarity,
   parseSourceList,
+  type Polarity,
 } from "@/lib/datasets/registry";
 import { parseViewMode, viewModeToParam, type ViewMode } from "@/lib/datasets/view";
 import type { LngLat } from "@/lib/api/routing";
@@ -25,6 +27,10 @@ interface DataViewValue {
   setSourceEnabled: (id: string, enabled: boolean) => void;
   setInAverage: (id: string, included: boolean) => void;
   setViewMode: (mode: ViewMode) => void;
+  /** Sources whose default direction the user flipped. URL `flip`. */
+  flippedSources: string[];
+  polarityOf: (id: string) => Polarity;
+  toggleFlip: (id: string) => void;
 
   /** Walking directions, A → B. */
   routeStart: LngLat | null;
@@ -46,6 +52,8 @@ export function DataViewProvider({ children }: { children: ReactNode }) {
   const sourcesParam = searchParams.get("sources");
   const avgParam = searchParams.get("avg");
   const viewParam = searchParams.get("view");
+  const flipParam = searchParams.get("flip");
+  const flippedSources = useMemo(() => parseSourceList(flipParam, []), [flipParam]);
 
   const enabledSources = useMemo(
     () => parseSourceList(sourcesParam, DEFAULT_ENABLED_SOURCES),
@@ -59,13 +67,16 @@ export function DataViewProvider({ children }: { children: ReactNode }) {
     [avgParam, enabledSources],
   );
   const viewMode = useMemo(() => {
-    const mode = parseViewMode(viewParam, averageSources);
+    const better = averageSources.filter(
+      (id) => effectivePolarity(id, flippedSources) === "better",
+    );
+    const mode = parseViewMode(viewParam, averageSources, better);
     // A single-source view of a source that is switched off shows nothing.
     if (mode.kind === "source" && !enabledSources.includes(mode.sourceId)) {
       return { kind: "legacy" } as const;
     }
     return mode;
-  }, [viewParam, averageSources, enabledSources]);
+  }, [viewParam, averageSources, enabledSources, flippedSources]);
 
   const update = useCallback(
     (patch: Record<string, string>) =>
@@ -108,6 +119,20 @@ export function DataViewProvider({ children }: { children: ReactNode }) {
     [update],
   );
 
+  const polarityOf = useCallback(
+    (id: string) => effectivePolarity(id, flippedSources),
+    [flippedSources],
+  );
+  const toggleFlip = useCallback(
+    (id: string) => {
+      const next = flippedSources.includes(id)
+        ? flippedSources.filter((s) => s !== id)
+        : [...flippedSources, id];
+      update({ flip: next.join(",") });
+    },
+    [flippedSources, update],
+  );
+
   const [routeStart, setRouteStart] = useState<LngLat | null>(null);
   const [routeEnd, setRouteEnd] = useState<LngLat | null>(null);
   const [routePicking, setRoutePicking] = useState<RoutePickTarget | null>(null);
@@ -135,6 +160,9 @@ export function DataViewProvider({ children }: { children: ReactNode }) {
       setSourceEnabled,
       setInAverage,
       setViewMode,
+      flippedSources,
+      polarityOf,
+      toggleFlip,
       routeStart,
       routeEnd,
       routePicking,
@@ -151,6 +179,9 @@ export function DataViewProvider({ children }: { children: ReactNode }) {
       setSourceEnabled,
       setInAverage,
       setViewMode,
+      flippedSources,
+      polarityOf,
+      toggleFlip,
       routeStart,
       routeEnd,
       routePicking,

@@ -40,25 +40,42 @@ export interface CompositeEntry {
   /** Mean percentile across the contributing sources, 0–100. */
   score: number;
   /** Per-source raw value and percentile, in the order sources were given. */
-  parts: Array<{ sourceId: string; value: number; percentile: number }>;
+  parts: Array<{
+    sourceId: string;
+    value: number;
+    /** Raw percentile of the value among areas. */
+    percentile: number;
+    /** True when "higher is better", so the concern is 100 − percentile. */
+    inverted: boolean;
+    /** What this source adds to the average (0–100, higher = more concern). */
+    concern: number;
+  }>;
 }
 
 export function averageComposite(
   perSource: Record<string, Record<string, number>>,
   sourceIds: string[],
   keys: string[],
+  /** Sources where higher is better; their concern is 100 − percentile. */
+  inverted: readonly string[] = [],
 ): Record<string, CompositeEntry> {
   const ranks = sourceIds.map((id) => percentileRanks(perSource[id] ?? {}, keys));
   const out: Record<string, CompositeEntry> = {};
   for (const key of keys) {
-    const parts = sourceIds.map((sourceId, index) => ({
-      sourceId,
-      value: perSource[sourceId]?.[key] ?? 0,
-      percentile: ranks[index][key] ?? 0,
-    }));
+    const parts = sourceIds.map((sourceId, index) => {
+      const percentile = ranks[index][key] ?? 0;
+      const isInverted = inverted.includes(sourceId);
+      return {
+        sourceId,
+        value: perSource[sourceId]?.[key] ?? 0,
+        percentile,
+        inverted: isInverted,
+        concern: isInverted ? 100 - percentile : percentile,
+      };
+    });
     const score =
       parts.length > 0
-        ? parts.reduce((sum, part) => sum + part.percentile, 0) / parts.length
+        ? parts.reduce((sum, part) => sum + part.concern, 0) / parts.length
         : 0;
     out[key] = { score: Math.round(score * 10) / 10, parts };
   }

@@ -76,7 +76,7 @@ export function LegendContent({
       {view ? (
         <div className="mt-2 rounded-md border border-border/60 bg-muted/30 p-2">
           <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            {view.kind === "average" ? "Sources in this average" : "Source"}
+            {view.kind === "average" ? "Concern score: sources" : "Source"}
           </div>
           {view.contributors.length === 0 ? (
             <p className="text-[11px] text-muted-foreground">
@@ -86,6 +86,11 @@ export function LegendContent({
             <ul className="mt-1 space-y-0.5">
               {view.contributors.map((id) => (
                 <li key={id} className="text-[11px]">
+                  {view.kind === "average" ? (
+                    <span aria-hidden="true" className="mr-1 text-muted-foreground">
+                      {view.better?.includes(id) ? "↓" : "↑"}
+                    </span>
+                  ) : null}
                   {SOURCE_BY_ID[id]?.label ?? id}{" "}
                   <span className="font-mono text-muted-foreground">
                     {SOURCE_BY_ID[id]?.datasetId}
@@ -96,8 +101,10 @@ export function LegendContent({
           )}
           {view.kind === "average" ? (
             <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
-              Each source is turned into a 0–100 percentile rank per area, then
-              the ranks are averaged.
+              Higher = more concern. Each source becomes a 0–100 percentile
+              rank per area; ↑ sources (higher is worse) count as is, ↓ sources
+              (higher is better) count as 100 − percentile; then they are
+              averaged.
             </p>
           ) : null}
         </div>

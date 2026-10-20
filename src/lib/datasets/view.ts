@@ -13,11 +13,20 @@ import { SOURCE_BY_ID } from "./registry";
 export type ViewMode =
   | { kind: "legacy" }
   | { kind: "source"; sourceId: string }
-  | { kind: "average"; sourceIds: string[] };
+  | {
+      kind: "average";
+      sourceIds: string[];
+      /** Sources treated as "higher is better" (concern = 100 − percentile). */
+      better?: string[];
+    };
 
 /** URL form: `legacy`, `src:<id>`, or `avg`. */
-export function parseViewMode(view: string | null, avgIds: string[]): ViewMode {
-  if (view === "avg") return { kind: "average", sourceIds: avgIds };
+export function parseViewMode(
+  view: string | null,
+  avgIds: string[],
+  better: string[] = [],
+): ViewMode {
+  if (view === "avg") return { kind: "average", sourceIds: avgIds, better };
   if (view?.startsWith("src:")) {
     const id = view.slice(4);
     if (id in SOURCE_BY_ID) return { kind: "source", sourceId: id };
@@ -102,7 +111,12 @@ export function applyView(
       }
       return out;
     }
-    const composite = averageComposite(values, ids, keys);
+    const composite = averageComposite(
+      values,
+      ids,
+      keys,
+      mode.kind === "average" ? (mode.better ?? []) : [],
+    );
     for (const key of keys) {
       const entry = composite[key];
       out[key] = { value: entry.score, breakdown: entry.parts };
@@ -137,9 +151,10 @@ export function applyView(
     areasWithData: shown.filter((d) => d.value > 0).length,
     view: {
       kind: mode.kind,
-      label: single ? single.label : "Average of selected sources",
-      unit: single ? single.unit : "avg. percentile",
+      label: single ? single.label : "Concern score (average of selected sources)",
+      unit: single ? single.unit : "concern score",
       contributors: ids,
+      better: mode.kind === "average" ? (mode.better ?? []).filter((id) => ids.includes(id)) : undefined,
     },
   };
 }

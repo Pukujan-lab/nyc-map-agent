@@ -144,7 +144,7 @@ describe("applyView", () => {
       sourceId: "trees",
     });
     expect(parseViewMode("src:nope", [])).toEqual({ kind: "legacy" });
-    expect(parseViewMode("avg", ["hpd"])).toEqual({ kind: "average", sourceIds: ["hpd"] });
+    expect(parseViewMode("avg", ["hpd"])).toEqual({ kind: "average", sourceIds: ["hpd"], better: [] });
   });
 });
 
@@ -153,5 +153,53 @@ describe("routeUrl", () => {
     const url = routeUrl({ lon: -73.98, lat: 40.75 }, { lon: -73.97, lat: 40.76 });
     expect(url).toContain("/routed-foot/route/v1/foot/-73.980000,40.750000;-73.970000,40.760000");
     expect(url).toContain("geometries=geojson");
+  });
+});
+
+describe("polarity", () => {
+  it("defaults problems to worse and assets to better", async () => {
+    const { SOURCES, effectivePolarity } = await import("./registry");
+    const by = Object.fromEntries(SOURCES.map((s) => [s.id, s.polarity]));
+    for (const id of ["noise", "311", "crashes", "hpd"]) expect(by[id]).toBe("worse");
+    for (const id of ["trees", "ramps", "speed-humps", "sip-corridors", "sip-intersections", "pluto-units"]) {
+      expect(by[id]).toBe("better");
+    }
+    expect(effectivePolarity("trees", ["trees"])).toBe("worse");
+    expect(effectivePolarity("hpd", ["hpd"])).toBe("better");
+    expect(effectivePolarity("hpd", [])).toBe("worse");
+  });
+
+  it("inverts 'better' sources so the composite means concern", () => {
+    const keys = ["x", "y"];
+    // x has many violations and many trees; y has few of both.
+    const values = { hpd: { x: 9, y: 1 }, trees: { x: 9, y: 1 } };
+    const plain = averageComposite(values, ["hpd", "trees"], keys);
+    expect(plain.x.score).toBe(100);
+    const concern = averageComposite(values, ["hpd", "trees"], keys, ["trees"]);
+    expect(concern.x.score).toBe(50);
+    expect(concern.y.score).toBe(50);
+    const trees = concern.x.parts.find((p) => p.sourceId === "trees");
+    expect(trees?.inverted).toBe(true);
+    expect(trees?.concern).toBe(0);
+    // An area with no trees is maximum concern on that source.
+    expect(concern.y.parts.find((p) => p.sourceId === "trees")?.concern).toBe(100);
+  });
+
+  it("carries direction through applyView and the URL parser", () => {
+    expect(parseViewMode("avg", ["hpd", "trees"], ["trees"])).toEqual({
+      kind: "average",
+      sourceIds: ["hpd", "trees"],
+      better: ["trees"],
+    });
+    const out = applyView(
+      model(),
+      { kind: "average", sourceIds: ["hpd", "trees"], better: ["trees"] },
+      { hpd: counts("hpd", { A: 7, B: 1 }), trees: counts("trees", { A: 7, B: 1 }) },
+    );
+    expect(out.view?.label).toMatch(/Concern score/);
+    expect(out.view?.better).toEqual(["trees"]);
+    const part = out.neighborhoods[0].breakdown?.find((p) => p.sourceId === "trees");
+    expect(part?.inverted).toBe(true);
+    expect(out.neighborhoods[0].value).toBe(out.neighborhoods[1].value);
   });
 });

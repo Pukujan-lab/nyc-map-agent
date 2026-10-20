@@ -42,7 +42,7 @@ export function ViewModeMenu({
       ? (compact ? LAYER_SHORT_LABELS : LAYER_LABELS)[layer]
       : viewMode.kind === "source"
         ? (SOURCE_BY_ID[viewMode.sourceId]?.shortLabel ?? "Source")
-        : `Average (${averageSources.length})`;
+        : `Concern (${averageSources.length})`;
 
   const onChange = (next: string) => {
     if (next.startsWith("legacy:")) {
@@ -96,7 +96,7 @@ export function ViewModeMenu({
           ))}
           <DropdownMenuSeparator />
           <DropdownMenuRadioItem value="avg" disabled={averageSources.length === 0}>
-            Average of {averageSources.length} source
+            Concern score: average of {averageSources.length} source
             {averageSources.length === 1 ? "" : "s"}
           </DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>

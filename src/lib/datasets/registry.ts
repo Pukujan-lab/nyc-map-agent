@@ -8,6 +8,8 @@
  * out on purpose — see `UNWIRED_DATASETS`.
  */
 
+export type Polarity = "worse" | "better";
+
 export type SourceCategory =
   | "Complaints"
   | "Safety"
@@ -34,6 +36,13 @@ interface BaseSource {
   unit: string;
   /** Loaded on first visit (before the user touches the drawer). */
   defaultEnabled: boolean;
+  /**
+   * Default direction for the Average ("Concern score"): `worse` means more
+   * records is more concern (complaints, crashes, violations); `better` means
+   * more is good (trees, ramps, traffic calming, housing), so the Average
+   * uses 100 − percentile. Users can flip it per source (URL `flip`).
+   */
+  polarity: Polarity;
 }
 
 /**
@@ -81,6 +90,7 @@ export type SourceConfig = BuiltinSource | GridSource | GeometrySource;
 export const SOURCES: SourceConfig[] = [
   {
     id: "noise",
+    polarity: "worse",
     kind: "builtin",
     builtin: "noise",
     label: "311 noise complaints",
@@ -93,6 +103,7 @@ export const SOURCES: SourceConfig[] = [
   },
   {
     id: "311",
+    polarity: "worse",
     kind: "grid",
     label: "All 311 service requests",
     shortLabel: "311 (all)",
@@ -108,6 +119,7 @@ export const SOURCES: SourceConfig[] = [
   },
   {
     id: "crashes",
+    polarity: "worse",
     kind: "builtin",
     builtin: "crashes",
     label: "Motor vehicle crashes",
@@ -120,6 +132,7 @@ export const SOURCES: SourceConfig[] = [
   },
   {
     id: "hpd",
+    polarity: "worse",
     kind: "grid",
     label: "HPD housing violations",
     shortLabel: "HPD violations",
@@ -135,6 +148,7 @@ export const SOURCES: SourceConfig[] = [
   },
   {
     id: "pluto-units",
+    polarity: "better",
     kind: "grid",
     label: "Residential units (PLUTO)",
     shortLabel: "Res. units",
@@ -150,6 +164,7 @@ export const SOURCES: SourceConfig[] = [
   },
   {
     id: "trees",
+    polarity: "better",
     kind: "grid",
     label: "Street trees (2015 census)",
     shortLabel: "Trees",
@@ -165,6 +180,7 @@ export const SOURCES: SourceConfig[] = [
   },
   {
     id: "ramps",
+    polarity: "better",
     kind: "geometry",
     label: "Pedestrian ramps",
     shortLabel: "Ramps",
@@ -178,6 +194,7 @@ export const SOURCES: SourceConfig[] = [
   },
   {
     id: "speed-humps",
+    polarity: "better",
     kind: "geometry",
     label: "Speed humps",
     shortLabel: "Speed humps",
@@ -191,6 +208,7 @@ export const SOURCES: SourceConfig[] = [
   },
   {
     id: "sip-corridors",
+    polarity: "better",
     kind: "geometry",
     label: "Street improvement corridors",
     shortLabel: "SIP corridors",
@@ -204,6 +222,7 @@ export const SOURCES: SourceConfig[] = [
   },
   {
     id: "sip-intersections",
+    polarity: "better",
     kind: "grid",
     label: "Street improvement intersections",
     shortLabel: "SIP intersections",
@@ -259,3 +278,15 @@ export function parseSourceList(value: string | null, fallback: string[]): strin
 export function datasetUrl(datasetId: string): string {
   return `https://data.cityofnewyork.us/d/${datasetId}`;
 }
+
+/** Effective direction after the user's flips. */
+export function effectivePolarity(id: string, flipped: readonly string[]): Polarity {
+  const base = SOURCE_BY_ID[id]?.polarity ?? "worse";
+  if (!flipped.includes(id)) return base;
+  return base === "worse" ? "better" : "worse";
+}
+
+export const POLARITY_LABELS: Record<Polarity, string> = {
+  worse: "higher is worse",
+  better: "higher is better",
+};

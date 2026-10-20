@@ -1,4 +1,5 @@
-import { AlertTriangle, ExternalLink, Loader2 } from "lucide-react";
+import { AlertTriangle, ArrowDownUp, ExternalLink, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   Accordion,
   AccordionContent,
@@ -19,6 +20,7 @@ import { Switch } from "@/components/ui/switch";
 import type { SourceCounts } from "@/lib/datasets/fetchSource";
 import {
   datasetUrl,
+  POLARITY_LABELS,
   SOURCE_CATEGORIES,
   SOURCES,
   UNWIRED_DATASETS,
@@ -41,7 +43,15 @@ interface DataSourcesDrawerProps {
  */
 export function DataSourcesDrawer({ open, onOpenChange, counts, status }: DataSourcesDrawerProps) {
   const isDesktop = useMediaQuery("(min-width: 1024px)");
-  const { enabledSources, averageSources, setSourceEnabled, setInAverage } = useDataView();
+  const {
+    enabledSources,
+    averageSources,
+    setSourceEnabled,
+    setInAverage,
+    polarityOf,
+    flippedSources,
+    toggleFlip,
+  } = useDataView();
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -107,6 +117,24 @@ export function DataSourcesDrawer({ open, onOpenChange, counts, status }: DataSo
                           </label>
                         ) : null}
                       </div>
+                      {on && averageSources.includes(source.id) ? (
+                        <div className="mt-1.5 flex items-center gap-1.5 text-[11px]">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-6 gap-1 px-2 text-[11px]"
+                            aria-label={`${source.label}: ${POLARITY_LABELS[polarityOf(source.id)]}. Flip direction`}
+                            onClick={() => toggleFlip(source.id)}
+                          >
+                            <ArrowDownUp className="h-3 w-3" />
+                            {POLARITY_LABELS[polarityOf(source.id)]}
+                          </Button>
+                          {flippedSources.includes(source.id) ? (
+                            <span className="text-muted-foreground">(flipped)</span>
+                          ) : null}
+                        </div>
+                      ) : null}
                       {on ? (
                         <div className="mt-1.5 text-[11px] text-muted-foreground">
                           {st?.error ? (
@@ -152,10 +180,11 @@ export function DataSourcesDrawer({ open, onOpenChange, counts, status }: DataSo
         </Accordion>
 
         <p className="mt-3 text-[10px] leading-snug text-muted-foreground">
-          Average = for each area, the percentile rank (0–100) of every
-          ticked source, averaged. Inventories such as trees or ramps count
-          assets, not problems — a high average is “lots recorded here”, not
-          “worse”.
+          Concern score (the Average view) = for each area, the percentile rank
+          (0–100) of every ticked source, averaged. Sources marked “higher is
+          better” (trees, ramps, speed humps, street improvements, housing)
+          count as 100 − percentile, so a high score always means more
+          concern. Flip any source with its direction button.
         </p>
       </SheetContent>
     </Sheet>

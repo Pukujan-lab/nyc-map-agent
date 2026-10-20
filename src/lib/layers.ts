@@ -80,6 +80,10 @@ export interface SourceBreakdown {
   value: number;
   /** Percentile rank 0–100; only set under the Average view. */
   percentile?: number;
+  /** Average view only: true when the source counts as "higher is better". */
+  inverted?: boolean;
+  /** Average view only: contribution to the concern score (0–100). */
+  concern?: number;
 }
 
 /** Set when the map shows a registry source or the Average composite. */
@@ -89,6 +93,8 @@ export interface ViewInfo {
   unit: string;
   /** Source ids that fed the value, in display order. */
   contributors: string[];
+  /** Average only: contributors counted as "higher is better". */
+  better?: string[];
 }
 
 export interface NeighborhoodDatum {
