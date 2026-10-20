@@ -8,8 +8,8 @@ Project guidance for the NYC Map Agent. Read this before writing code. Product s
 - **React Router** for routing. All routes live in `src/App.tsx`; pages live in `src/pages/`.
 - **Tailwind CSS** for all styling. No CSS-in-JS, no styled-components, no hand-written `.css` files beyond `src/index.css`.
 - **shadcn/ui** (Radix primitives) for every standard control: buttons, dialogs, sheets, tabs, tooltips, selects, sliders, toasts.
-- **deck.gl** (`@deck.gl/react`, `@deck.gl/layers`, `@deck.gl/aggregation-layers`) renders the extruded 3D columns. Height = incident count, color = severity.
-- **MapLibre GL + react-map-gl** provides the map canvas and camera control, with OpenStreetMap raster tiles and an "© OpenStreetMap contributors" attribution.
+- **deck.gl** (`@deck.gl/core`, `@deck.gl/layers`, `@deck.gl/mapbox`) renders the extruded 3D columns through a `MapboxOverlay` registered as a MapLibre control. Height = incident count, color = severity. Do **not** wrap the map in `@deck.gl/react`'s `<DeckGL>` — two React render roots over one canvas is the main source of interop bugs.
+- **MapLibre GL + react-map-gl** (`react-map-gl/maplibre`) provides the map canvas and camera control, with OpenStreetMap raster tiles and an "© OpenStreetMap contributors" attribution.
 - **TanStack Query** owns all server state: Socrata fetches, cell/neighborhood aggregates, caching, retries.
 - **Recharts** (via the shadcn `chart` component) for the hour-of-day and breakdown charts.
 - **lucide-react** for all icons. No icon fonts, no inline SVG one-offs.
@@ -23,8 +23,9 @@ Project guidance for the NYC Map Agent. Read this before writing code. Product s
 | Any UI control | shadcn/ui from `src/components/ui/` | Raw unstyled `<div>` buttons, MUI, Chakra, Ant |
 | Layout, spacing, color, responsive | Tailwind utility classes | inline `style` (except deck.gl/map props), CSS modules |
 | Icons | `lucide-react` | Font Awesome, emoji as icons |
-| 3D columns / hexagon aggregation | deck.gl layers | Three.js written from scratch, CSS 3D transforms |
-| Basemap, camera, fly-to | MapLibre + react-map-gl, driven by deck.gl `viewState` | Google Maps, a hand-rolled canvas renderer |
+| 3D columns / aggregation | deck.gl `PolygonLayer`/`GeoJsonLayer` via `MapboxOverlay` | Three.js from scratch, CSS 3D transforms, `@deck.gl/react` |
+| Basemap, camera, fly-to | MapLibre + react-map-gl; camera moves go through `MapStateContext.cameraTarget` → `map.flyTo`/`jumpTo` | Google Maps, a hand-rolled canvas renderer |
+| Off-main-thread work (paging, spatial join, rollups) | a module Web Worker in `src/lib/geo/` | blocking the main thread, a second dev server |
 | Fetching Socrata / any HTTP | `fetch` inside TanStack Query hooks in `src/lib/api/` | `axios`, raw `useEffect` + `fetch`, SWR |
 | Charts and histograms | Recharts via shadcn `chart` | Chart.js, D3, Highcharts |
 | Dates and time windows | `date-fns` | `moment`, manual `Date` math for ranges |
@@ -35,6 +36,7 @@ Project guidance for the NYC Map Agent. Read this before writing code. Product s
 | Notifications | shadcn `sonner` / `toast` | `alert()` |
 | Loading placeholders | shadcn `skeleton` | spinners built from scratch |
 | Unique ids | `crypto.randomUUID()` | `Math.random()` id strings |
+| Tests for geo math and rollups | `vitest` (`npm test`) | Jest, a browser-only manual checklist |
 
 If a task seems to need a library not on this list, prefer the closest listed option. Adding a dependency requires a clear reason and a note in this file.
 
@@ -46,6 +48,23 @@ If a task seems to need a library not on this list, prefer the closest listed op
 - Place points by `latitude`/`longitude`, not the `borough` field (street noise rows are often `Unspecified`).
 - Surface data caveats in the UI: 311 is reported complaints, not measured noise; crash data lags a few months.
 - Aggregate once, then render: cell and NTA rollups are computed in the query layer and cached, not recomputed per render or per column.
+
+## Spatial join and aggregation
+
+- Neither `erm2-nwe9` nor `h9gi-nx95` carries an NTA code. Neighborhood assignment is a **point-in-polygon join** against `9nt8-h7nd`, done in the browser.
+- `src/lib/geo/ntaIndex.ts` buckets the city into 0.01° (~1.1 km) cells mapping to candidate NTAs, so each point ray-casts 1–2 polygons instead of 262. `pointInPolygon.ts` handles Polygon + MultiPolygon + holes. No turf, no extra geo dependency.
+- `src/lib/geo/aggregate.worker.ts` is a **module Web Worker**: count → page Socrata CSV at 50k rows → zod-validate each row → assign → roll up → `postMessage({ type: "done" })`. It streams `progress` messages so the UI can show a determinate bar.
+- Rollups produced per NTA: count, night count (10pm–4am), weekend-night count (Fri/Sat 10pm–4am), 24-slot hour histogram, month histogram, `helicopterMonths`, top types/descriptors/factors, injuries, deaths, cyclists, severity. Plus borough totals and top intersections.
+- **Cache the aggregate, never the rows.** `src/lib/cache/aggregateCache.ts` stores ~262 small rows per `dataset:window` in `localStorage`; a repeat visit is instant. Raw rows are discarded after aggregation.
+- Rows outside every polygon go to `unassignedCount` and rows that fail zod to `malformedCount`. Both are surfaced in the caveats sheet — never silently dropped.
+
+## Agent seam
+
+- `src/lib/agent/client.ts` defines `AgentClient.send(messages, context)` and `AgentReply = { text, toolCalls, spoken? }`. `createAgentClient()` picks `MockAgentClient` or `HttpAgentClient` from `VITE_AGENT_MODE`.
+- `src/lib/agent/execute.ts` runs validated tool calls against `MapStateContext`. **Sources ("show query") are produced by execution, never by the agent**, so a model cannot fabricate a citation.
+- `src/lib/agent/query.ts` is the single deterministic rollup over the local aggregates. The mock agent and the tool executor both use it, so an answer's number and its source always agree.
+- `src/lib/agent/httpAgent.ts` documents the `POST /api/chat` contract and zod-validates the reply. That file is the only thing a real model layer has to satisfy.
+- Every answer must emit at least one of `fly_to` / `set_layer` / `highlight`. If a query fails, say so — never estimate.
 
 ## AI, chat, and voice rules
 
