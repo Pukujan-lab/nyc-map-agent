@@ -130,9 +130,14 @@ export function StreetViewSheet({
       const instance = new Viewer({
         accessToken: MAPILLARY_TOKEN,
         container,
-        // Arrow keys belong to the sheet's own sequence stepping, not to the
-        // viewer's pan controls.
-        component: { keyboard: false },
+        component: {
+          // Arrow keys belong to the sheet's own sequence stepping, not to the
+          // viewer's pan controls.
+          keyboard: false,
+          // The default cover waits for a click before showing anything, which
+          // reads as a broken panel when the photo is already chosen for you.
+          cover: false,
+        },
       });
       viewer = instance;
       viewerRef.current = instance;
@@ -140,12 +145,13 @@ export function StreetViewSheet({
       instance.on("load", () => {
         // The sheet slides in, so measure again once the canvas has a size.
         instance.resize();
-        if (!cancelled) setReady(true);
       });
 
-      // Walking the sequence moves away from the block, and the footer says so
-      // rather than pretending the photos still describe this square.
       instance.on("image", () => {
+        if (!cancelled) setReady(true);
+
+        // Walking the sequence moves away from the block, and the footer says
+        // so rather than pretending the photos still describe this square.
         const origin = { lon: image.lon, lat: image.lat };
         void instance
           .getPosition()
