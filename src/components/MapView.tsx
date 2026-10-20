@@ -29,8 +29,18 @@ import {
   neighborhoodsToGeoJson,
 } from "@/lib/map/geojson";
 import { LAYER_IDS, SOURCE_IDS, buildFallbackStyle } from "@/lib/map/style";
+import {
+  resolveWalkInput,
+  stepPose,
+  WALK_IDLE,
+  WALK_KEYS,
+  WALK_PITCH,
+  WALK_ZOOM,
+  type WalkInput,
+} from "@/lib/map/walk";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
+import { WalkControls } from "./WalkControls";
 
 /** How far the camera may tilt. Enough to look down a street, never a globe. */
 const MAX_PITCH = 78;
@@ -92,6 +102,9 @@ export function MapView({
     scale,
     tilted,
     setTilted,
+    walking,
+    walkRequest,
+    stopWalk,
     cameraTarget,
     navCommand,
     highlightedNtaCodes,
@@ -101,6 +114,8 @@ export function MapView({
     selectBlock,
   } = useMapState();
   const reducedMotion = usePrefersReducedMotion();
+  /** Held d-pad buttons. A ref, because it changes without needing a render. */
+  const walkPad = useRef<WalkInput>(WALK_IDLE);
 
   const viewState = useMemo(
     () => ({
@@ -325,6 +340,15 @@ export function MapView({
       "line-opacity",
       showBlocks ? 0.3 : 1,
     );
+    // A block's highlight belongs to the block scale; inside a neighborhood
+    // prism it would just be a bright speck buried in the column.
+    for (const id of [LAYER_IDS.blockSelection, LAYER_IDS.blockSelectionEdge]) {
+      map.setLayoutProperty(
+        id,
+        "visibility",
+        showBlocks ? "visible" : "none",
+      );
+    }
   }, [ready, styleEpoch, neighborhoodGeoJson, blockGeoJson, scale]);
 
   useEffect(() => {
@@ -380,6 +404,104 @@ export function MapView({
     });
   }, [ready, tilted, reducedMotion]);
 
+  // Entering walk mode is a camera move, not a mode flag: eye level is the
+  // steepest pitch the map allows, at a zoom where buildings have height.
+  useEffect(() => {
+    if (!ready || !walking) return;
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    const center = map.getCenter();
+    const target: [number, number] = [
+      walkRequest?.lon ?? center.lng,
+      walkRequest?.lat ?? center.lat,
+    ];
+    map.easeTo({
+      center: target,
+      pitch: WALK_PITCH,
+      bearing: map.getBearing(),
+      zoom: Math.max(map.getZoom(), WALK_ZOOM),
+      duration: reducedMotion ? 0 : 900,
+    });
+  }, [ready, walking, walkRequest, reducedMotion]);
+
+  // The walk loop. Each frame moves the camera in ground metres along its own
+  // bearing, so speed is constant at any zoom and the horizon stays level.
+  useEffect(() => {
+    if (!ready || !walking) return;
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+
+    const held = new Set<string>();
+    const isTyping = (target: EventTarget | null): boolean => {
+      const element = target as HTMLElement | null;
+      if (!element) return false;
+      return (
+        element.tagName === "INPUT" ||
+        element.tagName === "TEXTAREA" ||
+        element.isContentEditable
+      );
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (isTyping(event.target) || event.metaKey || event.ctrlKey) return;
+      if (event.key === "Escape") {
+        stopWalk();
+        return;
+      }
+      if (!WALK_KEYS.has(event.code)) return;
+      // Arrow keys would otherwise pan the map underneath the walk.
+      event.preventDefault();
+      held.add(event.code);
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      held.delete(event.code);
+    };
+    const onBlur = () => held.clear();
+
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
+
+    let frame = 0;
+    let last = performance.now();
+    const tick = (now: number) => {
+      const dt = (now - last) / 1000;
+      last = now;
+      const input = resolveWalkInput(held, walkPad.current);
+      if (input.forward !== 0 || input.turn !== 0) {
+        const center = map.getCenter();
+        const next = stepPose(
+          {
+            lon: center.lng,
+            lat: center.lat,
+            bearing: map.getBearing(),
+            zoom: map.getZoom(),
+          },
+          input,
+          dt,
+        );
+        // Pitch is pinned while walking: moving cancels any camera animation in
+        // flight, and a top-down map is not a walk.
+        map.jumpTo({
+          center: [next.lon, next.lat],
+          bearing: next.bearing,
+          pitch: WALK_PITCH,
+        });
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      held.clear();
+      walkPad.current = WALK_IDLE;
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [ready, walking, stopWalk]);
+
   useEffect(() => {
     if (!ready || !navCommand) return;
     const map = mapRef.current?.getMap();
@@ -400,7 +522,9 @@ export function MapView({
       bearing: 0,
     });
     setTilted(false);
-  }, [ready, navCommand, reducedMotion, setTilted]);
+    // "Reset view" means the city, not the street you were standing on.
+    stopWalk();
+  }, [ready, navCommand, reducedMotion, setTilted, stopWalk]);
 
   const hoverNtaName =
     hover?.kind === "block"
@@ -415,8 +539,11 @@ export function MapView({
         initialViewState={viewState}
         maxPitch={MAX_PITCH}
         minZoom={9}
-        maxZoom={17.5}
+        maxZoom={19}
         dragRotate
+        // The built-in arrow-key panning has to stand down while walking, or
+        // every keypress would move the camera twice.
+        keyboard={!walking}
         touchPitch
         onLoad={handleLoad}
         onError={handleError}
@@ -426,7 +553,16 @@ export function MapView({
         style={{ position: "absolute", inset: 0 }}
       />
 
-      {hover ? (
+      {walking ? (
+        <WalkControls
+          onInput={(input) => {
+            walkPad.current = input;
+          }}
+          onExit={stopWalk}
+        />
+      ) : null}
+
+      {hover && !walking ? (
         <div
           className="pointer-events-none absolute z-20 max-w-[220px] rounded-lg border border-border bg-card/95 px-3 py-2 text-xs shadow-xl backdrop-blur"
           style={{

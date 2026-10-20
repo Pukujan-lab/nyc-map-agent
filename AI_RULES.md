@@ -9,6 +9,8 @@ Project guidance for the NYC Map Agent. Read this before writing code. Product s
 - **Tailwind CSS** for all styling. No CSS-in-JS, no styled-components, no hand-written `.css` files beyond `src/index.css`.
 - **shadcn/ui** (Radix primitives) for every standard control: buttons, dialogs, sheets, tabs, tooltips, selects, sliders, toasts.
 - **MapLibre draws the data layers itself.** Neighborhoods and ~300 m block squares are `fill-extrusion` layers on two GeoJSON sources defined in `src/lib/map/style.ts`; heights and colors arrive as feature properties, and updates are `source.setData()` / `setPaintProperty()` calls. There is **no second renderer** — no deck.gl, no `<DeckGL>` wrapper, no overlay control. One canvas, one render pass, correct depth sorting against the basemap.
+- **Walk mode is a camera, not an engine.** `MapStateContext.walking` + `startWalk()` ease to `WALK_PITCH` (78°) at `WALK_ZOOM` (17), then a `requestAnimationFrame` loop drives the camera through `stepPose()` in `src/lib/map/walk.ts`, which moves the centre in **ground metres** along the current bearing — so walking speed is the same at any zoom. W/S/A/D or arrows move, Shift runs, Esc or the dock's footprints button leaves, and `WalkControls` supplies a d-pad for touch. Moving pins the pitch, and the map's built-in `keyboard` panning is off while walking so a keypress cannot move the camera twice. No game engine, no pointer-lock library, no second renderer.
+- **A picked block gets a raised white rim.** `blockSelectionToGeoJson()` builds a thin band *around* the block square, lifted above its column: a filled shell would be coplanar with the block's own faces and flicker, and a flat outline would vanish under the column as soon as the map tilts. The rim is hidden outside the Blocks scale.
 - The camera is **north-up and flat on load** (`pitch: 0`), and the user can tilt to 62° with the "3D" button or by right-dragging. `maxPitch` is 78 — never a globe. Tilting from the citywide view also drops the zoom to at least 13.4, because that is where the extruded buildings start; without them a tilt is just a floating plate. Tilt state lives in `MapStateContext.tilted`, so the button and the camera cannot disagree.
 - **The basemap is a keyless vector style with real 3D buildings** (`BASEMAP_STYLE_URL` in `src/lib/map/basemap.ts`, OpenFreeMap Liberty by default, overridable with `VITE_BASEMAP_STYLE`). `installDataLayers()` injects the data sources/layers above it, adds an extruded-buildings layer if the style lacks one, and lifts the basemap's label layers back on top so street names survive the overlay. `buildFallbackStyle()` in `src/lib/map/style.ts` is a raster OSM style with the data layers baked in, applied once if the vector style fails — the map must never be blank.
 - **MapLibre GL + react-map-gl** (`react-map-gl/maplibre`) provides the map canvas and camera control. Attribution for the vector basemap stays on the map.
@@ -30,6 +32,7 @@ Project guidance for the NYC Map Agent. Read this before writing code. Product s
 | Column height | `heightFor()` in `src/lib/layers.ts`, a sqrt scale of the same value | a second metric, a hand-rolled scale in a component |
 | Basemap, camera, fly-to | MapLibre + react-map-gl; camera moves go through `MapStateContext.cameraTarget` / `navCommand` → `map.flyTo`/`jumpTo`/`zoomIn` | Google Maps, a hand-rolled canvas renderer |
 | Tilt | `MapStateContext.tilted` → `map.easeTo({ pitch, zoom })`, 0° or 62°, `maxPitch` 78 | pitch set from a component, globe projection |
+| First-person walking | `stepPose()` in `src/lib/map/walk.ts` + `MapStateContext.walking` + `WalkControls` | a game engine, pointer-lock, a second renderer |
 | Basemap | `BASEMAP_STYLE_URL` (keyless vector style with 3D buildings) + `installDataLayers()` | a hand-built basemap from scratch, a second style file per feature |
 | Persistent on-screen UI | one bottom dock (`MapHud`) plus the `ControlDrawer` sheet | a floating card per feature, toolbars that cover the map |
 | Off-main-thread work (paging, spatial join, rollups) | a module Web Worker in `src/lib/geo/` | blocking the main thread, a second dev server |
@@ -88,7 +91,7 @@ If a task seems to need a library not on this list, prefer the closest listed op
 ## Code organization
 
 - `src/pages/` route screens; `src/components/` feature components; `src/components/ui/` shadcn primitives (do not edit these — compose new components instead).
-- `src/lib/api/` data access, `src/lib/agent/` model client + tools, `src/lib/geo/` cell + NTA aggregation, `src/lib/map/` basemap + data layers + GeoJSON, `src/lib/format.ts` display helpers.
+- `src/lib/api/` data access, `src/lib/agent/` model client + tools, `src/lib/geo/` cell + NTA aggregation, `src/lib/map/` basemap + data layers + GeoJSON + walking, `src/lib/format.ts` display helpers.
 - Keep files small and single-purpose; extract a component or hook when a file passes ~200 lines.
 - Props and shared data shapes get explicit exported types; no `React.FC`, no default-exported anonymous components.
 - Update `src/pages/Index.tsx` so new work is actually reachable — an unreferenced component is an unfinished feature.
@@ -96,8 +99,9 @@ If a task seems to need a library not on this list, prefer the closest listed op
 ## UI and accessibility
 
 - Mobile-first Tailwind; the map is full-bleed and panels are shadcn `sheet`/`card` overlays that stay usable at 375px wide.
-- **The map is the interface.** Exactly one thing is always on screen: the bottom dock (`MapHud`) — legend popover, layer switch, tilt, settings, chat. Everything else is a sheet: `ControlDrawer` (window, scale, neighborhood jump, zoom/reset, legend, caveats), `ChatPanel`, `DetailsSheet`, `CaveatsSheet`. A new control goes in the drawer, not in a new floating card; only a transient status chip (`MapStatusChip`) may appear over the map while data loads.
+- **The map is the interface.** Exactly one thing is always on screen: the bottom dock (`MapHud`) — legend popover, layer switch, tilt, walk, settings, chat. Everything else is a sheet: `ControlDrawer` (window, scale, neighborhood jump, zoom/reset, legend, caveats), `ChatPanel`, `DetailsSheet`, `CaveatsSheet`. A new control goes in the drawer, not in a new floating card; only a transient status chip (`MapStatusChip`) may appear over the map while data loads, and `WalkControls` (its strip and d-pad) while walking.
 - Every control is keyboard reachable with a visible focus ring; every icon-only button has an `aria-label`.
 - The map has a text equivalent: the details panel and chat carry the same numbers, so nothing is map-only.
-- Respect `prefers-reduced-motion` for camera flights — jump instead of animate.
+- Respect `prefers-reduced-motion` for camera flights — jump instead of animate, including the ease into walk mode.
+- Walk mode has a keyboard path (W/S/A/D or arrows, Shift, Esc) and a labelled touch d-pad; the dock button carries `aria-pressed`, so the mode is never mouse-only.
 - Dark theme via Tailwind `dark:` classes and CSS variables from `src/index.css`; no hard-coded hex colors in components.

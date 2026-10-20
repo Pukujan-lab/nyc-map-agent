@@ -1,6 +1,6 @@
 import type { NtaBoundary, PolygonRings } from "@/lib/api/nta";
 import { formatCount } from "@/lib/format";
-import { blockPolygon } from "@/lib/geo/blocks";
+import { BLOCK_GRID_DEG, blockPolygon } from "@/lib/geo/blocks";
 import type { AggregateResult, BlockCell, NtaAggregate } from "@/lib/geo/types";
 
 export type LayerId = "noise" | "crashes" | "combined";
@@ -196,6 +196,8 @@ export interface BlockDatum {
   key: string;
   ntaCode: string;
   polygon: PolygonRings;
+  /** Centre of the square — where "walk this block" puts the camera. */
+  center: { lon: number; lat: number };
   value: number;
   bucket: BucketIndex;
   fill: Rgba;
@@ -393,6 +395,10 @@ export function buildMapModel(params: {
     key,
     ntaCode: entry.ntaCode,
     polygon: blockPolygon(entry.lon, entry.lat),
+    center: {
+      lon: entry.lon + BLOCK_GRID_DEG / 2,
+      lat: entry.lat + BLOCK_GRID_DEG / 2,
+    },
     value,
     bucket: bucketFor(value, blockThresholds),
     fill: fillFor(value, blockThresholds),

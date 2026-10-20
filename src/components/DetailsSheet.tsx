@@ -1,4 +1,4 @@
-import { MessageSquarePlus, X } from "lucide-react";
+import { Footprints, MessageSquarePlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -95,8 +95,15 @@ function DetailsBody({
   onAsk: (text: string) => void;
   onWidenWindow: () => void;
 }) {
-  const { layer, selectBlock } = useMapState();
+  const { layer, selectBlock, startWalk, setDetailsOpen } = useMapState();
   if (!boundary) return null;
+
+  const walkBlock = () => {
+    if (!block) return;
+    startWalk(block.center);
+    // On a phone the sheet would cover the street you just walked onto.
+    if (!isDesktop) setDetailsOpen(false);
+  };
 
   const noiseCount = noise?.count ?? 0;
   const crashCount = crashes?.count ?? 0;
@@ -184,6 +191,16 @@ function DetailsBody({
                   ? `${formatCount(block.injured)} injured, ${formatCount(block.killed)} killed`
                   : `${formatCount(block.noiseCount)} noise, ${formatCount(block.crashCount)} crashes`}
             </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="mt-2 h-7 w-full text-[11px]"
+              onClick={walkBlock}
+            >
+              <Footprints className="h-3.5 w-3.5" />
+              Walk this block
+            </Button>
           </div>
         ) : null}
 
@@ -303,10 +320,11 @@ function DetailsBody({
 }
 
 export function DetailsSheet(props: DetailsSheetProps) {
-  const { selectedNtaCode, selectNta, seedChat, setWindow } = useMapState();
+  const { selectedNtaCode, selectNta, seedChat, setWindow, detailsOpen } =
+    useMapState();
   const { boundary, windowId } = props;
 
-  if (!selectedNtaCode || !boundary) return null;
+  if (!selectedNtaCode || !boundary || !detailsOpen) return null;
 
   const close = () => selectNta(null);
   const ask = (text: string) => {

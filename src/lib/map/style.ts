@@ -31,7 +31,8 @@ export const LAYER_IDS = {
   neighborhoodOutline: "neighborhood-outline",
   blocks: "block-extrusion",
   emphasis: "emphasis-outline",
-  blockSelection: "block-selection-outline",
+  blockSelection: "block-selection-rim",
+  blockSelectionEdge: "block-selection-edge",
 } as const;
 
 function emptyCollection(): FeatureCollection {
@@ -87,18 +88,32 @@ export const DATA_LAYERS: LayerSpecification[] = [
     source: SOURCE_IDS.emphasis,
     layout: { "line-join": "round" },
     paint: {
-      "line-color": ["match", ["get", "tone"], "selected", "#ffffff", "#38bdf8"],
+      // Near-black for the picked neighborhood — white vanished against the
+      // light basemap, and this has to read at any tilt.
+      "line-color": ["match", ["get", "tone"], "selected", "#0b1220", "#38bdf8"],
       "line-width": ["match", ["get", "tone"], "selected", 3, 2.4],
     },
   },
   {
     id: LAYER_IDS.blockSelection,
+    type: "fill-extrusion",
+    source: SOURCE_IDS.blockSelection,
+    paint: {
+      "fill-extrusion-color": "#ffffff",
+      "fill-extrusion-height": ["get", "height"],
+      "fill-extrusion-base": 0,
+      "fill-extrusion-opacity": 0.9,
+    },
+  },
+  {
+    id: LAYER_IDS.blockSelectionEdge,
     type: "line",
     source: SOURCE_IDS.blockSelection,
     layout: { "line-join": "round" },
     paint: {
-      "line-color": "#ffffff",
-      "line-width": 2.5,
+      "line-color": "#0b1220",
+      "line-width": 1.5,
+      "line-opacity": 0.75,
     },
   },
 ];

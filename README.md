@@ -58,6 +58,8 @@ Socrata SODA ──► src/lib/api/{socrata,noise,crashes,nta}.ts
 - **Rollup, not raw points.** Per neighborhood we keep counts, a 24-slot hour histogram, month histogram, night and weekend-night counts, top complaint types/descriptors/contributing factors, injuries, deaths and cyclist injuries. The same pass also fills a fixed ~300 m block grid, so the Blocks view needs no extra fetch. ~262 neighborhood rows plus a few thousand block cells, cached; the raw rows are thrown away.
 - **One renderer.** MapLibre draws the columns itself with `fill-extrusion` layers over two GeoJSON sources (`src/lib/map/style.ts`). No deck.gl, no overlay control, no second canvas — so the prisms depth-sort against the basemap and picking goes through `queryRenderedFeatures`, with an O(1) grid/index fallback if a query comes back empty.
 - **A city, not a plate.** `src/lib/map/basemap.ts` loads a keyless vector style (OpenFreeMap Liberty) and injects the data layers above it, adds an extruded-buildings layer if the style has none, lifts the style's labels back on top, and sets fog for horizon haze. The columns are translucent, so streets and buildings read through the color. If the style cannot be fetched, `buildFallbackStyle()` swaps in the bundled raster OSM style — the map is never blank.
+- **Walk it.** The footprints button drops the camera to eye level (78° pitch, zoom 17) and hands you the street: W/S move, A/D turn, Shift runs, Esc leaves — plus a d-pad on touch. Movement is in ground metres (`stepPose()` in `src/lib/map/walk.ts`), so walking pace does not change when you scroll the zoom. `src/lib/map/walk.test.ts` covers the maths.
+- **The picked block is obvious.** Selecting a block raises a thin white rim around its square (`blockSelectionToGeoJson`) rather than a filled shell, because a shell shares its faces with the block's own column and flickers; the rim stands clear of it at any tilt, and stays visible while you walk through it.
 - **Color, then height.** `src/lib/layers.ts` cuts the non-zero values into quartiles and maps them to four colors, so each band covers roughly a quarter of the areas with data. `heightFor()` turns the same value into column meters on a square-root scale. The legend reads its ranges, counts and peak from the same function, so the two cannot drift.
 - **Time windows.** Noise uses the selected window (90 days or 12 months). Crashes always use the **newest 12 months**, because the NYPD dataset lags about four months — a 90-day crash window can be empty. Every surface that shows crash numbers says so.
 - **Nothing is silently dropped.** Points outside every neighborhood land in `unassignedCount`, malformed rows in `malformedCount`, and both are reported in the caveats sheet (Legend → Details).
@@ -100,6 +102,7 @@ pnpm test
 - `pointInPolygon.test.ts` — ray casting, concave shapes, holes, bucket assignment and bucket-edge isolation
 - `socrata.test.ts` — RFC4180-ish CSV parsing and percent-encoded SoQL URLs
 - `layers.test.ts` — height scaling, per-layer counts, empty state
+- `walk.test.ts` — walk-mode movement, turning, sprinting, frame clamping, key/pad resolution
 - `mockAgent.test.ts` — the five acceptance questions plus the honest fallback, run against synthetic aggregates
 
 ## Data caveats

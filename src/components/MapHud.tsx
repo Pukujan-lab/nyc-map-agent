@@ -1,4 +1,10 @@
-import { Box, MessageSquare, SlidersHorizontal, Square } from "lucide-react";
+import {
+  Box,
+  Footprints,
+  MessageSquare,
+  SlidersHorizontal,
+  Square,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -23,7 +29,16 @@ interface MapHudProps {
  * drawer so the map is what fills the screen.
  */
 export function MapHud({ buckets, maxValue, onOpenControls }: MapHudProps) {
-  const { layer, scale, tilted, setTilted, setChatOpen } = useMapState();
+  const {
+    layer,
+    scale,
+    tilted,
+    setTilted,
+    walking,
+    startWalk,
+    stopWalk,
+    setChatOpen,
+  } = useMapState();
 
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center p-3">
@@ -72,13 +87,28 @@ export function MapHud({ buckets, maxValue, onOpenControls }: MapHudProps) {
           }
           aria-pressed={tilted}
           className="h-8 w-8 shrink-0 rounded-full"
-          onClick={() => setTilted(!tilted)}
+          onClick={() => {
+            if (walking) stopWalk();
+            setTilted(!tilted);
+          }}
         >
           {tilted ? (
             <Square className="h-4 w-4" />
           ) : (
             <Box className="h-4 w-4" />
           )}
+        </Button>
+
+        <Button
+          type="button"
+          size="icon"
+          variant={walking ? "default" : "ghost"}
+          aria-label={walking ? "Stop walking the map" : "Walk the map"}
+          aria-pressed={walking}
+          className="h-8 w-8 shrink-0 rounded-full"
+          onClick={() => (walking ? stopWalk() : startWalk())}
+        >
+          <Footprints className="h-4 w-4" />
         </Button>
 
         <Button
