@@ -68,10 +68,18 @@ export function installDataLayers(map: MapLibreMap): void {
   }
 }
 
-/** Horizon haze — the cue that sells depth in a tilted view. */
-export function applyAtmosphere(map: MapLibreMap): void {
+/**
+ * Horizon haze — the cue that sells depth in a tilted view.
+ *
+ * `range` is measured as a multiple of the camera's distance from the ground,
+ * so the numbers that look right from a kilometre up put an opaque grey wall a
+ * few metres ahead at street level. Walking gets its own, much more distant
+ * haze: enough to fade the far end of the block, never enough to hide the
+ * street you are standing on.
+ */
+export function applyAtmosphere(map: MapLibreMap, street = false): void {
   map.setFog({
-    range: [1.2, 9],
+    range: street ? [12, 50] : [1.2, 9],
     color: "#eaf2fb",
     "high-color": "#a9c7ea",
     "space-color": "#eaf2fb",

@@ -101,14 +101,19 @@ export function MapHud({ buckets, maxValue, onOpenControls }: MapHudProps) {
 
         <Button
           type="button"
-          size="icon"
+          size="sm"
           variant={walking ? "default" : "ghost"}
-          aria-label={walking ? "Stop walking the map" : "Walk the map"}
+          aria-label={
+            walking ? "Leave street level" : "Walk the street at ground level"
+          }
           aria-pressed={walking}
-          className="h-8 w-8 shrink-0 rounded-full"
+          className="h-8 shrink-0 gap-1.5 rounded-full px-2 text-[11px]"
           onClick={() => (walking ? stopWalk() : startWalk())}
         >
           <Footprints className="h-4 w-4" />
+          {/* Named, not just an icon: street level was invisible to anyone who
+              did not guess what footprints meant. */}
+          <span className="hidden sm:inline">Walk</span>
         </Button>
 
         <Button

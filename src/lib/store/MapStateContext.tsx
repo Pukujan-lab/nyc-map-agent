@@ -139,8 +139,8 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
 
   const startWalk = useCallback(
     (target?: { lon: number; lat: number } | null) => {
-      // Street level means the block grid: at zoom 17 a neighborhood column is
-      // a wall you would be standing inside.
+      // Street level means the block grid: a neighborhood column is a wall you
+      // would be standing inside.
       setScale("blocks");
       // A stale target would drag the camera back to the last block walked.
       setWalkRequest(target ? { ...target, nonce: Date.now() } : null);

@@ -4,10 +4,19 @@
  * the arithmetic lives here and can be tested without a WebGL context.
  */
 
-/** Looking almost straight down the street; MapLibre tops out at 78° here. */
-export const WALK_PITCH = 78;
-/** Street level — close enough that individual buildings carry the perspective. */
-export const WALK_ZOOM = 17;
+/**
+ * Eye level: MapLibre's hard pitch ceiling is 85°, and that is what it takes.
+ * At 78° the camera still sits well above the rooftops, which reads as an
+ * aerial shot however much the horizon shows.
+ */
+export const WALK_PITCH = 85;
+/**
+ * Street level, and it is the zoom that does most of the work: MapLibre has no
+ * altitude control, so the camera height is
+ * `1.5 × viewport height × metres-per-pixel × cos(pitch)` — about 110 m at
+ * zoom 17, but roughly 8 m here, which is a person on the pavement.
+ */
+export const WALK_ZOOM = 19.5;
 /** Metres per second, before sprinting. */
 export const WALK_SPEED = 12;
 /** Shift multiplier. A run, not a teleport. */

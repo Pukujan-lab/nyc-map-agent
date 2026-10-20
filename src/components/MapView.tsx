@@ -42,8 +42,12 @@ import { useMapState } from "@/lib/store/MapStateContext";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 import { WalkControls } from "./WalkControls";
 
-/** How far the camera may tilt. Enough to look down a street, never a globe. */
-const MAX_PITCH = 78;
+/**
+ * How far the camera may tilt — MapLibre's own ceiling. Anything less and walk
+ * mode cannot reach eye level, because pitch is the only altitude control the
+ * map has besides zoom.
+ */
+const MAX_PITCH = 85;
 /** The one tilt the "3D" button applies — low enough to see the horizon. */
 const TILT_PITCH = 62;
 /** Tilting from the citywide view drops in to where the buildings are. */
@@ -318,13 +322,47 @@ export function MapView({
       blockGeoJson,
     );
 
+    // Walking always stands on the block grid, whatever scale the drawer says,
+    // because the neighborhood prisms step aside at eye level.
     map.setLayoutProperty(
       LAYER_IDS.blocks,
       "visibility",
-      showBlocks ? "visible" : "none",
+      showBlocks || walking ? "visible" : "none",
+    );
+    // At eye level a block column is 60–1800 m of wall that you are standing
+    // *inside*, so the prisms flatten into a translucent carpet over the real
+    // street and the basemap's buildings supply the perspective.
+    map.setPaintProperty(
+      LAYER_IDS.blocks,
+      "fill-extrusion-height",
+      walking ? 0 : ["get", "height"],
+    );
+    map.setPaintProperty(
+      LAYER_IDS.blocks,
+      "fill-extrusion-opacity",
+      walking ? 0.5 : 0.8,
+    );
+    // Same for the picked block's rim: a wall standing above the column from
+    // above, a painted curb around the block you are walking through.
+    map.setPaintProperty(
+      LAYER_IDS.blockSelection,
+      "fill-extrusion-height",
+      walking ? 1.5 : ["get", "height"],
     );
     // With blocks on, neighborhoods drop to a flat tinted ground so the block
-    // prisms are what carries height.
+    // prisms are what carries height. While walking that ground would be
+    // coplanar with the flattened blocks and z-fight, so it steps aside
+    // entirely — at eye level the neighborhood tint has nothing to say anyway.
+    map.setLayoutProperty(
+      LAYER_IDS.neighborhoods,
+      "visibility",
+      walking ? "none" : "visible",
+    );
+    map.setLayoutProperty(
+      LAYER_IDS.neighborhoodOutline,
+      "visibility",
+      walking ? "none" : "visible",
+    );
     map.setPaintProperty(
       LAYER_IDS.neighborhoods,
       "fill-extrusion-height",
@@ -349,7 +387,7 @@ export function MapView({
         showBlocks ? "visible" : "none",
       );
     }
-  }, [ready, styleEpoch, neighborhoodGeoJson, blockGeoJson, scale]);
+  }, [ready, styleEpoch, neighborhoodGeoJson, blockGeoJson, scale, walking]);
 
   useEffect(() => {
     if (!ready) return;
@@ -403,6 +441,16 @@ export function MapView({
       duration: reducedMotion ? 0 : 900,
     });
   }, [ready, tilted, reducedMotion]);
+
+  // Fog is measured from the camera, so it has to be re-tuned the moment the
+  // camera drops from a kilometre up to eye level — otherwise the street is
+  // behind an opaque grey wall.
+  useEffect(() => {
+    if (!ready) return;
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    applyAtmosphere(map, walking);
+  }, [ready, walking]);
 
   // Entering walk mode is a camera move, not a mode flag: eye level is the
   // steepest pitch the map allows, at a zoom where buildings have height.
@@ -539,11 +587,18 @@ export function MapView({
         initialViewState={viewState}
         maxPitch={MAX_PITCH}
         minZoom={9}
-        maxZoom={19}
+        // Walking needs the extra stop: at zoom 19.5 the camera is ~8 m above
+        // the pavement, which is the difference between a street and a roof.
+        maxZoom={20}
         dragRotate
         // The built-in arrow-key panning has to stand down while walking, or
         // every keypress would move the camera twice.
         keyboard={!walking}
+        // Eye level is a function of zoom, so zooming out mid-walk would lift
+        // the camera back over the rooftops. Walking is a fixed eye height.
+        scrollZoom={!walking}
+        doubleClickZoom={!walking}
+        touchZoomRotate={!walking}
         touchPitch
         onLoad={handleLoad}
         onError={handleError}
