@@ -8,8 +8,12 @@ import type { FeatureCollection } from "geojson";
 /**
  * The data layers, defined once and used two ways: injected on top of the
  * vector basemap (`installDataLayers`) and baked into the raster fallback style.
- * Extruded columns are drawn by MapLibre itself (`fill-extrusion`) — one canvas,
- * one render pass, so the prisms depth-sort against the basemap correctly.
+ *
+ * There is deliberately **one** hue here. Areas are drawn as see-through glass
+ * whose *height* carries the count, over the basemap's own streets; the reading
+ * of "how much happened here" is a silhouette, not a colour band. What makes
+ * the shapes legible is the line work on top: a boundary around every ~300 m
+ * square, a boundary around every neighborhood, and a heavier borough line.
  */
 
 const TILE_URL =
@@ -20,6 +24,7 @@ export const SOURCE_IDS = {
   basemap: "osm",
   neighborhoods: "neighborhoods",
   blocks: "blocks",
+  boroughs: "boroughs",
   emphasis: "emphasis",
   blockSelection: "block-selection",
 } as const;
@@ -30,10 +35,15 @@ export const LAYER_IDS = {
   neighborhoods: "neighborhood-extrusion",
   neighborhoodOutline: "neighborhood-outline",
   blocks: "block-extrusion",
+  blockOutline: "block-outline",
+  boroughOutline: "borough-outline",
   emphasis: "emphasis-outline",
   blockSelection: "block-selection-rim",
   blockSelectionEdge: "block-selection-edge",
 } as const;
+
+/** The single glass hue every data volume is painted with. */
+const GLASS = "#64748b";
 
 function emptyCollection(): FeatureCollection {
   return { type: "FeatureCollection", features: [] };
@@ -42,6 +52,7 @@ function emptyCollection(): FeatureCollection {
 export const DATA_SOURCES: Record<string, SourceSpecification> = {
   neighborhoods: { type: "geojson", data: emptyCollection() },
   blocks: { type: "geojson", data: emptyCollection() },
+  boroughs: { type: "geojson", data: emptyCollection() },
   emphasis: { type: "geojson", data: emptyCollection() },
   "block-selection": { type: "geojson", data: emptyCollection() },
 };
@@ -52,22 +63,12 @@ export const DATA_LAYERS: LayerSpecification[] = [
     type: "fill-extrusion",
     source: SOURCE_IDS.neighborhoods,
     paint: {
-      "fill-extrusion-color": ["get", "color"],
+      "fill-extrusion-color": GLASS,
       "fill-extrusion-height": ["get", "height"],
       "fill-extrusion-base": 0,
-      // Translucent enough that the streets and buildings underneath still read
-      // through the color; the alpha in the feature color carries the rest.
-      "fill-extrusion-opacity": 0.7,
-    },
-  },
-  {
-    id: LAYER_IDS.neighborhoodOutline,
-    type: "line",
-    source: SOURCE_IDS.neighborhoods,
-    layout: { "line-join": "round" },
-    paint: {
-      "line-color": "rgba(8, 12, 22, 0.55)",
-      "line-width": 0.7,
+      // Translucent enough that the streets underneath still read through the
+      // volume — the count is the silhouette, not a colour.
+      "fill-extrusion-opacity": 0.3,
     },
   },
   {
@@ -76,10 +77,45 @@ export const DATA_LAYERS: LayerSpecification[] = [
     source: SOURCE_IDS.blocks,
     layout: { visibility: "none" },
     paint: {
-      "fill-extrusion-color": ["get", "color"],
+      "fill-extrusion-color": GLASS,
       "fill-extrusion-height": ["get", "height"],
       "fill-extrusion-base": 0,
-      "fill-extrusion-opacity": 0.8,
+      "fill-extrusion-opacity": 0.42,
+    },
+  },
+  {
+    id: LAYER_IDS.blockOutline,
+    type: "line",
+    source: SOURCE_IDS.blocks,
+    // Below this the 250 m squares are a couple of pixels across and the grid
+    // turns into a solid mesh.
+    minzoom: 11.5,
+    layout: { "line-join": "round", visibility: "none" },
+    paint: {
+      "line-color": "rgba(51, 65, 85, 0.38)",
+      "line-width": 0.5,
+    },
+  },
+  {
+    id: LAYER_IDS.neighborhoodOutline,
+    type: "line",
+    source: SOURCE_IDS.neighborhoods,
+    layout: { "line-join": "round" },
+    paint: {
+      "line-color": "rgba(30, 41, 59, 0.5)",
+      "line-width": 0.9,
+    },
+  },
+  {
+    id: LAYER_IDS.boroughOutline,
+    type: "line",
+    source: SOURCE_IDS.boroughs,
+    layout: { "line-join": "round" },
+    paint: {
+      // The county line: heavier and darker than a neighborhood edge, so the
+      // five boroughs read as the top level of the map.
+      "line-color": "rgba(15, 23, 42, 0.88)",
+      "line-width": 2.4,
     },
   },
   {

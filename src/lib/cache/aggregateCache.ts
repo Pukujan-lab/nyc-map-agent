@@ -1,8 +1,12 @@
 import type { AggregateResult, DatasetId } from "@/lib/geo/types";
 import type { WindowId } from "@/lib/windows";
 
-/** Bumped to 2 when blocks were added to the result shape. */
-const VERSION = 2;
+/**
+ * Bumped to 2 when blocks were added to the result shape, and to 3 when the
+ * per-address rollups (`topAddresses`, `topStreets`, block `addresses`) were
+ * added — an old cache would render a map with no house numbers on it.
+ */
+const VERSION = 3;
 
 function cacheKey(dataset: DatasetId, windowId: WindowId): string {
   return `nycma:aggregate:v${VERSION}:${dataset}:${windowId}`;
@@ -22,8 +26,10 @@ export function readCachedAggregate(
     const parsed = JSON.parse(raw) as AggregateResult;
     if (parsed.dataset !== dataset || parsed.windowId !== windowId) return null;
     if (!Array.isArray(parsed.ntas) || parsed.ntas.length === 0) return null;
-    // Results written before the block grid existed have no `blocks` array.
+    // Results written before the block grid existed have no `blocks` array,
+    // and results from before the address rollups have no `topAddresses`.
     if (!Array.isArray(parsed.blocks)) return null;
+    if (!Array.isArray(parsed.ntas[0].topAddresses)) return null;
     return parsed;
   } catch {
     return null;

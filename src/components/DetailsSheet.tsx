@@ -274,6 +274,23 @@ function DetailsBody({
               title="Complaint types"
               items={noise?.topTypes ?? []}
             />
+            <TopList
+              title={
+                block ? "Top addresses in this block" : "Top addresses here"
+              }
+              items={block ? block.addresses : (noise?.topAddresses ?? [])}
+              emptyLabel={
+                block
+                  ? "No address recorded on this block."
+                  : "No addresses recorded in this window."
+              }
+            />
+            <p className="text-[10px] leading-snug text-muted-foreground">
+              House numbers come from the 311 record&apos;s{" "}
+              <code className="font-mono">incident_address</code>, so
+              &ldquo;123 Broadway&rdquo; is one address however many complaints
+              are filed against it.
+            </p>
           </TabsContent>
 
           <TabsContent value="crashes" className="space-y-3">
@@ -296,9 +313,15 @@ function DetailsBody({
               title="Top contributing factors"
               items={crashes?.topFactors ?? []}
             />
+            <TopList
+              title={block ? "Streets in this block" : "Top streets here"}
+              items={block ? block.streets : (crashes?.topStreets ?? [])}
+              emptyLabel="No street names recorded."
+            />
             <p className="text-[10px] leading-snug text-muted-foreground">
               Crash data covers {crashWindowLabel}; the NYPD dataset runs about
-              four months behind.
+              four months behind. It records the street and cross street, never
+              a house number — so these are street names, not addresses.
             </p>
           </TabsContent>
 
@@ -339,17 +362,30 @@ function DetailsBody({
 }
 
 export function DetailsSheet(props: DetailsSheetProps) {
-  const { selectedNtaCode, selectNta, seedChat, setWindow, detailsOpen } =
-    useMapState();
+  const {
+    selectedNtaCode,
+    seedChat,
+    setWindow,
+    detailsOpen,
+    detailsExpanded,
+    setDetailsExpanded,
+    setDetailsOpen,
+  } = useMapState();
   const { boundary, windowId } = props;
 
-  if (!selectedNtaCode || !boundary || !detailsOpen) return null;
+  // A map click opens the small card (`MapPeek`); this sheet is the second,
+  // deliberate tap.
+  if (!selectedNtaCode || !boundary || !detailsOpen || !detailsExpanded) {
+    return null;
+  }
 
-  const close = () => selectNta(null);
+  // Closing the sheet goes back to the small card rather than dropping the
+  // selection: the map keeps its rim, and the sheet is one tap away again.
+  const close = () => setDetailsExpanded(false);
   const ask = (text: string) => {
     seedChat(text);
     // On mobile the chat is a bottom sheet too — close the details first.
-    if (!props.isDesktop) selectNta(null);
+    if (!props.isDesktop) setDetailsOpen(false);
   };
   const widen = () => {
     if (windowId !== "12mo") setWindow("12mo");

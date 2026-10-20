@@ -42,6 +42,8 @@ function nta(code: string, overrides: Partial<NtaAggregate> = {}): NtaAggregate 
     topTypes: [],
     topDescriptors: [],
     topFactors: [],
+    topAddresses: [],
+    topStreets: [],
     injured: 0,
     killed: 0,
     cyclists: 0,

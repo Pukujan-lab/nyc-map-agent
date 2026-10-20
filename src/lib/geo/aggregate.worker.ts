@@ -37,6 +37,9 @@ const MAX_ROWS = 900000;
 const TOP_N = 8;
 /** Noise has only a handful of complaint types, so keep them all. */
 const TOP_TYPES = 12;
+/** Addresses per neighborhood, and per ~300 m square. */
+const TOP_ADDRESSES = 8;
+const BLOCK_ADDRESSES = 3;
 
 const scope = self as unknown as {
   postMessage: (message: AggregateWorkerResponse) => void;
@@ -53,6 +56,8 @@ interface NtaAcc {
   types: Map<string, number>;
   descriptors: Map<string, number>;
   factors: Map<string, number>;
+  addresses: Map<string, number>;
+  streets: Map<string, number>;
   injured: number;
   killed: number;
   cyclists: number;
@@ -70,6 +75,8 @@ function createAcc(): NtaAcc {
     types: new Map(),
     descriptors: new Map(),
     factors: new Map(),
+    addresses: new Map(),
+    streets: new Map(),
     injured: 0,
     killed: 0,
     cyclists: 0,
@@ -86,6 +93,8 @@ interface BlockAcc {
   injured: number;
   killed: number;
   cyclists: number;
+  addresses: Map<string, number>;
+  streets: Map<string, number>;
 }
 
 /**
@@ -111,6 +120,8 @@ function bumpBlock(
       injured: 0,
       killed: 0,
       cyclists: 0,
+      addresses: new Map(),
+      streets: new Map(),
     };
     blocks.set(cell.key, acc);
   }
@@ -128,6 +139,17 @@ function topPairs(map: Map<string, number>, limit: number): CountPair[] {
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .slice(0, limit)
     .map(([key, value]): CountPair => [key, value]);
+}
+
+/**
+ * `incident_address` arrives as free text ("123 BROADWAY", sometimes with
+ * doubled spaces or a trailing borough). Case and spacing are normalised so the
+ * same address on two rows lands on one count; the string is capped so a
+ * pathological value cannot bloat the cached aggregate.
+ */
+function normalizeAddress(raw: string): string {
+  const cleaned = raw.trim().replace(/\s+/g, " ").toUpperCase();
+  return cleaned.length > 48 ? cleaned.slice(0, 48) : cleaned;
 }
 
 function hourFromIso(iso: string): number {
@@ -297,6 +319,7 @@ function processNoiseRows(
   const typeIdx = requireColumn(columns, "complaint_type");
   const descIdx = requireColumn(columns, "descriptor");
   const dateIdx = requireColumn(columns, "created_date");
+  const addressIdx = columns.get("incident_address") ?? -1;
 
   for (const row of table.rows) {
     const parsed = noiseRowSchema.safeParse({
@@ -305,6 +328,7 @@ function processNoiseRows(
       complaint_type: row[typeIdx],
       descriptor: row[descIdx],
       created_date: row[dateIdx],
+      incident_address: addressIdx >= 0 ? row[addressIdx] : "",
     });
     if (!parsed.success) {
       counters.malformed += 1;
@@ -329,7 +353,7 @@ function processNoiseRows(
     acc.hours[hour] += 1;
     if (night) acc.night += 1;
     if (isWeekendNight(hour, weekday)) acc.weekendNight += 1;
-    bumpBlock(
+    const block = bumpBlock(
       blocks,
       value.latitude,
       value.longitude,
@@ -340,6 +364,11 @@ function processNoiseRows(
     bump(acc.months, month);
     bump(acc.types, value.complaint_type);
     bump(acc.descriptors, value.descriptor || "Unspecified");
+    const address = normalizeAddress(value.incident_address);
+    if (address) {
+      bump(acc.addresses, address);
+      bump(block.addresses, address);
+    }
     if (value.complaint_type.includes("Helicopter")) {
       bump(acc.heliMonths, month);
     }
@@ -425,6 +454,10 @@ function processCrashRows(
     if (!isUnspecifiedFactor(factor)) bump(acc.factors, factor);
 
     const onStreet = value.on_street_name.trim();
+    if (onStreet) {
+      bump(acc.streets, onStreet);
+      bump(block.streets, onStreet);
+    }
     const crossStreet = value.cross_street_name.trim();
     if (onStreet && crossStreet) {
       const key = `${onStreet}|${crossStreet}`;
@@ -476,6 +509,8 @@ function finalize(
       topTypes: topPairs(acc.types, TOP_TYPES),
       topDescriptors: topPairs(acc.descriptors, TOP_N),
       topFactors: topPairs(acc.factors, TOP_N),
+      topAddresses: topPairs(acc.addresses, TOP_ADDRESSES),
+      topStreets: topPairs(acc.streets, TOP_N),
       injured: acc.injured,
       killed: acc.killed,
       cyclists: acc.cyclists,
@@ -527,6 +562,12 @@ function finalize(
       injured: acc.injured,
       killed: acc.killed,
       cyclists: acc.cyclists,
+      ...(acc.addresses.size > 0
+        ? { addresses: topPairs(acc.addresses, BLOCK_ADDRESSES) }
+        : {}),
+      ...(acc.streets.size > 0
+        ? { streets: topPairs(acc.streets, BLOCK_ADDRESSES) }
+        : {}),
     }),
   );
 

@@ -62,6 +62,12 @@ interface MapState {
    * are walking down.
    */
   detailsOpen: boolean;
+  /**
+   * A map click opens the *small* panel first (`detailsExpanded` false): the
+   * headline numbers, over the map, without taking the screen. Expanding it
+   * opens the full sheet with the charts and the query sources.
+   */
+  detailsExpanded: boolean;
   /** Street-level photos for the selected block. */
   streetViewOpen: boolean;
 }
@@ -84,6 +90,7 @@ interface MapStateActions {
   setChatOpen: (open: boolean) => void;
   setCaveatsOpen: (open: boolean) => void;
   setDetailsOpen: (open: boolean) => void;
+  setDetailsExpanded: (expanded: boolean) => void;
   setStreetViewOpen: (open: boolean) => void;
 }
 
@@ -109,8 +116,16 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
   const [chatSeed, setChatSeed] = useState<ChatSeed | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [caveatsOpen, setCaveatsOpen] = useState(false);
-  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsOpen, setDetailsOpenState] = useState(false);
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
   const [streetViewOpen, setStreetViewOpen] = useState(false);
+
+  // Closing the panel always collapses it: the next click must start small
+  // again, or one dismiss would leave the full sheet primed for every pick.
+  const setDetailsOpen = useCallback((open: boolean) => {
+    setDetailsOpenState(open);
+    if (!open) setDetailsExpanded(false);
+  }, []);
 
   const updateSearch = useCallback(
     (key: "layer" | "window" | "scale", value: string) => {
@@ -155,21 +170,27 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
 
   const stopWalk = useCallback(() => setWalking(false), []);
 
-  const selectNta = useCallback((ntaCode: string | null) => {
-    setSelectedNtaCode(ntaCode);
-    setDetailsOpen(ntaCode !== null);
-    // Picking a neighborhood is a coarser selection, so drop any block — and
-    // with it the street-level photos that block was showing.
-    setSelectedBlockKey(null);
-    setStreetViewOpen(false);
-  }, []);
+  const selectNta = useCallback(
+    (ntaCode: string | null) => {
+      setSelectedNtaCode(ntaCode);
+      // A fresh pick always starts as the small panel.
+      setDetailsOpenState(ntaCode !== null);
+      setDetailsExpanded(false);
+      // Picking a neighborhood is a coarser selection, so drop any block — and
+      // with it the street-level photos that block was showing.
+      setSelectedBlockKey(null);
+      setStreetViewOpen(false);
+    },
+    [],
+  );
 
   const selectBlock = useCallback(
     (block: { key: string; ntaCode: string } | null) => {
       setSelectedBlockKey(block ? block.key : null);
       if (block) {
         setSelectedNtaCode(block.ntaCode);
-        setDetailsOpen(true);
+        setDetailsOpenState(true);
+        setDetailsExpanded(false);
       } else {
         setStreetViewOpen(false);
       }
@@ -213,6 +234,7 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
       chatOpen,
       caveatsOpen,
       detailsOpen,
+      detailsExpanded,
       setLayer,
       setWindow,
       setScale,
@@ -229,6 +251,7 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
       setChatOpen,
       setCaveatsOpen,
       setDetailsOpen,
+      setDetailsExpanded,
       streetViewOpen,
       setStreetViewOpen,
     }),
@@ -248,6 +271,7 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
       chatOpen,
       caveatsOpen,
       detailsOpen,
+      detailsExpanded,
       setLayer,
       setWindow,
       setScale,
@@ -260,6 +284,7 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
       navigate,
       seedChat,
       clearSeed,
+      setDetailsOpen,
       streetViewOpen,
     ],
   );

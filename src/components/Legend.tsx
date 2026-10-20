@@ -1,76 +1,85 @@
 import { Card } from "@/components/ui/card";
 import { formatCount } from "@/lib/format";
-import {
-  LAYER_METRICS,
-  formatBucketRange,
-  type Bucket,
-  type LayerId,
-  type MapScale,
-} from "@/lib/layers";
+import { LAYER_METRICS, type LayerId, type MapScale } from "@/lib/layers";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { windowBounds } from "@/lib/windows";
 
 interface LegendProps {
   layer: LayerId;
   scale: MapScale;
-  buckets: Bucket[];
   maxValue: number;
+  areasWithData: number;
+}
+
+function LineKey({
+  className,
+  label,
+}: {
+  className: string;
+  label: string;
+}) {
+  return (
+    <li className="flex items-center gap-2">
+      <span
+        aria-hidden="true"
+        className={`h-0 w-4 shrink-0 border-t ${className}`}
+      />
+      <span className="flex-1 text-[11px]">{label}</span>
+    </li>
+  );
 }
 
 /**
- * The color key. Rendered bare (in the HUD's legend popover) or wrapped in a
- * card (in the control drawer) — the ranges always come from `buildMapModel`,
- * so they cannot drift from the colors on the map.
+ * The map key. There is no colour ramp any more: areas are one translucent
+ * glass hue and only their *height* encodes the count, so the key explains the
+ * height scale and the three boundary lines instead of a set of colour bands.
  */
-export function LegendContent({ layer, scale, buckets, maxValue }: LegendProps) {
+export function LegendContent({
+  layer,
+  scale,
+  maxValue,
+  areasWithData,
+}: LegendProps) {
   const { window: windowId, setCaveatsOpen } = useMapState();
   const { shortLabel } = windowBounds(windowId);
-  const areasWithData = buckets.reduce((sum, bucket) => sum + bucket.count, 0);
 
   return (
     <div>
       <div className="flex items-baseline justify-between gap-2">
         <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-          Legend
+          Map key
         </div>
         <div className="truncate text-[10px] text-muted-foreground">
           {LAYER_METRICS[layer].value}
         </div>
       </div>
 
-      <ul className="mt-2 space-y-1">
-        {buckets.map((bucket) => (
-          <li key={bucket.index} className="flex items-center gap-2">
-            <span
-              aria-hidden="true"
-              className="h-2.5 w-2.5 shrink-0 rounded-sm"
-              style={{ backgroundColor: bucket.hex }}
-            />
-            <span className="flex-1 text-[11px] tabular-nums">
-              {formatBucketRange(bucket)}
-            </span>
-            <span className="text-[10px] tabular-nums text-muted-foreground">
-              {formatCount(bucket.count)}
-            </span>
-          </li>
-        ))}
-        <li className="flex items-center gap-2">
-          <span
-            aria-hidden="true"
-            className="h-2.5 w-2.5 shrink-0 rounded-sm bg-muted-foreground/25"
-          />
-          <span className="flex-1 text-[11px]">no records</span>
-        </li>
-      </ul>
-
-      <p className="mt-1.5 text-[10px] leading-snug text-muted-foreground">
-        {scale === "blocks"
-          ? `~300 m blocks · ${formatCount(areasWithData)} with records`
-          : `Neighborhoods · ${formatCount(areasWithData)} with records`}
+      <p className="mt-2 text-[11px] leading-snug">
+        Taller = more. Every area is drawn as see-through glass, so the streets
+        stay readable underneath and no colour is doing any of the work.
+      </p>
+      <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
+        Height = {LAYER_METRICS[layer].value} · peak{" "}
+        {formatCount(maxValue)} · {formatCount(areasWithData)}{" "}
+        {scale === "blocks" ? "~300 m blocks" : "neighborhoods"} with records
       </p>
 
-      <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
-        Height = {LAYER_METRICS[layer].value} · peak {formatCount(maxValue)}
+      <ul className="mt-2.5 space-y-1 border-t border-border/60 pt-2">
+        {scale === "blocks" ? (
+          <LineKey
+            className="border-slate-500/50"
+            label="~300 m block square"
+          />
+        ) : null}
+        <LineKey
+          className="border-slate-700/60"
+          label="Neighborhood boundary"
+        />
+        <LineKey className="border-slate-900" label="Borough boundary" />
+      </ul>
+
+      <p className="mt-2 text-[10px] leading-snug text-muted-foreground">
+        Areas with no records have no height, so they simply are not drawn.
       </p>
 
       {layer === "combined" ? (

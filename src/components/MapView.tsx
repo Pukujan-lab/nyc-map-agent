@@ -8,11 +8,11 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import type { NtaBoundary } from "@/lib/api/nta";
 import { formatCount, formatPercent } from "@/lib/format";
 import { blockKey } from "@/lib/geo/blocks";
+import { boroughOutlinesToGeoJson } from "@/lib/geo/boroughs";
 import { NtaIndex } from "@/lib/geo/ntaIndex";
 import {
   HOME_VIEW,
   LAYER_METRICS,
-  rgbaToCss,
   type BlockDatum,
   type MapModel,
   type NeighborhoodDatum,
@@ -153,6 +153,16 @@ export function MapView({
   const blockGeoJson = useMemo(
     () => blocksToGeoJson(model.blocks),
     [model.blocks],
+  );
+
+  /**
+   * Borough outlines are derived from the neighborhood rings, not fetched: the
+   * edges two neighborhoods of the same borough share are interior, so only the
+   * county line survives.
+   */
+  const boroughGeoJson = useMemo(
+    () => boroughOutlinesToGeoJson(boundaries ?? []),
+    [boundaries],
   );
 
   const emphasisGeoJson = useMemo(
@@ -413,9 +423,12 @@ export function MapView({
     (map.getSource(SOURCE_IDS.blocks) as GeoJSONSource | undefined)?.setData(
       blockGeoJson,
     );
+    (map.getSource(SOURCE_IDS.boroughs) as GeoJSONSource | undefined)?.setData(
+      boroughGeoJson,
+    );
 
     // Walking always stands on the block grid, whatever scale the drawer says,
-    // because the neighborhood prisms step aside at eye level.
+    // because the neighborhood volumes step aside at eye level.
     map.setLayoutProperty(
       LAYER_IDS.blocks,
       "visibility",
@@ -433,7 +446,14 @@ export function MapView({
     map.setPaintProperty(
       LAYER_IDS.blocks,
       "fill-extrusion-opacity",
-      walking ? 0.3 : 0.8,
+      walking ? 0.32 : 0.45,
+    );
+    // The square grid is the block scale's line work, and it has nothing to say
+    // while you are standing on one of the squares.
+    map.setLayoutProperty(
+      LAYER_IDS.blockOutline,
+      "visibility",
+      showBlocks && !walking ? "visible" : "none",
     );
     // Same for the picked block's rim: a wall standing above the column from
     // above, a painted curb around the block you are walking through.
@@ -442,10 +462,10 @@ export function MapView({
       "fill-extrusion-height",
       walking ? 1.5 : ["get", "height"],
     );
-    // With blocks on, neighborhoods drop to a flat tinted ground so the block
-    // prisms are what carries height. While walking that ground would be
+    // With blocks on, neighborhoods drop to a flat glass ground so the block
+    // volumes are what carries height. While walking that ground would be
     // coplanar with the flattened blocks and z-fight, so it steps aside
-    // entirely — at eye level the neighborhood tint has nothing to say anyway.
+    // entirely — at eye level the neighborhood layer has nothing to say.
     map.setLayoutProperty(
       LAYER_IDS.neighborhoods,
       "visibility",
@@ -453,6 +473,11 @@ export function MapView({
     );
     map.setLayoutProperty(
       LAYER_IDS.neighborhoodOutline,
+      "visibility",
+      walking ? "none" : "visible",
+    );
+    map.setLayoutProperty(
+      LAYER_IDS.boroughOutline,
       "visibility",
       walking ? "none" : "visible",
     );
@@ -464,15 +489,15 @@ export function MapView({
     map.setPaintProperty(
       LAYER_IDS.neighborhoods,
       "fill-extrusion-opacity",
-      showBlocks ? 0.42 : 0.7,
+      showBlocks ? 0.14 : 0.35,
     );
     map.setPaintProperty(
       LAYER_IDS.neighborhoodOutline,
       "line-opacity",
-      showBlocks ? 0.3 : 1,
+      showBlocks ? 0.28 : 1,
     );
     // A block's highlight belongs to the block scale; inside a neighborhood
-    // prism it would just be a bright speck buried in the column.
+    // volume it would just be a bright speck buried in the glass.
     for (const id of [LAYER_IDS.blockSelection, LAYER_IDS.blockSelectionEdge]) {
       map.setLayoutProperty(
         id,
@@ -480,7 +505,15 @@ export function MapView({
         showBlocks ? "visible" : "none",
       );
     }
-  }, [ready, styleEpoch, neighborhoodGeoJson, blockGeoJson, scale, walking]);
+  }, [
+    ready,
+    styleEpoch,
+    neighborhoodGeoJson,
+    blockGeoJson,
+    boroughGeoJson,
+    scale,
+    walking,
+  ]);
 
   useEffect(() => {
     if (!ready) return;
@@ -791,11 +824,6 @@ export function MapView({
           )}
 
           <div className="mt-1.5 flex items-baseline gap-1.5">
-            <span
-              aria-hidden="true"
-              className="h-2.5 w-2.5 shrink-0 self-center rounded-sm"
-              style={{ backgroundColor: rgbaToCss(hover.datum.fill) }}
-            />
             <span className="text-base font-semibold tabular-nums text-foreground">
               {formatCount(hover.datum.value)}
             </span>
@@ -811,9 +839,7 @@ export function MapView({
           </div>
 
           <div className="mt-1 border-t border-border/60 pt-1 text-[10px] text-muted-foreground/80">
-            {hover.kind === "block"
-              ? "Click to open this neighborhood"
-              : "Click for details"}
+            Click for a quick look
           </div>
         </div>
       ) : null}

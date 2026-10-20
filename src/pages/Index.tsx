@@ -4,6 +4,7 @@ import { ChatPanel } from "@/components/ChatPanel";
 import { ControlDrawer } from "@/components/ControlDrawer";
 import { DetailsSheet } from "@/components/DetailsSheet";
 import { MapHud } from "@/components/MapHud";
+import { MapPeek } from "@/components/MapPeek";
 import { MapStatusChip } from "@/components/MapStatusChip";
 import { MapView } from "@/components/MapView";
 import { StreetViewSheet } from "@/components/StreetViewSheet";
@@ -118,11 +119,7 @@ export default function Index() {
         onRetry={data.retry}
       />
 
-      <MapHud
-        buckets={model.buckets}
-        maxValue={model.maxValue}
-        onOpenControls={() => setControlsOpen(true)}
-      />
+      <MapHud onOpenControls={() => setControlsOpen(true)} />
 
       <ControlDrawer
         open={controlsOpen}
@@ -133,14 +130,27 @@ export default function Index() {
         errorMessage={data.error?.message ?? null}
         neighborhoods={neighborhoods}
         onRetry={data.retry}
-        buckets={model.buckets}
         maxValue={model.maxValue}
+        areasWithData={model.areasWithData}
       />
 
       <ChatPanel
         boundaries={data.boundaries}
         noise={data.noise}
         crashes={data.crashes}
+        isDesktop={isDesktop}
+      />
+
+      <MapPeek
+        boundary={selectedBoundary}
+        block={selectedBlock}
+        noise={
+          selectedNtaCode ? (noiseByCode.get(selectedNtaCode) ?? null) : null
+        }
+        crashes={
+          selectedNtaCode ? (crashByCode.get(selectedNtaCode) ?? null) : null
+        }
+        windowLabel={windowLabel}
         isDesktop={isDesktop}
       />
 

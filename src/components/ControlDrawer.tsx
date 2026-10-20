@@ -29,7 +29,6 @@ import {
   HOME_VIEW,
   MAP_SCALES,
   SCALE_LABELS,
-  type Bucket,
   type MapScale,
 } from "@/lib/layers";
 import { useMapState } from "@/lib/store/MapStateContext";
@@ -58,8 +57,10 @@ interface ControlDrawerProps {
   errorMessage: string | null;
   neighborhoods: NeighborhoodOption[];
   onRetry: () => void;
-  buckets: Bucket[];
+  /** Peak value on the current scale — the top of the height scale. */
   maxValue: number;
+  /** Areas on the current scale with at least one record. */
+  areasWithData: number;
 }
 
 function Section({ label, children }: { label: string; children: ReactNode }) {
@@ -129,8 +130,8 @@ export function ControlDrawer({
   errorMessage,
   neighborhoods,
   onRetry,
-  buckets,
   maxValue,
+  areasWithData,
 }: ControlDrawerProps) {
   const {
     layer,
@@ -138,6 +139,7 @@ export function ControlDrawer({
     scale,
     selectedNtaCode,
     selectNta,
+    setDetailsExpanded,
     navigate,
     setCaveatsOpen,
   } = useMapState();
@@ -184,7 +186,12 @@ export function ControlDrawer({
           <Section label="Jump to a neighborhood">
             <Select
               value={selectedNtaCode ?? ""}
-              onValueChange={(code) => selectNta(code)}
+              onValueChange={(code) => {
+                selectNta(code);
+                // Chosen from a list, not tapped on the map — the numbers are
+                // what was asked for, so open the full sheet straight away.
+                setDetailsExpanded(true);
+              }}
             >
               <SelectTrigger aria-label="Jump to a neighborhood">
                 <SelectValue placeholder="Choose a neighborhood…" />
@@ -237,8 +244,8 @@ export function ControlDrawer({
           <Legend
             layer={layer}
             scale={scale}
-            buckets={buckets}
             maxValue={maxValue}
+            areasWithData={areasWithData}
           />
 
           {isError ? (

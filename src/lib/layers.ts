@@ -1,7 +1,11 @@
 import type { NtaBoundary, PolygonRings } from "@/lib/api/nta";
-import { formatCount } from "@/lib/format";
 import { BLOCK_GRID_DEG, blockPolygon } from "@/lib/geo/blocks";
-import type { AggregateResult, BlockCell, NtaAggregate } from "@/lib/geo/types";
+import type {
+  AggregateResult,
+  BlockCell,
+  CountPair,
+  NtaAggregate,
+} from "@/lib/geo/types";
 
 export type LayerId = "noise" | "crashes" | "combined";
 
@@ -20,7 +24,7 @@ export const LAYER_SHORT_LABELS: Record<LayerId, string> = {
   combined: "Both",
 };
 
-/** What the block color actually counts, per layer. */
+/** What the block height actually counts, per layer. */
 export const LAYER_METRICS: Record<LayerId, { value: string; unit: string }> = {
   noise: { value: "noise complaints", unit: "complaints" },
   crashes: { value: "crashes", unit: "crashes" },
@@ -53,113 +57,10 @@ export function parseMapScale(value: string | null): MapScale {
   return value === "blocks" ? "blocks" : "neighborhoods";
 }
 
-export type BucketIndex = 0 | 1 | 2 | 3;
-
-export type Rgba = [number, number, number, number];
-
-/** MapLibre paint properties take CSS color strings, not channel tuples. */
-export function rgbaToCss(rgba: Rgba): string {
-  return `rgba(${rgba[0]}, ${rgba[1]}, ${rgba[2]}, ${(rgba[3] / 255).toFixed(3)})`;
-}
-
-interface PaletteEntry {
-  label: string;
-  hex: string;
-  rgba: Rgba;
-}
-
 /**
- * Four flat colors, low to high: blue → green → yellow → red. Deliberately
- * categorical (not a gradient) so a block reads as "which of four bands" at a
- * glance instead of "somewhere on a ramp".
- */
-const PALETTE: PaletteEntry[] = [
-  { label: "Low", hex: "#3b82f6", rgba: [59, 130, 246, 205] },
-  { label: "Moderate", hex: "#22c55e", rgba: [34, 197, 94, 205] },
-  { label: "High", hex: "#facc15", rgba: [250, 204, 21, 215] },
-  { label: "Very high", hex: "#ef4444", rgba: [239, 68, 68, 225] },
-];
-
-/** Neighborhoods and blocks with no records stay visible but washed out. */
-export const NO_DATA_FILL: Rgba = [148, 163, 184, 26];
-
-export interface Bucket {
-  index: BucketIndex;
-  label: string;
-  hex: string;
-  rgba: Rgba;
-  /** Inclusive lower bound. */
-  min: number;
-  /** Inclusive upper bound; `null` on the open-ended top bucket. */
-  max: number | null;
-  /** How many areas fall in this bucket. */
-  count: number;
-}
-
-/** Upper bounds of buckets 0, 1 and 2. */
-export type Thresholds = [number, number, number];
-
-/**
- * Quartile cuts over the non-zero values, so each color covers roughly a
- * quarter of the areas that have data. Counts are integers, so the cuts are
- * nudged apart to keep the four buckets disjoint even when many areas tie.
- */
-export function thresholdsFor(values: number[]): Thresholds {
-  const positives = values.filter((value) => value > 0).sort((a, b) => a - b);
-  if (positives.length === 0) return [0, 0, 0];
-  const at = (quantile: number): number =>
-    positives[
-      Math.min(positives.length - 1, Math.max(0, Math.floor(quantile * positives.length)))
-    ];
-  const thresholds: Thresholds = [at(0.25), at(0.5), at(0.75)];
-  if (thresholds[1] <= thresholds[0]) thresholds[1] = thresholds[0] + 1;
-  if (thresholds[2] <= thresholds[1]) thresholds[2] = thresholds[1] + 1;
-  return thresholds;
-}
-
-export function bucketFor(value: number, thresholds: Thresholds): BucketIndex {
-  if (value <= thresholds[0]) return 0;
-  if (value <= thresholds[1]) return 1;
-  if (value <= thresholds[2]) return 2;
-  return 3;
-}
-
-export function fillFor(value: number, thresholds: Thresholds): Rgba {
-  if (value <= 0) return NO_DATA_FILL;
-  return PALETTE[bucketFor(value, thresholds)].rgba;
-}
-
-export function buildBuckets(values: number[], thresholds: Thresholds): Bucket[] {
-  const counts: [number, number, number, number] = [0, 0, 0, 0];
-  for (const value of values) {
-    if (value <= 0) continue;
-    counts[bucketFor(value, thresholds)] += 1;
-  }
-  return PALETTE.map((entry, index) => {
-    const bucket = index as BucketIndex;
-    return {
-      index: bucket,
-      label: entry.label,
-      hex: entry.hex,
-      rgba: entry.rgba,
-      min: bucket === 0 ? 1 : thresholds[bucket - 1] + 1,
-      max: bucket === 3 ? null : thresholds[bucket],
-      count: counts[bucket],
-    };
-  });
-}
-
-/** Human label for a bucket's value range, e.g. "121–320". */
-export function formatBucketRange(bucket: Bucket): string {
-  if (bucket.max === null) return `${formatCount(bucket.min)}+`;
-  if (bucket.index === 0) return `≤ ${formatCount(bucket.max)}`;
-  return `${formatCount(bucket.min)}–${formatCount(bucket.max)}`;
-}
-
-/**
- * Column height is a *second* reading of the same number the color encodes, so
- * the four-color legend still works on its own. The square root keeps one
- * extreme neighborhood from flattening everywhere else into the pavement.
+ * Column height is the map's only encoding: one number per area, on a square
+ * root scale so a single extreme neighborhood does not flatten everywhere else
+ * into the pavement. There is no colour ramp to disagree with it.
  */
 export const MIN_COLUMN_METERS = 60;
 export const MAX_COLUMN_METERS = 1800;
@@ -180,8 +81,6 @@ export interface NeighborhoodDatum {
   borough: string;
   polygon: PolygonRings;
   value: number;
-  bucket: BucketIndex;
-  fill: Rgba;
   /** Column height in meters; 0 for areas with no records. */
   height: number;
   nightShare: number;
@@ -190,6 +89,10 @@ export interface NeighborhoodDatum {
   injured: number;
   killed: number;
   cyclists: number;
+  /** House numbers from 311 `incident_address`, most frequent first. */
+  addresses: CountPair[];
+  /** Street names from crash records — that dataset carries no house number. */
+  streets: CountPair[];
 }
 
 export interface BlockDatum {
@@ -199,8 +102,6 @@ export interface BlockDatum {
   /** Centre of the square — where "walk this block" puts the camera. */
   center: { lon: number; lat: number };
   value: number;
-  bucket: BucketIndex;
-  fill: Rgba;
   /** Column height in meters; 0 for squares with no records. */
   height: number;
   nightCount: number;
@@ -209,6 +110,10 @@ export interface BlockDatum {
   injured: number;
   killed: number;
   cyclists: number;
+  /** House numbers from 311 `incident_address`, most frequent first. */
+  addresses: CountPair[];
+  /** Street names from crash records — that dataset carries no house number. */
+  streets: CountPair[];
 }
 
 export interface MapModel {
@@ -216,9 +121,10 @@ export interface MapModel {
   scale: MapScale;
   neighborhoods: NeighborhoodDatum[];
   blocks: BlockDatum[];
-  /** Buckets for whichever scale is on screen, so the legend cannot drift. */
-  buckets: Bucket[];
+  /** Peak value on the current scale — the top of the height scale. */
   maxValue: number;
+  /** Areas on the current scale with at least one record. */
+  areasWithData: number;
 }
 
 const EMPTY_AGGREGATE: NtaAggregate = {
@@ -232,6 +138,8 @@ const EMPTY_AGGREGATE: NtaAggregate = {
   topTypes: [],
   topDescriptors: [],
   topFactors: [],
+  topAddresses: [],
+  topStreets: [],
   injured: 0,
   killed: 0,
   cyclists: 0,
@@ -264,6 +172,24 @@ interface BlockAcc {
   injured: number;
   killed: number;
   cyclists: number;
+  addresses: CountPair[];
+  streets: CountPair[];
+}
+
+/** Two address lists, merged by label and capped — the square stays small. */
+const BLOCK_ADDRESS_LIMIT = 3;
+
+function mergePairs(lists: Array<CountPair[] | undefined>, limit: number): CountPair[] {
+  const totals = new Map<string, number>();
+  for (const list of lists) {
+    for (const [label, value] of list ?? []) {
+      totals.set(label, (totals.get(label) ?? 0) + value);
+    }
+  }
+  return Array.from(totals.entries())
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, limit)
+    .map(([label, value]): CountPair => [label, value]);
 }
 
 function mergeBlocks(
@@ -286,17 +212,27 @@ function mergeBlocks(
           injured: 0,
           killed: 0,
           cyclists: 0,
+          addresses: [],
+          streets: [],
         };
         merged.set(cell.key, entry);
       }
       if (dataset === "noise") {
         entry.noiseCount += cell.count;
         entry.nightCount += cell.nightCount;
+        entry.addresses = mergePairs(
+          [entry.addresses, cell.addresses],
+          BLOCK_ADDRESS_LIMIT,
+        );
       } else {
         entry.crashCount += cell.count;
         entry.injured += cell.injured;
         entry.killed += cell.killed;
         entry.cyclists += cell.cyclists;
+        entry.streets = mergePairs(
+          [entry.streets, cell.streets],
+          BLOCK_ADDRESS_LIMIT,
+        );
       }
     }
   };
@@ -307,9 +243,8 @@ function mergeBlocks(
 }
 
 /**
- * Single source of truth for the map: each area's value, its color bucket and
- * the legend's thresholds are computed together, so the colors on screen and
- * the legend can never disagree.
+ * Single source of truth for the map: each area's value and the column height
+ * it produces are computed together, so the map and the key can never disagree.
  */
 export function buildMapModel(params: {
   boundaries: NtaBoundary[] | null;
@@ -325,8 +260,8 @@ export function buildMapModel(params: {
       scale,
       neighborhoods: [],
       blocks: [],
-      buckets: [],
       maxValue: 0,
+      areasWithData: 0,
     };
   }
 
@@ -347,7 +282,6 @@ export function buildMapModel(params: {
   });
 
   const neighborhoodValues = rows.map((row) => row.value);
-  const thresholds = thresholdsFor(neighborhoodValues);
   const neighborhoodMax = neighborhoodValues.reduce(
     (max, value) => (value > max ? value : max),
     0,
@@ -363,8 +297,6 @@ export function buildMapModel(params: {
         borough: row.boundary.borough,
         polygon,
         value: row.value,
-        bucket: bucketFor(row.value, thresholds),
-        fill: fillFor(row.value, thresholds),
         height: heightFor(row.value, neighborhoodMax),
         nightShare: row.nightShare,
         noiseCount: row.noiseAgg.count,
@@ -372,6 +304,8 @@ export function buildMapModel(params: {
         injured: row.crashAgg.injured,
         killed: row.crashAgg.killed,
         cyclists: row.crashAgg.cyclists,
+        addresses: row.noiseAgg.topAddresses ?? [],
+        streets: row.crashAgg.topStreets ?? [],
       });
     });
   }
@@ -386,7 +320,6 @@ export function buildMapModel(params: {
     blockRows.push({ key, entry, value });
   }
 
-  const blockThresholds = thresholdsFor(blockValues);
   const blockMax = blockValues.reduce(
     (max, value) => (value > max ? value : max),
     0,
@@ -400,8 +333,6 @@ export function buildMapModel(params: {
       lat: entry.lat + BLOCK_GRID_DEG / 2,
     },
     value,
-    bucket: bucketFor(value, blockThresholds),
-    fill: fillFor(value, blockThresholds),
     height: heightFor(value, blockMax),
     nightCount: entry.nightCount,
     noiseCount: entry.noiseCount,
@@ -409,17 +340,18 @@ export function buildMapModel(params: {
     injured: entry.injured,
     killed: entry.killed,
     cyclists: entry.cyclists,
+    addresses: entry.addresses,
+    streets: entry.streets,
   }));
 
   const shownValues = scale === "blocks" ? blockValues : neighborhoodValues;
-  const shownThresholds = scale === "blocks" ? blockThresholds : thresholds;
 
   return {
     layer,
     scale,
     neighborhoods,
     blocks,
-    buckets: buildBuckets(shownValues, shownThresholds),
     maxValue: shownValues.reduce((max, value) => (value > max ? value : max), 0),
+    areasWithData: shownValues.filter((value) => value > 0).length,
   };
 }

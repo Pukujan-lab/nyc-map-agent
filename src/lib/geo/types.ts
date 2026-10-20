@@ -21,6 +21,17 @@ export interface NtaAggregate {
   topTypes: CountPair[];
   topDescriptors: CountPair[];
   topFactors: CountPair[];
+  /**
+   * House numbers from 311 `incident_address` ("123 BROADWAY"), most frequent
+   * first. This is the only per-house-number reading in either dataset.
+   */
+  topAddresses: CountPair[];
+  /**
+   * Street names from crash records. The NYPD crash dataset records the street
+   * and cross street, never a house number, so this list is kept apart from
+   * `topAddresses` rather than being mixed in as if it were the same thing.
+   */
+  topStreets: CountPair[];
   injured: number;
   killed: number;
   cyclists: number;
@@ -45,6 +56,10 @@ export interface BlockCell {
   injured: number;
   killed: number;
   cyclists: number;
+  /** House numbers from 311 `incident_address`; absent on crash cells. */
+  addresses?: CountPair[];
+  /** Street names from crash records; absent on 311 cells. */
+  streets?: CountPair[];
 }
 
 export interface BoroughAggregate {

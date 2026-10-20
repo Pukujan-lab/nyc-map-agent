@@ -9,6 +9,8 @@ export const NOISE_FIELDS = [
   "complaint_type",
   "descriptor",
   "created_date",
+  // The only per-house-number field in either dataset: "123 BROADWAY".
+  "incident_address",
 ] as const;
 
 export const NOISE_SELECT = NOISE_FIELDS.join(",");
@@ -45,6 +47,7 @@ export const noiseRowSchema = z.object({
   complaint_type: z.string().min(1),
   descriptor: z.string().optional().default("Unspecified"),
   created_date: z.string().min(19),
+  incident_address: z.string().optional().default(""),
 });
 
 export type NoiseRow = z.infer<typeof noiseRowSchema>;

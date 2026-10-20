@@ -1,22 +1,17 @@
 import type { Feature, FeatureCollection, Polygon, Position } from "geojson";
 import type { PolygonRings } from "@/lib/api/nta";
-import {
-  rgbaToCss,
-  type BlockDatum,
-  type NeighborhoodDatum,
-  type Rgba,
-} from "@/lib/layers";
+import type { BlockDatum, NeighborhoodDatum } from "@/lib/layers";
 
 /**
  * Turns the computed map model into GeoJSON for MapLibre's own `fill-extrusion`
- * layers. Only the paint inputs travel as feature properties — color and
- * height. Everything else (names, counts, per-layer detail) stays in the
- * datum maps, which the hover card and details panel read directly, so a
- * number can never be duplicated into two places and drift.
+ * and `line` layers. Only the paint inputs travel as feature properties —
+ * height, because there is no longer a colour ramp to carry. Everything else
+ * (names, counts, per-layer detail, house numbers) stays in the datum maps,
+ * which the peek card and details panel read directly, so a number can never be
+ * duplicated into two places and drift.
  */
 
 export interface ColumnProperties {
-  color: string;
   height: number;
 }
 
@@ -25,13 +20,12 @@ export type ColumnFeature = Feature<Polygon, ColumnProperties>;
 function column(
   id: string,
   rings: PolygonRings,
-  fill: Rgba,
   height: number,
 ): ColumnFeature {
   return {
     type: "Feature",
     id,
-    properties: { color: rgbaToCss(fill), height },
+    properties: { height },
     geometry: { type: "Polygon", coordinates: rings },
   };
 }
@@ -42,7 +36,7 @@ export function neighborhoodsToGeoJson(
   return {
     type: "FeatureCollection",
     features: neighborhoods.map((datum) =>
-      column(datum.id, datum.polygon, datum.fill, datum.height),
+      column(datum.id, datum.polygon, datum.height),
     ),
   };
 }
@@ -53,7 +47,7 @@ export function blocksToGeoJson(
   return {
     type: "FeatureCollection",
     features: blocks.map((block) =>
-      column(block.key, block.polygon, block.fill, block.height),
+      column(block.key, block.polygon, block.height),
     ),
   };
 }

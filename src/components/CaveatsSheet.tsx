@@ -88,6 +88,22 @@ export function CaveatsSheet({ boundaries, noise, crashes }: CaveatsSheetProps) 
             </li>
             <li>
               <span className="font-medium text-foreground">
+                House numbers are as filed.
+              </span>{" "}
+              311&apos;s <code className="font-mono">incident_address</code> is
+              the only address field in either dataset, and it is typed by the
+              caller. Crash records carry a street and cross street, never a
+              house number, so the crash list names streets.
+            </li>
+            <li>
+              <span className="font-medium text-foreground">
+                Borough lines are derived.
+              </span>{" "}
+              They are the outer edge of each borough&apos;s neighborhoods, not
+              a separate boundary dataset.
+            </li>
+            <li>
+              <span className="font-medium text-foreground">
                 Points outside every neighborhood are counted separately.
               </span>{" "}
               They are never dropped silently — see the coverage numbers below.
