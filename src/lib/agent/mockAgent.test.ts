@@ -256,3 +256,42 @@ describe("MockAgentClient acceptance questions", () => {
     expect(reply.toolCalls.length).toBeGreaterThan(0);
   });
 });
+
+describe("MockAgentClient free-form questions", () => {
+  it("rolls a plain question up to the borough level", async () => {
+    const reply = await ask("Which borough had the most noise complaints?");
+    expect(reply.text).toContain("Brooklyn");
+    expect(reply.text).toContain("1,400");
+    expect(reply.toolCalls.some((call) => call.name === "fly_to")).toBe(true);
+  });
+
+  it("answers for a named neighborhood instead of ranking the city", async () => {
+    const reply = await ask(
+      "How many noise complaints were there in East Village in the last 90 days?",
+    );
+    expect(reply.text).toContain("East Village");
+    expect(reply.text).toContain("200");
+    expect(reply.text).not.toContain("Bushwick South");
+  });
+
+  it("honours a stated count and switches to the crash layer", async () => {
+    const reply = await ask("Which 3 neighborhoods had the most crashes?");
+    expect(reply.text).toContain("Bushwick South");
+    expect(reply.text).toContain("50");
+    const highlight = reply.toolCalls.find((call) => call.name === "highlight");
+    expect(highlight?.name === "highlight" && highlight.args.nta_codes?.length).toBe(3);
+    expect(reply.toolCalls.some((call) => call.name === "set_layer")).toBe(true);
+  });
+
+  it("ranks ascending for a fewest question", async () => {
+    const reply = await ask("Which neighborhood had the fewest noise complaints?");
+    expect(reply.text).toContain("Financial District");
+    expect(reply.text).toContain("100");
+  });
+
+  it("refuses to fake a noise intersection rollup", async () => {
+    const reply = await ask("Which intersections have the most noise complaints?");
+    expect(reply.text).toContain("only build intersection rollups from crash data");
+    expect(reply.text).not.toContain("0 noise complaints");
+  });
+});

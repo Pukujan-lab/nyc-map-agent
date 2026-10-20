@@ -64,12 +64,15 @@ export function useAgent({
         { role: "user", content: text },
       ];
 
+      let answerText: string | null = null;
+
       try {
         const reply = await client.send(historyRef.current, contextRef.current);
         const execution = executeToolCalls(
           reply.toolCalls,
           executeRef.current,
         );
+        answerText = reply.spoken ?? reply.text;
         historyRef.current = [
           ...historyRef.current,
           { role: "assistant", content: reply.text },
@@ -85,7 +88,6 @@ export function useAgent({
             rows: execution.rows,
           },
         ]);
-        spokenRef.current(reply.spoken ?? reply.text);
       } catch (error) {
         const message =
           error instanceof Error ? error.message : "The query failed.";
@@ -103,6 +105,17 @@ export function useAgent({
       } finally {
         pendingRef.current = false;
         setPending(false);
+      }
+
+      // Speaking is a side effect of a finished answer, not part of producing
+      // it: a blocked or missing voice must never turn a good answer into an
+      // error bubble.
+      if (answerText) {
+        try {
+          spokenRef.current(answerText);
+        } catch {
+          /* speech is best-effort */
+        }
       }
     },
     [client],

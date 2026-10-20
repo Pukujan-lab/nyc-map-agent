@@ -66,6 +66,7 @@ If a task seems to need a library not on this list, prefer the closest listed op
 - `src/lib/agent/client.ts` defines `AgentClient.send(messages, context)` and `AgentReply = { text, toolCalls, spoken? }`. `createAgentClient()` picks `MockAgentClient` or `HttpAgentClient` from `VITE_AGENT_MODE`.
 - `src/lib/agent/execute.ts` runs validated tool calls against `MapStateContext`. **Sources ("show query") are produced by execution, never by the agent**, so a model cannot fabricate a citation.
 - `src/lib/agent/query.ts` is the single deterministic rollup over the local aggregates. The mock agent and the tool executor both use it, so an answer's number and its source always agree.
+- `MockAgentClient` has six scripted answers plus a parser (`genericAnswer`) that turns an ordinary question into a structured query. Extend the parser rather than adding another regex handler; if a question has no dataset/metric/grouping signal, it must fall back to the example list instead of guessing.
 - `src/lib/agent/httpAgent.ts` documents the `POST /api/chat` contract and zod-validates the reply. That file is the only thing a real model layer has to satisfy.
 - Every answer must emit at least one of `fly_to` / `set_layer` / `highlight`. If a query fails, say so — never estimate.
 

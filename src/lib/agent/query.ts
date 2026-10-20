@@ -15,6 +15,15 @@ export interface QueryOutcome {
   metricLabel: string;
 }
 
+export interface QueryOptions {
+  /**
+   * Ranking direction, default descending ("most"). Ascending exists only for
+   * the mock agent's "quietest / fewest" questions — the tool schema does not
+   * expose it, so a model cannot re-order the rows behind a citation.
+   */
+  order?: "asc" | "desc";
+}
+
 const METRIC_LABELS: Record<NonNullable<QueryDataArgs["metric"]>, string> = {
   count: "incident count",
   injured: "people injured",
@@ -143,7 +152,9 @@ export function runStructuredQuery(
     crashes: AggregateResult | null;
     boundaries: NtaBoundary[] | null;
   },
+  options?: QueryOptions,
 ): QueryOutcome {
+  const order = options?.order ?? "desc";
   const result = args.dataset === "noise" ? context.noise : context.crashes;
   if (!result || !context.boundaries) {
     throw new Error(
@@ -159,15 +170,12 @@ export function runStructuredQuery(
   let rows: QueryRow[] = [];
 
   if (groupBy === "nta") {
-    rows = selected
-      .map((entry) => ({
-        key: entry.boundary.ntaCode,
-        label: entry.boundary.ntaName,
-        value: entry.value,
-        ntaCode: entry.boundary.ntaCode,
-      }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, limit);
+    rows = selected.map((entry) => ({
+      key: entry.boundary.ntaCode,
+      label: entry.boundary.ntaName,
+      value: entry.value,
+      ntaCode: entry.boundary.ntaCode,
+    }));
   } else if (groupBy === "borough") {
     const totals = new Map<string, number>();
     for (const entry of selected) {
@@ -176,10 +184,11 @@ export function runStructuredQuery(
         (totals.get(entry.boundary.borough) ?? 0) + entry.value,
       );
     }
-    rows = Array.from(totals.entries())
-      .map(([borough, value]) => ({ key: borough, label: borough, value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, limit);
+    rows = Array.from(totals.entries()).map(([borough, value]) => ({
+      key: borough,
+      label: borough,
+      value,
+    }));
   } else if (groupBy === "intersection") {
     const boroughFilter = args.filters?.borough?.toLowerCase();
     const ntaFilter = args.filters?.nta_codes;
@@ -205,9 +214,7 @@ export function runStructuredQuery(
                 ? row.crashes
                 : row.cyclists,
         ntaCode: row.ntaCode ?? undefined,
-      }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, limit);
+      }));
   } else {
     const key: "topTypes" | "topDescriptors" | "topFactors" =
       groupBy === "complaint_type"
@@ -221,11 +228,20 @@ export function runStructuredQuery(
         totals.set(name, (totals.get(name) ?? 0) + value);
       }
     }
-    rows = Array.from(totals.entries())
-      .map(([name, value]) => ({ key: name, label: name, value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, limit);
+    rows = Array.from(totals.entries()).map(([name, value]) => ({
+      key: name,
+      label: name,
+      value,
+    }));
   }
+
+  // One ranking rule for every grouping, so "quietest" means the same thing
+  // whichever shape the rows took. Ascending drops zero rows, otherwise the
+  // 200-odd neighborhoods with no records would always "win" a least question.
+  const ranked =
+    order === "asc" ? rows.filter((row) => row.value > 0) : rows.slice();
+  ranked.sort((a, b) => (order === "asc" ? a.value - b.value : b.value - a.value));
+  rows = ranked.slice(0, limit);
 
   const baseQuery = result.sources[0]?.query ?? "";
   const filterSummary = JSON.stringify(args.filters ?? {});
@@ -238,7 +254,7 @@ export function runStructuredQuery(
       `--   group by ${groupBy}`,
       `--   metric  ${label}`,
       `--   filters ${filterSummary}`,
-      `--   order   value desc limit ${limit}`,
+      `--   order   value ${order} limit ${limit}`,
     ].join("\n"),
   };
 

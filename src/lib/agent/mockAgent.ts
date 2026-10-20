@@ -1,11 +1,12 @@
 import { haversineKm, type NtaBoundary } from "@/lib/api/nta";
 import { formatCount, formatPercent } from "@/lib/format";
-import type { AggregateResult, NtaAggregate } from "@/lib/geo/types";
+import type { AggregateResult, DatasetId, NtaAggregate } from "@/lib/geo/types";
 import type { LayerId } from "@/lib/layers";
 import { windowBounds } from "@/lib/windows";
 import type { AgentClient, AgentContext, AgentReply, ChatTurn } from "./client";
 import { BOROUGH_CENTERS, findBoundary } from "./places";
-import type { AgentToolCall } from "./tools";
+import { runStructuredQuery, type QueryRow } from "./query";
+import type { AgentToolCall, QueryDataArgs } from "./tools";
 
 /** Crash data lags, so crash answers always name the crash window. */
 function crashWindowLabel(ctx: AgentContext): string {
@@ -443,6 +444,325 @@ function comparisonAnswer(ctx: AgentContext, place: string): AgentReply {
   };
 }
 
+/**
+ * The hand-written handlers above cover the questions in the brief. Everything
+ * else is parsed here into a structured query, so an ordinary question gets a
+ * real answer instead of a list of examples. No numbers are ever written down
+ * in this file — they all come back from `runStructuredQuery`.
+ */
+
+const CRASH_HINTS =
+  /crash|collision|injur|hurt|kill|fatal|death|died|cyclist|bike|bicycl|pedestrian|driver|traffic|hit[- ]and[- ]run|severity/;
+const NOISE_HINTS =
+  /noise|311|complaint|loud|helicopter|heliport|construction|jackhammer|music|party|siren|nightlife|barking/;
+
+const NIGHT_HINTS = /night|late|overnight|after midnight|10\s*p\.?m|4\s*a\.?m|bedtime/;
+const WEEKEND_HINTS = /weekend|friday|saturday|fri\b|sat\b/;
+const LEAST_HINTS = /quietest|calmest|fewest|least|lowest|safest|smallest/;
+const CITYWIDE_HINTS =
+  /citywide|city-wide|all five boroughs|across the city|in total|altogether|overall|whole city/;
+
+const SUBJECTS: Record<
+  NonNullable<QueryDataArgs["group_by"]>,
+  [singular: string, plural: string]
+> = {
+  nta: ["neighborhood", "neighborhoods"],
+  borough: ["borough", "boroughs"],
+  intersection: ["intersection", "intersections"],
+  complaint_type: ["complaint type", "complaint types"],
+  descriptor: ["descriptor", "descriptors"],
+  contributing_factor: ["contributing factor", "contributing factors"],
+};
+
+const BOROUGH_WORDS = [
+  "staten island",
+  "brooklyn",
+  "manhattan",
+  "queens",
+  "bronx",
+] as const;
+
+interface Signal<T> {
+  value: T;
+  /** True when the words were actually in the question, not just a default. */
+  explicit: boolean;
+}
+
+function detectDataset(text: string, ctx: AgentContext): Signal<DatasetId> {
+  const fallback: DatasetId = ctx.layer === "crashes" ? "crashes" : "noise";
+  const crash = CRASH_HINTS.test(text);
+  const noise = NOISE_HINTS.test(text);
+  if (crash && !noise) return { value: "crashes", explicit: true };
+  if (noise && !crash) return { value: "noise", explicit: true };
+  if (crash && noise) return { value: fallback, explicit: true };
+  return { value: fallback, explicit: false };
+}
+
+type Metric = NonNullable<QueryDataArgs["metric"]>;
+
+function detectMetric(text: string, dataset: DatasetId): Signal<Metric> {
+  const night = NIGHT_HINTS.test(text);
+  const weekend = WEEKEND_HINTS.test(text);
+
+  if (dataset === "noise") {
+    if (night && weekend) return { value: "weekend_night_count", explicit: true };
+    if (night) return { value: "night_count", explicit: true };
+    return { value: "count", explicit: false };
+  }
+
+  if (/cyclist|bike|bicycl/.test(text)) return { value: "cyclist_injured", explicit: true };
+  if (/kill|fatal|death|died|fatality/.test(text)) return { value: "killed", explicit: true };
+  if (/injur|hurt|wounded/.test(text)) return { value: "injured", explicit: true };
+  if (night && weekend) return { value: "weekend_night_count", explicit: true };
+  if (night) return { value: "night_count", explicit: true };
+  return { value: "count", explicit: false };
+}
+
+type GroupBy = NonNullable<QueryDataArgs["group_by"]>;
+
+function detectGroupBy(text: string, dataset: DatasetId): Signal<GroupBy> {
+  const factorGrouping = /contributing|factor|cause|reason/.test(text);
+  if (dataset === "crashes" && factorGrouping) {
+    return { value: "contributing_factor", explicit: true };
+  }
+  if (/intersection|corner|crossing|crosswalk/.test(text)) {
+    return { value: "intersection", explicit: true };
+  }
+  if (/borough|boro\b|citywide|five boroughs/.test(text)) {
+    return { value: "borough", explicit: true };
+  }
+  if (
+    /complaint type|type of (?:noise|complaint|crash)|which type|what type|kinds? of/.test(
+      text,
+    )
+  ) {
+    return { value: "complaint_type", explicit: true };
+  }
+  if (dataset === "crashes" && /descriptor|described as/.test(text)) {
+    return { value: "descriptor", explicit: true };
+  }
+  if (dataset === "noise" && factorGrouping) {
+    // 311 has no contributing-factor field; the closest honest grouping is the
+    // complaint type itself.
+    return { value: "complaint_type", explicit: true };
+  }
+  return { value: "nta", explicit: false };
+}
+
+function detectBorough(text: string): string | null {
+  const lower = text.toLowerCase();
+  return BOROUGH_WORDS.find((name) => lower.includes(name)) ?? null;
+}
+
+/** Longest neighborhood name mentioned in the question, so "East Harlem"
+ *  beats "Harlem". */
+function detectNeighborhood(
+  text: string,
+  boundaries: NtaBoundary[],
+): NtaBoundary | null {
+  const lower = text.toLowerCase();
+  let best: NtaBoundary | null = null;
+  for (const boundary of boundaries) {
+    const name = boundary.ntaName.toLowerCase();
+    if (name.length < 4 || !lower.includes(name)) continue;
+    if (!best || name.length > best.ntaName.length) best = boundary;
+  }
+  return best;
+}
+
+function detectLimit(text: string): number {
+  const match =
+    /\btop\s+(\d{1,2})\b/.exec(text) ??
+    /\b(\d{1,2})\s+(?:neighborhoods?|areas?|ntas?|intersections?|boroughs?|blocks?|types?)\b/.exec(
+      text,
+    );
+  const parsed = match ? Number.parseInt(match[1], 10) : Number.NaN;
+  if (Number.isFinite(parsed) && parsed >= 1) return Math.min(parsed, 20);
+  return 5;
+}
+
+function metricWords(dataset: DatasetId, metric: Metric): string {
+  if (dataset === "noise") {
+    if (metric === "night_count") return "noise complaints between 10pm and 4am";
+    if (metric === "weekend_night_count") {
+      return "noise complaints on weekend nights (Fri/Sat, 10pm–4am)";
+    }
+    return "noise complaints";
+  }
+  switch (metric) {
+    case "injured":
+      return "people injured";
+    case "killed":
+      return "people killed";
+    case "cyclist_injured":
+      return "cyclists injured";
+    case "night_count":
+      return "crashes between 10pm and 4am";
+    case "weekend_night_count":
+      return "crashes on weekend nights (Fri/Sat, 10pm–4am)";
+    default:
+      return "crashes";
+  }
+}
+
+function rankLines(rows: QueryRow[]): string {
+  return rows
+    .slice(0, 5)
+    .map((row, index) => `${index + 1}. ${row.label} — ${formatCount(row.value)}`)
+    .join("\n");
+}
+
+function genericAnswer(ctx: AgentContext, text: string): AgentReply | null {
+  const boundaries = ctx.boundaries;
+  if (!boundaries) return notReady();
+
+  const datasetSignal = detectDataset(text, ctx);
+  const dataset = datasetSignal.value;
+  const source = dataset === "noise" ? ctx.noise : ctx.crashes;
+  if (!source) return notReady();
+
+  const metricSignal = detectMetric(text, dataset);
+  const groupSignal = detectGroupBy(text, dataset);
+  const borough = detectBorough(text);
+  const neighborhood = detectNeighborhood(text, boundaries);
+  const ascending = LEAST_HINTS.test(text);
+  const citywide = CITYWIDE_HINTS.test(text);
+
+  // A place name alone isn't a question — "best pizza in Queens" must not turn
+  // into a noise ranking. Require one of the three data signals.
+  if (
+    !datasetSignal.explicit &&
+    !metricSignal.explicit &&
+    !groupSignal.explicit
+  ) {
+    return null;
+  }
+
+  const groupBy: GroupBy = citywide ? "borough" : groupSignal.value;
+  const limit = citywide ? 5 : neighborhood ? 1 : detectLimit(text);
+
+  // Intersection rollups are only built from crash rows — 311 rows have no
+  // reliable street pair — so answering "loudest intersection" from noise data
+  // would be a fabricated zero.
+  if (dataset === "noise" && groupBy === "intersection") {
+    return {
+      text: [
+        "I only build intersection rollups from crash data, because 311 rows don't carry a reliable street pair.",
+        "Ask which neighborhood is loudest instead, or switch to the crashes layer for intersections.",
+      ].join("\n\n"),
+      toolCalls: [{ name: "set_layer", args: { layer: "crashes" } }],
+    };
+  }
+
+  const args: QueryDataArgs = {
+    dataset,
+    metric: metricSignal.value,
+    group_by: groupBy,
+    limit,
+    filters: {
+      ...(borough ? { borough } : {}),
+      ...(neighborhood ? { nta_codes: [neighborhood.ntaCode] } : {}),
+    },
+  };
+
+  let outcome: ReturnType<typeof runStructuredQuery>;
+  try {
+    outcome = runStructuredQuery(
+      args,
+      { noise: ctx.noise, crashes: ctx.crashes, boundaries },
+      { order: ascending ? "asc" : "desc" },
+    );
+  } catch {
+    return notReady();
+  }
+
+  const rows = outcome.rows;
+  const window = dataset === "crashes" ? crashWindowLabel(ctx) : ctx.windowLabel;
+  const metric = metricWords(dataset, metricSignal.value);
+  const subject = SUBJECTS[groupBy];
+  const scope = neighborhood
+    ? ` in ${neighborhood.ntaName}`
+    : borough
+      ? ` in ${borough.replace(/\b\w/g, (c) => c.toUpperCase())}`
+      : "";
+
+  const toolCalls: AgentToolCall[] = [];
+  if (dataset !== ctx.layer) {
+    toolCalls.push({ name: "set_layer", args: { layer: dataset } });
+  }
+
+  if (rows.length === 0) {
+    return {
+      text: [
+        `I found no ${metric}${scope} in ${window}.`,
+        "Those records may fall outside a neighborhood boundary, or the window may be too narrow — try a wider one.",
+      ].join("\n\n"),
+      toolCalls:
+        toolCalls.length > 0
+          ? toolCalls
+          : [{ name: "set_layer", args: { layer: dataset } }],
+    };
+  }
+
+  const top = rows[0];
+  const total = rows.reduce((sum, row) => sum + row.value, 0);
+
+  let body: string;
+  if (citywide) {
+    body = [
+      `${formatCount(total)} ${metric} across the five boroughs over ${window}.`,
+      "",
+      rankLines(rows),
+    ].join("\n");
+  } else if (rows.length === 1) {
+    body = `${top.label}: ${formatCount(top.value)} ${metric} over ${window}.`;
+  } else {
+    body = [
+      `${ascending ? "Fewest" : "Most"} ${metric} over ${window}, by ${subject[0]}:`,
+      "",
+      rankLines(rows),
+    ].join("\n");
+  }
+
+  const anchors = rows
+    .map((row) => row.ntaCode)
+    .filter((code): code is string => typeof code === "string");
+  const anchor = anchors[0]
+    ? boundaries.find((boundary) => boundary.ntaCode === anchors[0])
+    : null;
+
+  if (anchors.length > 0) {
+    toolCalls.push({
+      name: "highlight",
+      args: { nta_codes: anchors.slice(0, 8) },
+    });
+  }
+  if (anchor) {
+    toolCalls.push({
+      name: "fly_to",
+      args: { lat: anchor.center[1], lon: anchor.center[0], zoom: 12.2 },
+    });
+  } else if (borough || groupBy === "borough") {
+    const center = BOROUGH_CENTERS[(borough ?? top.label).toLowerCase()];
+    if (center) {
+      toolCalls.push({
+        name: "fly_to",
+        args: { lat: center.lat, lon: center.lon, zoom: center.zoom },
+      });
+    }
+  }
+  if (toolCalls.length === 0) {
+    toolCalls.push({ name: "set_layer", args: { layer: dataset } });
+  }
+
+  const spoken =
+    rows.length === 1
+      ? `${top.label}: ${formatCount(top.value)} ${metric} over ${window}.`
+      : `${top.label} leads with ${formatCount(top.value)} ${metric} over ${window}.`;
+
+  return { text: body, toolCalls, spoken };
+}
+
 function fallbackAnswer(ctx: AgentContext): AgentReply {
   const source = ctx.layer === "crashes" ? ctx.crashes : ctx.noise;
   if (!source || !ctx.boundaries) return notReady();
@@ -540,6 +860,7 @@ export class MockAgentClient implements AgentClient {
     await new Promise((resolve) => setTimeout(resolve, 380));
 
     const handler = HANDLERS.find((candidate) => candidate.test(text));
-    return handler ? handler.run(context, text) : fallbackAnswer(context);
+    if (handler) return handler.run(context, text);
+    return genericAnswer(context, text) ?? fallbackAnswer(context);
   }
 }
