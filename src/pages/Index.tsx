@@ -1,11 +1,10 @@
-import { useMemo } from "react";
-import { MessageSquare } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useMemo, useState } from "react";
 import { CaveatsSheet } from "@/components/CaveatsSheet";
 import { ChatPanel } from "@/components/ChatPanel";
+import { ControlDrawer } from "@/components/ControlDrawer";
 import { DetailsSheet } from "@/components/DetailsSheet";
-import { Legend } from "@/components/Legend";
-import { MapControls } from "@/components/MapControls";
+import { MapHud } from "@/components/MapHud";
+import { MapStatusChip } from "@/components/MapStatusChip";
 import { MapView } from "@/components/MapView";
 import { useMapData } from "@/lib/geo/aggregate";
 import type { NtaAggregate } from "@/lib/geo/types";
@@ -21,8 +20,8 @@ export default function Index() {
     scale,
     selectedNtaCode,
     selectedBlockKey,
-    setChatOpen,
   } = useMapState();
+  const [controlsOpen, setControlsOpen] = useState(false);
   const isDesktop = useMediaQuery("(min-width: 1024px)");
   const data = useMapData(windowId);
   const { label: windowLabel } = windowBounds(windowId);
@@ -93,37 +92,33 @@ export default function Index() {
     <div className="relative h-full w-full overflow-hidden bg-background">
       <MapView model={model} boundaries={data.boundaries} />
 
-      <div className="absolute left-3 top-3 z-20 max-w-[calc(100%-4.5rem)]">
-        <MapControls
-          progress={data.progress}
-          isLoading={data.isLoading}
-          isError={data.isError}
-          errorMessage={data.error?.message ?? null}
-          neighborhoods={neighborhoods}
-          onRetry={data.retry}
-        />
-      </div>
+      <MapStatusChip
+        windowId={windowId}
+        progress={data.progress}
+        isLoading={data.isLoading}
+        isError={data.isError}
+        errorMessage={data.error?.message ?? null}
+        onRetry={data.retry}
+      />
 
-      <div className="absolute bottom-3 left-3 z-20">
-        <Legend
-          layer={layer}
-          scale={scale}
-          buckets={model.buckets}
-          maxValue={model.maxValue}
-        />
-      </div>
+      <MapHud
+        buckets={model.buckets}
+        maxValue={model.maxValue}
+        onOpenControls={() => setControlsOpen(true)}
+      />
 
-      {!isDesktop ? (
-        <Button
-          type="button"
-          size="icon"
-          aria-label="Open chat"
-          className="absolute right-3 top-3 z-20 h-10 w-10 rounded-full shadow-lg"
-          onClick={() => setChatOpen(true)}
-        >
-          <MessageSquare className="h-4 w-4" />
-        </Button>
-      ) : null}
+      <ControlDrawer
+        open={controlsOpen}
+        onOpenChange={setControlsOpen}
+        progress={data.progress}
+        isLoading={data.isLoading}
+        isError={data.isError}
+        errorMessage={data.error?.message ?? null}
+        neighborhoods={neighborhoods}
+        onRetry={data.retry}
+        buckets={model.buckets}
+        maxValue={model.maxValue}
+      />
 
       <ChatPanel
         boundaries={data.boundaries}

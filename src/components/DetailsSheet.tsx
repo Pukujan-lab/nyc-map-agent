@@ -331,8 +331,8 @@ export function DetailsSheet(props: DetailsSheetProps) {
     return (
       <Card
         className={cn(
-          "absolute top-4 z-30 flex max-h-[calc(100%-2rem)] w-[380px] flex-col overflow-hidden p-0",
-          "right-[400px]",
+          // Sits above the dock, which owns the bottom of the screen.
+          "absolute right-4 top-4 z-30 flex max-h-[calc(100%-7rem)] w-[380px] flex-col overflow-hidden p-0",
         )}
       >
         {body}

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Send, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
   Sheet,
   SheetContent,
@@ -268,19 +267,15 @@ export function ChatPanel({
     </div>
   );
 
-  if (isDesktop) {
-    return (
-      <Card className="absolute bottom-4 right-4 top-4 z-30 flex w-[380px] flex-col overflow-hidden p-0">
-        {body}
-      </Card>
-    );
-  }
-
   return (
     <Sheet open={chatOpen} onOpenChange={setChatOpen}>
       <SheetContent
-        side="bottom"
-        className="flex h-[85vh] flex-col overflow-hidden p-0"
+        side={isDesktop ? "right" : "bottom"}
+        className={
+          isDesktop
+            ? "flex h-full w-full flex-col overflow-hidden p-0 sm:max-w-[420px]"
+            : "flex h-[85vh] flex-col overflow-hidden p-0"
+        }
       >
         <SheetTitle className="sr-only">Ask the map</SheetTitle>
         <SheetDescription className="sr-only">

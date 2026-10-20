@@ -18,19 +18,26 @@ import {
   type NeighborhoodDatum,
 } from "@/lib/layers";
 import {
+  applyAtmosphere,
+  BASEMAP_STYLE_URL,
+  installDataLayers,
+} from "@/lib/map/basemap";
+import {
   blockSelectionToGeoJson,
   blocksToGeoJson,
   emphasisToGeoJson,
   neighborhoodsToGeoJson,
 } from "@/lib/map/geojson";
-import { LAYER_IDS, SOURCE_IDS, buildMapStyle } from "@/lib/map/style";
+import { LAYER_IDS, SOURCE_IDS, buildFallbackStyle } from "@/lib/map/style";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 
-/** How far the camera may tilt. Enough to read column height, never a globe. */
-const MAX_PITCH = 60;
-/** The one tilt the "3D" button applies. */
-const TILT_PITCH = 52;
+/** How far the camera may tilt. Enough to look down a street, never a globe. */
+const MAX_PITCH = 78;
+/** The one tilt the "3D" button applies — low enough to see the horizon. */
+const TILT_PITCH = 62;
+/** Tilting from the citywide view drops in to where the buildings are. */
+const TILT_MIN_ZOOM = 13.4;
 /** Past this many degrees the map counts as tilted — for the button and the camera. */
 const TILT_EPSILON = 5;
 
@@ -75,6 +82,9 @@ export function MapView({
 }) {
   const mapRef = useRef<MapRef | null>(null);
   const [ready, setReady] = useState(false);
+  /** Bumped whenever the style (re)loads, so the data is re-applied to fresh sources. */
+  const [styleEpoch, setStyleEpoch] = useState(0);
+  const fellBack = useRef(false);
   const [hover, setHover] = useState<HoverInfo | null>(null);
 
   const {
@@ -167,7 +177,32 @@ export function MapView({
     [boundaries],
   );
 
-  const handleLoad = useCallback(() => setReady(true), []);
+  const handleLoad = useCallback(() => {
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    installDataLayers(map);
+    applyAtmosphere(map);
+    setStyleEpoch((epoch) => epoch + 1);
+    setReady(true);
+    // A style swap (the raster fallback) replaces every source, so the data
+    // has to be re-attached and re-pushed.
+    map.on("style.load", () => {
+      installDataLayers(map);
+      setStyleEpoch((epoch) => epoch + 1);
+    });
+  }, []);
+
+  /**
+   * If the vector basemap cannot be fetched the map would otherwise stay
+   * blank, so fall back once to the bundled raster style. Tile errors are
+   * survivable; only an unloaded style is not.
+   */
+  const handleError = useCallback(() => {
+    const map = mapRef.current?.getMap();
+    if (!map || fellBack.current || map.isStyleLoaded()) return;
+    fellBack.current = true;
+    map.setStyle(buildFallbackStyle());
+  }, []);
 
   /**
    * Prefer MapLibre's own 3D picking; fall back to arithmetic when a query
@@ -283,14 +318,14 @@ export function MapView({
     map.setPaintProperty(
       LAYER_IDS.neighborhoods,
       "fill-extrusion-opacity",
-      showBlocks ? 0.45 : 1,
+      showBlocks ? 0.42 : 0.7,
     );
     map.setPaintProperty(
       LAYER_IDS.neighborhoodOutline,
       "line-opacity",
       showBlocks ? 0.3 : 1,
     );
-  }, [ready, neighborhoodGeoJson, blockGeoJson, scale]);
+  }, [ready, styleEpoch, neighborhoodGeoJson, blockGeoJson, scale]);
 
   useEffect(() => {
     if (!ready) return;
@@ -302,7 +337,7 @@ export function MapView({
     (
       map.getSource(SOURCE_IDS.blockSelection) as GeoJSONSource | undefined
     )?.setData(selectionGeoJson);
-  }, [ready, emphasisGeoJson, selectionGeoJson]);
+  }, [ready, styleEpoch, emphasisGeoJson, selectionGeoJson]);
 
   useEffect(() => {
     if (!ready || !cameraTarget) return;
@@ -338,7 +373,10 @@ export function MapView({
     map.easeTo({
       pitch: tilted ? TILT_PITCH : 0,
       bearing: tilted ? map.getBearing() : 0,
-      duration: reducedMotion ? 0 : 700,
+      // From the citywide view a tilt would just be a floating plate; drop in
+      // far enough that the buildings and streets carry the perspective.
+      zoom: tilted ? Math.max(map.getZoom(), TILT_MIN_ZOOM) : map.getZoom(),
+      duration: reducedMotion ? 0 : 900,
     });
   }, [ready, tilted, reducedMotion]);
 
@@ -373,14 +411,15 @@ export function MapView({
     <div className="absolute inset-0">
       <MapLibreMap
         ref={mapRef}
-        mapStyle={buildMapStyle()}
+        mapStyle={BASEMAP_STYLE_URL}
         initialViewState={viewState}
         maxPitch={MAX_PITCH}
         minZoom={9}
-        maxZoom={17}
+        maxZoom={17.5}
         dragRotate
         touchPitch
         onLoad={handleLoad}
+        onError={handleError}
         onMouseMove={handleMouseMove}
         onClick={handleClick}
         onMoveEnd={handleMoveEnd}

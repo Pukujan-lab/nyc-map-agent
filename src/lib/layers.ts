@@ -13,6 +13,13 @@ export const LAYER_LABELS: Record<LayerId, string> = {
   combined: "Combined",
 };
 
+/** Same control, narrow enough to sit in the HUD dock. */
+export const LAYER_SHORT_LABELS: Record<LayerId, string> = {
+  noise: "Noise",
+  crashes: "Crashes",
+  combined: "Both",
+};
+
 /** What the block color actually counts, per layer. */
 export const LAYER_METRICS: Record<LayerId, { value: string; unit: string }> = {
   noise: { value: "noise complaints", unit: "complaints" },

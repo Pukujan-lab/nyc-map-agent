@@ -17,13 +17,18 @@ interface LegendProps {
   maxValue: number;
 }
 
-export function Legend({ layer, scale, buckets, maxValue }: LegendProps) {
+/**
+ * The color key. Rendered bare (in the HUD's legend popover) or wrapped in a
+ * card (in the control drawer) — the ranges always come from `buildMapModel`,
+ * so they cannot drift from the colors on the map.
+ */
+export function LegendContent({ layer, scale, buckets, maxValue }: LegendProps) {
   const { window: windowId, setCaveatsOpen } = useMapState();
   const { shortLabel } = windowBounds(windowId);
   const areasWithData = buckets.reduce((sum, bucket) => sum + bucket.count, 0);
 
   return (
-    <Card className="w-[240px] p-3 sm:w-[260px]">
+    <div>
       <div className="flex items-baseline justify-between gap-2">
         <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
           Legend
@@ -86,6 +91,14 @@ export function Legend({ layer, scale, buckets, maxValue }: LegendProps) {
           Details
         </button>
       </p>
+    </div>
+  );
+}
+
+export function Legend(props: LegendProps) {
+  return (
+    <Card className="p-3">
+      <LegendContent {...props} />
     </Card>
   );
 }

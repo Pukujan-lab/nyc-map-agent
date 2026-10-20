@@ -13,7 +13,7 @@ Ask anything about how loud or how dangerous a NYC street is, and watch the answ
 2. **AI chat:** questions in plain language get answered with real numbers from the data, and the map moves or filters to show the answer.
 
 ## Demo story (2 minutes)
-1. Open on all five boroughs, flat and north-up, with neighborhoods colored by noise.
+1. Open on all five boroughs, flat and north-up, with neighborhoods colored by noise. Tap 3D: the camera drops to 62° and the city's buildings appear under the columns.
 2. Type "Where is the loudest block in Bushwick on weekend nights?" The chat answers with a real count, and the map flies to that block and highlights it.
 3. Switch to crashes. Type "Which Brooklyn intersections have the most cyclist injuries?" The chat lists the top results, and the map highlights them.
 4. Click any block. A panel shows the breakdown, and you can choose "Ask about this neighborhood."
