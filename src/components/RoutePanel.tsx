@@ -5,6 +5,7 @@ import type { WalkingRoute } from "@/lib/api/routing";
 import { formatCount } from "@/lib/format";
 import { useDataView } from "@/lib/store/DataViewContext";
 import { useMapState } from "@/lib/store/MapStateContext";
+import { cn } from "@/lib/utils";
 
 function formatDistance(metres: number): string {
   return metres >= 1000
@@ -55,7 +56,14 @@ export function RoutePanel({
   };
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-14 z-30 flex justify-center px-3">
+    // Below the loading chip; lower still while walking, where the two-line
+    // street-level strip spans a phone's full width at the top.
+    <div
+      className={cn(
+        "pointer-events-none absolute inset-x-0 z-30 flex justify-center px-3",
+        walking ? "top-[5.5rem] sm:top-14" : "top-14",
+      )}
+    >
       <Card className="pointer-events-auto w-full max-w-sm p-3 text-xs shadow-xl">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 font-semibold">

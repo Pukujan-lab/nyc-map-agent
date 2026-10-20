@@ -222,6 +222,8 @@ export default function Index() {
         }
         windowLabel={windowLabel}
         isDesktop={isDesktop}
+        view={model.view}
+        viewValue={selectedBlock?.value ?? selectedDatum?.value}
       />
 
       <DetailsSheet
