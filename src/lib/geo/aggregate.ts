@@ -178,14 +178,14 @@ export function useMapData(windowId: WindowId): MapData {
   useEffect(() => {
     if (!noise) return;
     console.info(
-      `[aggregate] noise ${noise.windowId}: ${noise.totalRows} rows, ${noise.unassignedCount} unassigned`,
+      `[aggregate] noise ${noise.windowId}: ${noise.totalRows} rows, ${noise.unassignedCount} unassigned, ${(noise.blocks ?? []).length} blocks`,
     );
   }, [noise]);
 
   useEffect(() => {
     if (!crashes) return;
     console.info(
-      `[aggregate] crashes ${crashes.windowId}: ${crashes.totalRows} rows, ${crashes.unassignedCount} unassigned`,
+      `[aggregate] crashes ${crashes.windowId}: ${crashes.totalRows} rows, ${crashes.unassignedCount} unassigned, ${(crashes.blocks ?? []).length} blocks`,
     );
   }, [crashes]);
 

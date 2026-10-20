@@ -1,68 +1,68 @@
 import { Card } from "@/components/ui/card";
 import { formatCount } from "@/lib/format";
-import { LAYER_METRICS, rampHex, type LayerId } from "@/lib/layers";
+import {
+  LAYER_METRICS,
+  formatBucketRange,
+  type Bucket,
+  type LayerId,
+  type MapScale,
+} from "@/lib/layers";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { windowBounds } from "@/lib/windows";
 
 interface LegendProps {
   layer: LayerId;
-  maxHeightValue: number;
+  scale: MapScale;
+  buckets: Bucket[];
+  maxValue: number;
 }
 
-export function Legend({ layer, maxHeightValue }: LegendProps) {
+export function Legend({ layer, scale, buckets, maxValue }: LegendProps) {
   const { window: windowId, setCaveatsOpen } = useMapState();
   const { shortLabel } = windowBounds(windowId);
-  const ramp = rampHex(layer);
+  const areasWithData = buckets.reduce((sum, bucket) => sum + bucket.count, 0);
 
   return (
     <Card className="w-[240px] p-3 sm:w-[260px]">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-        Legend
+      <div className="flex items-baseline justify-between gap-2">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          Legend
+        </div>
+        <div className="truncate text-[10px] text-muted-foreground">
+          {LAYER_METRICS[layer].value}
+        </div>
       </div>
 
-      <div className="mt-2 space-y-2.5">
-        <div>
-          <div className="flex items-baseline justify-between gap-2 text-[11px]">
-            <span className="font-medium">Height</span>
-            <span className="truncate text-muted-foreground">
-              {LAYER_METRICS[layer].height}
+      <ul className="mt-2 space-y-1">
+        {buckets.map((bucket) => (
+          <li key={bucket.index} className="flex items-center gap-2">
+            <span
+              aria-hidden="true"
+              className="h-2.5 w-2.5 shrink-0 rounded-sm"
+              style={{ backgroundColor: bucket.hex }}
+            />
+            <span className="flex-1 text-[11px] tabular-nums">
+              {formatBucketRange(bucket)}
             </span>
-          </div>
-          <div className="mt-1.5 flex items-end gap-1" aria-hidden="true">
-            {[0.22, 0.42, 0.66, 1].map((scale) => (
-              <div
-                key={scale}
-                className="w-3 rounded-t-sm bg-primary/80"
-                style={{ height: `${Math.round(scale * 22)}px` }}
-              />
-            ))}
-          </div>
-          <div className="mt-1 flex justify-between text-[10px] tabular-nums text-muted-foreground">
-            <span>0</span>
-            <span>{formatCount(maxHeightValue)} max</span>
-          </div>
-        </div>
-
-        <div>
-          <div className="flex items-baseline justify-between gap-2 text-[11px]">
-            <span className="font-medium">Color</span>
-            <span className="truncate text-muted-foreground">
-              {LAYER_METRICS[layer].color}
+            <span className="text-[10px] tabular-nums text-muted-foreground">
+              {formatCount(bucket.count)}
             </span>
-          </div>
-          <div
-            className="mt-1.5 h-2 rounded-full"
-            style={{
-              background: `linear-gradient(90deg, ${ramp.from}, ${ramp.to})`,
-            }}
+          </li>
+        ))}
+        <li className="flex items-center gap-2">
+          <span
             aria-hidden="true"
+            className="h-2.5 w-2.5 shrink-0 rounded-sm bg-muted-foreground/25"
           />
-          <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
-            <span>low</span>
-            <span>high</span>
-          </div>
-        </div>
-      </div>
+          <span className="flex-1 text-[11px]">no records</span>
+        </li>
+      </ul>
+
+      <p className="mt-1.5 text-[10px] leading-snug text-muted-foreground">
+        {scale === "blocks"
+          ? `~300 m blocks · ${formatCount(areasWithData)} with records · peak ${formatCount(maxValue)}`
+          : `Neighborhoods · ${formatCount(areasWithData)} with records · peak ${formatCount(maxValue)}`}
+      </p>
 
       {layer === "combined" ? (
         <p className="mt-2 text-[10px] leading-snug text-muted-foreground">

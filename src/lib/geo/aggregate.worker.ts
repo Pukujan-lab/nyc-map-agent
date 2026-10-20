@@ -19,11 +19,13 @@ import {
   parseCsv,
   type CsvTable,
 } from "@/lib/api/socrata";
+import { blockKey } from "./blocks";
 import { NtaIndex } from "./ntaIndex";
 import type {
   AggregateResult,
   AggregateWorkerRequest,
   AggregateWorkerResponse,
+  BlockCell,
   BoroughAggregate,
   CountPair,
   IntersectionRow,
@@ -73,6 +75,48 @@ function createAcc(): NtaAcc {
     cyclists: 0,
     pedestrians: 0,
   };
+}
+
+interface BlockAcc {
+  lon: number;
+  lat: number;
+  ntaCode: string;
+  count: number;
+  night: number;
+  injured: number;
+  killed: number;
+  cyclists: number;
+}
+
+/**
+ * Adds one record to its ~300 m square and returns the accumulator so callers
+ * can layer dataset-specific numbers on top.
+ */
+function bumpBlock(
+  blocks: Map<string, BlockAcc>,
+  lat: number,
+  lon: number,
+  ntaCode: string,
+  night: boolean,
+): BlockAcc {
+  const cell = blockKey(lat, lon);
+  let acc = blocks.get(cell.key);
+  if (!acc) {
+    acc = {
+      lon: cell.lon,
+      lat: cell.lat,
+      ntaCode,
+      count: 0,
+      night: 0,
+      injured: 0,
+      killed: 0,
+      cyclists: 0,
+    };
+    blocks.set(cell.key, acc);
+  }
+  acc.count += 1;
+  if (night) acc.night += 1;
+  return acc;
 }
 
 function bump(map: Map<string, number>, key: string): void {
@@ -138,6 +182,7 @@ async function aggregate(
   accs: NtaAcc[],
   counters: { unassigned: number; malformed: number },
   intersectionMap: Map<string, IntersectionRow>,
+  blocks: Map<string, BlockAcc>,
 ): Promise<void> {
   const index = new NtaIndex(request.boundaries);
   const isNoise = request.dataset === "noise";
@@ -159,6 +204,7 @@ async function aggregate(
     accs,
     counters,
     intersectionMap,
+    blocks,
   );
 }
 
@@ -182,6 +228,7 @@ async function aggregatePages(
   accs: NtaAcc[],
   counters: { unassigned: number; malformed: number },
   intersectionMap: Map<string, IntersectionRow>,
+  blocks: Map<string, BlockAcc>,
 ): Promise<void> {
   scope.postMessage({
     type: "progress",
@@ -216,9 +263,18 @@ async function aggregatePages(
     if (!columns) columns = indexColumns(table.header);
 
     if (isNoise) {
-      processNoiseRows(table, columns, index, accs, counters);
+      processNoiseRows(table, columns, index, accs, counters, blocks);
     } else {
-      processCrashRows(table, columns, index, accs, counters, intersectionMap, boroughByNta);
+      processCrashRows(
+        table,
+        columns,
+        index,
+        accs,
+        counters,
+        intersectionMap,
+        boroughByNta,
+        blocks,
+      );
     }
 
     offset += table.rows.length;
@@ -234,6 +290,7 @@ function processNoiseRows(
   index: NtaIndex,
   accs: NtaAcc[],
   counters: { unassigned: number; malformed: number },
+  blocks: Map<string, BlockAcc>,
 ): void {
   const latIdx = requireColumn(columns, "latitude");
   const lonIdx = requireColumn(columns, "longitude");
@@ -268,9 +325,17 @@ function processNoiseRows(
     acc.count += 1;
     const hour = hourFromIso(value.created_date);
     const weekday = weekdayFromDate(value.created_date);
+    const night = isNightHour(hour);
     acc.hours[hour] += 1;
-    if (isNightHour(hour)) acc.night += 1;
+    if (night) acc.night += 1;
     if (isWeekendNight(hour, weekday)) acc.weekendNight += 1;
+    bumpBlock(
+      blocks,
+      value.latitude,
+      value.longitude,
+      index.boundaries[ntaIndex].ntaCode,
+      night,
+    );
     const month = value.created_date.slice(0, 7);
     bump(acc.months, month);
     bump(acc.types, value.complaint_type);
@@ -289,6 +354,7 @@ function processCrashRows(
   counters: { unassigned: number; malformed: number },
   intersectionMap: Map<string, IntersectionRow>,
   boroughByNta: Map<string, string>,
+  blocks: Map<string, BlockAcc>,
 ): void {
   const latIdx = requireColumn(columns, "latitude");
   const lonIdx = requireColumn(columns, "longitude");
@@ -344,6 +410,17 @@ function processCrashRows(
     acc.cyclists += value.number_of_cyclist_injured;
     acc.pedestrians += value.number_of_pedestrians_injured;
 
+    const block = bumpBlock(
+      blocks,
+      value.latitude,
+      value.longitude,
+      index.boundaries[ntaIndex].ntaCode,
+      isNightHour(hour),
+    );
+    block.injured += value.number_of_persons_injured;
+    block.killed += value.number_of_persons_killed;
+    block.cyclists += value.number_of_cyclist_injured;
+
     const factor = value.contributing_factor_vehicle_1.trim();
     if (!isUnspecifiedFactor(factor)) bump(acc.factors, factor);
 
@@ -380,6 +457,7 @@ function finalize(
   accs: NtaAcc[],
   counters: { unassigned: number; malformed: number },
   intersectionMap: Map<string, IntersectionRow>,
+  blocks: Map<string, BlockAcc>,
 ): AggregateResult {
   const ntas: NtaAggregate[] = request.boundaries.map((boundary, i) => {
     const acc = accs[i];
@@ -438,6 +516,20 @@ function finalize(
     .sort((a, b) => b.cyclists - a.cyclists || b.crashes - a.crashes)
     .slice(0, 80);
 
+  const blockCells: BlockCell[] = Array.from(blocks.entries()).map(
+    ([key, acc]) => ({
+      key,
+      lon: acc.lon,
+      lat: acc.lat,
+      ntaCode: acc.ntaCode,
+      count: acc.count,
+      nightCount: acc.night,
+      injured: acc.injured,
+      killed: acc.killed,
+      cyclists: acc.cyclists,
+    }),
+  );
+
   const isNoise = request.dataset === "noise";
   const dataset = isNoise ? NOISE_DATASET : CRASH_DATASET;
   const select = isNoise ? NOISE_SELECT : CRASH_SELECT;
@@ -455,6 +547,7 @@ function finalize(
     unassignedCount: counters.unassigned,
     malformedCount: counters.malformed,
     ntas,
+    blocks: blockCells,
     boroughs,
     intersections,
     sources: [
@@ -477,8 +570,9 @@ async function run(request: AggregateWorkerRequest): Promise<void> {
   const accs = request.boundaries.map(() => createAcc());
   const counters = { unassigned: 0, malformed: 0 };
   const intersectionMap = new Map<string, IntersectionRow>();
+  const blocks = new Map<string, BlockAcc>();
 
-  await aggregate(request, accs, counters, intersectionMap);
+  await aggregate(request, accs, counters, intersectionMap, blocks);
 
   scope.postMessage({
     type: "progress",
@@ -488,7 +582,7 @@ async function run(request: AggregateWorkerRequest): Promise<void> {
   });
   scope.postMessage({
     type: "done",
-    result: finalize(request, accs, counters, intersectionMap),
+    result: finalize(request, accs, counters, intersectionMap, blocks),
   });
 }
 

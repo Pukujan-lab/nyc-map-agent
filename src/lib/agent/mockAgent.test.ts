@@ -66,6 +66,7 @@ function aggregate(
     unassignedCount: 4,
     malformedCount: 0,
     ntas,
+    blocks: [],
     boroughs: [],
     intersections: [],
     sources: [{ label: "source", query: "https://example.test" }],

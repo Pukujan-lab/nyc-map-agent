@@ -9,14 +9,20 @@ import { MapControls } from "@/components/MapControls";
 import { MapView } from "@/components/MapView";
 import { useMapData } from "@/lib/geo/aggregate";
 import type { NtaAggregate } from "@/lib/geo/types";
-import { buildColumnModel } from "@/lib/layers";
+import { buildMapModel } from "@/lib/layers";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { windowBounds } from "@/lib/windows";
 
 export default function Index() {
-  const { layer, window: windowId, selectedNtaCode, setChatOpen } =
-    useMapState();
+  const {
+    layer,
+    window: windowId,
+    scale,
+    selectedNtaCode,
+    selectedBlockKey,
+    setChatOpen,
+  } = useMapState();
   const isDesktop = useMediaQuery("(min-width: 1024px)");
   const data = useMapData(windowId);
   const { label: windowLabel } = windowBounds(windowId);
@@ -24,15 +30,16 @@ export default function Index() {
     ? windowBounds(data.crashes.windowId).label
     : windowBounds("12mo").label;
 
-  const columns = useMemo(
+  const model = useMemo(
     () =>
-      buildColumnModel({
+      buildMapModel({
         boundaries: data.boundaries,
         noise: data.noise,
         crashes: data.crashes,
         layer,
+        scale,
       }),
-    [data.boundaries, data.noise, data.crashes, layer],
+    [data.boundaries, data.noise, data.crashes, layer, scale],
   );
 
   const noiseByCode = useMemo(() => {
@@ -55,6 +62,15 @@ export default function Index() {
     [data.boundaries, selectedNtaCode],
   );
 
+  const selectedBlock = useMemo(
+    () =>
+      selectedBlockKey
+        ? (model.blocks.find((block) => block.key === selectedBlockKey) ??
+          null)
+        : null,
+    [model.blocks, selectedBlockKey],
+  );
+
   const neighborhoods = useMemo(() => {
     if (!data.boundaries || !data.noise) return [];
     return data.boundaries
@@ -75,7 +91,7 @@ export default function Index() {
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-background">
-      <MapView columns={columns} />
+      <MapView model={model} />
 
       <div className="absolute left-3 top-3 z-20 max-w-[calc(100%-4.5rem)]">
         <MapControls
@@ -89,7 +105,12 @@ export default function Index() {
       </div>
 
       <div className="absolute bottom-3 left-3 z-20">
-        <Legend layer={layer} maxHeightValue={columns.maxHeightValue} />
+        <Legend
+          layer={layer}
+          scale={scale}
+          buckets={model.buckets}
+          maxValue={model.maxValue}
+        />
       </div>
 
       {!isDesktop ? (
@@ -113,6 +134,7 @@ export default function Index() {
 
       <DetailsSheet
         boundary={selectedBoundary}
+        block={selectedBlock}
         noise={
           selectedNtaCode ? noiseByCode.get(selectedNtaCode) ?? null : null
         }

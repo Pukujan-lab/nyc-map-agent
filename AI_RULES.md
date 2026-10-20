@@ -8,7 +8,7 @@ Project guidance for the NYC Map Agent. Read this before writing code. Product s
 - **React Router** for routing. All routes live in `src/App.tsx`; pages live in `src/pages/`.
 - **Tailwind CSS** for all styling. No CSS-in-JS, no styled-components, no hand-written `.css` files beyond `src/index.css`.
 - **shadcn/ui** (Radix primitives) for every standard control: buttons, dialogs, sheets, tabs, tooltips, selects, sliders, toasts.
-- **deck.gl** (`@deck.gl/core`, `@deck.gl/layers`, `@deck.gl/mapbox`) renders the extruded 3D columns through a `MapboxOverlay` registered as a MapLibre control. Height = incident count, color = severity. Do **not** wrap the map in `@deck.gl/react`'s `<DeckGL>` — two React render roots over one canvas is the main source of interop bugs.
+- **deck.gl** (`@deck.gl/core`, `@deck.gl/layers`, `@deck.gl/mapbox`) draws the map through a `MapboxOverlay` registered as a MapLibre control. The map is **flat and north-up** (no extrusion, no pitch, no bearing): neighborhoods and ~300 m block squares are filled with one of four categorical colors. Do **not** wrap the map in `@deck.gl/react`'s `<DeckGL>` — two React render roots over one canvas is the main source of interop bugs.
 - **MapLibre GL + react-map-gl** (`react-map-gl/maplibre`) provides the map canvas and camera control, with OpenStreetMap raster tiles and an "© OpenStreetMap contributors" attribution.
 - **TanStack Query** owns all server state: Socrata fetches, cell/neighborhood aggregates, caching, retries.
 - **Recharts** (via the shadcn `chart` component) for the hour-of-day and breakdown charts.
@@ -23,8 +23,9 @@ Project guidance for the NYC Map Agent. Read this before writing code. Product s
 | Any UI control | shadcn/ui from `src/components/ui/` | Raw unstyled `<div>` buttons, MUI, Chakra, Ant |
 | Layout, spacing, color, responsive | Tailwind utility classes | inline `style` (except deck.gl/map props), CSS modules |
 | Icons | `lucide-react` | Font Awesome, emoji as icons |
-| 3D columns / aggregation | deck.gl `PolygonLayer`/`GeoJsonLayer` via `MapboxOverlay` | Three.js from scratch, CSS 3D transforms, `@deck.gl/react` |
-| Basemap, camera, fly-to | MapLibre + react-map-gl; camera moves go through `MapStateContext.cameraTarget` → `map.flyTo`/`jumpTo` | Google Maps, a hand-rolled canvas renderer |
+| Neighborhood / block fills | deck.gl `PolygonLayer` via `MapboxOverlay`, one datum per polygon part | Three.js from scratch, CSS 3D transforms, `@deck.gl/react`, extruded columns |
+| Color encoding | four categorical buckets (blue → green → yellow → red) from quartiles in `src/lib/layers.ts` | continuous gradients, height encoding |
+| Basemap, camera, fly-to | MapLibre + react-map-gl; camera moves go through `MapStateContext.cameraTarget` / `navCommand` → `map.flyTo`/`jumpTo`/`zoomIn` | Google Maps, a hand-rolled canvas renderer, tilting or rotating the camera |
 | Off-main-thread work (paging, spatial join, rollups) | a module Web Worker in `src/lib/geo/` | blocking the main thread, a second dev server |
 | Fetching Socrata / any HTTP | `fetch` inside TanStack Query hooks in `src/lib/api/` | `axios`, raw `useEffect` + `fetch`, SWR |
 | Charts and histograms | Recharts via shadcn `chart` | Chart.js, D3, Highcharts |
@@ -55,7 +56,9 @@ If a task seems to need a library not on this list, prefer the closest listed op
 - `src/lib/geo/ntaIndex.ts` buckets the city into 0.01° (~1.1 km) cells mapping to candidate NTAs, so each point ray-casts 1–2 polygons instead of 262. `pointInPolygon.ts` handles Polygon + MultiPolygon + holes. No turf, no extra geo dependency.
 - `src/lib/geo/aggregate.worker.ts` is a **module Web Worker**: count → page Socrata CSV at 50k rows → zod-validate each row → assign → roll up → `postMessage({ type: "done" })`. It streams `progress` messages so the UI can show a determinate bar.
 - Rollups produced per NTA: count, night count (10pm–4am), weekend-night count (Fri/Sat 10pm–4am), 24-slot hour histogram, month histogram, `helicopterMonths`, top types/descriptors/factors, injuries, deaths, cyclists, severity. Plus borough totals and top intersections.
-- **Cache the aggregate, never the rows.** `src/lib/cache/aggregateCache.ts` stores ~262 small rows per `dataset:window` in `localStorage`; a repeat visit is instant. Raw rows are discarded after aggregation.
+- The same pass also fills a **fixed ~300 m block grid** (`src/lib/geo/blocks.ts`, `BLOCK_GRID_DEG = 0.003`, key `row:col`) so noise and crashes stack on the same square. Each `BlockCell` carries count, night count, injuries, deaths and cyclists — no per-block type breakdown, because that would multiply the cache for little gain.
+- **Cache the aggregate, never the rows.** `src/lib/cache/aggregateCache.ts` stores the ~262 NTA rows plus the block cells per `dataset:window` in `localStorage`; a repeat visit is instant. Raw rows are discarded after aggregation. Bump `VERSION` whenever the result shape changes.
+- `src/lib/layers.ts` is the only place that turns aggregates into colors: `buildMapModel` computes each area's value, its bucket, and the legend's thresholds together, so the map and the legend can never disagree.
 - Rows outside every polygon go to `unassignedCount` and rows that fail zod to `malformedCount`. Both are surfaced in the caveats sheet — never silently dropped.
 
 ## Agent seam

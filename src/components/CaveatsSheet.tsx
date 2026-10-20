@@ -51,7 +51,7 @@ export function CaveatsSheet({ boundaries, noise, crashes }: CaveatsSheetProps) 
         <SheetHeader>
           <SheetTitle>Data caveats</SheetTitle>
           <SheetDescription>
-            What these columns actually count, and where the numbers come from.
+            What these blocks actually count, and where the numbers come from.
           </SheetDescription>
         </SheetHeader>
 
@@ -80,6 +80,14 @@ export function CaveatsSheet({ boundaries, noise, crashes }: CaveatsSheetProps) 
             </li>
             <li>
               <span className="font-medium text-foreground">
+                Blocks are a fixed ~300 m grid, not census blocks.
+              </span>{" "}
+              One grid lets noise and crashes stack on the same square. A square
+              that straddles a boundary is filed under the neighborhood of its
+              first record.
+            </li>
+            <li>
+              <span className="font-medium text-foreground">
                 Points outside every neighborhood are counted separately.
               </span>{" "}
               They are never dropped silently — see the coverage numbers below.
@@ -97,6 +105,10 @@ export function CaveatsSheet({ boundaries, noise, crashes }: CaveatsSheetProps) 
             <Row
               label="Noise rows assigned"
               value={formatCount(noise?.totalRows ?? 0)}
+            />
+            <Row
+              label="Noise blocks with records"
+              value={formatCount((noise?.blocks ?? []).length)}
             />
             <Row
               label="Noise rows outside any neighborhood"

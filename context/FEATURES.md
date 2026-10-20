@@ -8,16 +8,16 @@ Build order: F1, F2, F4, F7, F3, F5, then F6. F2 and F4 are the demo. Cut F5 and
 - [ ] One query returns counts by cell and by neighborhood in under 1 second.
 - [ ] The counts match a direct API count for the same filter (within 1%).
 
-## F2. 3D map (main)
-- Extruded columns on an OpenStreetMap basemap. Height is the incident count, and color is severity (crashes with injuries or deaths weigh more).
-- A layer toggle switches between Noise, Crashes, and Combined. The camera starts tilted.
-- [ ] All five boroughs load in 3D.
-- [ ] The toggle switches layers.
-- [ ] Hovering over a column shows its counts.
+## F2. Block map (main)
+- Flat, north-up fills on an OpenStreetMap basemap: neighborhoods, or ~300 m blocks, colored in four bands (blue → green → yellow → red) cut at the quartiles of the current layer's counts.
+- A layer toggle switches between Noise, Crashes, and Combined. A scale toggle switches Neighborhoods / Blocks. Zoom and reset buttons live in the same card, and the camera never tilts or rotates.
+- [ ] All five boroughs load flat, with the legend's four ranges matching the colors on screen.
+- [ ] The toggles switch layer and scale.
+- [ ] Hovering over a neighborhood or a block shows its counts.
 
 ## F3. Click details
-- Clicking a column or neighborhood opens a side panel with the top noise descriptors, the top crash contributing factors, injuries and deaths, and an hour-of-day chart.
-- [ ] The numbers in the panel match F1 for the cell clicked.
+- Clicking a neighborhood or block opens a side panel with the top noise descriptors, the top crash contributing factors, injuries and deaths, and an hour-of-day chart; a clicked block also shows its share of the neighborhood.
+- [ ] The numbers in the panel match F1 for the area clicked.
 
 ## F4. AI chat (main)
 - The chat answers using the actions in CHAT_TOOLS.md and never guesses numbers.

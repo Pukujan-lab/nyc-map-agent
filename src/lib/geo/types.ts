@@ -29,6 +29,24 @@ export interface NtaAggregate {
   severity: number;
 }
 
+/**
+ * One ~300 m grid square. Blocks are a fixed grid rather than census blocks so
+ * noise and crashes can share the same key and stack on the same square.
+ */
+export interface BlockCell {
+  key: string;
+  /** South-west corner of the square. */
+  lon: number;
+  lat: number;
+  /** Neighborhood of the first record in the square. */
+  ntaCode: string;
+  count: number;
+  nightCount: number;
+  injured: number;
+  killed: number;
+  cyclists: number;
+}
+
 export interface BoroughAggregate {
   borough: string;
   count: number;
@@ -65,6 +83,8 @@ export interface AggregateResult {
   unassignedCount: number;
   malformedCount: number;
   ntas: NtaAggregate[];
+  /** ~300 m squares with at least one record; the "block by block" view. */
+  blocks: BlockCell[];
   boroughs: BoroughAggregate[];
   intersections: IntersectionRow[];
   sources: SoqlSource[];

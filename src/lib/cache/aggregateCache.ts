@@ -1,7 +1,8 @@
 import type { AggregateResult, DatasetId } from "@/lib/geo/types";
 import type { WindowId } from "@/lib/windows";
 
-const VERSION = 1;
+/** Bumped to 2 when blocks were added to the result shape. */
+const VERSION = 2;
 
 function cacheKey(dataset: DatasetId, windowId: WindowId): string {
   return `nycma:aggregate:v${VERSION}:${dataset}:${windowId}`;
@@ -21,6 +22,8 @@ export function readCachedAggregate(
     const parsed = JSON.parse(raw) as AggregateResult;
     if (parsed.dataset !== dataset || parsed.windowId !== windowId) return null;
     if (!Array.isArray(parsed.ntas) || parsed.ntas.length === 0) return null;
+    // Results written before the block grid existed have no `blocks` array.
+    if (!Array.isArray(parsed.blocks)) return null;
     return parsed;
   } catch {
     return null;

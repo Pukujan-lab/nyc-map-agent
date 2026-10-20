@@ -147,7 +147,7 @@ export function runStructuredQuery(
   const result = args.dataset === "noise" ? context.noise : context.crashes;
   if (!result || !context.boundaries) {
     throw new Error(
-      "The data is still loading. Try again once the columns have rendered.",
+      "The data is still loading. Try again once the map has filled in.",
     );
   }
 

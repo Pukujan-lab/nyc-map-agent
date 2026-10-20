@@ -1,13 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Map, { type MapRef } from "react-map-gl/maplibre";
+import MapLibreMap, { type MapRef } from "react-map-gl/maplibre";
 import type { StyleSpecification } from "maplibre-gl";
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { formatCount, formatPercent } from "@/lib/format";
-import { LAYER_METRICS, type ColumnDatum, type ColumnModel } from "@/lib/layers";
+import {
+  HOME_VIEW,
+  LAYER_METRICS,
+  type BlockDatum,
+  type MapModel,
+  type NeighborhoodDatum,
+} from "@/lib/layers";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
-import { buildNtaLayers, type HoverInfo } from "./NtaColumnsLayer";
+import { buildMapLayers, type HoverInfo } from "./MapLayers";
 
 const TILE_URL =
   import.meta.env.VITE_TILE_URL ??
@@ -31,37 +37,45 @@ const mapStyle: StyleSpecification = {
       type: "raster",
       source: "osm",
       paint: {
-        "raster-brightness-min": 0.03,
-        "raster-brightness-max": 0.58,
-        "raster-saturation": -0.32,
-        "raster-contrast": 0.08,
+        // Lightened just enough that four saturated fills stay readable.
+        "raster-brightness-min": 0.08,
+        "raster-brightness-max": 0.7,
+        "raster-saturation": -0.35,
+        "raster-contrast": 0.05,
       },
     },
   ],
 };
 
 function initialZoom(): number {
-  if (typeof window === "undefined") return 10.4;
+  if (typeof window === "undefined") return HOME_VIEW.neighborhoodZoom;
+  // The map is flat, so the viewport width decides how much of the city fits.
   if (window.innerWidth < 640) return 9.9;
-  if (window.innerWidth < 1024) return 10.3;
-  return 10.8;
+  if (window.innerWidth < 1024) return 10.5;
+  return HOME_VIEW.neighborhoodZoom;
 }
 
-function tooltipDetail(datum: ColumnDatum, layer: ColumnModel["layer"]): string {
-  if (layer === "noise") {
-    return `${formatPercent(datum.nightShare)} after 10pm`;
-  }
+function cssColor(rgba: [number, number, number, number]): string {
+  return `rgba(${rgba[0]}, ${rgba[1]}, ${rgba[2]}, ${(rgba[3] / 255).toFixed(2)})`;
+}
+
+function detailForNeighborhood(datum: NeighborhoodDatum, layer: MapModel["layer"]): string {
+  if (layer === "noise") return `${formatPercent(datum.nightShare)} after 10pm`;
   if (layer === "crashes") {
-    return `${formatCount(datum.injured)} injured · ${formatCount(
-      datum.killed,
-    )} killed`;
+    return `${formatCount(datum.injured)} injured · ${formatCount(datum.killed)} killed`;
   }
-  return `${formatCount(datum.noiseCount)} noise · ${formatCount(
-    datum.crashCount,
-  )} crashes`;
+  return `${formatCount(datum.noiseCount)} noise · ${formatCount(datum.crashCount)} crashes`;
 }
 
-export function MapView({ columns }: { columns: ColumnModel }) {
+function detailForBlock(datum: BlockDatum, layer: MapModel["layer"]): string {
+  if (layer === "noise") return `${formatCount(datum.nightCount)} after 10pm`;
+  if (layer === "crashes") {
+    return `${formatCount(datum.injured)} injured · ${formatCount(datum.killed)} killed`;
+  }
+  return `${formatCount(datum.noiseCount)} noise · ${formatCount(datum.crashCount)} crashes`;
+}
+
+export function MapView({ model }: { model: MapModel }) {
   const mapRef = useRef<MapRef | null>(null);
   const overlayRef = useRef<MapboxOverlay | null>(null);
   const [ready, setReady] = useState(false);
@@ -69,23 +83,35 @@ export function MapView({ columns }: { columns: ColumnModel }) {
 
   const {
     layer,
+    scale,
     cameraTarget,
+    navCommand,
     highlightedNtaCodes,
     selectedNtaCode,
+    selectedBlockKey,
     selectNta,
+    selectBlock,
   } = useMapState();
   const reducedMotion = usePrefersReducedMotion();
 
   const viewState = useMemo(
     () => ({
-      longitude: -73.94,
-      latitude: 40.7,
+      longitude: HOME_VIEW.lon,
+      latitude: HOME_VIEW.lat,
       zoom: initialZoom(),
-      pitch: 50,
-      bearing: -17,
+      pitch: 0,
+      bearing: 0,
     }),
     [],
   );
+
+  const nameByCode = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const datum of model.neighborhoods) {
+      map.set(datum.ntaCode, datum.ntaName);
+    }
+    return map;
+  }, [model.neighborhoods]);
 
   const handleLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
@@ -104,61 +130,103 @@ export function MapView({ columns }: { columns: ColumnModel }) {
     setHover(info);
   }, []);
 
-  const handleSelect = useCallback(
+  const handleSelectNta = useCallback(
     (ntaCode: string) => {
       selectNta(ntaCode);
     },
     [selectNta],
   );
 
+  const handleSelectBlock = useCallback(
+    (block: BlockDatum) => {
+      selectBlock({ key: block.key, ntaCode: block.ntaCode });
+    },
+    [selectBlock],
+  );
+
   useEffect(() => {
     if (!ready) return;
-    const layers = buildNtaLayers({
-      data: columns.data,
+    const layers = buildMapLayers({
+      neighborhoods: model.neighborhoods,
+      blocks: model.blocks,
       layer,
+      scale,
       highlightedNtaCodes,
       selectedNtaCode,
+      selectedBlockKey,
       animate: !reducedMotion,
       onHover: handleHover,
-      onSelect: handleSelect,
+      onSelectNta: handleSelectNta,
+      onSelectBlock: handleSelectBlock,
     });
     overlayRef.current?.setProps({ layers });
   }, [
     ready,
-    columns.data,
+    model.neighborhoods,
+    model.blocks,
     layer,
+    scale,
     highlightedNtaCodes,
     selectedNtaCode,
+    selectedBlockKey,
     reducedMotion,
     handleHover,
-    handleSelect,
+    handleSelectNta,
+    handleSelectBlock,
   ]);
 
   useEffect(() => {
     if (!ready || !cameraTarget) return;
     const map = mapRef.current?.getMap();
     if (!map) return;
-    const center: [number, number] = [cameraTarget.lon, cameraTarget.lat];
-    const zoom = cameraTarget.zoom ?? 13;
-    const pitch = cameraTarget.pitch ?? 50;
-    const bearing = cameraTarget.bearing ?? map.getBearing();
+    // The map is flat by design: no pitch, no bearing, no accidental tilt.
+    const camera = {
+      center: [cameraTarget.lon, cameraTarget.lat] as [number, number],
+      zoom: cameraTarget.zoom ?? 13,
+      pitch: 0,
+      bearing: 0,
+    };
     if (reducedMotion) {
-      map.jumpTo({ center, zoom, pitch, bearing });
+      map.jumpTo(camera);
     } else {
-      map.flyTo({ center, zoom, pitch, bearing, duration: 1400, essential: true });
+      map.flyTo({ ...camera, duration: 1200, essential: true });
     }
   }, [ready, cameraTarget, reducedMotion]);
 
-  const hoverLabel = layer === "noise" ? "Noise complaints" : "Incidents";
+  useEffect(() => {
+    if (!ready || !navCommand) return;
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    const duration = reducedMotion ? 0 : 260;
+    if (navCommand.type === "zoom-in") {
+      map.zoomIn({ duration });
+      return;
+    }
+    if (navCommand.type === "zoom-out") {
+      map.zoomOut({ duration });
+      return;
+    }
+    map.jumpTo({
+      center: [HOME_VIEW.lon, HOME_VIEW.lat],
+      zoom: initialZoom(),
+      pitch: 0,
+      bearing: 0,
+    });
+  }, [ready, navCommand, reducedMotion]);
+
+  const hoverNtaName =
+    hover?.kind === "block" ? nameByCode.get(hover.datum.ntaCode) ?? null : null;
 
   return (
     <div className="absolute inset-0">
-      <Map
+      <MapLibreMap
         ref={mapRef}
         mapStyle={mapStyle}
         initialViewState={viewState}
-        maxPitch={70}
-        minZoom={8}
+        maxPitch={0}
+        dragRotate={false}
+        touchPitch={false}
+        minZoom={9}
         maxZoom={17}
         onLoad={handleLoad}
         style={{ position: "absolute", inset: 0 }}
@@ -172,25 +240,48 @@ export function MapView({ columns }: { columns: ColumnModel }) {
             top: Math.max(hover.y - 10, 8),
           }}
         >
-          <div className="text-[13px] font-semibold text-foreground">
-            {hover.object.ntaName}
-          </div>
-          <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-            {hover.object.borough}
-          </div>
+          {hover.kind === "neighborhood" ? (
+            <>
+              <div className="text-[13px] font-semibold text-foreground">
+                {hover.datum.ntaName}
+              </div>
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                {hover.datum.borough}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="text-[13px] font-semibold text-foreground">
+                {hoverNtaName ?? "Block"}
+              </div>
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                ~300 m block
+              </div>
+            </>
+          )}
+
           <div className="mt-1.5 flex items-baseline gap-1.5">
-            <span className="text-base font-semibold tabular-nums text-primary">
-              {formatCount(hover.object.count)}
+            <span
+              aria-hidden="true"
+              className="h-2.5 w-2.5 shrink-0 self-center rounded-sm"
+              style={{ backgroundColor: cssColor(hover.datum.fill) }}
+            />
+            <span className="text-base font-semibold tabular-nums text-foreground">
+              {formatCount(hover.datum.value)}
             </span>
             <span className="text-[11px] text-muted-foreground">
-              {hoverLabel.toLowerCase()}
+              {LAYER_METRICS[layer].unit}
             </span>
           </div>
+
           <div className="mt-0.5 text-[11px] text-muted-foreground">
-            {tooltipDetail(hover.object, layer)}
+            {hover.kind === "neighborhood"
+              ? detailForNeighborhood(hover.datum, layer)
+              : detailForBlock(hover.datum, layer)}
           </div>
-          <div className="mt-1 border-t border-border/60 pt-1 text-[10px] uppercase tracking-wide text-muted-foreground/80">
-            {LAYER_METRICS[layer].color}
+
+          <div className="mt-1 border-t border-border/60 pt-1 text-[10px] text-muted-foreground/80">
+            {hover.kind === "block" ? "Click to open this neighborhood" : "Click for details"}
           </div>
         </div>
       ) : null}
