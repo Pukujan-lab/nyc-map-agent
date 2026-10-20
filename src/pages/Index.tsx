@@ -6,6 +6,8 @@ import { DetailsSheet } from "@/components/DetailsSheet";
 import { MapHud } from "@/components/MapHud";
 import { MapStatusChip } from "@/components/MapStatusChip";
 import { MapView } from "@/components/MapView";
+import { StreetViewSheet } from "@/components/StreetViewSheet";
+import { formatCount } from "@/lib/format";
 import { useMapData } from "@/lib/geo/aggregate";
 import type { NtaAggregate } from "@/lib/geo/types";
 import { buildMapModel } from "@/lib/layers";
@@ -69,6 +71,21 @@ export default function Index() {
         : null,
     [model.blocks, selectedBlockKey],
   );
+
+  // The street-view sheet repeats the block's numbers over the photo, so the
+  // panorama can never be read as a different square's evidence.
+  const blockCaption = useMemo(() => {
+    if (!selectedBlock) return "";
+    if (layer === "noise") {
+      return `${formatCount(selectedBlock.noiseCount)} noise complaints`;
+    }
+    if (layer === "crashes") {
+      return `${formatCount(selectedBlock.crashCount)} crashes`;
+    }
+    return `${formatCount(selectedBlock.noiseCount)} noise · ${formatCount(
+      selectedBlock.crashCount,
+    )} crashes`;
+  }, [selectedBlock, layer]);
 
   const neighborhoods = useMemo(() => {
     if (!data.boundaries || !data.noise) return [];
@@ -140,6 +157,13 @@ export default function Index() {
         windowLabel={windowLabel}
         crashWindowLabel={crashWindowLabel}
         sources={detailSources}
+        isDesktop={isDesktop}
+      />
+
+      <StreetViewSheet
+        block={selectedBlock}
+        ntaName={selectedBoundary?.ntaName ?? null}
+        caption={blockCaption}
         isDesktop={isDesktop}
       />
 

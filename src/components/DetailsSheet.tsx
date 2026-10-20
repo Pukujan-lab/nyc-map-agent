@@ -1,4 +1,4 @@
-import { Footprints, MessageSquarePlus, X } from "lucide-react";
+import { Camera, Footprints, MessageSquarePlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -95,7 +95,8 @@ function DetailsBody({
   onAsk: (text: string) => void;
   onWidenWindow: () => void;
 }) {
-  const { layer, selectBlock, startWalk, setDetailsOpen } = useMapState();
+  const { layer, selectBlock, startWalk, setDetailsOpen, setStreetViewOpen } =
+    useMapState();
   if (!boundary) return null;
 
   const walkBlock = () => {
@@ -103,6 +104,12 @@ function DetailsBody({
     startWalk(block.center);
     // On a phone the sheet would cover the street you just walked onto.
     if (!isDesktop) setDetailsOpen(false);
+  };
+
+  const openStreetView = () => {
+    // Both panels are bottom sheets on a phone — show them one at a time.
+    if (!isDesktop) setDetailsOpen(false);
+    setStreetViewOpen(true);
   };
 
   const noiseCount = noise?.count ?? 0;
@@ -191,16 +198,28 @@ function DetailsBody({
                   ? `${formatCount(block.injured)} injured, ${formatCount(block.killed)} killed`
                   : `${formatCount(block.noiseCount)} noise, ${formatCount(block.crashCount)} crashes`}
             </p>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="mt-2 h-7 w-full text-[11px]"
-              onClick={walkBlock}
-            >
-              <Footprints className="h-3.5 w-3.5" />
-              Walk this block
-            </Button>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 text-[11px]"
+                onClick={walkBlock}
+              >
+                <Footprints className="h-3.5 w-3.5" />
+                Walk this block
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 text-[11px]"
+                onClick={openStreetView}
+              >
+                <Camera className="h-3.5 w-3.5" />
+                Street view
+              </Button>
+            </div>
           </div>
         ) : null}
 

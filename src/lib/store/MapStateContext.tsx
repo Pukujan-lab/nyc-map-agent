@@ -62,6 +62,8 @@ interface MapState {
    * are walking down.
    */
   detailsOpen: boolean;
+  /** Street-level photos for the selected block. */
+  streetViewOpen: boolean;
 }
 
 interface MapStateActions {
@@ -82,6 +84,7 @@ interface MapStateActions {
   setChatOpen: (open: boolean) => void;
   setCaveatsOpen: (open: boolean) => void;
   setDetailsOpen: (open: boolean) => void;
+  setStreetViewOpen: (open: boolean) => void;
 }
 
 type MapStateContextValue = MapState & MapStateActions;
@@ -107,6 +110,7 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
   const [chatOpen, setChatOpen] = useState(false);
   const [caveatsOpen, setCaveatsOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [streetViewOpen, setStreetViewOpen] = useState(false);
 
   const updateSearch = useCallback(
     (key: "layer" | "window" | "scale", value: string) => {
@@ -154,8 +158,10 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
   const selectNta = useCallback((ntaCode: string | null) => {
     setSelectedNtaCode(ntaCode);
     setDetailsOpen(ntaCode !== null);
-    // Picking a neighborhood is a coarser selection, so drop any block.
+    // Picking a neighborhood is a coarser selection, so drop any block — and
+    // with it the street-level photos that block was showing.
     setSelectedBlockKey(null);
+    setStreetViewOpen(false);
   }, []);
 
   const selectBlock = useCallback(
@@ -164,6 +170,8 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
       if (block) {
         setSelectedNtaCode(block.ntaCode);
         setDetailsOpen(true);
+      } else {
+        setStreetViewOpen(false);
       }
     },
     [],
@@ -221,6 +229,8 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
       setChatOpen,
       setCaveatsOpen,
       setDetailsOpen,
+      streetViewOpen,
+      setStreetViewOpen,
     }),
     [
       layer,
@@ -250,6 +260,7 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
       navigate,
       seedChat,
       clearSeed,
+      streetViewOpen,
     ],
   );
 
