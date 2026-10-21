@@ -49,7 +49,7 @@ import {
   approachBearing,
   clampLookPitch,
   EYE_HEIGHT_M,
-  LOOK_MAX_PITCH,
+  lookTarget,
   LOOK_DEG_PER_PX,
   poseAlongRoute,
   resolveWalkInput,
@@ -94,17 +94,17 @@ interface Eye {
  * pedestrian viewpoint rather than a steep pitch from a rooftop.
  */
 function eyeCamera(map: MaplibreMapInstance, eye: Eye): CameraOptions {
-  // Aim at the ground point the look ray hits. MapLibre keeps the map centre
-  // clamped to the ground, so an aim point above or below it sank the camera
-  // underground (black lower half, pale band) or lifted it to the rooftops.
-  const ahead = EYE_HEIGHT_M * Math.tan((Math.min(eye.pitch, LOOK_MAX_PITCH) * Math.PI) / 180);
+  // Aim at a point on the look ray: the pavement when looking down, a point
+  // in the air when looking level or up (pitch > 90). The centre is unclamped
+  // from the ground while walking, so the aim point can sit above it.
+  const { ahead, height } = lookTarget(eye.pitch, EYE_HEIGHT_M);
   const rad = (eye.bearing * Math.PI) / 180;
   const cosLat = Math.cos((eye.lat * Math.PI) / 180);
   const to: [number, number] = [
     eye.lon + (ahead * Math.sin(rad)) / (111_320 * cosLat),
     eye.lat + (ahead * Math.cos(rad)) / 111_320,
   ];
-  const toAlt = 0;
+  const toAlt = height;
   return map.calculateCameraOptionsFromTo(new LngLat(eye.lon, eye.lat), EYE_HEIGHT_M, new LngLat(to[0], to[1]), toAlt);
 }
 import { useMapState } from "@/lib/store/MapStateContext";
@@ -864,6 +864,9 @@ export function MapView({
     const map = mapRef.current?.getMap();
     if (!map) return;
     applyAtmosphere(map, walking);
+    // Looking up puts the map centre in the air along the look ray; overhead
+    // it stays pinned to the ground as usual.
+    map.setCenterClampedToGround(!walking);
     applyStreetPalette(map, walking);
     // After the street palette, so time-of-day lighting re-tints on top of it.
     setAmbient({ walking });

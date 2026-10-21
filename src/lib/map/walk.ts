@@ -17,10 +17,33 @@ export const EYE_HEIGHT_M = 1.7;
 export const WALK_PITCH = 86;
 /** Drag-to-look range: from the kerb at your feet up to the rooftops. */
 export const LOOK_MIN_PITCH = 70;
-/** Just under level: the aim point must stay on the ground ahead. */
-export const LOOK_MAX_PITCH = 89;
-/** The map's pitch ceiling while walking (MapLibre 5 allows up to 180). */
-export const WALK_MAX_PITCH = 120;
+/**
+ * Look-up ceiling: 90° is level, 150° is 60° above the horizon — tower tops
+ * and sky. MapLibre 5 accepts `maxPitch` up to 180 (docs: "Map options").
+ */
+export const LOOK_MAX_PITCH = 150;
+/** The map's pitch ceiling while walking; the overhead map keeps 85°. */
+export const WALK_MAX_PITCH = LOOK_MAX_PITCH;
+/**
+ * How far along the look ray the map centre sits when the ray never meets the
+ * pavement (looking level or up). Short, so the centre zoom stays ~z22 and the
+ * vector tiles stay sharp; the rendered view depends only on the eye.
+ */
+export const LOOK_CENTER_DISTANCE_M = 10;
+
+/**
+ * Where the map centre goes for an eye at `eyeHeight` looking at `pitch`:
+ * metres ahead along the ground and the centre's height above it. Looking
+ * down it is the pavement point the ray hits (capped at the fixed distance);
+ * looking level or up it floats in the air along the ray.
+ */
+export function lookTarget(pitch: number, eyeHeight: number): { ahead: number; height: number } {
+  const rad = (pitch * Math.PI) / 180;
+  const down = Math.cos(rad); // > 0 when looking below the horizon
+  const toGround = down > 0 ? eyeHeight / down : Infinity;
+  const d = Math.min(toGround, LOOK_CENTER_DISTANCE_M);
+  return { ahead: d * Math.sin(rad), height: Math.max(0, eyeHeight - d * down) };
+}
 /** Zoom ceiling while walking; an eye 1.7 m up lands around z21.5–22.5. */
 export const WALK_MAX_ZOOM = 24;
 /** Degrees of look per dragged pixel. */
