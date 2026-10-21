@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RestroomDetails } from "@/components/RestroomCard";
-import { usePanel } from "@/lib/store/PanelContext";
+import { usePanel, usePanelChip } from "@/lib/store/PanelContext";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import MapLibreMap, {
   type MapLayerMouseEvent,
@@ -201,6 +201,10 @@ export function MapView({
   // The hover card is a mouse affordance; on touch / narrow screens the sheet
   // already shows the same numbers.
   const canHover = useMediaQuery("(hover: hover) and (pointer: fine) and (min-width: 1024px)");
+  const city3dMod = useRef<typeof import("@/lib/map/city3d") | null>(null);
+  const [schoolIcons, setSchoolIcons] = useState(false);
+  const toggleSchools = useCallback(() => setSchoolIcons((on) => !on), []);
+  usePanelChip({ id: "schools", label: "Schools", active: schoolIcons, onToggle: toggleSchools });
   const restroomsMod = useRef<typeof import("@/lib/map/restrooms") | null>(null);
   /** So leaving walk mode can restore the overhead camera exactly once. */
   const wasWalking = useRef(false);
@@ -511,6 +515,11 @@ export function MapView({
         });
         return;
       }
+      const school = city3dMod.current?.schoolAt(event.target, event.point.x, event.point.y);
+      if (school) {
+        showPanel({ id: `school:${school}`, title: school, subtitle: "School · NYC DOE (LCGMS)" });
+        return;
+      }
       // Clicks stay live at street level: picking the block underfoot opens
       // its details like it does overhead.
       const picked = pickAt(event.point.x, event.point.y, event.lngLat);
@@ -688,13 +697,20 @@ export function MapView({
     let cleanup: (() => void) | null = null;
     // Lazy chunk: users who never turn it on never download it.
     import("@/lib/map/city3d")
-      .then(async ({ installCity3d, setCity3dVisible, city3dCoversView }) => {
-        if (!city3d) {
+      .then(async (mod) => {
+        const { installCity3d, setCity3dVisible, city3dCoversView } = mod;
+        city3dMod.current = mod;
+        if (!city3d && !schoolIcons) {
           setCity3dVisible(map, false);
           return;
         }
         await installCity3d(map);
         if (cancelled) return;
+        mod.setSchoolIconsVisible(map, schoolIcons);
+        if (!city3d) {
+          setCity3dVisible(map, false);
+          return;
+        }
         // Basemap buildings only step aside where textured tiles exist.
         let covered: boolean | null = null;
         const sync = () => {
@@ -713,7 +729,7 @@ export function MapView({
       cancelled = true;
       cleanup?.();
     };
-  }, [ready, styleEpoch, city3d]);
+  }, [ready, styleEpoch, city3d, schoolIcons]);
 
   useEffect(() => {
     if (!ready) return;
