@@ -7,7 +7,7 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import type { Context } from "hono";
 import { compress } from "hono/compress";
-import { ROUTES } from "./openapi";
+import { AGENT_ROUTE, ROUTES } from "./openapi";
 import * as aggregate from "../api/aggregate";
 import * as area from "../api/area/[block]";
 import * as areas from "../api/areas";
@@ -65,7 +65,8 @@ for (const [path, handler] of routes) {
 export const MOUNTED_PATHS = routes.map(([path]) => path);
 
 // Smart-mode agent (POST, NDJSON stream; body validated by zod in the handler). Skips gzip above.
-app.post("/api/agent", (c) => agent.POST(c.req.raw));
+// The handler validates the body itself (zod) so it can stream; the route adds docs.
+app.openapi(AGENT_ROUTE, ((c: Context) => agent.POST(c.req.raw)) as never);
 
 app.doc31("/api/openapi.json", { openapi: "3.1.0", info: { title: "NYC Map Agent API", version: "1" } });
 app.all("/api/*", (c) => c.json({ error: "not_found" }, 404));
