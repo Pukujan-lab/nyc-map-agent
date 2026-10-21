@@ -7,7 +7,9 @@ import { useFlags } from "@/lib/flags";
 import { useFeatureToggles } from "@/lib/featureToggles";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { applyReadable } from "@/lib/map/readable";
-import { applyPlaces, usePlacesShown } from "@/lib/map/places";
+import { applyPlaces, usePlaces } from "@/lib/map/places";
+import { useMapOptions } from "@/lib/map/mapOptions";
+import { THEMES, applyMapTheme, useTheme } from "@/lib/theme";
 import { useTransitFocus } from "@/lib/map/transitFocus";
 import { useFlag } from "@/lib/flags";
 import MapLibreMap, {
@@ -416,16 +418,26 @@ export function MapView({
     [],
   );
 
-  // Readable transit basemap: always on phones, and whenever Transit Focus is on.
-  const phone = useMediaQuery("(max-width: 1023px)");
+  // Layout A (#171): simple pale streets by default (and always in Transit
+  // Focus), the chosen theme's land/water/park colours, places only when chosen.
   const [transitFocus] = useTransitFocus();
-  const placesShown = usePlacesShown();
+  const places = usePlaces();
+  const opts = useMapOptions();
+  const theme = useTheme();
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!map || !ready) return;
-    applyReadable(map, phone || transitFocus);
-    applyPlaces(map, placesShown);
-  }, [ready, styleEpoch, phone, transitFocus, placesShown]);
+    const t = THEMES[theme];
+    applyMapTheme(map, theme);
+    applyReadable(map, opts.streets === "simple" || transitFocus, { street: t.street, major: t.major, label: t.label_ });
+    for (const l of map.getStyle()?.layers ?? []) {
+      if (/^highway-name-major$/.test(l.id)) map.setLayoutProperty(l.id, "visibility", opts.streetNames ? "visible" : "none");
+      if (l.type === "fill-extrusion" && !l.id.startsWith("transit-") && !l.id.startsWith("neighborhood") && !l.id.startsWith("block")) {
+        map.setLayoutProperty(l.id, "visibility", opts.buildings ? "visible" : "none");
+      }
+    }
+    applyPlaces(map, places);
+  }, [ready, styleEpoch, transitFocus, places, opts, theme]);
 
   const handleLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
