@@ -49,8 +49,8 @@
       "keywords": [],
       "path": "docs/MODULES.md",
       "related": [],
-      "reviewed_commit": "f31e4f7ff5a2c8ae3166a9b7ef8613b3aad6a27d",
-      "reviewed_sha256": "baa624fe80c836bde929727db7bb81641e7ff36e6e49df02b85836eca675f060",
+      "reviewed_commit": "48727e7d064781f54ff9674c6fc773815940b2b0",
+      "reviewed_sha256": "9dcf0811efbca8816bb197e7588a83b898149c51dc118c29eb1f5188730feb29",
       "summary": "Per-module responsibilities and ownership.",
       "tasks": [],
       "title": "Modules"

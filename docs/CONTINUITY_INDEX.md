@@ -1,6 +1,6 @@
 # Continuity Document Index
 
-<!-- continuity:documents-index {"catalog_sha256":"4c54c474731e9ef0e2bdb88ab0eb846ed373d423f75eb5b703cf8ae3f5453ed6","schema":"project-continuity.documents-index.v1"} -->
+<!-- continuity:documents-index {"catalog_sha256":"0b9ec7a27187d6c9e3a37b683e191a0f27021c90a00b132fae641c23383c6f80","schema":"project-continuity.documents-index.v1"} -->
 
 > Generated from `.continuity/documents.json`. Edit the JSON inventory, then run `continuity docs render`; do not edit this view directly.
 > Freshness below compares local file bytes; after `git fetch origin`, use `continuity docs find` for cached remote freshness.
@@ -57,9 +57,9 @@
 
 - File: [`docs/MODULES.md`](../docs/MODULES.md)
 - Local content status: **CURRENT**
-- Last reviewed at commit: `f31e4f7ff5a2c8ae3166a9b7ef8613b3aad6a27d`
-- Reviewed SHA-256: `baa624fe80c836bde929727db7bb81641e7ff36e6e49df02b85836eca675f060`
-- Current SHA-256: `baa624fe80c836bde929727db7bb81641e7ff36e6e49df02b85836eca675f060`
+- Last reviewed at commit: `48727e7d064781f54ff9674c6fc773815940b2b0`
+- Reviewed SHA-256: `9dcf0811efbca8816bb197e7588a83b898149c51dc118c29eb1f5188730feb29`
+- Current SHA-256: `9dcf0811efbca8816bb197e7588a83b898149c51dc118c29eb1f5188730feb29`
 - Summary: Per-module responsibilities and ownership.
 - Search terms: none
 - Neighboring records: none
