@@ -7,4 +7,4 @@ canvas-text decals over its blades by `src/lib/map/streetSigns.ts`.
 
 ## Hero landmarks
 
-`landmarks/*.glb` (Empire State, Chrysler, One WTC, Statue of Liberty) are low-poly massing models authored in this repository by `scripts/make-landmarks.mjs` from published dimensions. They are dedicated to the public domain under CC0 1.0.
+`landmarks/*.glb` (Empire State, Chrysler, One WTC, Statue of Liberty) are low-poly massing models authored in this repository by `scripts/make-landmarks.ts` from published dimensions. They are dedicated to the public domain under CC0 1.0.

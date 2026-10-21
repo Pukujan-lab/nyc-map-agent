@@ -2,7 +2,7 @@
  * Hero landmarks drawn as glTF models instead of plain footprint boxes.
  * Shared by the tile build (footprints within `radiusM` get `hero: 1` and are
  * not extruded) and the three.js landmarks layer (models in
- * public/models/landmarks, made by scripts/make-landmarks.mjs, CC0).
+ * public/models/landmarks, made by scripts/make-landmarks.ts, CC0).
  */
 export interface Landmark {
   id: string;
