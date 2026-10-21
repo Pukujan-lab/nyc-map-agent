@@ -19,6 +19,9 @@ const ApiError = z.object({ error: z.string(), issues: z.array(z.string()).optio
 
 const errors = {
   400: { description: "Invalid query", content: { "application/json": { schema: ApiError } } },
+  // Node's HTTP parser rejects a request line / headers over 16 KB before the app sees it
+  // (found by the schemathesis contract test with a long /traffic/along line).
+  431: { description: "Request URL or headers too large (rejected by the HTTP server)" },
   502: { description: "Upstream (Octo / R2) error", content: { "application/json": { schema: ApiError } } },
 };
 

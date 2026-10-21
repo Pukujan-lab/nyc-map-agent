@@ -143,6 +143,9 @@
               }
             }
           },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
+          },
           "502": {
             "description": "Upstream (Octo / R2) error",
             "content": {
@@ -208,6 +211,9 @@
               }
             }
           },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
+          },
           "502": {
             "description": "Upstream (Octo / R2) error",
             "content": {
@@ -255,6 +261,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
           },
           "502": {
             "description": "Upstream (Octo / R2) error",
@@ -304,6 +313,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
           },
           "502": {
             "description": "Upstream (Octo / R2) error",
@@ -356,6 +368,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
           },
           "502": {
             "description": "Upstream (Octo / R2) error",
@@ -410,6 +425,9 @@
               }
             }
           },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
+          },
           "502": {
             "description": "Upstream (Octo / R2) error",
             "content": {
@@ -458,6 +476,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
           },
           "502": {
             "description": "Upstream (Octo / R2) error",
@@ -508,6 +529,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
           },
           "502": {
             "description": "Upstream (Octo / R2) error",
@@ -626,6 +650,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
           },
           "502": {
             "description": "Upstream (Octo / R2) error",
@@ -746,6 +773,9 @@
               }
             }
           },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
+          },
           "502": {
             "description": "Upstream (Octo / R2) error",
             "content": {
@@ -794,6 +824,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
           },
           "502": {
             "description": "Upstream (Octo / R2) error",
@@ -845,6 +878,9 @@
               }
             }
           },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
+          },
           "502": {
             "description": "Upstream (Octo / R2) error",
             "content": {
@@ -881,6 +917,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
           },
           "502": {
             "description": "Upstream (Octo / R2) error",
@@ -920,6 +959,9 @@
               }
             }
           },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
+          },
           "502": {
             "description": "Upstream (Octo / R2) error",
             "content": {
@@ -956,6 +998,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
           },
           "502": {
             "description": "Upstream (Octo / R2) error",
@@ -994,6 +1039,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
           },
           "502": {
             "description": "Upstream (Octo / R2) error",
@@ -1058,6 +1106,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
           },
           "502": {
             "description": "Upstream (Octo / R2) error",
@@ -1124,6 +1175,9 @@
               }
             }
           },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
+          },
           "502": {
             "description": "Upstream (Octo / R2) error",
             "content": {
@@ -1172,6 +1226,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
           },
           "502": {
             "description": "Upstream (Octo / R2) error",
@@ -1222,6 +1279,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
           },
           "502": {
             "description": "Upstream (Octo / R2) error",
@@ -1281,6 +1341,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
           },
           "502": {
             "description": "Upstream (Octo / R2) error",
@@ -1342,6 +1405,9 @@
               }
             }
           },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
+          },
           "502": {
             "description": "Upstream (Octo / R2) error",
             "content": {
@@ -1391,6 +1457,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
           },
           "502": {
             "description": "Upstream (Octo / R2) error",
@@ -1442,6 +1511,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
           },
           "502": {
             "description": "Upstream (Octo / R2) error",
@@ -1500,6 +1572,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
           },
           "502": {
             "description": "Upstream (Octo / R2) error",
@@ -1560,6 +1635,9 @@
               }
             }
           },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
+          },
           "502": {
             "description": "Upstream (Octo / R2) error",
             "content": {
@@ -1596,6 +1674,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
           },
           "502": {
             "description": "Upstream (Octo / R2) error",
@@ -1634,6 +1715,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
           },
           "502": {
             "description": "Upstream (Octo / R2) error",
@@ -1703,6 +1787,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
           },
           "502": {
             "description": "Upstream (Octo / R2) error",
@@ -1774,6 +1861,9 @@
               }
             }
           },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
+          },
           "502": {
             "description": "Upstream (Octo / R2) error",
             "content": {
@@ -1842,6 +1932,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
           },
           "502": {
             "description": "Upstream (Octo / R2) error",
@@ -1913,6 +2006,9 @@
               }
             }
           },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
+          },
           "502": {
             "description": "Upstream (Octo / R2) error",
             "content": {
@@ -1949,6 +2045,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
           },
           "502": {
             "description": "Upstream (Octo / R2) error",
@@ -1988,6 +2087,9 @@
               }
             }
           },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
+          },
           "502": {
             "description": "Upstream (Octo / R2) error",
             "content": {
@@ -2024,6 +2126,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
           },
           "502": {
             "description": "Upstream (Octo / R2) error",
@@ -2062,6 +2167,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
           },
           "502": {
             "description": "Upstream (Octo / R2) error",
@@ -2118,6 +2226,9 @@
               }
             }
           },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
+          },
           "502": {
             "description": "Upstream (Octo / R2) error",
             "content": {
@@ -2173,6 +2284,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request URL or headers too large (rejected by the HTTP server)"
           },
           "502": {
             "description": "Upstream (Octo / R2) error",

@@ -9,3 +9,4 @@ public/tiles/nyc-blocks.*
 .e2e-build/
 playwright-report/
 test-results/
+.schemathesis/

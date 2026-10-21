@@ -88,7 +88,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
-      - name: openapi.json is up to date (every route has a spec)
+      - name: openapi.json and the generated client types are up to date
         run: pnpm openapi:check
       - name: Breaking changes vs main need a major bump (oasdiff)
         if: github.event_name == 'pull_request'
@@ -102,6 +102,27 @@ jobs:
           fi
           curl -fsSL https://github.com/oasdiff/oasdiff/releases/download/v1.34.0/oasdiff_1.34.0_linux_amd64.tar.gz | tar xz -C "$tmp" oasdiff
           OASDIFF="$tmp/oasdiff" scripts/ci/api-breaking.sh "$tmp/base.json" openapi.json
+      - name: Clean workspace (persistent runner)
+        if: always()
+        run: find "$GITHUB_WORKSPACE" -mindepth 1 -delete || true
+  contract:
+    # Real server vs openapi.json (schemathesis). See scripts/ci/contract.sh.
+    runs-on: [self-hosted, linux, x64, gravebuster]
+    timeout-minutes: 15
+    container: { image: node:22-bookworm }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Install schemathesis (pinned)
+        run: |
+          apt-get update -qq && apt-get install -y -qq python3-venv >/dev/null
+          python3 -m venv "$RUNNER_TEMP/st"
+          "$RUNNER_TEMP/st/bin/pip" install -q -r scripts/ci/contract-requirements.txt
+      - name: Contract test against the real server (schemathesis)
+        run: SCHEMATHESIS="$RUNNER_TEMP/st/bin/schemathesis" scripts/ci/contract.sh
       - name: Clean workspace (persistent runner)
         if: always()
         run: find "$GITHUB_WORKSPACE" -mindepth 1 -delete || true

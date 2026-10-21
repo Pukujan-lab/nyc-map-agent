@@ -19,13 +19,15 @@ export async function mockNetwork(page: Page): Promise<void> {
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url());
     const local = url.hostname === "localhost";
+    // The app calls /api/v1/*; /api/* is the server's alias. Serve both.
+    const path = url.pathname.replace(/^\/api\/v1\//, "/api/");
     const json = (body: string, status = 200) => route.fulfill({ status, contentType: "application/json", body });
-    if (local && url.pathname === "/api/areas") return json(fixture("areas-nta"));
-    if (local && url.pathname === "/api/aggregate") {
+    if (local && path === "/api/areas") return json(fixture("areas-nta"));
+    if (local && path === "/api/aggregate") {
       return json(fixture(url.searchParams.get("dataset") === "crashes" ? "aggregate-crashes" : "aggregate-noise"));
     }
-    if (local && url.pathname === "/api/sources") return json(JSON.stringify({ sources: [] }));
-    if (local && url.pathname.startsWith("/api/")) return json(JSON.stringify({ error: "not_found" }), 404);
+    if (local && path === "/api/sources") return json(JSON.stringify({ sources: [] }));
+    if (local && path.startsWith("/api/")) return json(JSON.stringify({ error: "not_found" }), 404);
     if (local) return route.continue();
     if (url.hostname === "tiles.openfreemap.org" && url.pathname.startsWith("/styles/")) return json(STYLE);
     if (url.hostname === "geosearch.planninglabs.nyc") return json(JSON.stringify({ features: [] }));
