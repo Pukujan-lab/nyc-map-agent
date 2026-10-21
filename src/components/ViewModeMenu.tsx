@@ -18,6 +18,7 @@ import { useMapState } from "@/lib/store/MapStateContext";
 import { useFlags } from "@/lib/flags";
 import { FEATURES } from "@/features";
 import { cn } from "@/lib/utils";
+import type { PanelChip } from "@/lib/store/PanelContext";
 
 /**
  * One dropdown for "what is the map showing", driven by the registry: each
@@ -26,8 +27,14 @@ import { cn } from "@/lib/utils";
 export function ViewModeMenu({
   compact = false,
   iconOnly = false,
+  chip = false,
+  toggles = [],
   onOpenSources,
 }: {
+  /** A chip at the end of the panel's chip row, labelled "More layers". */
+  chip?: boolean;
+  /** Secondary on/off layers (Schools, Traffic, Parking…) listed first. */
+  toggles?: PanelChip[];
   compact?: boolean;
   /** A round icon button (the control rail); the menu is unchanged. */
   iconOnly?: boolean;
@@ -43,9 +50,12 @@ export function ViewModeMenu({
   const sources = enabledSources.filter(allowed);
   const showAverage = flags.dataLayers;
   const hidden = viewMode.kind === "source" ? !allowed(viewMode.sourceId) : !showAverage;
+  // Simple mode has no data layers at all; writing a view there would put
+  // `view=` in the URL and switch the analytics on through the link rule.
+  const anyView = sources.length > 0 || showAverage;
   useEffect(() => {
-    if (hidden) setViewMode(DEFAULT_VIEW);
-  }, [hidden, setViewMode]);
+    if (hidden && anyView) setViewMode(DEFAULT_VIEW);
+  }, [hidden, anyView, setViewMode]);
 
   const value = viewMode.kind === "source" ? `src:${viewMode.sourceId}` : "avg";
 
@@ -64,7 +74,15 @@ export function ViewModeMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        {iconOnly ? (
+        {chip ? (
+          <button
+            type="button"
+            className="flex h-7 shrink-0 snap-start items-center gap-1 rounded-full border border-border bg-card px-2.5 text-xs text-foreground shadow-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            More layers
+            <ChevronDown className="h-3 w-3 opacity-60" />
+          </button>
+        ) : iconOnly ? (
           <Button
             type="button"
             variant="ghost"
@@ -93,7 +111,16 @@ export function ViewModeMenu({
         </Button>
         )}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align={iconOnly ? "end" : "center"} side={iconOnly ? "left" : undefined} className="w-64">
+      <DropdownMenuContent align={iconOnly || chip ? "end" : "center"} side={iconOnly ? "left" : undefined} className="w-64">
+        {toggles.map((t) => (
+          <DropdownMenuCheckboxItem key={t.id} checked={t.active} onCheckedChange={() => t.onToggle()}>
+            {t.label}
+          </DropdownMenuCheckboxItem>
+        ))}
+        {toggles.length && (sources.length || showAverage) ? <DropdownMenuSeparator /> : null}
+        {sources.length || showAverage ? (
+          <div className="px-2 py-1 text-[11px] font-medium text-muted-foreground">Data layers</div>
+        ) : null}
         <DropdownMenuRadioGroup value={value} onValueChange={onChange}>
           {sources.map((id) => (
             <DropdownMenuRadioItem key={id} value={`src:${id}`}>
@@ -116,7 +143,7 @@ export function ViewModeMenu({
           Textured 3D city
         </DropdownMenuCheckboxItem>
         ) : null}
-        {flags.restrooms ? (
+        {flags.restrooms && !chip ? (
         <DropdownMenuCheckboxItem checked={restrooms} onCheckedChange={(on) => setRestrooms(on === true)}>
           Public restrooms
         </DropdownMenuCheckboxItem>

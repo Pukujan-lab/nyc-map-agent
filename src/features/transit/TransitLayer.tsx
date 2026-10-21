@@ -110,7 +110,7 @@ export default function TransitLayer() {
   const anyOn = on.size > 0;
   const toggleChip = useCallback(() => {
     if (anyOn) (["subway", "lirr", "mnr", "bus"] as const).forEach((id) => set(id, false));
-    else set("subway", true);
+    else { set("subway", true); set("bus", true); }
   }, [anyOn, set]);
   usePanelChip({ id: "transit", label: "Transit", active: anyOn, onToggle: toggleChip });
 

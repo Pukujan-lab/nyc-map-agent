@@ -216,6 +216,8 @@ export function MapView({
   const [schoolIcons, setSchoolIcons] = useState(false);
   const toggleSchools = useCallback(() => setSchoolIcons((on) => !on), []);
   const schoolsOn = useFlag("schools");
+  const analyticsFlags = useFlags();
+  const analytics = analyticsFlags.noise || analyticsFlags.crashes || analyticsFlags.dataLayers;
   const storefrontsOn = useFlag("storefronts");
   usePanelChip(schoolsOn ? { id: "schools", label: "Schools", active: schoolIcons, onToggle: toggleSchools } : null);
   const restroomsMod = useRef<typeof import("@/lib/map/restrooms") | null>(null);
@@ -698,6 +700,26 @@ export function MapView({
         map.setLayoutProperty(id, "visibility", "none");
       }
     }
+    // Simple mode opens on a plain city map: the noise / crash analytics
+    // (blocks, neighborhood volumes, heat) appear only in Advanced or from a
+    // saved `view=` link. Walking keeps its painted pavement.
+    if (!analytics && !walking) {
+      for (const id of [
+        LAYER_IDS.neighborhoods,
+        LAYER_IDS.blocks,
+        LAYER_IDS.blockOutline,
+        LAYER_IDS.neighborhoodOutline,
+        LAYER_IDS.blockSelection,
+        LAYER_IDS.blockSelectionEdge,
+        LAYER_IDS.areaFill,
+        LAYER_IDS.areaColumns,
+        LAYER_IDS.areaOutline,
+        LAYER_IDS.heat,
+      ]) {
+        if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", "none");
+      }
+      setBlockFillVisible(map, false);
+    }
   }, [
     ready,
     styleEpoch,
@@ -709,6 +731,7 @@ export function MapView({
     scale,
     mapStyle,
     walking,
+    analytics,
   ]);
 
   // Feature modules whose lazy `layers` chunk exports mount(map): mounted while

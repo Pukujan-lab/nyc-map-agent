@@ -27,6 +27,8 @@ export interface FeatureModule {
    * it is off the module's `layers` are not mounted.
    */
   chip?: { id: string; label: string };
+  /** A section on the panel's home view (e.g. Nearby arrivals). */
+  HomeSection?: ComponentType;
   /** A collapsed drawer in the place panel for the picked block / neighborhood. */
   PlaceSection?: { label: string; Component: ComponentType<{ lon: number; lat: number }> };
   /** Panel content ids this module pushes via usePanel().showPanel. */

@@ -14,17 +14,26 @@ async function getJson<T>(url: string): Promise<T> {
 
 export type TransitLayerId = SystemId | "bus";
 
-/** `?transit=subway,lirr` in the URL; `?transitPanel=1` opens the status drawer. */
+/** Live subway and buses are on when the URL says nothing (the default view). */
+const DEFAULT_TRANSIT = "subway,bus";
+const parseTransit = (raw: string | null) =>
+  new Set((raw ?? DEFAULT_TRANSIT).split(",").filter((id) => id && id !== "none"));
+
+/**
+ * `?transit=subway,lirr` in the URL (absent = subway + buses, `none` = off);
+ * `?transitPanel=1` opens the status drawer.
+ */
 export function useTransitToggles() {
   const [params, setParams] = useSearchParams();
-  const on = new Set((params.get("transit") ?? "").split(",").filter(Boolean) as TransitLayerId[]);
+  const on = parseTransit(params.get("transit")) as Set<TransitLayerId>;
   const set = useCallback(
     (id: TransitLayerId, value: boolean) =>
       setParams((prev) => {
         const next = new URLSearchParams(prev);
-        const cur = new Set((next.get("transit") ?? "").split(",").filter(Boolean));
+        const cur = parseTransit(next.get("transit"));
         if (value) cur.add(id); else cur.delete(id);
-        if (cur.size) next.set("transit", [...cur].join(",")); else next.delete("transit");
+        const joined = cur.size ? [...cur].join(",") : "none";
+        if (joined === DEFAULT_TRANSIT) next.delete("transit"); else next.set("transit", joined);
         return next;
       }, { replace: true }),
     [setParams],
