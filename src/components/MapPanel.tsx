@@ -9,17 +9,13 @@ import { cn } from "@/lib/utils";
 import { PanelSearch } from "./PanelSearch";
 
 /** Mobile snap points: peek shows the summary only. */
-const PEEK = "168px";
+/** One row (title + number) plus the grab handle. */
+const PEEK = "92px";
 const SNAPS: Array<string | number> = [PEEK, 0.5, 1];
 const SNAP_BY_NAME: Record<SheetSnap, string | number> = { peek: PEEK, half: 0.5, full: 1 };
 const nameOf = (point: string | number | null): SheetSnap =>
   point === 1 ? "full" : point === 0.5 ? "half" : "peek";
 
-/** Chips that later features (transit, schools) take over by registering the same id. */
-const PLACEHOLDER_CHIPS = [
-  { id: "transit", label: "Transit" },
-  { id: "schools", label: "Schools" },
-];
 
 function Chips() {
   const { layer, setLayer, restrooms, setRestrooms } = useMapState();
@@ -31,24 +27,22 @@ function Chips() {
   ];
   const registered = new Map(chips.map((chip) => [chip.id, chip]));
   const order = ["noise", "crashes", "transit", "restrooms", "schools"];
-  const all = order.map(
-    (id) =>
-      registered.get(id) ??
-      builtIn.find((c) => c.id === id) ??
-      ({ ...PLACEHOLDER_CHIPS.find((c) => c.id === id)!, active: false, onToggle: undefined } as const),
-  );
+  // Transit and Schools appear once those features register a chip with that id.
+  const all = order.flatMap((id) => {
+    const chip = registered.get(id) ?? builtIn.find((c) => c.id === id);
+    return chip ? [chip] : [];
+  });
   const extra = chips.filter((c) => !order.includes(c.id));
   return (
-    <div className="flex gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none]">
+    <div className="-mx-3 flex snap-x snap-mandatory scroll-px-3 gap-1.5 overflow-x-auto px-3 pb-0.5 [mask-image:linear-gradient(to_right,transparent,black_12px,black_calc(100%-24px),transparent)] [scrollbar-width:none]">
       {[...all, ...extra].map((chip) => (
         <button
           key={chip.id}
           type="button"
           aria-pressed={chip.active}
-          disabled={!chip.onToggle}
           onClick={chip.onToggle}
           className={cn(
-            "h-8 shrink-0 rounded-full border px-3 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40",
+            "h-7 shrink-0 snap-start rounded-full border px-2.5 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             chip.active
               ? "border-primary bg-primary text-primary-foreground"
               : "border-border bg-card text-foreground hover:bg-accent",
@@ -63,9 +57,9 @@ function Chips() {
 
 function Home() {
   return (
-    <div className="p-4">
-      <div className="text-sm font-semibold">Explore NYC</div>
-      <div className="mt-1 text-xs text-muted-foreground">
+    <div className="px-4 py-2.5">
+      <div className="text-base font-semibold">Explore NYC</div>
+      <div className="mt-3 text-xs text-muted-foreground">
         Search, or tap a neighborhood or block on the map.
       </div>
     </div>
@@ -81,11 +75,14 @@ export function MapPanel({
   isDesktop,
   boundaries,
   place,
+  status,
 }: {
   isDesktop: boolean;
   boundaries: NtaBoundary[] | null;
   /** The selected neighborhood / block (rendered by `PlaceDetails`), or null. */
   place: ReactNode;
+  /** Thin loading line drawn under the search bar. */
+  status?: ReactNode;
 }) {
   const { walking, selectedNtaCode, selectedBlockKey } = useMapState();
   const { content, closePanel, snap, setSnap, collapsed, setCollapsed } = usePanel();
@@ -140,7 +137,10 @@ export function MapPanel({
           )}
         >
           <div className="space-y-2 p-3 pb-2">
-            <PanelSearch boundaries={boundaries} />
+            <div className="relative">
+              <PanelSearch boundaries={boundaries} />
+              {status}
+            </div>
             <Chips />
           </div>
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-border/60">{body}</div>
@@ -162,8 +162,11 @@ export function MapPanel({
 
   return (
     <>
-      <div className="absolute inset-x-3 top-3 z-30 space-y-2">
-        <PanelSearch boundaries={boundaries} />
+      <div className="absolute inset-x-3 top-[calc(env(safe-area-inset-top)+0.75rem)] z-30 space-y-2">
+        <div className="relative">
+          <PanelSearch boundaries={boundaries} />
+          {status}
+        </div>
         <Chips />
       </div>
       <Drawer.Root
@@ -177,7 +180,7 @@ export function MapPanel({
         <Drawer.Portal>
           <Drawer.Content
             aria-describedby={undefined}
-            className="fixed inset-x-0 bottom-0 z-40 flex h-full max-h-[97%] flex-col rounded-t-2xl border border-border bg-card shadow-2xl outline-none"
+            className="fixed inset-x-0 bottom-0 z-40 flex h-full max-h-[97%] flex-col rounded-t-2xl pb-[env(safe-area-inset-bottom)] border border-border bg-card shadow-2xl outline-none"
           >
             <Drawer.Title className="sr-only">Map panel</Drawer.Title>
             <div className="mx-auto mt-2 h-1.5 w-10 shrink-0 rounded-full bg-muted-foreground/40" />

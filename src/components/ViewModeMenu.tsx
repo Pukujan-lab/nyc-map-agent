@@ -23,9 +23,12 @@ import { cn } from "@/lib/utils";
  */
 export function ViewModeMenu({
   compact = false,
+  iconOnly = false,
   onOpenSources,
 }: {
   compact?: boolean;
+  /** A round icon button (the control rail); the menu is unchanged. */
+  iconOnly?: boolean;
   onOpenSources?: () => void;
 }) {
   const { layer, setLayer, city3d, setCity3d, restrooms, setRestrooms } = useMapState();
@@ -59,6 +62,17 @@ export function ViewModeMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
+        {iconOnly ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label={`Layers: ${label}`}
+            className="h-9 w-9 rounded-full"
+          >
+            <Layers className="h-4 w-4" />
+          </Button>
+        ) : (
         <Button
           type="button"
           variant="outline"
@@ -75,8 +89,9 @@ export function ViewModeMenu({
           </span>
           <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60" />
         </Button>
+        )}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="center" className="w-64">
+      <DropdownMenuContent align={iconOnly ? "end" : "center"} side={iconOnly ? "left" : undefined} className="w-64">
         <DropdownMenuRadioGroup value={value} onValueChange={onChange}>
           <DropdownMenuLabel className="text-[11px] text-muted-foreground">
             Classic layers

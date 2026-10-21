@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RestroomDetails } from "@/components/RestroomCard";
 import { usePanel } from "@/lib/store/PanelContext";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 import MapLibreMap, {
   type MapLayerMouseEvent,
   type MapRef,
@@ -196,6 +197,9 @@ export function MapView({
     detail: string;
   } | null>(null);
   const { showPanel } = usePanel();
+  // The hover card is a mouse affordance; on touch / narrow screens the sheet
+  // already shows the same numbers.
+  const canHover = useMediaQuery("(hover: hover) and (pointer: fine) and (min-width: 1024px)");
   const restroomsMod = useRef<typeof import("@/lib/map/restrooms") | null>(null);
   /** So leaving walk mode can restore the overhead camera exactly once. */
   const wasWalking = useRef(false);
@@ -215,6 +219,7 @@ export function MapView({
     stopWalk,
     cameraTarget,
     navCommand,
+    eco,
     highlightedNtaCodes,
     selectedNtaCode,
     selectedBlockKey,
@@ -474,7 +479,7 @@ export function MapView({
     (event: MapLayerMouseEvent) => {
       // At eye level a hover card would sit on top of the street you are
       // walking down, and the pavement underfoot is the whole point.
-      if (walking) return;
+      if (walking || !canHover) return;
       const picked = pickAt(event.point.x, event.point.y, event.lngLat);
       const map = mapRef.current?.getMap();
       if (map) {
@@ -485,7 +490,7 @@ export function MapView({
         return { ...picked, x: event.point.x, y: event.point.y };
       });
     },
-    [pickAt, walking],
+    [pickAt, walking, canHover],
   );
 
   const handleClick = useCallback(
@@ -1044,6 +1049,11 @@ export function MapView({
       map.zoomOut({ duration });
       return;
     }
+    if (navCommand.type === "north") {
+      map.easeTo({ bearing: 0, pitch: 0, duration });
+      setTilted(false);
+      return;
+    }
     map.jumpTo({
       center: [HOME_VIEW.lon, HOME_VIEW.lat],
       zoom: initialZoom(),
@@ -1054,6 +1064,12 @@ export function MapView({
     // "Reset view" means the city, not the street you were standing on.
     stopWalk();
   }, [ready, navCommand, reducedMotion, setTilted, stopWalk]);
+
+  // Eco mode: render at 1x instead of the device pixel ratio.
+  useEffect(() => {
+    if (!ready) return;
+    mapRef.current?.getMap().setPixelRatio(eco ? 1 : window.devicePixelRatio);
+  }, [ready, eco]);
 
   const hoverNtaName =
     hover?.kind === "block"
@@ -1105,7 +1121,7 @@ export function MapView({
         />
       ) : null}
 
-      {hover && !walking ? (
+      {hover && !walking && canHover ? (
         <div
           className="pointer-events-none absolute z-20 max-w-[220px] rounded-lg border border-border bg-card/95 px-3 py-2 text-xs shadow-xl backdrop-blur"
           style={{

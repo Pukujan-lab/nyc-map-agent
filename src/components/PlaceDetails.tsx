@@ -6,6 +6,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { NtaBoundary } from "@/lib/api/nta";
 import { formatCount, formatPercent } from "@/lib/format";
@@ -37,6 +38,8 @@ interface DetailsSheetProps {
   crashWindowLabel: string;
   sources: SoqlSource[];
   isDesktop: boolean;
+  /** Aggregation still running: show skeletons, not a misleading 0. */
+  loading?: boolean;
   /** Set under a single-source / Average view. */
   view?: ViewInfo;
   /** The current view's value for the neighborhood (and its parts). */
@@ -143,6 +146,7 @@ function DetailsBody({
   onWidenWindow,
   onSummaryTap,
   isDesktop,
+  loading,
   view,
   viewValue,
   breakdown,
@@ -198,7 +202,7 @@ function DetailsBody({
 
   return (
     <>
-      <div className="flex items-start gap-2 border-b border-border/60 p-4 pb-3">
+      <div className="flex items-center gap-2 border-b border-border/60 px-4 py-2.5">
         <Button
           type="button"
           size="icon"
@@ -211,28 +215,32 @@ function DetailsBody({
         </Button>
         <button
           type="button"
-          className="min-w-0 flex-1 text-left"
+          className="flex min-w-0 flex-1 items-baseline justify-between gap-3 text-left"
           onClick={onSummaryTap}
           aria-label={`Show details for ${boundary.ntaName}`}
         >
-          <div className="truncate text-sm font-semibold">
+          <span className="truncate text-base font-semibold">
             {boundary.ntaName}
-          </div>
-          <div className="text-[11px] text-muted-foreground">
-            {boundary.borough} · {windowLabel}
-          </div>
-          <div className="mt-1.5 flex items-baseline gap-1.5">
-            <span className="text-2xl font-semibold tabular-nums text-primary">
-              {formatCount(headline)}
+          </span>
+          {loading ? (
+            <Skeleton aria-label="Loading" className="h-5 w-14 shrink-0" />
+          ) : (
+            <span className="shrink-0 whitespace-nowrap">
+              <span className="text-lg font-semibold tabular-nums text-primary">
+                {formatCount(headline)}
+              </span>{" "}
+              <span className="text-[11px] text-muted-foreground">
+                {headlineLabel}
+              </span>
             </span>
-            <span className="text-[11px] text-muted-foreground">
-              {headlineLabel}
-            </span>
-          </div>
+          )}
         </button>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4 pt-3">
+        <div className="mb-3 text-[11px] text-muted-foreground">
+          {boundary.borough} · {windowLabel}
+        </div>
         {block ? (
           <div className="mb-3 rounded-md border border-primary/40 bg-primary/5 p-2.5">
             <div className="flex items-start justify-between gap-2">
@@ -296,7 +304,7 @@ function DetailsBody({
           </div>
         ) : null}
 
-        {headline === 0 ? (
+        {headline === 0 && !loading ? (
           <div className="mb-3 rounded-md border border-border/60 bg-muted/30 p-2.5">
             <p className="text-[11px] text-muted-foreground">
               No incidents recorded in this neighborhood for this window.

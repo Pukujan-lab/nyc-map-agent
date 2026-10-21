@@ -27,7 +27,7 @@ export interface CameraTarget {
   nonce: number;
 }
 
-export type NavCommandType = "zoom-in" | "zoom-out" | "reset";
+export type NavCommandType = "zoom-in" | "zoom-out" | "reset" | "north";
 
 export interface NavCommand {
   type: NavCommandType;
@@ -56,7 +56,10 @@ interface MapState {
   city3d: boolean;
   /** Public restrooms icon layer (restrooms=1 in the URL). */
   restrooms: boolean;
+  /** Eco mode (eco=1): pixel ratio 1 and no textured city, to save battery. */
+  eco: boolean;
   setRestrooms: (on: boolean) => void;
+  setEco: (on: boolean) => void;
   /** True while the camera is pitched; drives the "3D" toggle's pressed state. */
   tilted: boolean;
   /** True while the camera is driven first-person from the keyboard. */
@@ -127,7 +130,9 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
   const [walking, setWalking] = useState(false);
   // Street level defaults to the textured city; an explicit choice in the
   // Layers dropdown (city3d=0/1 in the URL) always wins.
-  const city3d = city3dParam === "1" || (city3dParam === null && walking);
+  const eco = searchParams.get("eco") === "1";
+  // Eco mode drops the textured city (its facades and props are the heaviest draw).
+  const city3d = !eco && (city3dParam === "1" || (city3dParam === null && walking));
   const restrooms = searchParams.get("restrooms") === "1";
   const [walkRequest, setWalkRequest] = useState<WalkRequest | null>(null);
   const [selectedNtaCode, setSelectedNtaCode] = useState<string | null>(null);
@@ -150,7 +155,7 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateSearch = useCallback(
-    (key: "layer" | "window" | "scale" | "style" | "city3d" | "restrooms", value: string) => {
+    (key: "layer" | "window" | "scale" | "style" | "city3d" | "restrooms" | "eco", value: string) => {
       setSearchParams(
         (previous) => {
           const next = new URLSearchParams(previous);
@@ -188,6 +193,10 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
     [updateSearch],
   );
 
+  const setEco = useCallback(
+    (on: boolean) => updateSearch("eco", on ? "1" : "0"),
+    [updateSearch],
+  );
   const setRestrooms = useCallback(
     (on: boolean) => updateSearch("restrooms", on ? "1" : "0"),
     [updateSearch],
@@ -264,7 +273,9 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
       city3d,
       setCity3d,
       restrooms,
+      eco,
       setRestrooms,
+      setEco,
       tilted,
       walking,
       walkRequest,
@@ -307,7 +318,9 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
       city3d,
       setCity3d,
       restrooms,
+      eco,
       setRestrooms,
+      setEco,
       tilted,
       walking,
       walkRequest,
