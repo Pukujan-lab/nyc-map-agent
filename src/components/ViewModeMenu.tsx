@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { ChevronDown, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,6 +16,7 @@ import { SOURCE_BY_ID } from "@/lib/datasets/registry";
 import { LAYER_IDS, LAYER_LABELS, LAYER_SHORT_LABELS } from "@/lib/layers";
 import { useDataView } from "@/lib/store/DataViewContext";
 import { useMapState } from "@/lib/store/MapStateContext";
+import { useFlags } from "@/lib/flags";
 import { cn } from "@/lib/utils";
 
 /**
@@ -33,6 +35,18 @@ export function ViewModeMenu({
 }) {
   const { layer, setLayer, city3d, setCity3d, restrooms, setRestrooms } = useMapState();
   const { viewMode, setViewMode, enabledSources, averageSources } = useDataView();
+  const flags = useFlags();
+  // Simple mode (advancedMode off) hides the analytics layers; advanced adds
+  // them back into this same dropdown without changing the layout.
+  const layerIds = LAYER_IDS.filter((id) => flags[id]);
+  const showData = flags.dataLayers;
+  const hidden =
+    (viewMode.kind === "legacy" && !flags[layer]) || (viewMode.kind !== "legacy" && !showData);
+  useEffect(() => {
+    if (!hidden) return;
+    setLayer("noise");
+    setViewMode({ kind: "legacy" });
+  }, [hidden, setLayer, setViewMode]);
 
   const value =
     viewMode.kind === "legacy"
@@ -96,11 +110,13 @@ export function ViewModeMenu({
           <DropdownMenuLabel className="text-[11px] text-muted-foreground">
             Classic layers
           </DropdownMenuLabel>
-          {LAYER_IDS.map((id) => (
+          {layerIds.map((id) => (
             <DropdownMenuRadioItem key={id} value={`legacy:${id}`}>
               {id === "combined" ? "Noise + crashes" : LAYER_LABELS[id]}
             </DropdownMenuRadioItem>
           ))}
+          {showData ? (
+            <>
           <DropdownMenuSeparator />
           <DropdownMenuLabel className="text-[11px] text-muted-foreground">
             Single source
@@ -115,15 +131,21 @@ export function ViewModeMenu({
             Concern score: average of {averageSources.length} source
             {averageSources.length === 1 ? "" : "s"}
           </DropdownMenuRadioItem>
+            </>
+          ) : null}
         </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />
+        {flags.city3d ? (
         <DropdownMenuCheckboxItem checked={city3d} onCheckedChange={(on) => setCity3d(on === true)}>
           Textured 3D city (Lower Manhattan + Brownstone Brooklyn, zoom in)
         </DropdownMenuCheckboxItem>
+        ) : null}
+        {flags.restrooms ? (
         <DropdownMenuCheckboxItem checked={restrooms} onCheckedChange={(on) => setRestrooms(on === true)}>
           Public restrooms
         </DropdownMenuCheckboxItem>
-        {onOpenSources ? (
+        ) : null}
+        {onOpenSources && showData ? (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={onOpenSources}>

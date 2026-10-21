@@ -10,6 +10,9 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { useAdvancedMode } from "@/lib/flags";
 import {
   Select,
   SelectContent,
@@ -172,6 +175,7 @@ export function ControlDrawer({
     setCaveatsOpen,
   } = useMapState();
   const isDesktop = useMediaQuery("(min-width: 1024px)");
+  const [advancedMode, setAdvancedMode] = useAdvancedMode();
   const { shortLabel } = windowBounds(windowId);
   const active = progress.noise ?? progress.crashes;
   const percent =
@@ -193,8 +197,14 @@ export function ControlDrawer({
         </SheetHeader>
 
         <div className="space-y-4 px-4 pb-6">
+          <div className="flex items-center justify-between gap-2">
+            <Label htmlFor="advanced-mode" className="text-sm">Advanced</Label>
+            <Switch id="advanced-mode" checked={advancedMode} onCheckedChange={setAdvancedMode} />
+          </div>
+
           <Section label="Map view">
             <ViewModeMenu onOpenSources={onOpenSources} />
+            {advancedMode ? (
             <Button
               type="button"
               variant="secondary"
@@ -205,6 +215,7 @@ export function ControlDrawer({
               <Database className="h-3.5 w-3.5" />
               Data sources…
             </Button>
+            ) : null}
           </Section>
 
           <Section label="Unit and style">

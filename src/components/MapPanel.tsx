@@ -1,4 +1,5 @@
 import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
+import { isFlagId, useFlags } from "@/lib/flags";
 import { useEffect, type ReactNode } from "react";
 import { Drawer } from "vaul";
 import { Button } from "@/components/ui/button";
@@ -20,13 +21,17 @@ const nameOf = (point: string | number | null): SheetSnap =>
 function Chips() {
   const { layer, setLayer, restrooms, setRestrooms } = useMapState();
   const { chips } = usePanel();
+  const flags = useFlags();
   const builtIn: PanelChip[] = [
     { id: "noise", label: "Noise", active: layer === "noise", onToggle: () => setLayer(layer === "noise" ? "combined" : "noise") },
     { id: "crashes", label: "Crashes", active: layer === "crashes", onToggle: () => setLayer(layer === "crashes" ? "combined" : "crashes") },
     { id: "restrooms", label: "Restrooms", active: restrooms, onToggle: () => setRestrooms(!restrooms) },
   ];
   const registered = new Map(chips.map((chip) => [chip.id, chip]));
-  const order = ["noise", "crashes", "transit", "restrooms", "schools"];
+  // Simple mode hides advanced-tier chips (e.g. Crashes); see src/lib/flags.
+  const order = ["noise", "crashes", "transit", "restrooms", "schools"].filter(
+    (id) => !isFlagId(id) || flags[id],
+  );
   // Transit and Schools appear once those features register a chip with that id.
   const all = order.flatMap((id) => {
     const chip = registered.get(id) ?? builtIn.find((c) => c.id === id);
