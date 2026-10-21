@@ -25,6 +25,7 @@ import { setFollowed, useFollowed } from "./follow";
 import { SYSTEM_LABELS } from "./model";
 import { StationDetails, VehicleDetails } from "./TransitCard";
 import { TransitStatusDetails } from "./TransitStatus";
+import { FOCUS_OPACITY, FOCUS_VEIL_ID, WORLD, useTransitFocus } from "./focus";
 
 /** Layers a click on the map should hand to transit instead of the area pick. */
 const TRANSIT_CLICK_LAYERS = ["transit-vehicle-2d", "transit-vehicle-hit", "transit-access", "transit-entrance", "transit-station"];
@@ -113,6 +114,12 @@ export default function TransitLayer() {
     else { set("subway", true); set("bus", true); }
   }, [anyOn, set]);
   usePanelChip({ id: "transit", label: "Transit", active: anyOn, onToggle: toggleChip });
+  const [focus, setFocus] = useTransitFocus();
+  const toggleFocus = useCallback(() => {
+    if (!focus && !anyOn) { set("subway", true); set("bus", true); }
+    setFocus(!focus);
+  }, [focus, anyOn, set, setFocus]);
+  usePanelChip({ id: "transitFocus", label: "Transit Focus", active: focus && anyOn, onToggle: toggleFocus });
 
   // Icons, including after a style swap.
   useEffect(() => {
@@ -413,6 +420,12 @@ export default function TransitLayer() {
           layout={{ "line-cap": "round", "line-join": "round" }}
           paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1.5, 16, 4] }} />
       </Source>
+      {focus ? (
+        <Source id={FOCUS_VEIL_ID} type="geojson" data={WORLD}>
+          <Layer id={FOCUS_VEIL_ID} type="fill" beforeId="transit-line-under"
+            paint={{ "fill-color": "#f8fafc", "fill-opacity": FOCUS_OPACITY }} />
+        </Source>
+      ) : null}
       <Source id="transit-work-segs" type="geojson" data={work.segs}>
         <Layer id="transit-work-line" type="line" paint={{ "line-color": "#f59e0b", "line-width": ["interpolate", ["linear"], ["zoom"], 10, 2, 16, 6], "line-dasharray": [1, 1.5], "line-opacity": 0.85 }} />
       </Source>
