@@ -1227,6 +1227,9 @@ export async function startDeploy(deps: PipelineDeps, config: PipelineConfig, re
       error,
       finishedAt: ended.toISOString(),
       durationMs: ended.getTime() - startedAt.getTime(),
+      // A run that stops early leaves later steps untouched; "skipped" is what the
+      // dashboard renders for them, so mark them here rather than at every exit.
+      steps: run.steps.map((s) => (s.status === "pending" ? { ...s, status: "skipped" } : s)),
     });
   };
 
@@ -1276,9 +1279,6 @@ export async function startDeploy(deps: PipelineDeps, config: PipelineConfig, re
       request.kind === "rollback" ? (previous?.previousImage ?? "") : `nyc-map-agent:${run.sha.slice(0, 12)}`;
 
     if (request.kind === "rollback" && !targetImage) {
-      step("checkout", "skipped");
-      step("build", "skipped");
-      step("swap", "skipped");
       return finish("failed", "no previous image to roll back to");
     }
 
