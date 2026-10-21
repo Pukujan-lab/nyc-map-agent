@@ -93,3 +93,70 @@ export function applyAtmosphere(map: MapLibreMap, street = false): void {
     "atmosphere-blend": 0,
   });
 }
+
+/**
+ * Real-world widths in metres for the Liberty road layers. The style draws
+ * roads in screen pixels that stop growing around z18, so at a 1.7 m eye
+ * (z21-22) a street became a hairline on a white page. While walking, roads
+ * are re-sized in ground metres and painted asphalt, casings become kerbs
+ * and sidewalks, and the bare ground becomes concrete.
+ */
+const ROAD_WIDTH_M: Array<[RegExp, number]> = [
+  [/motorway(?!_link)/, 22],
+  [/trunk_primary/, 18],
+  [/secondary_tertiary/, 14],
+  [/link/, 9],
+  [/minor/, 10],
+  [/service_track/, 6],
+  [/path_pedestrian/, 3],
+];
+/** Each kerb + sidewalk adds this much either side of the carriageway. */
+const SIDEWALK_M = 3.5;
+/** Metres per pixel at zoom 0 at NYC's latitude (40.7°). */
+const M_PER_PX_Z0 = 118_700;
+const STREET_COLORS = {
+  ground: "#b9b5ad",
+  asphalt: "#4b4e54",
+  sidewalk: "#c9c4ba",
+  path: "#bfb6a6",
+  park: "#6f9a5b",
+} as const;
+
+function metresWidth(m: number): unknown {
+  // Exponential base 2 in zoom = constant ground width.
+  return ["interpolate", ["exponential", 2], ["zoom"], 15, (m * 2 ** 15) / M_PER_PX_Z0, 24, (m * 2 ** 24) / M_PER_PX_Z0];
+}
+
+const saved = new WeakMap<MapLibreMap, Map<string, unknown>>();
+
+function setPaint(map: MapLibreMap, layer: string, prop: string, value: unknown, on: boolean): void {
+  if (!map.getLayer(layer)) return;
+  let store = saved.get(map);
+  if (!store) saved.set(map, (store = new Map()));
+  const key = `${layer}|${prop}`;
+  if (on) {
+    if (!store.has(key)) store.set(key, map.getPaintProperty(layer, prop) ?? null);
+    map.setPaintProperty(layer, prop, value);
+  } else if (store.has(key)) {
+    map.setPaintProperty(layer, prop, store.get(key) ?? undefined);
+    store.delete(key);
+  }
+}
+
+/** Street-level ground, roads and sidewalks; `street = false` restores the style. */
+export function applyStreetPalette(map: MapLibreMap, street: boolean): void {
+  for (const layer of map.getStyle().layers ?? []) {
+    const id = layer.id;
+    if (layer.type === "background") setPaint(map, id, "background-color", STREET_COLORS.ground, street);
+    if (layer.type === "fill" && /^landuse_residential$/.test(id)) setPaint(map, id, "fill-color", STREET_COLORS.ground, street);
+    if (layer.type === "fill" && /^park$|landcover_grass/.test(id)) setPaint(map, id, "fill-color", STREET_COLORS.park, street);
+    if (layer.type !== "line" || !/^(road|bridge)_/.test(id) || /rail/.test(id)) continue;
+    const width = ROAD_WIDTH_M.find(([re]) => re.test(id))?.[1];
+    if (!width) continue;
+    const casing = id.endsWith("_casing");
+    const pedestrian = /path_pedestrian/.test(id);
+    setPaint(map, id, "line-color", casing ? STREET_COLORS.sidewalk : pedestrian ? STREET_COLORS.path : STREET_COLORS.asphalt, street);
+    setPaint(map, id, "line-width", metresWidth(casing ? width + 2 * SIDEWALK_M : width), street);
+    if (!pedestrian) setPaint(map, id, "line-dasharray", undefined, street);
+  }
+}
