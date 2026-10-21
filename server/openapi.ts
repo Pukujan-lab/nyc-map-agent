@@ -38,6 +38,34 @@ const binaryRoute = (path: string, summary: string) =>
     },
   });
 
+/** POST /api/agent: the smart-mode trip agent. Body mirrors src/features/agent/schema.ts `requestBody`. */
+export const AGENT_ROUTE = createRoute({
+  method: "post",
+  path: "/api/agent",
+  summary: "Smart-mode trip agent (NDJSON stream of text, tool and map-command events)",
+  request: {
+    body: {
+      required: true,
+      content: {
+        "application/json": {
+          schema: z
+            .object({
+              messages: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string() })).min(1).max(30),
+              location: z.object({ lon: z.number(), lat: z.number() }).nullable().optional(),
+              mode: z.enum(["walk", "transit", "drive"]).optional(),
+              now: z.string().optional(),
+            })
+            .openapi("AgentRequest"),
+        },
+      },
+    },
+  },
+  responses: {
+    200: { description: "One JSON StreamEvent per line", content: { "application/x-ndjson": { schema: z.string() } } },
+    400: { description: "Invalid body", content: { "application/json": { schema: ApiError } } },
+  },
+});
+
 /** Hono path (":block") -> route. Order matches server/app.ts. */
 export const ROUTES = {
   "/api/aggregate": jsonRoute("/api/aggregate", "Precomputed noise / crash rollup", AggregateQuery),

@@ -17,6 +17,8 @@ export interface FlagMeta {
 }
 
 export const FLAGS = {
+  agent: { tier: "basic", default: true, label: "Smart mode (voice + text assistant)" },
+  agentDrive: { tier: "basic", default: true, label: "Smart mode: driving trips" },
   search: { tier: "basic", default: true, label: "Search" },
   directions: { tier: "basic", default: true, label: "Walking directions" },
   transit: { tier: "basic", default: true, label: "Live transit" },
