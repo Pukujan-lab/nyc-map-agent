@@ -22,7 +22,7 @@ function tilesUrl(): string {
   return /^https?:\/\//.test(CITY3D_TILES) ? CITY3D_TILES : `${window.location.origin}${CITY3D_TILES}`;
 }
 export const CITY3D_MIN_ZOOM = 16;
-export const FACADES = ["rowhouse", "walkup", "prewar", "modern", "tower", "storefront"] as const;
+export const FACADES = ["rowhouse", "walkup", "prewar", "modern", "tower", "school", "storefront"] as const;
 const SOURCE = "city3d";
 const STOREFRONT_M = 4.5;
 
@@ -44,6 +44,7 @@ const ROOF: ExpressionSpecification = [
   "tower", "#9fb4c6",
   "modern", "#b7bcc2",
   "prewar", "#b8ab95",
+  "school", "#a0705a",
   "#8d8a86",
 ];
 
@@ -65,7 +66,7 @@ export async function installCity3d(map: MapLibreMap): Promise<void> {
     map.addSource(SOURCE, {
       type: "vector",
       url: `pmtiles://${tilesUrl()}`,
-      attribution: "NYC Open Data (footprints, PLUTO, trees, hydrants, benches)",
+      attribution: "NYC Open Data (footprints, PLUTO, DOE schools, trees, hydrants, benches)",
     });
   }
   await loadFacades(map);
@@ -136,6 +137,50 @@ export async function installCity3d(map: MapLibreMap): Promise<void> {
     map.addLayer(createStreetSignsLayer(), beforeId);
     map.setLayoutProperty("city3d-signs", "visibility", "none");
   }
+}
+
+/** Small "school" disc for DOE school points; drawn once on a canvas. */
+function schoolIcon(): ImageData {
+  const n = 36;
+  const ctx = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+  if (!ctx) throw new Error("no 2d canvas");
+  ctx.canvas.width = ctx.canvas.height = n;
+  ctx.beginPath();
+  ctx.arc(n / 2, n / 2, n / 2 - 3, 0, Math.PI * 2);
+  ctx.fillStyle = "#b45309";
+  ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = "#fff";
+  ctx.stroke();
+  ctx.fillStyle = "#fff";
+  ctx.beginPath(); // a simple pediment + body: "schoolhouse"
+  ctx.moveTo(n / 2, 9); ctx.lineTo(27, 16); ctx.lineTo(9, 16); ctx.closePath(); ctx.fill();
+  ctx.fillRect(11, 16, 14, 10);
+  return ctx.getImageData(0, 0, n, n);
+}
+
+/** Optional school icons (the "Schools" chip). Needs installCity3d first. */
+export function setSchoolIconsVisible(map: MapLibreMap, on: boolean): void {
+  if (!map.getSource(SOURCE)) return;
+  if (!map.hasImage("school-icon")) map.addImage("school-icon", schoolIcon(), { pixelRatio: 2 });
+  if (!map.getLayer("city3d-schools")) {
+    map.addLayer({
+      id: "city3d-schools", type: "symbol", source: SOURCE, "source-layer": "schools", minzoom: 14,
+      layout: { "icon-image": "school-icon", "icon-allow-overlap": true, visibility: "none" },
+    });
+  }
+  map.setLayoutProperty("city3d-schools", "visibility", on ? "visible" : "none");
+}
+
+/** School name under a click: a school-faced building or a school icon. */
+export function schoolAt(map: MapLibreMap, x: number, y: number): string | null {
+  const layers = ["city3d-schools", "city3d-walls"].filter((id) => map.getLayer(id));
+  if (!layers.length) return null;
+  for (const f of map.queryRenderedFeatures([[x - 6, y - 6], [x + 6, y + 6]], { layers })) {
+    const name = f.layer.id === "city3d-schools" ? f.properties?.name : f.properties?.school;
+    if (typeof name === "string" && name) return name;
+  }
+  return null;
 }
 
 /** True when the textured city actually has buildings loaded for the current view. */
