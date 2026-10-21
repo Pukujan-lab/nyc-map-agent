@@ -31,8 +31,47 @@ Copy `.env.example` to `.env` and fill in what you need.
 | `VITE_SOCRATA_APP_TOKEN` | browser | Optional. Raises Socrata rate limits for the ~205k-row pull. The app works without it. |
 | `VITE_BASEMAP_STYLE` | browser | MapLibre style URL. Defaults to OpenFreeMap Liberty (keyless, includes 3D buildings). |
 | `VITE_TILE_URL` | browser | Raster tiles for the fallback style, used only if the vector basemap fails. Defaults to public OSM tiles. |
+| `VITE_MAPILLARY_TOKEN` or `MAPILLARY_TOKEN` | browser | Optional Mapillary **client** token for street-level photos. Either name works (`vite.config.ts` sets `envPrefix: ["VITE_", "MAPILLARY_"]`). Client tokens ship in the bundle by design. |
+| `VITE_OSRM_URL` | browser | Optional OSRM base URL for walking directions. Defaults to the public FOSSGIS foot instance `https://routing.openstreetmap.de/routed-foot`. |
 | `VITE_AGENT_MODE` | browser | `mock` (default) or `http`. See below. |
 | `INFERHUB_API_KEY` | **server only** | Never `VITE_`-prefixed, never in the bundle. Used by your `/api/chat` handler. |
+
+## Data sources
+
+Every map source is one entry in `src/lib/datasets/registry.ts`; the data-sources drawer, the view dropdown, the legend and the details sheet all read from it. Geo columns were checked with live SODA queries (run them yourself with `LIVE_SOCRATA=1 pnpm test`).
+
+| Source | Dataset | Geo used | Window | How it is fetched |
+| --- | --- | --- | --- | --- |
+| 311 noise complaints | `erm2-nwe9` | `latitude`/`longitude` | selected | worker pipeline (rows) |
+| All 311 service requests | `erm2-nwe9` | `latitude`/`longitude` | selected (`created_date`) | server-side grid `GROUP BY` |
+| Motor vehicle crashes | `h9gi-nx95` | `latitude`/`longitude` | latest 12 months | worker pipeline (rows) |
+| HPD housing violations | `wvxf-dwi5` | `latitude`/`longitude` (text, cast) | selected (`inspectiondate`) | server-side grid `GROUP BY` |
+| Residential units (PLUTO) | `64uk-42ks` | `latitude`/`longitude` | snapshot | server-side `sum(unitsres)` per cell |
+| Street trees (2015) | `uvpi-gqnh` | `latitude`/`longitude` | census | server-side grid `GROUP BY` |
+| Pedestrian ramps | `ufzp-rrqu` | `the_geom` point | inventory | paged rows (cap 250k) |
+| Speed humps | `jknp-skuy` | `the_geom` multiline (midpoint) | inventory | paged rows |
+| SIP corridors | `if4c-w48d` | `the_geom` multiline (midpoint) | inventory | paged rows |
+| SIP intersections | `shr7-eqdc` | `lat`/`long` (text, cast) | inventory | server-side grid `GROUP BY` |
+
+The server-side rollup is `floor(lat / 0.003), floor(lon / 0.003)`, which is the same ~300 m block grid the map draws. Even an 850k-row dataset comes back as a few thousand cells. Each cell goes to the neighborhood under its centre.
+
+**Not wired:** DOB complaints (`eabe-havv`) has no coordinates; traffic volume counts (`7ym2-wayt`) are WKT in NY State Plane feet and would need a reprojection library; building footprints (`5zhs-2jue`) are ~1M polygons with no centroid column.
+
+### Views: single source vs. Concern score (Average)
+
+The view dropdown in the dock (and in the settings drawer) can show the classic noise / crashes / both layers, **any single enabled source**, or the **Concern score**, which is an average across sources. Each ticked source becomes a 0–100 percentile rank per area (ties share their rank, areas with no records rank 0).
+
+Every registry entry has a default `polarity`:
+- **Higher is worse:** 311, noise, crashes and HPD violations count as is.
+- **Higher is better:** trees, ramps, speed humps, street improvements and residential units count as `100 − percentile`.
+
+So a high score always means more concern. The data-sources drawer has a button on each source in the average to flip its direction. The legend marks each contributor ↑ (higher is worse) or ↓ (higher is better). The details sheet shows each source's raw count, percentile, direction and concern contribution.
+
+View state lives in the URL: `view=avg|src:<id>|legacy`, `sources=…`, `avg=…`, and `flip=…` for the sources whose default direction was flipped.
+
+## Walking directions
+
+The dock's navigation button or the details sheet ("Route from / to here") let you set A and B. The route comes from OSRM's foot profile on the public FOSSGIS server (`routing.openstreetmap.de`), with no key and one request per pick. It is drawn on the map with its distance and walking time, and **Walk along route** moves the street camera along it. That server is a donated community service. Its [usage policy](https://routing.openstreetmap.de/about.html) asks for light, non-bulk use and OSM attribution, so set `VITE_OSRM_URL` to your own OSRM for real traffic.
 
 ## How the data gets on the map
 

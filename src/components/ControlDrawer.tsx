@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import {
   AlertTriangle,
   BookOpen,
+  Database,
   LocateFixed,
   RefreshCw,
   ZoomIn,
@@ -35,7 +36,8 @@ import { useMapState } from "@/lib/store/MapStateContext";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { cn } from "@/lib/utils";
 import { windowBounds } from "@/lib/windows";
-import { LayerToggle } from "./LayerToggle";
+import type { ViewInfo } from "@/lib/layers";
+import { ViewModeMenu } from "./ViewModeMenu";
 import { Legend } from "./Legend";
 import { WindowSelect } from "./WindowSelect";
 
@@ -61,6 +63,8 @@ interface ControlDrawerProps {
   maxValue: number;
   /** Areas on the current scale with at least one record. */
   areasWithData: number;
+  view?: ViewInfo;
+  onOpenSources: () => void;
 }
 
 function Section({ label, children }: { label: string; children: ReactNode }) {
@@ -132,6 +136,8 @@ export function ControlDrawer({
   onRetry,
   maxValue,
   areasWithData,
+  view,
+  onOpenSources,
 }: ControlDrawerProps) {
   const {
     layer,
@@ -165,8 +171,18 @@ export function ControlDrawer({
         </SheetHeader>
 
         <div className="space-y-4 px-4 pb-6">
-          <Section label="Layer">
-            <LayerToggle />
+          <Section label="Map view">
+            <ViewModeMenu onOpenSources={onOpenSources} />
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="w-full"
+              onClick={onOpenSources}
+            >
+              <Database className="h-3.5 w-3.5" />
+              Data sources…
+            </Button>
           </Section>
 
           <Section label="Scale">
@@ -246,6 +262,7 @@ export function ControlDrawer({
             scale={scale}
             maxValue={maxValue}
             areasWithData={areasWithData}
+            view={view}
           />
 
           {isError ? (

@@ -27,6 +27,7 @@ export const SOURCE_IDS = {
   boroughs: "boroughs",
   emphasis: "emphasis",
   blockSelection: "block-selection",
+  route: "walk-route",
 } as const;
 
 export const LAYER_IDS = {
@@ -40,6 +41,9 @@ export const LAYER_IDS = {
   emphasis: "emphasis-outline",
   blockSelection: "block-selection-rim",
   blockSelectionEdge: "block-selection-edge",
+  routeCasing: "walk-route-casing",
+  routeLine: "walk-route-line",
+  routeEnds: "walk-route-ends",
 } as const;
 
 /** The single glass hue every data volume is painted with. */
@@ -55,6 +59,7 @@ export const DATA_SOURCES: Record<string, SourceSpecification> = {
   boroughs: { type: "geojson", data: emptyCollection() },
   emphasis: { type: "geojson", data: emptyCollection() },
   "block-selection": { type: "geojson", data: emptyCollection() },
+  "walk-route": { type: "geojson", data: emptyCollection() },
 };
 
 export const DATA_LAYERS: LayerSpecification[] = [
@@ -150,6 +155,35 @@ export const DATA_LAYERS: LayerSpecification[] = [
       "line-color": "#0b1220",
       "line-width": 1.5,
       "line-opacity": 0.75,
+    },
+  },
+  // Walking directions: a dark casing under a bright line, plus A/B dots.
+  {
+    id: LAYER_IDS.routeCasing,
+    type: "line",
+    source: SOURCE_IDS.route,
+    filter: ["==", ["geometry-type"], "LineString"],
+    layout: { "line-join": "round", "line-cap": "round" },
+    paint: { "line-color": "#0b1220", "line-width": 8, "line-opacity": 0.6 },
+  },
+  {
+    id: LAYER_IDS.routeLine,
+    type: "line",
+    source: SOURCE_IDS.route,
+    filter: ["==", ["geometry-type"], "LineString"],
+    layout: { "line-join": "round", "line-cap": "round" },
+    paint: { "line-color": "#38bdf8", "line-width": 4.5 },
+  },
+  {
+    id: LAYER_IDS.routeEnds,
+    type: "circle",
+    source: SOURCE_IDS.route,
+    filter: ["==", ["geometry-type"], "Point"],
+    paint: {
+      "circle-radius": 7,
+      "circle-color": ["match", ["get", "end"], "start", "#22c55e", "#ef4444"],
+      "circle-stroke-color": "#ffffff",
+      "circle-stroke-width": 2,
     },
   },
 ];

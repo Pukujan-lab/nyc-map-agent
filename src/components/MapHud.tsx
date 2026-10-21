@@ -2,16 +2,19 @@ import {
   Box,
   Camera,
   MessageSquare,
+  Navigation,
   SlidersHorizontal,
   Square,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useMapState } from "@/lib/store/MapStateContext";
-import { LayerToggle } from "./LayerToggle";
+import { useDataView } from "@/lib/store/DataViewContext";
+import { ViewModeMenu } from "./ViewModeMenu";
 
 interface MapHudProps {
   onOpenControls: () => void;
+  onOpenSources: () => void;
 }
 
 /**
@@ -19,7 +22,8 @@ interface MapHudProps {
  * window, scale, neighborhood jump, zoom, the map key, caveats — lives in the
  * control drawer so the map is what fills the screen.
  */
-export function MapHud({ onOpenControls }: MapHudProps) {
+export function MapHud({ onOpenControls, onOpenSources }: MapHudProps) {
+  const { routePicking, routeStart, setRoutePicking } = useDataView();
   const {
     tilted,
     setTilted,
@@ -32,7 +36,7 @@ export function MapHud({ onOpenControls }: MapHudProps) {
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center p-3">
       <div className="pointer-events-auto flex max-w-full items-center gap-1 rounded-full border border-border/70 bg-card/90 p-1 shadow-xl backdrop-blur-md">
-        <LayerToggle compact />
+        <ViewModeMenu compact onOpenSources={onOpenSources} />
 
         <Separator orientation="vertical" className="mx-0.5 h-6" />
 
@@ -78,6 +82,18 @@ export function MapHud({ onOpenControls }: MapHudProps) {
         >
           <Camera className="h-4 w-4" />
           Street
+        </Button>
+
+        <Button
+          type="button"
+          size="icon"
+          variant={routePicking || routeStart ? "default" : "ghost"}
+          aria-label="Walking directions: pick a start and end on the map"
+          aria-pressed={routePicking !== null}
+          className="h-8 w-8 shrink-0 rounded-full"
+          onClick={() => setRoutePicking(routeStart ? "end" : "start")}
+        >
+          <Navigation className="h-4 w-4" />
         </Button>
 
         <Button

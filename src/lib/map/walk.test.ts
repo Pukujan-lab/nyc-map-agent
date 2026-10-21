@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  clampWalkZoom,
   normalizeBearing,
+  poseAlongRoute,
+  routeLength,
+  WALK_MAX_ZOOM,
+  WALK_ZOOM,
   resolveWalkInput,
   stepPose,
   WALK_IDLE,
@@ -19,11 +24,12 @@ const START: WalkPose = {
 
 describe("stepPose", () => {
   it("walks north along the bearing without drifting east", () => {
-    const next = stepPose(START, { forward: 1, turn: 0, sprint: false }, 1);
+    // 0.2 s is the longest frame stepPose honours (MAX_STEP_SECONDS).
+    const next = stepPose(START, { forward: 1, turn: 0, sprint: false }, 0.2);
     expect(next.lat).toBeGreaterThan(START.lat);
     expect(next.lon).toBeCloseTo(START.lon, 10);
-    // One second at the walking speed, in degrees of latitude.
-    expect(next.lat - START.lat).toBeCloseTo(WALK_SPEED / 111320, 6);
+    // 0.2 s at the walking speed, in degrees of latitude.
+    expect(next.lat - START.lat).toBeCloseTo((WALK_SPEED * 0.2) / 111320, 8);
   });
 
   it("turns right into the east at a quarter turn", () => {
@@ -57,14 +63,14 @@ describe("stepPose", () => {
   });
 
   it("turns at the documented rate and wraps past north", () => {
-    const turned = stepPose(START, { forward: 0, turn: 1, sprint: false }, 1);
-    expect(turned.bearing).toBeCloseTo(WALK_TURN_RATE, 6);
+    const turned = stepPose(START, { forward: 0, turn: 1, sprint: false }, 0.2);
+    expect(turned.bearing).toBeCloseTo(WALK_TURN_RATE * 0.2, 6);
     const wrapped = stepPose(
       { ...START, bearing: 350 },
       { forward: 0, turn: 1, sprint: false },
-      1,
+      0.2,
     );
-    expect(wrapped.bearing).toBeCloseTo(70, 6);
+    expect(wrapped.bearing).toBeCloseTo((350 + WALK_TURN_RATE * 0.2) % 360, 6);
   });
 });
 
@@ -107,5 +113,41 @@ describe("resolveWalkInput", () => {
     expect(resolveWalkInput(new Set(["ShiftRight"]), WALK_IDLE).sprint).toBe(
       true,
     );
+  });
+});
+
+describe("walk camera limits", () => {
+  it("keeps the walking zoom at or below 19 so tiles stay sharp", () => {
+    expect(WALK_ZOOM).toBeLessThanOrEqual(19);
+    expect(clampWalkZoom(21)).toBe(WALK_MAX_ZOOM);
+    expect(clampWalkZoom(10)).toBeGreaterThan(16);
+  });
+});
+
+describe("poseAlongRoute", () => {
+  // Two segments: ~111 m north, then ~84 m east at NYC latitude.
+  const route: Array<[number, number]> = [
+    [-73.98, 40.75],
+    [-73.98, 40.751],
+    [-73.979, 40.751],
+  ];
+
+  it("measures the route in metres", () => {
+    expect(routeLength(route)).toBeGreaterThan(190);
+    expect(routeLength(route)).toBeLessThan(200);
+  });
+
+  it("walks north along the first segment", () => {
+    const pose = poseAlongRoute(route, 50);
+    expect(pose?.bearing).toBeCloseTo(0, 0);
+    expect(pose?.lat).toBeGreaterThan(40.75);
+    expect(pose?.done).toBe(false);
+  });
+
+  it("turns east on the second segment and finishes at the end", () => {
+    expect(poseAlongRoute(route, 150)?.bearing).toBeCloseTo(90, 0);
+    const end = poseAlongRoute(route, 10_000);
+    expect(end?.done).toBe(true);
+    expect(end?.lon).toBeCloseTo(-73.979, 6);
   });
 });

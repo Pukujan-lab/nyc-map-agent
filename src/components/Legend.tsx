@@ -1,6 +1,12 @@
 import { Card } from "@/components/ui/card";
 import { formatCount } from "@/lib/format";
-import { LAYER_METRICS, type LayerId, type MapScale } from "@/lib/layers";
+import { SOURCE_BY_ID } from "@/lib/datasets/registry";
+import {
+  LAYER_METRICS,
+  type LayerId,
+  type MapScale,
+  type ViewInfo,
+} from "@/lib/layers";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { windowBounds } from "@/lib/windows";
 
@@ -9,6 +15,8 @@ interface LegendProps {
   scale: MapScale;
   maxValue: number;
   areasWithData: number;
+  /** Set under a single-source or Average view. */
+  view?: ViewInfo;
 }
 
 function LineKey({
@@ -39,6 +47,7 @@ export function LegendContent({
   scale,
   maxValue,
   areasWithData,
+  view,
 }: LegendProps) {
   const { window: windowId, setCaveatsOpen } = useMapState();
   const { shortLabel } = windowBounds(windowId);
@@ -50,7 +59,7 @@ export function LegendContent({
           Map key
         </div>
         <div className="truncate text-[10px] text-muted-foreground">
-          {LAYER_METRICS[layer].value}
+          {view ? view.label : LAYER_METRICS[layer].value}
         </div>
       </div>
 
@@ -59,10 +68,47 @@ export function LegendContent({
         stay readable underneath and no colour is doing any of the work.
       </p>
       <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
-        Height = {LAYER_METRICS[layer].value} · peak{" "}
+        Height = {view ? view.unit : LAYER_METRICS[layer].value} · peak{" "}
         {formatCount(maxValue)} · {formatCount(areasWithData)}{" "}
         {scale === "blocks" ? "~300 m blocks" : "neighborhoods"} with records
       </p>
+
+      {view ? (
+        <div className="mt-2 rounded-md border border-border/60 bg-muted/30 p-2">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {view.kind === "average" ? "Concern score: sources" : "Source"}
+          </div>
+          {view.contributors.length === 0 ? (
+            <p className="text-[11px] text-muted-foreground">
+              Still loading — or no sources ticked.
+            </p>
+          ) : (
+            <ul className="mt-1 space-y-0.5">
+              {view.contributors.map((id) => (
+                <li key={id} className="text-[11px]">
+                  {view.kind === "average" ? (
+                    <span aria-hidden="true" className="mr-1 text-muted-foreground">
+                      {view.better?.includes(id) ? "↓" : "↑"}
+                    </span>
+                  ) : null}
+                  {SOURCE_BY_ID[id]?.label ?? id}{" "}
+                  <span className="font-mono text-muted-foreground">
+                    {SOURCE_BY_ID[id]?.datasetId}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {view.kind === "average" ? (
+            <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
+              Higher = more concern. Each source becomes a 0–100 percentile
+              rank per area; ↑ sources (higher is worse) count as is, ↓ sources
+              (higher is better) count as 100 − percentile; then they are
+              averaged.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       <ul className="mt-2.5 space-y-1 border-t border-border/60 pt-2">
         {scale === "blocks" ? (

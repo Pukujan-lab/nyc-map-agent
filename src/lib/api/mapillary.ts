@@ -10,8 +10,16 @@ import { z } from "zod";
  * developer dashboard if it is abused.
  */
 export const MAPILLARY_TOKEN = (
-  import.meta.env.VITE_MAPILLARY_TOKEN ?? ""
+  import.meta.env.VITE_MAPILLARY_TOKEN ||
+  import.meta.env.MAPILLARY_TOKEN ||
+  ""
 ).trim();
+
+/**
+ * Search radii, nearest first. Coverage in the outer boroughs is patchy, so a
+ * miss at street scale widens to the neighbourhood before giving up.
+ */
+export const SEARCH_RADII_METRES = [250, 750, 1500] as const;
 
 export const hasMapillaryToken = MAPILLARY_TOKEN.length > 0;
 
@@ -100,7 +108,8 @@ export async function findNearestImage(
     access_token: MAPILLARY_TOKEN,
     fields: FIELDS,
     bbox,
-    limit: "100",
+    // A wider box holds more photos; ask for enough that the nearest is in it.
+    limit: radiusMetres > 500 ? "500" : "100",
   });
 
   const response = await fetch(`${GRAPH_URL}?${params.toString()}`);
@@ -147,4 +156,22 @@ export async function findNearestImage(
 /** Permalink to a photo on mapillary.com — used for attribution. */
 export function mapillaryImageLink(imageId: string): string {
   return `https://www.mapillary.com/app/?image_key=${encodeURIComponent(imageId)}`;
+}
+
+/**
+ * Nearest photo, widening the search through `SEARCH_RADII_METRES` until one
+ * turns up. Reports the radius that hit so the sheet can say "nearest photo is
+ * 640 m away" rather than silently showing another street.
+ */
+export async function findNearestImageWidening(
+  origin: LngLatPoint,
+  radii: readonly number[] = SEARCH_RADII_METRES,
+): Promise<{ image: MapillaryImage | null; radius: number }> {
+  let radius = radii[0] ?? 250;
+  for (const r of radii) {
+    radius = r;
+    const image = await findNearestImage(origin, r);
+    if (image) return { image, radius: r };
+  }
+  return { image: null, radius };
 }

@@ -5,6 +5,7 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { DataViewProvider } from "@/lib/store/DataViewContext";
 import { MapStateProvider } from "@/lib/store/MapStateContext";
 import "./index.css";
 
@@ -25,10 +26,12 @@ ReactDOM.createRoot(root).render(
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <MapStateProvider>
-          <TooltipProvider delayDuration={200}>
-            <App />
-            <Toaster />
-          </TooltipProvider>
+          <DataViewProvider>
+            <TooltipProvider delayDuration={200}>
+              <App />
+              <Toaster />
+            </TooltipProvider>
+          </DataViewProvider>
         </MapStateProvider>
       </BrowserRouter>
     </QueryClientProvider>

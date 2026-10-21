@@ -5,28 +5,27 @@
  */
 
 /**
- * Eye level: MapLibre's hard pitch ceiling is 85°, and that is what it takes.
- * At 78° the camera still sits well above the rooftops, which reads as an
- * aerial shot however much the horizon shows.
+ * Street-level pitch. 85° (MapLibre's ceiling) at zoom 21 put the eye ~7 m up
+ * but rendered the vector tiles ~6 zooms past their native maximum (OpenFreeMap
+ * tops out at z14 vector data), so roads, labels and building edges turned to
+ * blur. 75° keeps a horizon in frame while leaving the ground readable.
  */
-export const WALK_PITCH = 85;
+export const WALK_PITCH = 75;
 /**
- * Street level, and it is the zoom that does all of the work. MapLibre has no
- * altitude control — no free camera, no eye-height property — so the camera
- * height is `1.5 × viewport height in px × metres-per-pixel × cos(pitch)`, and
- * at 85° that last term is only 0.087. Metres-per-pixel at this latitude is
- * `118,700 / 2^zoom`:
- *
- * | zoom | height (900 px viewport) |
- * | ---- | ------------------------ |
- * | 17   | ~110 m — a rooftop       |
- * | 19.5 | ~19 m — above the lights |
- * | 21   | ~7 m — a second-floor sill |
- *
- * 21 is the stop where the street fills the frame without pushing the vector
- * tiles so far past their native zoom that the road geometry turns to mush.
+ * Camera zoom while walking, capped at 18.5. Camera height is roughly
+ * `1.5 × viewport px × metres-per-pixel × cos(pitch)`; at 75° and z18.5 that is
+ * ~60 m for a 900 px viewport — a low-flying drone rather than eye level, but
+ * the tiles and 3D buildings stay sharp, which is what made the old camera
+ * unusable. Scroll-zoom is allowed inside `[WALK_MIN_ZOOM, WALK_MAX_ZOOM]`.
  */
-export const WALK_ZOOM = 21;
+export const WALK_ZOOM = 18.5;
+export const WALK_MIN_ZOOM = 16.5;
+export const WALK_MAX_ZOOM = 19;
+
+export function clampWalkZoom(zoom: number): number {
+  return Math.min(WALK_MAX_ZOOM, Math.max(WALK_MIN_ZOOM, zoom));
+}
+
 /** Metres per second, before sprinting. */
 export const WALK_SPEED = 12;
 /** Shift multiplier. A run, not a teleport. */
@@ -121,4 +120,54 @@ export function resolveWalkInput(
     turn: keyTurn !== 0 ? keyTurn : pad.turn,
     sprint: held(["ShiftLeft", "ShiftRight"]) || pad.sprint,
   };
+}
+
+/** Flat-earth metres between two lon/lat points (fine over a city walk). */
+export function metresBetween(a: [number, number], b: [number, number]): number {
+  const cosLat = Math.cos((((a[1] + b[1]) / 2) * Math.PI) / 180);
+  const east = (b[0] - a[0]) * METERS_PER_DEGREE * cosLat;
+  const north = (b[1] - a[1]) * METERS_PER_DEGREE;
+  return Math.hypot(east, north);
+}
+
+export function routeLength(coords: Array<[number, number]>): number {
+  let total = 0;
+  for (let i = 1; i < coords.length; i += 1) total += metresBetween(coords[i - 1], coords[i]);
+  return total;
+}
+
+/**
+ * Camera pose `distance` metres along a route: position interpolated on the
+ * current segment, bearing pointing down that segment. Past the end it stays
+ * on the last vertex with `done: true`.
+ */
+export function poseAlongRoute(
+  coords: Array<[number, number]>,
+  distance: number,
+): { lon: number; lat: number; bearing: number; done: boolean } | null {
+  if (coords.length === 0) return null;
+  if (coords.length === 1) {
+    return { lon: coords[0][0], lat: coords[0][1], bearing: 0, done: true };
+  }
+  let remaining = Math.max(0, distance);
+  for (let i = 1; i < coords.length; i += 1) {
+    const a = coords[i - 1];
+    const b = coords[i];
+    const length = metresBetween(a, b);
+    const cosLat = Math.cos((a[1] * Math.PI) / 180);
+    const bearing = normalizeBearing(
+      (Math.atan2((b[0] - a[0]) * cosLat, b[1] - a[1]) * 180) / Math.PI,
+    );
+    if (remaining <= length || i === coords.length - 1) {
+      const t = length > 0 ? Math.min(1, remaining / length) : 1;
+      return {
+        lon: a[0] + (b[0] - a[0]) * t,
+        lat: a[1] + (b[1] - a[1]) * t,
+        bearing,
+        done: i === coords.length - 1 && remaining >= length,
+      };
+    }
+    remaining -= length;
+  }
+  return null;
 }

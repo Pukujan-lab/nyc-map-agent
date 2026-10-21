@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import type { NtaBoundary } from "@/lib/api/nta";
 import { formatCount, formatPercent } from "@/lib/format";
 import type { CountPair, NtaAggregate } from "@/lib/geo/types";
-import { LAYER_METRICS, type BlockDatum } from "@/lib/layers";
+import { LAYER_METRICS, type BlockDatum, type ViewInfo } from "@/lib/layers";
 import { useMapState } from "@/lib/store/MapStateContext";
 
 interface MapPeekProps {
@@ -15,6 +15,10 @@ interface MapPeekProps {
   crashes: NtaAggregate | null;
   windowLabel: string;
   isDesktop: boolean;
+  /** Set under a single-source / Concern-score view; overrides the headline. */
+  view?: ViewInfo;
+  /** The view's value for the picked block, or else the neighborhood. */
+  viewValue?: number;
 }
 
 function headlineValue(
@@ -97,6 +101,8 @@ export function MapPeek({
   crashes,
   windowLabel,
   isDesktop,
+  view,
+  viewValue,
 }: MapPeekProps) {
   const {
     layer,
@@ -118,7 +124,9 @@ export function MapPeek({
   const subtitle = block
     ? `~300 m block · ${boundary?.borough ?? "New York City"}`
     : `${boundary?.borough ?? "New York City"} · ${windowLabel}`;
-  const headline = headlineValue(layer, block, noise, crashes);
+  const headline = view
+    ? (viewValue ?? 0)
+    : headlineValue(layer, block, noise, crashes);
   const place = topPlace(layer, block, noise, crashes);
 
   const walkBlock = () => {
@@ -164,11 +172,11 @@ export function MapPeek({
               {formatCount(headline)}
             </span>
             <span className="text-[11px] text-muted-foreground">
-              {LAYER_METRICS[layer].unit}
+              {view ? view.unit : LAYER_METRICS[layer].unit}
             </span>
           </div>
           <div className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-            {detailLine(layer, block, noise, crashes)}
+            {view ? view.label : detailLine(layer, block, noise, crashes)}
           </div>
           {place ? (
             <div className="mt-1.5 flex items-baseline justify-between gap-2 border-t border-border/60 pt-1.5 text-[11px]">

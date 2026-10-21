@@ -1,4 +1,10 @@
-import { Camera, Footprints, MessageSquarePlus, X } from "lucide-react";
+import { Camera, Footprints, MapPin, MessageSquarePlus, X } from "lucide-react";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -11,7 +17,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { NtaBoundary } from "@/lib/api/nta";
 import { formatCount, formatPercent } from "@/lib/format";
 import type { CountPair, NtaAggregate, SoqlSource } from "@/lib/geo/types";
-import { LAYER_LABELS, LAYER_METRICS, type BlockDatum } from "@/lib/layers";
+import { SOURCE_BY_ID } from "@/lib/datasets/registry";
+import {
+  LAYER_LABELS,
+  LAYER_METRICS,
+  type BlockDatum,
+  type SourceBreakdown,
+  type ViewInfo,
+} from "@/lib/layers";
+import { useDataView } from "@/lib/store/DataViewContext";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { cn } from "@/lib/utils";
 import type { WindowId } from "@/lib/windows";
@@ -30,6 +44,51 @@ interface DetailsSheetProps {
   crashWindowLabel: string;
   sources: SoqlSource[];
   isDesktop: boolean;
+  /** Set under a single-source / Average view. */
+  view?: ViewInfo;
+  /** The current view's value for the neighborhood (and its parts). */
+  viewValue?: number;
+  breakdown?: SourceBreakdown[];
+  /** Every enabled source's count in this neighborhood / block. */
+  sourceTotals: Array<{ id: string; label: string; unit: string; nta: number; block: number | null }>;
+}
+
+function BreakdownList({ view, breakdown }: { view: ViewInfo; breakdown: SourceBreakdown[] }) {
+  return (
+    <ul className="space-y-1">
+      {breakdown.map((part) => {
+        const source = SOURCE_BY_ID[part.sourceId];
+        return (
+          <li key={part.sourceId} className="flex items-baseline justify-between gap-2 text-[11px]">
+            <span className="truncate">
+              {source?.label ?? part.sourceId}
+              {view.kind === "average" ? (
+                <span
+                  className={part.inverted ? "ml-1 text-emerald-600 dark:text-emerald-400" : "ml-1 text-amber-600 dark:text-amber-400"}
+                >
+                  {part.inverted ? "↓ higher is better" : "↑ higher is worse"}
+                </span>
+              ) : null}
+            </span>
+            <span className="shrink-0 tabular-nums text-muted-foreground">
+              {formatCount(part.value)} {source?.unit}
+              {view.kind === "average" && part.percentile !== undefined
+                ? ` · p${Math.round(part.percentile)}`
+                : ""}
+              {view.kind === "average" && part.concern !== undefined
+                ? ` → concern ${Math.round(part.concern)}`
+                : ""}
+            </span>
+            {view.kind === "average" ? (
+              <span className="sr-only">
+                {part.inverted ? "higher is better" : "higher is worse"}
+              </span>
+            ) : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
 }
 
 function TopList({
@@ -90,6 +149,10 @@ function DetailsBody({
   onAsk,
   onWidenWindow,
   isDesktop,
+  view,
+  viewValue,
+  breakdown,
+  sourceTotals,
 }: DetailsSheetProps & {
   onClose: () => void;
   onAsk: (text: string) => void;
@@ -97,7 +160,15 @@ function DetailsBody({
 }) {
   const { layer, selectBlock, startWalk, setDetailsOpen, setStreetViewOpen } =
     useMapState();
+  const { setRoutePoint, setRoutePicking, routeStart, routeEnd } = useDataView();
   if (!boundary) return null;
+
+  const here = block
+    ? block.center
+    : {
+        lon: (boundary.bbox[0] + boundary.bbox[2]) / 2,
+        lat: (boundary.bbox[1] + boundary.bbox[3]) / 2,
+      };
 
   const walkBlock = () => {
     if (!block) return;
@@ -114,14 +185,16 @@ function DetailsBody({
 
   const noiseCount = noise?.count ?? 0;
   const crashCount = crashes?.count ?? 0;
-  const headline =
-    layer === "noise"
+  const headline = view
+    ? (viewValue ?? 0)
+    : layer === "noise"
       ? noiseCount
       : layer === "crashes"
         ? crashCount
         : noiseCount + crashCount;
-  const headlineLabel =
-    layer === "noise"
+  const headlineLabel = view
+    ? view.unit
+    : layer === "noise"
       ? "noise complaints"
       : layer === "crashes"
         ? "crashes"
@@ -184,11 +257,13 @@ function DetailsBody({
                 {formatCount(block.value)}
               </span>
               <span className="text-[11px] text-muted-foreground">
-                {LAYER_METRICS[layer].unit}
+                {view ? view.unit : LAYER_METRICS[layer].unit}
               </span>
             </div>
             <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-              {headline > 0
+              {view
+                ? view.label
+                : headline > 0
                 ? `${formatPercent(block.value / headline)} of this neighborhood`
                 : "No records in this neighborhood"}{" "}
               ·{" "}
@@ -240,6 +315,31 @@ function DetailsBody({
           </div>
         ) : null}
 
+        <Accordion
+          type="multiple"
+          defaultValue={view ? ["view", "noise-crashes"] : ["noise-crashes"]}
+        >
+          {view && breakdown ? (
+            <AccordionItem value="view">
+              <AccordionTrigger className="py-2 text-xs">
+                {view.kind === "average" ? "What went into the concern score" : view.label}
+              </AccordionTrigger>
+              <AccordionContent>
+                <BreakdownList view={view} breakdown={breakdown} />
+                {view.kind === "average" ? (
+                  <p className="mt-1.5 text-[10px] leading-snug text-muted-foreground">
+                    p = percentile rank among {block ? "blocks" : "neighborhoods"}.
+                    “Higher is better” sources count as 100 − p. The average of the
+                    concern values is the concern score (column height).
+                  </p>
+                ) : null}
+              </AccordionContent>
+            </AccordionItem>
+          ) : null}
+
+          <AccordionItem value="noise-crashes">
+            <AccordionTrigger className="py-2 text-xs">Noise, crashes &amp; timeline</AccordionTrigger>
+            <AccordionContent>
         <Tabs defaultValue="noise">
           <TabsList className="w-full">
             <TabsTrigger value="noise" className="flex-1">
@@ -337,6 +437,66 @@ function DetailsBody({
             </p>
           </TabsContent>
         </Tabs>
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="all-sources">
+            <AccordionTrigger className="py-2 text-xs">
+              All loaded sources here ({sourceTotals.length})
+            </AccordionTrigger>
+            <AccordionContent>
+              <ul className="space-y-1">
+                {sourceTotals.map((row) => (
+                  <li key={row.id} className="flex items-baseline justify-between gap-2 text-[11px]">
+                    <span className="truncate">{row.label}</span>
+                    <span className="shrink-0 tabular-nums text-muted-foreground">
+                      {formatCount(row.nta)} {row.unit}
+                      {row.block !== null ? ` · ${formatCount(row.block)} in block` : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="directions">
+            <AccordionTrigger className="py-2 text-xs">Walking directions</AccordionTrigger>
+            <AccordionContent>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-[11px]"
+                  onClick={() => {
+                    setRoutePoint("start", here);
+                    if (!routeEnd) setRoutePicking("end");
+                  }}
+                >
+                  <MapPin className="h-3.5 w-3.5 text-green-500" />
+                  Route from here
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-[11px]"
+                  onClick={() => {
+                    setRoutePoint("end", here);
+                    if (!routeStart) setRoutePicking("start");
+                  }}
+                >
+                  <MapPin className="h-3.5 w-3.5 text-red-500" />
+                  Route to here
+                </Button>
+              </div>
+              <p className="mt-1.5 text-[10px] leading-snug text-muted-foreground">
+                Uses the centre of the {block ? "block" : "neighborhood"}. Pick the
+                other end on the map from the directions card.
+              </p>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
 
         <div className="mt-3 border-t border-border/60 pt-2">
           <Button

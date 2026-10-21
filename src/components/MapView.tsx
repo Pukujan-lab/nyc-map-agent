@@ -29,12 +29,19 @@ import {
   neighborhoodsToGeoJson,
 } from "@/lib/map/geojson";
 import { LAYER_IDS, SOURCE_IDS, buildFallbackStyle } from "@/lib/map/style";
+import type { WalkingRoute } from "@/lib/api/routing";
+import { useDataView } from "@/lib/store/DataViewContext";
 import {
+  clampWalkZoom,
+  poseAlongRoute,
   resolveWalkInput,
   stepPose,
   WALK_IDLE,
   WALK_KEYS,
+  WALK_MAX_ZOOM,
+  WALK_MIN_ZOOM,
   WALK_PITCH,
+  WALK_SPEED,
   WALK_ZOOM,
   type WalkInput,
 } from "@/lib/map/walk";
@@ -96,10 +103,29 @@ function detailForBlock(datum: BlockDatum, layer: MapModel["layer"]): string {
 export function MapView({
   model,
   boundaries,
+  route = null,
 }: {
   model: MapModel;
   boundaries: NtaBoundary[] | null;
+  /** Walking directions to draw (and optionally follow), if any. */
+  route?: WalkingRoute | null;
 }) {
+  const {
+    routeStart,
+    routeEnd,
+    routePicking,
+    setRoutePoint,
+    followingRoute,
+    setFollowingRoute,
+  } = useDataView();
+  const routeRef = useRef<WalkingRoute | null>(route);
+  const followRef = useRef(followingRoute);
+  useEffect(() => {
+    routeRef.current = route;
+  }, [route]);
+  useEffect(() => {
+    followRef.current = followingRoute;
+  }, [followingRoute]);
   const mapRef = useRef<MapRef | null>(null);
   const [ready, setReady] = useState(false);
   /** Bumped whenever the style (re)loads, so the data is re-applied to fresh sources. */
@@ -388,8 +414,13 @@ export function MapView({
 
   const handleClick = useCallback(
     (event: MapLayerMouseEvent) => {
-      // A click while walking would open the details sheet over the street.
-      if (walking) return;
+      // Picking a route endpoint takes priority over selecting an area.
+      if (routePicking) {
+        setRoutePoint(routePicking, { lon: event.lngLat.lng, lat: event.lngLat.lat });
+        return;
+      }
+      // Clicks stay live at street level: picking the block underfoot opens
+      // its details like it does overhead.
       const picked = pickAt(event.point.x, event.point.y, event.lngLat);
       if (!picked) return;
       if (picked.kind === "block") {
@@ -398,7 +429,7 @@ export function MapView({
         selectNta(picked.datum.ntaCode);
       }
     },
-    [pickAt, selectBlock, selectNta, walking],
+    [pickAt, selectBlock, selectNta, routePicking, setRoutePoint],
   );
 
   const handleMoveEnd = useCallback(() => {
@@ -604,7 +635,7 @@ export function MapView({
       center: target,
       pitch: WALK_PITCH,
       bearing: map.getBearing(),
-      zoom: Math.max(map.getZoom(), WALK_ZOOM),
+      zoom: WALK_ZOOM,
       duration: reducedMotion ? 0 : 900,
     });
     setWalkPlace(describeAtRef.current(target[1], target[0]));
@@ -677,11 +708,33 @@ export function MapView({
     // Crossing a block edge is the only thing worth a React update: the strip
     // then says which block you are standing in and what happened there.
     let standingOn = blockKey(map.getCenter().lat, map.getCenter().lng).key;
+    let routeDistance = 0;
     const tick = (now: number) => {
       const dt = (now - last) / 1000;
       last = now;
       const input = resolveWalkInput(held, walkPad.current);
-      if (input.forward !== 0 || input.turn !== 0) {
+      const followed = followRef.current ? routeRef.current : null;
+      if (followed) {
+        // Following directions: advance along the polyline at walking pace
+        // (Shift / sprint still runs), facing down the current segment.
+        routeDistance +=
+          WALK_SPEED * (input.sprint ? 3 : 1) * Math.min(Math.max(dt, 0), 0.2);
+        const pose = poseAlongRoute(followed.coordinates, routeDistance);
+        if (pose) {
+          map.jumpTo({
+            center: [pose.lon, pose.lat],
+            bearing: pose.bearing,
+            pitch: WALK_PITCH,
+            zoom: clampWalkZoom(map.getZoom()),
+          });
+          const key = blockKey(pose.lat, pose.lon).key;
+          if (key !== standingOn) {
+            standingOn = key;
+            setWalkPlace(describeAtRef.current(pose.lat, pose.lon));
+          }
+          if (pose.done) setFollowingRoute(false);
+        }
+      } else if (input.forward !== 0 || input.turn !== 0) {
         const center = map.getCenter();
         const next = stepPose(
           {
@@ -702,7 +755,8 @@ export function MapView({
           center: [next.lon, next.lat],
           bearing: next.bearing,
           pitch: WALK_PITCH,
-          zoom: WALK_ZOOM,
+          // Scroll-zoom is allowed while walking, inside the sharp range.
+          zoom: clampWalkZoom(map.getZoom()),
         });
         const key = blockKey(next.lat, next.lon).key;
         if (key !== standingOn) {
@@ -724,7 +778,45 @@ export function MapView({
     };
     // `describeAt` comes through a ref so a data refresh cannot tear down the
     // loop and drop the keys the walker is holding.
-  }, [ready, walking, stopWalk]);
+  }, [ready, walking, stopWalk, followingRoute, setFollowingRoute]);
+
+  // Walking directions: one GeoJSON source holding the line and both ends.
+  useEffect(() => {
+    if (!ready) return;
+    const map = mapRef.current?.getMap();
+    const source = map?.getSource(SOURCE_IDS.route) as GeoJSONSource | undefined;
+    if (!source) return;
+    const features: GeoJSON.Feature[] = [];
+    if (route) {
+      features.push({
+        type: "Feature",
+        properties: {},
+        geometry: { type: "LineString", coordinates: route.coordinates },
+      });
+    }
+    if (routeStart) {
+      features.push({
+        type: "Feature",
+        properties: { end: "start" },
+        geometry: { type: "Point", coordinates: [routeStart.lon, routeStart.lat] },
+      });
+    }
+    if (routeEnd) {
+      features.push({
+        type: "Feature",
+        properties: { end: "end" },
+        geometry: { type: "Point", coordinates: [routeEnd.lon, routeEnd.lat] },
+      });
+    }
+    source.setData({ type: "FeatureCollection", features });
+  }, [ready, styleEpoch, route, routeStart, routeEnd]);
+
+  // A crosshair cursor says "the next click drops a route point".
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map || !ready) return;
+    map.getCanvas().style.cursor = routePicking ? "crosshair" : "";
+  }, [ready, routePicking]);
 
   useEffect(() => {
     if (!ready || !navCommand) return;
@@ -762,17 +854,17 @@ export function MapView({
         mapStyle={BASEMAP_STYLE_URL}
         initialViewState={viewState}
         maxPitch={MAX_PITCH}
-        minZoom={9}
-        // Walking needs the headroom: zoom is the only altitude control the map
-        // has, so `WALK_ZOOM` (21) has to be reachable.
-        maxZoom={22}
+        minZoom={walking ? WALK_MIN_ZOOM : 9}
+        // While walking, zoom is held inside the range where the vector tiles
+        // are still sharp (see `WALK_MAX_ZOOM` in walk.ts).
+        maxZoom={walking ? WALK_MAX_ZOOM : 22}
         // The built-in arrow-key panning has to stand down while walking, or
         // every keypress would move the camera twice.
         keyboard={!walking}
-        // Eye level is a function of zoom, so zooming out mid-walk would lift
-        // the camera back over the rooftops. Walking is a fixed eye height —
-        // and a right-drag must not tip the pitch away from the street either.
-        scrollZoom={!walking}
+        // Scroll-zoom stays on while walking (bounded by min/maxZoom above);
+        // double-click, pinch-rotate and right-drag stay off so the pitch
+        // cannot tip away from the street.
+        scrollZoom
         doubleClickZoom={!walking}
         touchZoomRotate={!walking}
         dragRotate={!walking}
@@ -828,14 +920,16 @@ export function MapView({
               {formatCount(hover.datum.value)}
             </span>
             <span className="text-[11px] text-muted-foreground">
-              {LAYER_METRICS[layer].unit}
+              {model.view ? model.view.unit : LAYER_METRICS[layer].unit}
             </span>
           </div>
 
           <div className="mt-0.5 text-[11px] text-muted-foreground">
-            {hover.kind === "neighborhood"
-              ? detailForNeighborhood(hover.datum, layer)
-              : detailForBlock(hover.datum, layer)}
+            {model.view
+              ? model.view.label
+              : hover.kind === "neighborhood"
+                ? detailForNeighborhood(hover.datum, layer)
+                : detailForBlock(hover.datum, layer)}
           </div>
 
           <div className="mt-1 border-t border-border/60 pt-1 text-[10px] text-muted-foreground/80">
