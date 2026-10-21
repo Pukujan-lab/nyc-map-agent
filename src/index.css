@@ -105,3 +105,16 @@
   pointer-events: none !important;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45) !important;
 }
+
+/* Narrow screens: the bottom dock spans the width, so the compact attribution
+   (and its "i" toggle) sits above it instead of underneath. */
+@media (max-width: 767px) {
+  .maplibregl-ctrl-bottom-right,
+  .maplibregl-ctrl-bottom-left {
+    bottom: 64px;
+  }
+  .maplibregl-ctrl-attrib-button {
+    min-width: 24px;
+    min-height: 24px;
+  }
+}

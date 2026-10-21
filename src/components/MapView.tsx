@@ -993,6 +993,7 @@ export function MapView({
         initialViewState={viewState}
         // Street level looks past the horizon (MapLibre 5 allows pitch > 85);
         // the overhead map keeps its 85° ceiling.
+        attributionControl={{ compact: true }}
         maxPitch={walking ? WALK_MAX_PITCH : MAX_PITCH}
         minZoom={9}
         // An eye 1.7 m up sits around z22; the camera height comes from the
