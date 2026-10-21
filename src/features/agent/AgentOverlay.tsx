@@ -110,7 +110,7 @@ export default function AgentOverlay() {
 
   const body = (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2 border-b px-4 py-3">
+      <div className="flex items-center gap-2 border-b py-3 pl-4 pr-12">
         <div className="flex-1 text-sm font-semibold">Ask the map</div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
