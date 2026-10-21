@@ -638,6 +638,12 @@ describe("deploy lock", () => {
     rmSync(join(dir, "owner"), { force: true });
     expect(acquireLock(dir, { nowMs: NOW + 31 * 60 * 1000, staleMs: 30 * 60 * 1000 })).toBe(true);
   });
+
+  it("creates the state directory when it does not exist yet", () => {
+    const nested = join(dir, "..", "state", "deploy.lock");
+    expect(acquireLock(nested, { nowMs: NOW })).toBe(true);
+    expect(lockOwner(nested)?.pid).toBe(process.pid);
+  });
 });
 ```
 
@@ -652,7 +658,7 @@ Create `deploy/cd/lock.ts`:
 
 ```ts
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 export interface LockOwner {
   pid: number;
@@ -674,6 +680,9 @@ export function lockOwner(dir: string): LockOwner | null {
 export function acquireLock(dir: string, opts: { nowMs?: number; staleMs?: number } = {}): boolean {
   const nowMs = opts.nowMs ?? Date.now();
   const staleMs = opts.staleMs ?? 30 * 60 * 1000;
+  // The state directory does not exist on a fresh host; creating it here keeps
+  // the first deploy from failing every acquire with ENOENT.
+  mkdirSync(dirname(dir), { recursive: true });
   try {
     mkdirSync(dir);
     writeFileSync(join(dir, "owner"), JSON.stringify({ pid: process.pid, at: nowMs }));
@@ -703,7 +712,7 @@ export function releaseLock(dir: string): void {
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `pnpm vitest run deploy/cd/lock.test.ts`
-Expected: PASS (5 tests).
+Expected: PASS (6 tests).
 
 - [ ] **Step 5: Commit**
 
@@ -848,7 +857,7 @@ git commit -m "feat(cd): process runner with line streaming"
 - Test: `deploy/cd/pipeline.test.ts`
 
 **Interfaces:**
-- Consumes: `Runner`, `RunResult` from `./runner`; `Run`, `emptySteps`, `StepName` from `./types`; `acquireLock`, `releaseLock` from `./lock`; `appendRun` from `./state`.
+- Consumes: `Runner`, `RunResult` from `./runner`; `Run`, `emptySteps`, `StepName` from `./types`; `acquireLock`, `releaseLock` from `./lock`; `appendRun`, `currentRun` from `./state`.
 - Produces:
   - `interface PipelineConfig { repoDir: string; deployDir: string; stateFile: string; lockDir: string; envFile: string; buildArgs: Record<string, string>; healthTimeoutMs?: number; healthPollMs?: number }`
   - `interface PipelineDeps { runner: Runner; now?: () => Date; onLog?: (runId: string, line: string) => void; onUpdate?: (run: Run) => void; sleep?: (ms: number) => Promise<void> }`
@@ -856,19 +865,24 @@ git commit -m "feat(cd): process runner with line streaming"
   - `runId(date: Date, sha: string): string`
   - Throws `BusyError` when the lock is held.
 
-  The id is only knowable once the sha is resolved, so `startDeploy` emits its first `onUpdate` immediately after the `fetch` step resolves the sha — the server awaits that first emission to answer the HTTP request.
+  The id is only knowable once the sha is resolved, so `startDeploy` publishes a provisional run under a zero-sha id, then re-publishes under the real id as soon as the sha is known. Only the real id is ever persisted to the state file, so the history never shows the placeholder.
 
 - [ ] **Step 1: Write the failing test**
 
 Create `deploy/cd/pipeline.test.ts`:
 
 ```ts
-import { describe, expect, it } from "vitest";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { BusyError, runId, startDeploy, type PipelineConfig } from "./pipeline";
+import { appendRun, readRuns } from "./state";
+import { emptySteps, type Run } from "./types";
 import type { RunOptions, RunResult, Runner } from "./runner";
 
 const SHA = "a".repeat(40);
-const NEXT = "b".repeat(40);
+const ZERO_SHA = "0".repeat(40);
 
 function fakeRunner(script: (cmd: string, args: string[]) => RunResult | undefined): Runner & { calls: string[] } {
   const calls: string[] = [];
@@ -885,18 +899,39 @@ function fakeRunner(script: (cmd: string, args: string[]) => RunResult | undefin
   };
 }
 
-const config: PipelineConfig = {
-  repoDir: "/app",
-  deployDir: "/app/deploy",
-  stateFile: "/tmp/cd-test/deploys.jsonl",
-  lockDir: "/tmp/cd-test/deploy.lock",
-  envFile: "/work/.env",
-  buildArgs: { VITE_DATA_BACKEND: "octo" },
-  healthTimeoutMs: 50,
-  healthPollMs: 10,
-};
+let dir: string;
+let config: PipelineConfig;
+
+beforeEach(() => {
+  dir = mkdtempSync(join(tmpdir(), "cd-pipeline-"));
+  config = {
+    repoDir: dir,
+    deployDir: dir,
+    stateFile: join(dir, "deploys.jsonl"),
+    lockDir: join(dir, "deploy.lock"),
+    envFile: join(dir, ".env"),
+    buildArgs: { VITE_DATA_BACKEND: "octo" },
+    healthTimeoutMs: 50,
+    healthPollMs: 10,
+  };
+});
+afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
 const noSleep = async () => {};
+
+const seeded = (status: Run["status"], image: string, previousImage: string | null = null): Run => ({
+  id: `20261021T140000Z-${"c".repeat(12)}`,
+  sha: "c".repeat(40),
+  kind: "deploy",
+  status,
+  startedAt: "2026-10-21T14:00:00Z",
+  finishedAt: "2026-10-21T14:05:00Z",
+  durationMs: 300_000,
+  image,
+  previousImage,
+  steps: emptySteps(),
+  error: null,
+});
 
 describe("run ids", () => {
   it("are timestamp plus short sha", () => {
@@ -928,7 +963,9 @@ describe("deploy pipeline", () => {
   it("rejects a ref that is not a full sha", async () => {
     const runner = fakeRunner(() => undefined);
     await expect(startDeploy({ runner, sleep: noSleep }, config, { kind: "deploy", sha: "main" })).rejects.toThrow(/full 40-character sha/i);
-  });  it("fails the run when the build fails, without swapping", async () => {
+  });
+
+  it("fails the run when the build fails, without swapping", async () => {
     const runner = fakeRunner((cmd, args) => {
       if (cmd === "git" && args[0] === "rev-parse") return { code: 0, output: `${SHA}\n` };
       if (cmd === "docker" && args[0] === "build") return { code: 1, output: "boom" };
@@ -946,7 +983,7 @@ describe("deploy pipeline", () => {
     const runner = fakeRunner((cmd, args) => {
       if (cmd === "git" && args[0] === "rev-parse") return { code: 0, output: `${SHA}\n` };
       if (cmd === "docker" && args[0] === "inspect" && args.includes("{{.Config.Image}}")) {
-        return { code: 0, output: "nyc-map-agent:previous\n" };
+        return { code: 0, output: "nyc-map-agent:live\n" };
       }
       if (cmd === "docker" && args[0] === "inspect") {
         healthChecks += 1;
@@ -957,17 +994,19 @@ describe("deploy pipeline", () => {
     });
     const run = await startDeploy({ runner, sleep: noSleep }, config, { kind: "deploy", sha: SHA });
     expect(run.status).toBe("failed");
+    expect(run.previousImage).toBe("nyc-map-agent:live");
     expect(run.steps.find((s) => s.name === "health")?.status).toBe("failed");
     const swaps = runner.calls.filter((c) => c.includes("up -d --no-deps web"));
     expect(swaps.length).toBe(2);
-    expect(swaps[1]).toContain("NYC_MAP_IMAGE=nyc-map-agent:previous");
+    expect(swaps[0]).toContain("NYC_MAP_IMAGE=nyc-map-agent:aaaaaaaaaaaa");
+    expect(swaps[1]).toContain("NYC_MAP_IMAGE=nyc-map-agent:live");
   });
 
-  it("rollback redeploys the previous image and records the kind", async () => {
+  it("rollback redeploys the image the last good deploy replaced", async () => {
+    appendRun(config.stateFile, seeded("succeeded", "nyc-map-agent:current", "nyc-map-agent:previous"));
     const runner = fakeRunner((cmd, args) => {
-      if (cmd === "git" && args[0] === "rev-parse") return { code: 0, output: `${SHA}\n` };
       if (cmd === "docker" && args[0] === "inspect" && args.includes("{{.Config.Image}}")) {
-        return { code: 0, output: "nyc-map-agent:previous\n" };
+        return { code: 0, output: "nyc-map-agent:current\n" };
       }
       if (cmd === "docker" && args[0] === "inspect") return { code: 0, output: "healthy\n" };
       return undefined;
@@ -976,25 +1015,62 @@ describe("deploy pipeline", () => {
     expect(run.kind).toBe("rollback");
     expect(run.status).toBe("rolled-back");
     expect(run.image).toBe("nyc-map-agent:previous");
+    expect(run.sha).toBe("c".repeat(40));
+    const swaps = runner.calls.filter((c) => c.includes("up -d --no-deps web"));
+    expect(swaps).toHaveLength(1);
+    expect(swaps[0]).toContain("NYC_MAP_IMAGE=nyc-map-agent:previous");
+  });
+
+  it("fails a rollback when there is nothing to roll back to", async () => {
+    const runner = fakeRunner((cmd, args) => {
+      if (cmd === "docker" && args[0] === "inspect") return { code: 1, output: "" };
+      return undefined;
+    });
+    const run = await startDeploy({ runner, sleep: noSleep }, config, { kind: "rollback" });
+    expect(run.status).toBe("failed");
+    expect(run.error).toMatch(/no previous image/i);
+    expect(runner.calls.some((c) => c.includes("up -d --no-deps web"))).toBe(false);
   });
 
   it("publishes the run once the sha is known, so a running deploy is addressable", async () => {
     const seen: string[] = [];
     const runner = fakeRunner((cmd, args) => {
       if (cmd === "git" && args[0] === "rev-parse") return { code: 0, output: `${SHA}\n` };
-      if (cmd === "docker" && args[0] === "inspect" && args.includes("{{.Config.Image}}")) {
-        return { code: 0, output: "nyc-map-agent:previous\n" };
-      }
       if (cmd === "docker" && args[0] === "inspect") return { code: 0, output: "healthy\n" };
       return undefined;
     });
     await startDeploy({ runner, sleep: noSleep, onUpdate: (r) => seen.push(`${r.status}:${r.sha}`) }, config, {
       kind: "deploy",
-      sha: SHA,
     });
-    expect(seen[0]).toBe(`running:${"0".repeat(40)}`);
+    expect(seen[0]).toBe(`running:${ZERO_SHA}`);
     expect(seen).toContain(`running:${SHA}`);
     expect(seen[seen.length - 1]).toBe(`succeeded:${SHA}`);
+  });
+
+  it("never writes a record for the provisional zero-sha id", async () => {
+    const runner = fakeRunner((cmd, args) => {
+      if (cmd === "git" && args[0] === "rev-parse") return { code: 0, output: `${SHA}\n` };
+      if (cmd === "docker" && args[0] === "inspect") return { code: 0, output: "healthy\n" };
+      return undefined;
+    });
+    await startDeploy({ runner, sleep: noSleep }, config, { kind: "deploy" });
+    const persisted = readFileSync(config.stateFile, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as Run);
+    expect(persisted.every((r) => r.sha !== ZERO_SHA)).toBe(true);
+    expect(persisted.every((r) => r.id.endsWith(SHA.slice(0, 12)))).toBe(true);
+  });
+
+  it("persists a fetch failure so the run is not lost", async () => {
+    const runner = fakeRunner((cmd, args) => {
+      if (cmd === "git" && args[0] === "fetch") return { code: 128, output: "fatal: no remote" };
+      return undefined;
+    });
+    const run = await startDeploy({ runner, sleep: noSleep }, config, { kind: "deploy", sha: SHA });
+    expect(run.status).toBe("failed");
+    expect(run.steps.find((s) => s.name === "fetch")?.status).toBe("failed");
+    expect(readRuns(config.stateFile).map((r) => r.id)).toEqual([run.id]);
   });
 
   it("refuses a second concurrent run", async () => {
@@ -1031,7 +1107,7 @@ Expected: FAIL — cannot resolve `./pipeline`.
 Create `deploy/cd/pipeline.ts`:
 
 ```ts
-import { appendRun } from "./state";
+import { appendRun, currentRun } from "./state";
 import { acquireLock, releaseLock } from "./lock";
 import type { Runner } from "./runner";
 import { emptySteps, type Run, type Step, type StepName } from "./types";
@@ -1066,6 +1142,7 @@ export class BusyError extends Error {
 }
 
 const CONTAINER = "nyc-map-web";
+const ZERO_SHA = "0".repeat(40);
 
 export function runId(date: Date, sha: string): string {
   const stamp = date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
@@ -1083,7 +1160,10 @@ export async function startDeploy(deps: PipelineDeps, config: PipelineConfig, re
   if (!acquireLock(config.lockDir, { nowMs: now().getTime() })) throw new BusyError();
 
   const startedAt = now();
-  const provisionalSha = request.kind === "deploy" && request.sha ? request.sha : "0".repeat(40);
+  // A deploy's id carries its sha, known up front when CI supplies one and
+  // resolved from origin/main otherwise. A rollback's sha is the commit the last
+  // good deploy replaced, read from the state file once the lock is held.
+  const provisionalSha = request.kind === "deploy" ? (request.sha ?? ZERO_SHA) : ZERO_SHA;
   let run: Run = {
     id: runId(startedAt, provisionalSha),
     sha: provisionalSha,
@@ -1098,12 +1178,24 @@ export async function startDeploy(deps: PipelineDeps, config: PipelineConfig, re
     error: null,
   };
 
-  const log = (line: string) => deps.onLog?.(run.id, line);
+  const lines: string[] = [];
+  const log = (line: string) => {
+    lines.push(line);
+    deps.onLog?.(run.id, line);
+  };
   const publish = (next: Run): Run => {
+    const previousId = run.id;
     run = next;
-    // Persisted on every transition so /status can show a run in progress and the
-    // log SSE stream can replay it. Readers keep the last record per id.
-    appendRun(config.stateFile, run);
+    // Until the sha is known the record has a placeholder id; persisting it would
+    // leave a phantom "running" run in the history under a second id. Once the sha
+    // is known — supplied by CI or resolved from origin/main — every transition is
+    // persisted, so /status lists the run while it is still in progress. A terminal
+    // record is always written, so a fetch failure is not lost.
+    const provisional = run.sha === ZERO_SHA && run.status === "running";
+    if (!provisional) appendRun(config.stateFile, run);
+    // Lines logged before the id was known were keyed to the placeholder; replay
+    // them under the real id so the SSE stream replays completely.
+    if (run.id !== previousId) for (const line of lines) deps.onLog?.(run.id, line);
     deps.onUpdate?.(run);
     return run;
   };
@@ -1161,16 +1253,28 @@ export async function startDeploy(deps: PipelineDeps, config: PipelineConfig, re
     }
     step("fetch", "succeeded");
 
-    // The image currently running is the rollback target.
+    // The image running right now: what an automatic swap-back restores, and what
+    // a manual rollback is moving away from.
     const current = await runner.run("docker", ["inspect", CONTAINER, "--format", "{{.Config.Image}}"], { onLine: log });
-    publish({ ...run, previousImage: current.code === 0 ? current.output.trim() || null : null });
+    const liveImage = current.code === 0 ? current.output.trim() || null : null;
 
-    const targetImage = request.kind === "rollback" ? (run.previousImage ?? "") : `nyc-map-agent:${run.sha.slice(0, 12)}`;
+    // A manual rollback restores the image the last good deploy replaced. That run
+    // carries both the sha (so this run is identifiable) and the replaced image.
+    const previous = request.kind === "rollback" ? currentRun(config.stateFile) : null;
+    publish({
+      ...run,
+      previousImage: liveImage,
+      ...(previous ? { sha: previous.sha, id: runId(startedAt, previous.sha) } : {}),
+    });
+    log(`live image: ${liveImage ?? "unknown"}`);
+
+    const targetImage =
+      request.kind === "rollback" ? (previous?.previousImage ?? "") : `nyc-map-agent:${run.sha.slice(0, 12)}`;
 
     if (request.kind === "rollback" && !targetImage) {
       step("checkout", "skipped");
       step("build", "skipped");
-      step("swap", "failed");
+      step("swap", "skipped");
       return finish("failed", "no previous image to roll back to");
     }
 
@@ -1275,12 +1379,10 @@ async function waitHealthy(
 }
 ```
 
-Note: `withStep` sets `startedAt` only when moving to `running`; a step that never ran keeps `startedAt: null`. The test asserts step order and statuses only.
-
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `pnpm vitest run deploy/cd/pipeline.test.ts`
-Expected: PASS (7 tests).
+Expected: PASS (11 tests).
 
 - [ ] **Step 5: Commit**
 
@@ -1300,7 +1402,7 @@ git commit -m "feat(cd): deploy pipeline with health check and automatic rollbac
 **Interfaces:**
 - Consumes: `signSession`, `verifySession`, `checkPassword`, `checkBearer`, `createRateLimiter`, `sessionExpiry`, `SESSION_COOKIE` from `./auth`; `readRuns`, `currentRun`, `markInterrupted` from `./state`; `startDeploy`, `BusyError`, `PipelineConfig` from `./pipeline`; `Runner` from `./runner`.
 - Produces:
-  - `interface ServerConfig { password: string; sessionSecret: string; deployToken: string; stateFile: string; pipeline: PipelineConfig; logDir: string; now?: () => Date }`
+  - `interface ServerConfig { password: string; sessionSecret: string; deployToken: string; stateFile: string; pipeline: PipelineConfig; now?: () => Date }`
   - `createApp(config: ServerConfig, deps: { runner: Runner }): Hono`
   - `interface RunLogs { append(runId: string, line: string): void; lines(runId: string): string[]; waiters(runId: string): Set<(line: string) => void> }`
 
@@ -1337,7 +1439,6 @@ beforeEach(() => {
     sessionSecret: "s".repeat(32),
     deployToken: "t".repeat(32),
     stateFile: join(dir, "deploys.jsonl"),
-    logDir: join(dir, "logs"),
     pipeline: {
       repoDir: dir,
       deployDir: dir,
@@ -1479,7 +1580,6 @@ export interface ServerConfig {
   sessionSecret: string;
   deployToken: string;
   stateFile: string;
-  logDir: string;
   pipeline: PipelineConfig;
   now?: () => Date;
 }
@@ -1689,7 +1789,6 @@ if (process.env.NODE_ENV !== "test") {
     sessionSecret: env("CD_SESSION_SECRET"),
     deployToken: env("CD_DEPLOY_TOKEN"),
     stateFile: join(stateDir, "deploys.jsonl"),
-    logDir: join(stateDir, "logs"),
     pipeline: {
       repoDir: env("CD_REPO_DIR", "/app"),
       deployDir: env("CD_DEPLOY_DIR", "/app/deploy"),
@@ -1707,12 +1806,7 @@ if (process.env.NODE_ENV !== "test") {
   const port = Number(process.env.PORT ?? 8081);
   serve({ fetch: createApp(config, { runner: createRunner() }).fetch, port }, () => console.log(`nyc-map-cd on :${port}`));
 }
-
-// Keeps the import used for the module's side-effect-free surface in tests.
-export type { Run };
 ```
-
-**Important:** `startDeploy` is asynchronous, but `start()` returns before the run record exists, so the `202` id is generated from `runIdFor`. The dashboard treats the id as opaque; the poll/SSE path resolves it once the run is written. `runIdFor` and `runId` in `pipeline.ts` must produce the same string — both are `<UTC stamp>-<sha12>`.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1742,7 +1836,7 @@ git commit -m "feat(cd): deploy API with session auth, SSE logs, and rate limiti
 - Create: `deploy/docker-compose.yml`
 - Create: `deploy/docker-compose.edge.yml`
 - Create: `deploy/.env.example`
-- Create: `deploy/.dockerignore`
+- Create: `.dockerignore`
 
 **Interfaces:**
 - Consumes: `deploy/cd/server.ts` as the CD entry point; `deploy/dashboard/` as the dashboard source.
@@ -1813,6 +1907,11 @@ COPY --from=dashboard /dash/dist /srv/dashboard
 # nyc-map-agent on gravebuster: app, deploy service, edge router.
 # See deploy/README.md. Loopback-only binds; the Cloudflare tunnel reaches the
 # edge container over the study-os_edge network (docker-compose.edge.yml).
+#
+# The env file is read by the compose client, not the container, so its path must
+# resolve where compose runs: /work/.env inside the CD container (where /work is
+# mounted), /srv/nyc-map-agent/.env on the host during bootstrap. The runbook
+# exports CD_HOST_ENV_FILE on the host; the default covers the deploy path.
 name: nyc-map-agent
 
 services:
@@ -1827,7 +1926,7 @@ services:
         MAPILLARY_TOKEN: ${MAPILLARY_TOKEN:-}
     restart: unless-stopped
     env_file:
-      - path: /work/.env
+      - path: ${CD_HOST_ENV_FILE:-/work/.env}
         required: false
     environment:
       PORT: "8080"
@@ -1849,7 +1948,7 @@ services:
       dockerfile: deploy/Dockerfile.cd
     restart: unless-stopped
     env_file:
-      - path: /work/.env
+      - path: ${CD_HOST_ENV_FILE:-/work/.env}
         required: true
     environment:
       CD_REPO_DIR: /app
@@ -1896,7 +1995,13 @@ networks:
     name: ${EDGE_NETWORK:-study-os_edge}
 ```
 
-- [ ] **Step 6: Write `deploy/.dockerignore`**
+- [ ] **Step 6: Write `.dockerignore` at the repository root**
+
+Both images build with `context: ..` (the repository root), so Docker reads
+`<root>/.dockerignore`. A copy under `deploy/` would be ignored and
+`node_modules` would enter every build context.
+
+Create `.dockerignore`:
 
 ```
 node_modules
@@ -1907,6 +2012,8 @@ dist
 playwright-report
 test-results
 deploy/dashboard/node_modules
+deploy/dashboard/dist
+.aba-results
 ```
 
 - [ ] **Step 7: Write `deploy/.env.example`**
@@ -1937,14 +2044,15 @@ SOCRATA_KEY_SECRET=
 
 Run:
 ```bash
-cd deploy && NYC_MAP_IMAGE=nyc-map-agent:test docker compose -f docker-compose.yml config >/dev/null && echo ok
+cd deploy && NYC_MAP_IMAGE=nyc-map-agent:test CD_HOST_ENV_FILE=./.env.example docker compose -f docker-compose.yml config >/dev/null && echo ok
 ```
-Expected: `ok`.
+Expected: `ok`. (`CD_HOST_ENV_FILE` points at a file that exists locally so the
+required env file resolves; the value is irrelevant to the rendered config.)
 
 - [ ] **Step 9: Commit**
 
 ```bash
-git add deploy/Dockerfile.cd deploy/Dockerfile.edge deploy/Caddyfile deploy/docker-compose.yml deploy/docker-compose.edge.yml deploy/.env.example deploy/.dockerignore
+git add deploy/Dockerfile.cd deploy/Dockerfile.edge deploy/Caddyfile deploy/docker-compose.yml deploy/docker-compose.edge.yml deploy/.env.example .dockerignore
 git commit -m "feat(deploy): three-container stack and edge router"
 ```
 
@@ -2182,10 +2290,17 @@ git clone https://github.com/Pukujan/nyc-map-agent /srv/nyc-map-agent/app
 cp /srv/nyc-map-agent/app/deploy/.env.example /srv/nyc-map-agent/.env
 # fill in the values, then:
 chmod 600 /srv/nyc-map-agent/.env
+# The compose client reads env_file on the host, where /work does not exist.
+export CD_HOST_ENV_FILE=/srv/nyc-map-agent/.env
 cd /srv/nyc-map-agent
 docker compose -f app/deploy/docker-compose.yml -f app/deploy/docker-compose.edge.yml up -d --build
 curl -s https://nyc.design-bakery.com/healthz
 ```
+
+`CD_HOST_ENV_FILE` is only needed for commands run on the host; inside
+`nyc-map-cd` the default `/work/.env` is correct and is what the deploy pipeline
+uses. Export it in the shell profile or prefix every host-side `docker compose`
+invocation with it.
 
 Generate the secrets:
 
@@ -2198,7 +2313,7 @@ openssl rand -hex 32   # CD_DEPLOY_TOKEN  (also the GitHub secret NYC_DEPLOY_TOK
 
 | Task | Command |
 | --- | --- |
-| Redeploy the CD container after changing it | `cd /srv/nyc-map-agent && docker compose -f app/deploy/docker-compose.yml up -d --build cd edge` |
+| Redeploy the CD container after changing it | `CD_HOST_ENV_FILE=/srv/nyc-map-agent/.env docker compose -f app/deploy/docker-compose.yml up -d --build cd edge` (run from `/srv/nyc-map-agent`) |
 | Read deploy history | `tail -n 20 /srv/nyc-map-agent/state/deploys.jsonl` |
 | Force a deploy | `curl -X POST -H "Authorization: Bearer $CD_DEPLOY_TOKEN" https://nyc.design-bakery.com/deploy/api/deploy` |
 | Roll back | press **Roll back** in the dashboard |
