@@ -1,3 +1,4 @@
+import { liveProgress } from "./monotonic";
 import { useEffect } from "react";
 import { Accessibility, Crosshair, ScanEye, Star, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -91,7 +92,7 @@ export function VehicleDetails({ vehicleKey }: { vehicleKey: string }) {
     if (b) v = { key: vehicleKey, system: "bus", route: b.route, label: b.route, color: "#0039A6", lon: b.lon, lat: b.lat, bearing: b.bearing ?? 0, grade: "grade", dir: b.dir, nextStop: b.next ?? undefined };
   } else {
     const st = data[system as SystemId]?.stat, trip = data[system as SystemId]?.live?.trips.find((t) => t.id === tripId);
-    v = st && trip ? estimateTrain(st, trip, now) : undefined;
+    v = st && trip ? estimateTrain(st, trip, now, liveProgress) : undefined;
   }
   const following = followed === vehicleKey;
   return (

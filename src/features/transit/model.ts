@@ -1,4 +1,5 @@
 import { defaultDwell, motionAt } from "./dwell";
+import type { ProgressTracker } from "./monotonic";
 
 /** Pure transit math: estimated train positions along GTFS shapes, arrivals, vehicle bodies. */
 export type SystemId = "subway" | "lirr" | "mnr";
@@ -84,7 +85,7 @@ function bearingOf(a: [number, number], b: [number, number]) {
  * stop we extrapolate back from the first leg (capped). Null when unplaceable.
  * One function drives 2D bullets, 3D models and the follow camera.
  */
-export function estimateTrain(sys: StaticSystem, trip: LiveTrip, now: number): Vehicle | null {
+export function estimateTrain(sys: StaticSystem, trip: LiveTrip, now: number, tracker?: ProgressTracker): Vehicle | null {
   const shape = sys.shapes[trip.route];
   const sm = sys.stopM[trip.route];
   if (!shape || !sm) return null;
@@ -99,11 +100,16 @@ export function estimateTrain(sys: StaticSystem, trip: LiveTrip, now: number): V
     return sys.system === "subway" ? defaultDwell(st, names.get(st)) : 45;
   }, { origin: trip.origin });
   if (!mo) return null; // finished
-  const m = mo.m;
+  let m = mo.m;
   const nextI = mo.phase === "moving" ? (mo.f === 0 && mo.i === 0 && now < pts[0].arr ? 0 : mo.i + 1) : mo.i;
   const next = pts[Math.min(nextI, pts.length - 1)];
   const onward = pts[Math.min(mo.i + 1, pts.length - 1)];
   const forward = Math.sign(onward.m - pts[mo.i].m) || Math.sign(pts[mo.i].m - (pts[mo.i - 1]?.m ?? pts[mo.i].m)) || 1;
+  if (tracker && mo.phase !== "terminal") {
+    // Never pass the first stop the feed still lists (departure unconfirmed).
+    const tripFwd = Math.sign(pts[pts.length - 1].m - pts[0].m) || forward;
+    m = tracker.update({ key: `${sys.system}:${trip.id}`, route: trip.route, forward: tripFwd, m, holdM: pts[0].m, holdEta: pts[0].arr }, now);
+  }
   const stopped: Vehicle["stopped"] =
     mo.phase === "origin" ? { kind: "departs", stop: pts[0].id, t: mo.departs }
     : mo.phase === "dwell" ? { kind: "at", stop: pts[mo.i].id, t: mo.departs }
