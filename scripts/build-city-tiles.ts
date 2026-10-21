@@ -3,6 +3,7 @@
  *   buildings  Building Footprints (5zhs-2jue) heights + PLUTO (64uk-42ks) class/floors/year
  *   props      street trees (uvpi-gqnh), hydrants (5bgh-vtsn), benches (kuxa-tauh),
  *              street-light poles reserved for small cells (tbgj-tdd6)
+ *   signs      named OSM shops/amenities (Geofabrik NY + osmium, ODbL) on their facade, scripts/storefronts.ts
  *   schools    DOE School Point Locations (a3nt-yts4, LCGMS) spatially joined to the
  *              nearest footprint with DuckDB spatial (PLUTO class W* is the fallback)
  * Props become tiny low-poly polygons (canopy octagon, trunk, pole, box) so MapLibre's own
@@ -14,6 +15,7 @@
  * Needs tippecanoe >= 2.17 and the duckdb CLI (>= 1.1, spatial extension) on PATH.
  */
 import { execFileSync } from "node:child_process";
+import { storefrontFeatures } from "./storefronts";
 import { closeSync, mkdirSync, openSync, readFileSync, statSync, writeSync } from "node:fs";
 
 /** Original pilot bbox: Lower Manhattan, DUMBO, Brooklyn Heights, Downtown Brooklyn, Park Slope. */
@@ -168,6 +170,10 @@ async function main() {
       },
       `building:${facade}`,
     );
+  }
+  // Storefront signboards (OSM, ODbL): reuse the footprints file the school join wrote.
+  if (process.env.CITY3D_SIGNS !== "0") {
+    for (const f of storefrontFeatures(PILOT_BBOX, `/tmp/${AREA}-footprints.ndjson`, AREA)) add(f, "storefront-sign");
   }
   // Small school icons (optional chip): the DOE point itself, with its name.
   for (const sc of schools) {

@@ -26,7 +26,7 @@ export const FACADES = ["rowhouse", "walkup", "prewar", "modern", "tower", "scho
 const SOURCE = "city3d";
 const STOREFRONT_M = 4.5;
 
-export const CITY3D_LAYERS = ["city3d-storefront", "city3d-walls", "city3d-roofs", "city3d-props", "city3d-signs"] as const;
+export const CITY3D_LAYERS = ["city3d-storefront", "city3d-walls", "city3d-roofs", "city3d-props", "city3d-signs", "city3d-storefront-signs"] as const;
 
 async function loadFacades(map: MapLibreMap): Promise<void> {
   await Promise.all(

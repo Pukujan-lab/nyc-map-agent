@@ -202,10 +202,12 @@ export function MapView({
   // The hover card is a mouse affordance; on touch / narrow screens the sheet
   // already shows the same numbers.
   const canHover = useMediaQuery("(hover: hover) and (pointer: fine) and (min-width: 1024px)");
+  const signsMod = useRef<typeof import("@/lib/map/threeLayer") | null>(null);
   const city3dMod = useRef<typeof import("@/lib/map/city3d") | null>(null);
   const [schoolIcons, setSchoolIcons] = useState(false);
   const toggleSchools = useCallback(() => setSchoolIcons((on) => !on), []);
   const schoolsOn = useFlag("schools");
+  const storefrontsOn = useFlag("storefronts");
   usePanelChip(schoolsOn ? { id: "schools", label: "Schools", active: schoolIcons, onToggle: toggleSchools } : null);
   const restroomsMod = useRef<typeof import("@/lib/map/restrooms") | null>(null);
   /** So leaving walk mode can restore the overhead camera exactly once. */
@@ -517,6 +519,21 @@ export function MapView({
         });
         return;
       }
+      const dir = city3d ? signsMod.current?.directoryAt(event.target, event.lngLat.lng, event.lngLat.lat) : null;
+      if (dir) {
+        const shops = (dir.dir ?? "").split("|").filter(Boolean);
+        showPanel({
+          id: `directory:${dir.lng},${dir.lat}`,
+          title: dir.name,
+          subtitle: `Directory · ${shops.length} shops · © OpenStreetMap contributors`,
+          details: (
+            <ul className="space-y-1 text-sm">
+              {shops.map((name) => <li key={name}>{name}</li>)}
+            </ul>
+          ),
+        });
+        return;
+      }
       const school = city3dMod.current?.schoolAt(event.target, event.point.x, event.point.y);
       if (school) {
         showPanel({ id: `school:${school}`, title: school, subtitle: "School · NYC DOE (LCGMS)" });
@@ -532,7 +549,7 @@ export function MapView({
         selectNta(picked.datum.ntaCode);
       }
     },
-    [pickAt, selectBlock, selectNta, routePicking, setRoutePoint, showPanel],
+    [pickAt, selectBlock, selectNta, routePicking, setRoutePoint, showPanel, city3d],
   );
 
   const handleMoveEnd = useCallback(() => {
@@ -709,6 +726,11 @@ export function MapView({
         await installCity3d(map);
         if (cancelled) return;
         mod.setSchoolIconsVisible(map, schoolIcons);
+        // Storefront signboards: a three.js custom layer, eye level only.
+        const signs = await import("@/lib/map/threeLayer");
+        if (cancelled) return;
+        signsMod.current = signs;
+        if (storefrontsOn && !map.getLayer(signs.STOREFRONT_LAYER)) map.addLayer(signs.createStorefrontLayer());
         if (!city3d) {
           setCity3dVisible(map, false);
           return;
@@ -731,7 +753,7 @@ export function MapView({
       cancelled = true;
       cleanup?.();
     };
-  }, [ready, styleEpoch, city3d, schoolIcons]);
+  }, [ready, styleEpoch, city3d, schoolIcons, storefrontsOn]);
 
   useEffect(() => {
     if (!ready) return;
