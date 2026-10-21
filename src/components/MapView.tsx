@@ -5,7 +5,6 @@ import { usePanel } from "@/lib/store/PanelContext";
 import { setAmbient } from "@/lib/ambient";
 import { useFlags } from "@/lib/flags";
 import { useFeatureToggles } from "@/lib/featureToggles";
-import { FEATURES } from "@/features";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import MapLibreMap, {
   type MapLayerMouseEvent,

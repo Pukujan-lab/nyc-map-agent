@@ -20,8 +20,8 @@
     "limit": "2 kB"
   },
   {
-    "name": "features: lazy feature layers (layers-*.js; each loads only when its flag/chip is on)",
-    "path": ".size-build/assets/layers-*.js",
+    "name": "feature: daylight (lazy)",
+    "path": ".size-build/assets/daylightLayers-*.js",
     "limit": "4.5 kB"
   },
   {
