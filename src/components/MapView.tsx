@@ -34,7 +34,7 @@ import {
   neighborhoodsToGeoJson,
 } from "@/lib/map/geojson";
 import { BLOCK_HEIGHT, LAYER_IDS, SOURCE_IDS, buildFallbackStyle } from "@/lib/map/style";
-import { installBlockTiles, pushBlocks } from "@/lib/map/blockTiles";
+import { BLOCK_FILL_LAYER, installBlockTiles, pushBlocks, setBlockFillVisible } from "@/lib/map/blockTiles";
 import { fetchNearestStreet, type WalkingRoute } from "@/lib/api/routing";
 import { useDataView } from "@/lib/store/DataViewContext";
 import type { CameraOptions, Map as MaplibreMapInstance } from "maplibre-gl";
@@ -436,7 +436,9 @@ export function MapView({
       // querying would throw.
       const feature =
         map && map.getLayer(pickLayer)
-          ? map.queryRenderedFeatures([x, y], { layers: [pickLayer] })[0]
+          ? map.queryRenderedFeatures([x, y], {
+              layers: [pickLayer, BLOCK_FILL_LAYER].filter((l) => scale === "blocks" || l === pickLayer).filter((l) => map.getLayer(l)),
+            })[0]
           : undefined;
       const id = feature?.id;
 
@@ -631,6 +633,7 @@ export function MapView({
     map.setLayoutProperty(LAYER_IDS.areaColumns, "visibility", vis(!walking && mapStyle === "columns" && coarse));
     map.setLayoutProperty(LAYER_IDS.areaOutline, "visibility", vis(!walking && mapStyle !== "heat" && (mapStyle === "fill" || coarse)));
     map.setLayoutProperty(LAYER_IDS.heat, "visibility", vis(!walking && mapStyle === "heat"));
+    setBlockFillVisible(map, !walking && mapStyle === "fill" && scale === "blocks");
     if (!classic) {
       for (const id of [
         LAYER_IDS.neighborhoods,

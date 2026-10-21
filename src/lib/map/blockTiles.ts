@@ -3,7 +3,7 @@ import type { FeatureCollection } from "geojson";
 import { DATA_BACKEND } from "@/lib/datasets/backend";
 import type { BlockDatum } from "@/lib/layers";
 import { ensurePmtilesProtocol } from "./pmtilesProtocol";
-import { DATA_LAYERS, LAYER_IDS, SOURCE_IDS } from "./style";
+import { CHOROPLETH_RAMP, DATA_LAYERS, LAYER_IDS, SOURCE_IDS } from "./style";
 
 /**
  * Real NYC tax blocks (Octo backend): MapPLUTO lots dissolved by borough +
@@ -17,6 +17,8 @@ import { DATA_LAYERS, LAYER_IDS, SOURCE_IDS } from "./style";
 export const USE_BLOCK_TILES = DATA_BACKEND === "octo";
 const BLOCK_TILES: string = import.meta.env.VITE_BLOCK_TILES_URL ?? "/api/block-tiles";
 const SOURCE_LAYER = "blocks";
+export const BLOCK_FILL_LAYER = "block-tile-fill";
+const BLOCK_FILL = BLOCK_FILL_LAYER;
 const SWAPPED: string[] = [LAYER_IDS.blocks, LAYER_IDS.blockOutline];
 
 /** Swaps the blocks source to the PMTiles; true when it did (data must be re-pushed). */
@@ -39,6 +41,22 @@ export async function installBlockTiles(map: MapLibreMap): Promise<boolean> {
   const url = /^https?:\/\//.test(BLOCK_TILES) ? BLOCK_TILES : `${window.location.origin}${BLOCK_TILES}`;
   map.addSource(SOURCE_IDS.blocks, { type: "vector", url: `pmtiles://${url}` });
   for (const { spec, before } of specs) map.addLayer(spec as LayerSpecification, before);
+  // The filled-areas view of real blocks: same ramp as area-fill, keyed by feature-state t.
+  map.addLayer(
+    {
+      id: BLOCK_FILL,
+      type: "fill",
+      source: SOURCE_IDS.blocks,
+      "source-layer": SOURCE_LAYER,
+      layout: { visibility: "none" },
+      paint: {
+        "fill-color": ["interpolate", ["linear"], ["coalesce", ["feature-state", "t"], 0], ...CHOROPLETH_RAMP.flat()] as never,
+        "fill-opacity": ["case", [">", ["coalesce", ["feature-state", "t"], 0], 0], 0.62, 0.06],
+        "fill-outline-color": "rgba(51, 65, 85, 0.35)",
+      },
+    },
+    map.getLayer(LAYER_IDS.areaFill) ? LAYER_IDS.areaFill : undefined,
+  );
   return true;
 }
 
@@ -51,10 +69,17 @@ export function pushBlocks(map: MapLibreMap, blocks: BlockDatum[], geojson: Feat
     return;
   }
   map.removeFeatureState({ source: SOURCE_IDS.blocks, sourceLayer: SOURCE_LAYER });
+  const max = blocks.reduce((m, b) => (b.value > m ? b.value : m), 0);
   for (const block of blocks) {
     const id = Number(block.key);
     if (Number.isInteger(id)) {
-      map.setFeatureState({ source: SOURCE_IDS.blocks, sourceLayer: SOURCE_LAYER, id }, { height: block.height });
+      const t = max > 0 ? Math.sqrt(Math.max(block.value, 0) / max) : 0;
+      map.setFeatureState({ source: SOURCE_IDS.blocks, sourceLayer: SOURCE_LAYER, id }, { height: block.height, t });
     }
   }
+}
+
+/** Shows the tile-backed block fill (filled-areas view at the Blocks scale). */
+export function setBlockFillVisible(map: MapLibreMap, visible: boolean): void {
+  if (map.getLayer(BLOCK_FILL)) map.setLayoutProperty(BLOCK_FILL, "visibility", visible ? "visible" : "none");
 }

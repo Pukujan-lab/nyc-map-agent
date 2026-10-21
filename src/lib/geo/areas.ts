@@ -35,10 +35,11 @@ export function buildAreas(params: {
   if (scale === "blocks") {
     return model.blocks.map((b) => ({
       code: b.key,
-      name: `Block ${b.key}`,
+      name: b.label ?? `Block ${b.key}`,
       borough: "",
       value: b.value,
-      polygons: [b.polygon],
+      // Real tax blocks are filled from their PMTiles (src/lib/map/blockTiles.ts).
+      polygons: b.label ? [] : [b.polygon],
     }));
   }
   if (scale === "neighborhoods") {
