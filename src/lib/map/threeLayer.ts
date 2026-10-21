@@ -7,6 +7,7 @@
  * was lost (#98). Layers only repaint when their content changes.
  */
 import * as THREE from "three";
+import { RouteSignCache, drawSignFace, signFace, type SignFace } from "./routeSign";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { distanceFade } from "./corner";
 import { LANDMARKS } from "./landmarks";
@@ -42,6 +43,8 @@ export interface VehicleInstance {
   color: string;
   kind: VehicleMode;
   ghost: boolean;
+  /** GTFS route id (subway: "A", "Q", "6X"); drives the front and rear route signs. */
+  route?: string;
 }
 
 /** Live-vehicle modes, each with its own swappable glTF slot. */
@@ -254,6 +257,51 @@ export function createVehicleLayer() {
   /** Loaded glTF parts per mode, one InstancedMesh each; empty until the model arrives. */
   const models: Record<VehicleMode, THREE.InstancedMesh[]> = { subway: [], rail: [], bus: [] };
   let last: VehicleInstance[] = [];
+
+  // ---- Route signs: the glTF livery bakes one sign into its shared texture, so draw each
+  // train's own bullet on quads over the front and rear signs, one InstancedMesh per route. ----
+  const SIGN_PX = 128, SIGN_M = 0.6;
+  /** Car ends (y) and sign height (z) in scene metres; refit once the subway model loads. */
+  let signFit = { half: 10, z: 3.8 * 0.78 };
+  const signGeometry = (half: number, z: number) => {
+    const rear = new THREE.PlaneGeometry(SIGN_M, SIGN_M).rotateX(Math.PI / 2).translate(0, -half - 0.04, z); // faces -y, reads upright
+    const front = rear.clone().rotateZ(Math.PI); // faces +y, not mirrored
+    const g = new THREE.BufferGeometry();
+    for (const name of ["position", "normal", "uv"]) {
+      const a = rear.toNonIndexed().getAttribute(name), b = front.toNonIndexed().getAttribute(name);
+      const out = new Float32Array(a.array.length + b.array.length);
+      out.set(a.array as Float32Array); out.set(b.array as Float32Array, a.array.length);
+      g.setAttribute(name, new THREE.BufferAttribute(out, a.itemSize));
+    }
+    rear.dispose(); front.dispose();
+    return g;
+  };
+  let signGeom = signGeometry(signFit.half, signFit.z);
+  const signs = new RouteSignCache((face: SignFace) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = SIGN_PX;
+    const ctx = canvas.getContext("2d");
+    if (ctx) drawSignFace(ctx, face, SIGN_PX);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.encoding = THREE.sRGBEncoding;
+    const material = new THREE.MeshBasicMaterial({ map: texture, polygonOffset: true, polygonOffsetFactor: -2 });
+    const mesh = new THREE.InstancedMesh(signGeom, material, CAP);
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    mesh.frustumCulled = false;
+    mesh.count = 0;
+    scene.add(mesh);
+    return { mesh, dispose() { scene.remove(mesh); material.dispose(); texture.dispose(); mesh.dispose(); } };
+  });
+  function refitSigns(parts: THREE.InstancedMesh[]) {
+    const box = new THREE.Box3();
+    for (const m of parts) { m.geometry.computeBoundingBox(); box.union(m.geometry.boundingBox!); }
+    if (box.isEmpty()) return;
+    signFit = { half: Math.max(-box.min.y, box.max.y), z: box.max.z * 0.78 };
+    const old = signGeom;
+    signGeom = signGeometry(signFit.half, signFit.z);
+    signs.clear(); // rebuilt on the next update with the new geometry
+    old.dispose();
+  }
   function loadModels() {
     // The meshopt decoder is only needed for these models: keep it out of the shared 3D chunk.
     void import("three/examples/jsm/libs/meshopt_decoder.module.js").then(({ MeshoptDecoder }) => {
@@ -269,6 +317,7 @@ export function createVehicleLayer() {
           return mesh;
         });
         boxes[mode].count = 0;
+        if (mode === "subway") refitSigns(models.subway);
         update(last);
       }, undefined, () => { /* keep the box for this mode */ });
     }
@@ -417,6 +466,7 @@ export function createVehicleLayer() {
     },
     onRemove() {
       map?.off("moveend", syncChunks);
+      signs.clear();
       renderer = null; // shared with the other three.js layers: never dispose it here
     },
     render(_gl, args) {
@@ -432,6 +482,7 @@ export function createVehicleLayer() {
     last = vehicles;
     const n: Record<VehicleMode, number> = { subway: 0, rail: 0, bus: 0 };
     let g = 0;
+    const perSign = new Map<string, { face: SignFace; n: number }>();
     for (const v of vehicles) {
       const mc = MercatorCoordinate.fromLngLat([v.lon, v.lat], 0);
       p.set((mc.x - origin.x) / s, -(mc.y - origin.y) / s, v.z);
@@ -449,6 +500,18 @@ export function createVehicleLayer() {
       // A loaded model keeps its own livery; the box stand-in carries the route colour.
       if (parts.length) for (const part of parts) part.setMatrixAt(i, m4);
       else { boxes[v.kind].setMatrixAt(i, m4); boxes[v.kind].setColorAt(i, color.set(v.color)); }
+      if (v.kind === "subway" && v.route) {
+        const face = signFace(v.route, v.color);
+        const slot = perSign.get(face.key) ?? { face, n: 0 };
+        perSign.set(face.key, slot);
+        if (slot.n < CAP) signs.get(face).mesh.setMatrixAt(slot.n++, m4);
+      }
+    }
+    signs.prune(new Set(perSign.keys()));
+    for (const { face, n: count } of perSign.values()) {
+      const { mesh } = signs.get(face);
+      mesh.count = count;
+      mesh.instanceMatrix.needsUpdate = true;
     }
     for (const mode of Object.keys(n) as VehicleMode[]) {
       const count = Math.min(n[mode], CAP);

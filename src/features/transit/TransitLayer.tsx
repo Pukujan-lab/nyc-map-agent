@@ -354,7 +354,7 @@ export default function TransitLayer() {
     v3d.current?.update(
       vehicles
         .filter((v) => !(walking && v.grade === "underground")) // street level shows entrances instead
-        .map((v) => ({ lon: v.lon, lat: v.lat, bearing: v.bearing, z: v.z ?? 0, color: v.system === "bus" ? "#f8fafc" : v.color, kind: v.system === "bus" ? "bus" : v.system === "subway" ? "subway" : "rail", ghost: v.grade === "underground" })),
+        .map((v) => ({ lon: v.lon, lat: v.lat, bearing: v.bearing, z: v.z ?? 0, color: v.system === "bus" ? "#f8fafc" : v.color, kind: v.system === "bus" ? "bus" : v.system === "subway" ? "subway" : "rail", ghost: v.grade === "underground", route: v.route })),
     );
   }, [vehicles, three, walking]);
 
