@@ -1,5 +1,7 @@
 # Product brief
 
+<!-- continuity:project {"id":"nyc-map-agent","protocol_version":"0.1.0-draft","schema":"project-continuity.project.v1","title":"NYC Map Agent"} -->
+
 ## One line
 Ask anything about how loud or how dangerous a NYC street is, and watch the answer appear on a 3D map.
 

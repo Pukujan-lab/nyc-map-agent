@@ -1,6 +1,6 @@
 {
   "schema": "acs.hotload.lock.v1",
-  "installed_at": "2026-10-21T00:04:56+00:00",
+  "installed_at": "2026-10-21T17:53:44+00:00",
   "state": "READY",
   "acs": {
     "module_id": "multi-agent-hotload",
