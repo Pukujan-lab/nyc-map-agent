@@ -1,5 +1,6 @@
 import type { NtaBoundary, PolygonRings } from "@/lib/api/nta";
-import { BLOCK_GRID_DEG, blockPolygon } from "@/lib/geo/blocks";
+import { BLOCK_GRID_DEG, blockPolygon, bboxPolygon } from "@/lib/geo/blocks";
+import { DATA_BACKEND } from "@/lib/datasets/backend";
 import type {
   AggregateResult,
   BlockCell,
@@ -49,7 +50,7 @@ export type MapScale = "blocks" | "neighborhoods" | "districts" | "boroughs";
 export const MAP_SCALES: MapScale[] = ["blocks", "neighborhoods", "districts", "boroughs"];
 
 export const SCALE_LABELS: Record<MapScale, string> = {
-  blocks: "Block (~300 m)",
+  blocks: DATA_BACKEND === "octo" ? "Block (tax block)" : "Block (~300 m)",
   neighborhoods: "Neighborhood (NTA 2020)",
   districts: "Community district",
   boroughs: "Borough",
@@ -146,6 +147,8 @@ export interface NeighborhoodDatum {
 
 export interface BlockDatum {
   key: string;
+  /** Real block identity (Octo tax blocks): "Brooklyn block 585 · COURT STREET / …". */
+  label?: string;
   ntaCode: string;
   polygon: PolygonRings;
   /** Centre of the square — where "walk this block" puts the camera. */
@@ -164,6 +167,11 @@ export interface BlockDatum {
   /** Street names from crash records — that dataset carries no house number. */
   streets: CountPair[];
   breakdown?: SourceBreakdown[];
+}
+
+/** A block's identity for labels: the tax block and its streets, or the grid square. */
+export function blockName(block: Pick<BlockDatum, "label"> | null | undefined): string {
+  return block?.label ?? "~300 m block";
 }
 
 export interface MapModel {
@@ -226,6 +234,8 @@ interface BlockAcc {
   cyclists: number;
   addresses: CountPair[];
   streets: CountPair[];
+  label?: string;
+  bbox?: [number, number, number, number];
 }
 
 /** Two address lists, merged by label and capped — the square stays small. */
@@ -258,6 +268,8 @@ function mergeBlocks(
           lon: cell.lon,
           lat: cell.lat,
           ntaCode: cell.ntaCode,
+          label: cell.label,
+          bbox: cell.bbox,
           noiseCount: 0,
           crashCount: 0,
           nightCount: 0,
@@ -379,11 +391,13 @@ export function buildMapModel(params: {
   const blocks: BlockDatum[] = blockRows.map(({ key, entry, value }) => ({
     key,
     ntaCode: entry.ntaCode,
-    polygon: blockPolygon(entry.lon, entry.lat),
-    center: {
-      lon: entry.lon + BLOCK_GRID_DEG / 2,
-      lat: entry.lat + BLOCK_GRID_DEG / 2,
-    },
+    // A real tax block (Octo) is drawn from PMTiles; its bounds frame the
+    // picked-block rim. The Socrata fallback keeps the ~300 m grid square.
+    polygon: entry.bbox ? bboxPolygon(entry.bbox) : blockPolygon(entry.lon, entry.lat),
+    center: entry.bbox
+      ? { lon: (entry.bbox[0] + entry.bbox[2]) / 2, lat: (entry.bbox[1] + entry.bbox[3]) / 2 }
+      : { lon: entry.lon + BLOCK_GRID_DEG / 2, lat: entry.lat + BLOCK_GRID_DEG / 2 },
+    ...(entry.label ? { label: entry.label } : {}),
     value,
     height: heightFor(value, blockMax),
     nightCount: entry.nightCount,

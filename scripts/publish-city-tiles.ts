@@ -7,14 +7,17 @@
  * request at 100 MB, so the file goes up in parts of PART_MB (default 40).
  *
  *   pnpm build:city-tiles && pnpm publish:city-tiles
+ *   pnpm build:block-tiles && pnpm publish:block-tiles   (any file: pass its path)
  */
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { basename } from "node:path";
 import { octoConfigFromEnv, octoQuery } from "../api/_lib/octo";
 import { loadEnv } from "./env";
 
-const FILE = process.env.CITY_TILES_FILE ?? "public/tiles/nyc-city.pmtiles";
-const NAME = "nyc-city.pmtiles";
+const FILE = process.argv[2] ?? process.env.CITY_TILES_FILE ?? "public/tiles/nyc-city.pmtiles";
+/** core.published_assets name, e.g. nyc-city.pmtiles / nyc-blocks.pmtiles. */
+const NAME = basename(FILE);
 const PART_BYTES = Number(process.env.PART_MB ?? 40) * 1024 * 1024;
 
 async function call(path: string, body?: unknown): Promise<Record<string, unknown>> {

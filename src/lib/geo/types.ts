@@ -60,6 +60,13 @@ export interface BlockCell {
   addresses?: CountPair[];
   /** Street names from crash records; absent on 311 cells. */
   streets?: CountPair[];
+  /**
+   * Real tax blocks (Octo backend): the block's identity, e.g. "Brooklyn block
+   * 585 · COURT STREET / UNION STREET", and its [west, south, east, north]
+   * bounds. The key is then `boro * 100000 + block`, the PMTiles feature id.
+   */
+  label?: string;
+  bbox?: [number, number, number, number];
 }
 
 export interface BoroughAggregate {

@@ -4,15 +4,23 @@
  * /api/aggregate instead of the browser paging ~200k Socrata rows at startup.
  * Same code as the browser worker (src/lib/geo/aggregateCore.ts), different rows.
  *
- *   pnpm build:aggregates      (after ingest + load:areas)
+ * The block cells are real tax blocks: the window's points are spatially
+ * joined to the published nyc-blocks.geojson in DuckDB (scripts/block-join.ts),
+ * and the per-block totals also land in marts.block_stats.
+ *
+ *   pnpm build:aggregates      (after ingest + load:areas + publish:block-tiles)
  */
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { blockJoin, type BlockPoint } from "./block-join";
 import { octoQuery } from "../api/_lib/octo";
 import { parseNtaBoundaries } from "../src/lib/api/nta";
 import { NOISE_FIELDS } from "../src/lib/api/noise";
 import { CRASH_FIELDS } from "../src/lib/api/crashes";
 import { aggregateRows, type RowSource } from "../src/lib/geo/aggregateCore";
 import { windowBounds, WINDOW_IDS, type WindowId } from "../src/lib/windows";
-import type { AggregateWorkerRequest, DatasetId } from "../src/lib/geo/types";
+import type { AggregateResult, AggregateWorkerRequest, DatasetId } from "../src/lib/geo/types";
 import { loadEnv } from "./env";
 
 /** Crashes always use 12 months (see CRASH_WINDOW in src/lib/geo/aggregate.ts). */
@@ -30,7 +38,7 @@ const SELECT: Record<DatasetId, string> = {
           coalesce(contributing_factor_vehicle_1, '') AS contributing_factor_vehicle_1`,
 };
 
-function octoRows(dataset: DatasetId, start: string, end: string): RowSource {
+function octoRows(dataset: DatasetId, start: string, end: string, sink: BlockPoint[]): RowSource {
   const table = dataset === "noise" ? "raw.noise_311" : "raw.crashes";
   const ts = dataset === "noise" ? "created_date" : "crash_date";
   const key = dataset === "noise" ? "unique_key" : "collision_id";
@@ -46,9 +54,58 @@ function octoRows(dataset: DatasetId, start: string, end: string): RowSource {
         [start, end],
         { rowLimit: limit },
       );
+      for (const r of rows) sink.push(toPoint(dataset, r));
       return { header, rows: rows.map((r) => header.map((h) => r[h] ?? "")) };
     },
   };
+}
+
+function toPoint(dataset: DatasetId, r: Record<string, string>): BlockPoint {
+  const noise = dataset === "noise";
+  return {
+    lat: Number(r.latitude),
+    lon: Number(r.longitude),
+    hour: Number((noise ? r.created_date?.slice(11, 13) : r.crash_time?.slice(0, 2)) ?? 0) || 0,
+    // Same normalisation as aggregateCore's addresses / streets.
+    place: noise
+      ? (r.incident_address ?? "").trim().replace(/\s+/g, " ").toUpperCase().slice(0, 48)
+      : (r.on_street_name ?? "").trim(),
+    injured: Number(r.number_of_persons_injured ?? 0) || 0,
+    killed: Number(r.number_of_persons_killed ?? 0) || 0,
+    cyclists: Number(r.number_of_cyclist_injured ?? 0) || 0,
+  };
+}
+
+/** nyc-blocks.geojson: BLOCKS_GEOJSON if set, else the copy published through Octo files. */
+async function blocksFile(dir: string): Promise<string> {
+  if (process.env.BLOCKS_GEOJSON) return process.env.BLOCKS_GEOJSON;
+  const { rows } = await octoQuery<{ parts: unknown }>("SELECT parts FROM core.published_assets WHERE name = 'nyc-blocks.geojson'");
+  if (!rows[0]) throw new Error("nyc-blocks.geojson is not published: run pnpm build:block-tiles && pnpm publish:block-tiles.");
+  const parts = (typeof rows[0].parts === "string" ? JSON.parse(rows[0].parts) : rows[0].parts) as Array<{ url: string }>;
+  const chunks = await Promise.all(parts.map(async (p) => {
+    const res = await fetch(p.url);
+    if (!res.ok) throw new Error(`blocks download ${res.status}`);
+    return Buffer.from(await res.arrayBuffer());
+  }));
+  const file = join(dir, "nyc-blocks.geojson");
+  writeFileSync(file, Buffer.concat(chunks));
+  return file;
+}
+
+async function writeBlockStats(dataset: DatasetId, windowId: WindowId, cells: AggregateResult["blocks"]) {
+  await octoQuery("DELETE FROM marts.block_stats WHERE dataset = $1 AND window_id = $2", [dataset, windowId]);
+  for (let i = 0; i < cells.length; i += 2000) {
+    const batch = cells.slice(i, i + 2000).map((c) => ({
+      block_id: Number(c.key), label: c.label ?? "", nta2020: c.ntaCode || null, n: c.count, night: c.nightCount,
+      injured: c.injured, killed: c.killed, cyclists: c.cyclists,
+    }));
+    await octoQuery(
+      `INSERT INTO marts.block_stats (dataset, window_id, block_id, boro, block, label, nta2020, n, night, injured, killed, cyclists)
+       SELECT $1, $2, x.block_id, x.block_id / 100000, x.block_id % 100000, x.label, x.nta2020, x.n, x.night, x.injured, x.killed, x.cyclists
+       FROM jsonb_to_recordset($3::jsonb) AS x(block_id int, label text, nta2020 text, n int, night int, injured int, killed int, cyclists int)`,
+      [dataset, windowId, JSON.stringify(batch)],
+    );
+  }
 }
 
 async function main() {
@@ -65,11 +122,26 @@ async function main() {
     })),
   });
   if (boundaries.length === 0) throw new Error("core.area_shapes is empty: run pnpm load:areas first.");
+  const dir = mkdtempSync(join(tmpdir(), "aggregates-"));
+  const ntaFile = join(dir, "nta.geojson");
+  writeFileSync(ntaFile, JSON.stringify({
+    type: "FeatureCollection",
+    features: shapes.rows.map((r) => ({
+      type: "Feature",
+      properties: { nta2020: r.area },
+      geometry: typeof r.geometry === "string" ? JSON.parse(r.geometry) : r.geometry,
+    })),
+  }));
+  const blocks = await blockJoin(await blocksFile(dir), ntaFile);
   for (const [dataset, windowId] of JOBS) {
     const t0 = Date.now();
     const bounds = windowBounds(windowId);
     const request: AggregateWorkerRequest = { dataset, windowId, windowStart: bounds.startIso, windowEnd: bounds.endIso, boundaries };
-    const result = await aggregateRows(request, octoRows(dataset, bounds.startIso, bounds.endIso));
+    const points: BlockPoint[] = [];
+    const result = await aggregateRows(request, octoRows(dataset, bounds.startIso, bounds.endIso, points));
+    // Real tax blocks replace the browser's ~300 m grid squares.
+    result.blocks = await blocks.join(dataset, points);
+    await writeBlockStats(dataset, windowId, result.blocks);
     result.sources = [{ label: `${dataset === "noise" ? "311 noise" : "Crash"} rows (Octo ${dataset === "noise" ? "raw.noise_311" : "raw.crashes"}) → neighborhood rollup`, query: "/api/aggregate" }];
     const body = JSON.stringify(result);
     await octoQuery(

@@ -264,7 +264,7 @@ export function StreetViewSheet({
             Street view · {ntaName ?? "this block"}
           </div>
           <div className="truncate text-[11px] text-muted-foreground">
-            {caption} in this ~300 m block
+            {caption} in {block?.label ?? "this ~300 m block"}
           </div>
           {image && searchRadius > SEARCH_RADII_METRES[0] ? (
             <div className="text-[11px] text-amber-600 dark:text-amber-400">

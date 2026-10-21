@@ -10,6 +10,7 @@ import { formatCount, formatDate } from "@/lib/format";
 import type { AggregateResult } from "@/lib/geo/types";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { useMediaQuery } from "@/lib/useMediaQuery";
+import { USE_BLOCK_TILES } from "@/lib/map/blockTiles";
 
 interface CaveatsSheetProps {
   boundaries: NtaBoundary[] | null;
@@ -80,7 +81,7 @@ export function CaveatsSheet({ boundaries, noise, crashes }: CaveatsSheetProps) 
             </li>
             <li>
               <span className="font-medium text-foreground">
-                Blocks are a fixed ~300 m grid, not census blocks.
+                {USE_BLOCK_TILES ? "Blocks are DOF tax blocks; street points go to the nearest block face." : "Blocks are a fixed ~300 m grid, not census blocks."}
               </span>{" "}
               One grid lets noise and crashes stack on the same square. A square
               that straddles a boundary is filed under the neighborhood of its

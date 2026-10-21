@@ -10,6 +10,7 @@ import {
 } from "@/lib/layers";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { windowBounds } from "@/lib/windows";
+import { USE_BLOCK_TILES } from "@/lib/map/blockTiles";
 
 interface LegendProps {
   layer: LayerId;
@@ -130,7 +131,7 @@ export function LegendContent({
         {scale === "blocks" ? (
           <LineKey
             className="border-slate-500/50"
-            label="~300 m block square"
+            label={USE_BLOCK_TILES ? "Tax block (DCP MapPLUTO)" : "~300 m block square"}
           />
         ) : null}
         <LineKey

@@ -17,6 +17,7 @@ import {
   type BlockDatum,
   type SourceBreakdown,
   type ViewInfo,
+  blockName,
 } from "@/lib/layers";
 import { useDataView } from "@/lib/store/DataViewContext";
 import { useMapState } from "@/lib/store/MapStateContext";
@@ -27,7 +28,7 @@ import { StatCard } from "./StatCard";
 
 interface DetailsSheetProps {
   boundary: NtaBoundary | null;
-  /** The ~300 m block clicked on the map, if any. */
+  /** The block clicked on the map, if any. */
   block: BlockDatum | null;
   noise: NtaAggregate | null;
   crashes: NtaAggregate | null;
@@ -236,7 +237,7 @@ function DetailsBody({
           <div className="mb-3 rounded-md border border-primary/40 bg-primary/5 p-2.5">
             <div className="flex items-start justify-between gap-2">
               <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                Selected block · ~300 m
+                Selected · {blockName(block)}
               </div>
               <Button
                 type="button"
