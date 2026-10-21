@@ -110,8 +110,9 @@ export function CaveatsSheet({ boundaries, noise, crashes }: CaveatsSheetProps) 
               They are never dropped silently — see the coverage numbers below.
             </li>
             <li>
-              <span className="font-medium text-foreground">Weather.</span>{" "}
-              Open-Meteo (National Weather Service as fallback), refreshed every 10 minutes.
+              <span className="font-medium text-foreground">Weather and alerts.</span>{" "}
+              Open-Meteo (National Weather Service as fallback), NWS active alerts and FloodNet NYC
+              street flood sensors, refreshed every 5–10 minutes.
             </li>
           </ul>
 
