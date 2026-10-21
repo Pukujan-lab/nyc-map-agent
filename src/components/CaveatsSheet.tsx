@@ -109,6 +109,26 @@ export function CaveatsSheet({ boundaries, noise, crashes }: CaveatsSheetProps) 
               </span>{" "}
               They are never dropped silently — see the coverage numbers below.
             </li>
+            <li>
+              <span className="font-medium text-foreground">
+                Traffic covers only NYC DOT&apos;s sensor corridors.
+              </span>{" "}
+              Highways, the FDR, bridges and some major avenues (NYC DOT Real-Time Traffic Speed
+              Data). Other streets show no traffic colour, which does not mean they are clear.
+              Closures are DOT construction closures for today.
+            </li>
+            <li>
+              <span className="font-medium text-foreground">
+                Parking shows places and rules, not free spaces.
+              </span>{" "}
+              Licensed garages and lots (NYC DCWP), OpenStreetMap parking, and NYC DOT parking signs
+              and meters. No open feed reports live occupancy.
+            </li>
+            <li>
+              <span className="font-medium text-foreground">Weather and alerts.</span>{" "}
+              Open-Meteo (National Weather Service as fallback), NWS active alerts and FloodNet NYC
+              street flood sensors, refreshed every 5–10 minutes.
+            </li>
           </ul>
 
           <div>

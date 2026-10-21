@@ -73,6 +73,15 @@ interface PanelValue {
 
 const PanelContext = createContext<PanelValue | null>(null);
 
+/**
+ * Push panel content from outside React (a map layer's click handler in a
+ * feature's lazy `layers` chunk). The mounted PanelProvider shows it.
+ */
+const bus = new Set<(content: PanelContent) => void>();
+export function pushPanel(content: PanelContent): void {
+  bus.forEach((show) => show(content));
+}
+
 export function PanelProvider({ children }: { children: ReactNode }) {
   const { selectNta } = useMapState();
   const [content, setContent] = useState<PanelContent | null>(null);
@@ -91,6 +100,12 @@ export function PanelProvider({ children }: { children: ReactNode }) {
     [selectNta],
   );
   const closePanel = useCallback(() => setContent(null), []);
+  useEffect(() => {
+    bus.add(showPanel);
+    return () => {
+      bus.delete(showPanel);
+    };
+  }, [showPanel]);
   const register = useCallback((_kind: "chip", id: string, value: PanelChip | null) => {
     setChipMap((prev) => {
       const next = { ...prev };

@@ -3,6 +3,7 @@ import { RestroomDetails } from "@/components/RestroomCard";
 import { usePanel } from "@/lib/store/PanelContext";
 import { setAmbient } from "@/lib/ambient";
 import { useFlags } from "@/lib/flags";
+import { useFeatureToggles } from "@/lib/featureToggles";
 import { FEATURES } from "@/features";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import MapLibreMap, {
@@ -673,7 +674,10 @@ export function MapView({
   // Feature modules whose lazy `layers` chunk exports mount(map): mounted while
   // their flag is on, remounted after a style reload, cleaned up otherwise.
   const flags = useFlags();
-  const mountedKey = FEATURES.filter((f) => f.layers && flags[f.id]).map((f) => f.id).join(",");
+  const [toggledOn] = useFeatureToggles();
+  const mountedKey = FEATURES.filter((f) => f.layers && flags[f.id] && (!f.chip || toggledOn.has(f.chip.id)))
+    .map((f) => f.id)
+    .join(",");
   useEffect(() => {
     if (!ready) return;
     const map = mapRef.current?.getMap();

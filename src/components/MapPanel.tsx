@@ -9,6 +9,7 @@ import { usePanel, type PanelChip, type SheetSnap } from "@/lib/store/PanelConte
 import { cn } from "@/lib/utils";
 import { PanelSearch } from "./PanelSearch";
 import { FEATURES } from "@/features";
+import { useFeatureToggles } from "@/lib/featureToggles";
 
 /** Mobile snap points: peek shows the summary only. */
 /** One row (title + number) plus the grab handle. */
@@ -53,7 +54,14 @@ function Chips() {
     const chip = registered.get(id) ?? builtIn.find((c) => c.id === id);
     return chip ? [chip] : [];
   });
-  const extra = chips.filter((c) => !order.includes(c.id));
+  const [toggledOn, toggle] = useFeatureToggles();
+  const featureChips: PanelChip[] = FEATURES.filter((f) => f.chip && flags[f.id]).map((f) => ({
+    id: f.chip!.id,
+    label: f.chip!.label,
+    active: toggledOn.has(f.chip!.id),
+    onToggle: () => toggle(f.chip!.id),
+  }));
+  const extra = [...chips.filter((c) => !order.includes(c.id)), ...featureChips];
   return (
     <div className="-mx-3 flex snap-x snap-mandatory scroll-px-3 gap-1.5 overflow-x-auto px-3 pb-0.5 [mask-image:linear-gradient(to_right,transparent,black_12px,black_calc(100%-24px),transparent)] [scrollbar-width:none]">
       {[...all, ...extra].map((chip) => (
@@ -162,7 +170,6 @@ export function MapPanel({
               <PanelSearch boundaries={boundaries} />
               {status}
             </div>
-            <FeatureTopBar />
             <FeatureTopBar />
         <Chips />
           </div>

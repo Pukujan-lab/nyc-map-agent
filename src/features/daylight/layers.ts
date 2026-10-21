@@ -60,6 +60,18 @@ export function mount(map: MapLibreMap): () => void {
     }
   };
 
+  // Raster fallback basemap: no colours to recolour, so dim it instead.
+  const raster = (sun: Sun) => {
+    const { weather } = getAmbient();
+    const grey = weather === "clear" ? 0 : 0.25;
+    for (const layer of map.getStyle().layers ?? []) {
+      if (layer.type !== "raster") continue;
+      map.setPaintProperty(layer.id, "raster-brightness-max", 1 - 0.72 * sun.night);
+      map.setPaintProperty(layer.id, "raster-saturation", -Math.min(1, 0.4 * sun.night + grey));
+      map.setPaintProperty(layer.id, "raster-contrast", -0.1 * sun.night);
+    }
+  };
+
   const atmosphere = (sun: Sun) => {
     const { weather, walking } = getAmbient();
     const { sky, horizon } = skyColors(sun, weather);
@@ -142,6 +154,7 @@ export function mount(map: MapLibreMap): () => void {
     if (!force && key === lastKey) return;
     lastKey = key;
     recolor(sun);
+    raster(sun);
     atmosphere(sun);
     streetlights(sun);
   };

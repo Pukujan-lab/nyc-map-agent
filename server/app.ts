@@ -19,6 +19,8 @@ import * as sources from "../api/sources";
 import * as street from "../api/street";
 import * as hazards from "./features/hazards/routes";
 import * as weather from "./features/weather/routes";
+import * as traffic from "./features/traffic/routes";
+import * as parking from "./features/parking/routes";
 
 type Handler = { GET: (request: Request) => Promise<Response> };
 
@@ -34,6 +36,11 @@ const routes: Array<[string, Handler]> = [
   ["/api/street", street],
   ["/api/weather", weather],
   ["/api/hazards", hazards],
+  ["/api/traffic/along", { GET: traffic.GET_ALONG }],
+  ["/api/traffic", traffic],
+  ["/api/parking/near", { GET: parking.GET_NEAR }],
+  ["/api/parking/rules", { GET: parking.GET_RULES }],
+  ["/api/parking", parking],
 ];
 
 export const app = new OpenAPIHono({

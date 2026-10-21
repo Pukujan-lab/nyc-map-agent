@@ -16,6 +16,13 @@ export interface FeatureModule {
   layers?: () => Promise<unknown>;
   /** A small line under the search bar (e.g. a hazard notice). No tooltips. */
   TopBar?: ComponentType;
+  /**
+   * An off-by-default chip in the chip row (state in the URL, `on=`). While
+   * it is off the module's `layers` are not mounted.
+   */
+  chip?: { id: string; label: string };
+  /** A collapsed drawer in the place panel for the picked block / neighborhood. */
+  PlaceSection?: { label: string; Component: ComponentType<{ lon: number; lat: number }> };
   /** Panel content ids this module pushes via usePanel().showPanel. */
   panel?: { idPrefix: string };
   /** Chip ids it registers with usePanelChip. */
