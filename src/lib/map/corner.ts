@@ -20,7 +20,7 @@ export function titleStreet(s: string): string {
     .join(" ");
 }
 
-const AVENUE = /\b(av|ave|avenue|blvd|broadway)$/i;
+const AVENUE = /(^|\s)(av|ave|avenue)(\s|$)|\bblvd$|\bbroadway$/i;
 
 /** Street first, avenue second, as New Yorkers say it: "W 44 St at 8 Av". */
 export function cornerLabel(a: string, b: string): string {

@@ -9,6 +9,7 @@ describe("corner label", () => {
   it("puts the avenue second", () => {
     expect(cornerLabel("8 AV", "W 44 ST")).toBe("W 44 St at 8 Av");
     expect(cornerLabel("W 44 ST", "8 AV")).toBe("W 44 St at 8 Av");
+    expect(cornerLabel("AV OF THE AMERICAS", "W 40 ST")).toBe("W 40 St at Av Of The Americas");
   });
   it("picks the nearest sign within range", () => {
     const signs = [
