@@ -162,47 +162,9 @@ export function bodyPolygon(lon: number, lat: number, bearing: number, length: n
   return { type: "Polygon", coordinates: [[corner(l + 2, 0), corner(l, w), corner(-l, w), corner(-l, -w), corner(l, -w), corner(l + 2, 0)]] };
 }
 
-/** Thin deck polygons under elevated runs: one quad per segment. */
-export function viaductPolygons(lines: StaticSystem["lines"]): GeoJSON.FeatureCollection<GeoJSON.Polygon> {
-  const features: GeoJSON.Feature<GeoJSON.Polygon>[] = [];
-  for (const f of lines.features) {
-    if (f.properties.grade !== "elevated") continue;
-    const c = f.geometry.coordinates;
-    for (let i = 1; i < c.length; i++) {
-      const [a, b] = [c[i - 1], c[i]];
-      const mid: [number, number] = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-      if (structureAt(mid, 120)?.kind === "bridge") continue; // the bridge model carries the track
-      const dx = (b[0] - a[0]) * 111_320 * Math.cos((a[1] * Math.PI) / 180), dy = (b[1] - a[1]) * 111_320;
-      const len = Math.hypot(dx, dy);
-      if (len < 1) continue;
-      const brg = ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
-      features.push({ type: "Feature", properties: { color: f.properties.color, top: structureAt(mid)?.deck ?? VIADUCT_TOP }, geometry: bodyPolygonFlat(mid[0], mid[1], brg, len + 1, 7) });
-    }
-  }
-  return { type: "FeatureCollection", features };
-}
 function bodyPolygonFlat(lon: number, lat: number, bearing: number, length: number, width: number): GeoJSON.Polygon {
   const p = bodyPolygon(lon, lat, bearing, length, width).coordinates[0];
   return { type: "Polygon", coordinates: [[p[1], p[2], p[3], p[4], p[1]]] };
-}
-
-/** Square piers every ~40 m under elevated runs. */
-export function viaductPiers(lines: StaticSystem["lines"]): GeoJSON.FeatureCollection<GeoJSON.Polygon> {
-  const features: GeoJSON.Feature<GeoJSON.Polygon>[] = [];
-  for (const f of lines.features) {
-    if (f.properties.grade !== "elevated") continue;
-    let acc = 0;
-    if (structureAt(f.geometry.coordinates[0] as [number, number], 120)?.kind === "bridge") continue;
-    const c = f.geometry.coordinates;
-    for (let i = 1; i < c.length; i++) {
-      const dx = (c[i][0] - c[i - 1][0]) * 111_320 * Math.cos((c[i][1] * Math.PI) / 180), dy = (c[i][1] - c[i - 1][1]) * 111_320;
-      acc += Math.hypot(dx, dy);
-      if (acc < 40) continue;
-      acc = 0;
-      features.push({ type: "Feature", properties: { top: structureAt(c[i] as [number, number])?.deck ?? VIADUCT_TOP }, geometry: bodyPolygonFlat(c[i][0], c[i][1], 0, 1.2, 1.2) });
-    }
-  }
-  return { type: "FeatureCollection", features };
 }
 
 /**
@@ -261,4 +223,66 @@ export function trackHeightProfile(sys: StaticSystem, route: string): { m: numbe
     profiles.set(shape, p);
   }
   return { m: shape.m, ...p };
+}
+
+/**
+ * Raised track from the height profiles: one deck quad per shape segment that
+ * sits above ground (viaducts, portal ramps, bridge decks), each at its own
+ * height, so bridge tracks climb, hold the deck and descend. Piers only off
+ * the bridges. `raisedCells` lets the ground lines step aside under them.
+ */
+export function raisedTrack(sys: StaticSystem): {
+  decks: GeoJSON.FeatureCollection<GeoJSON.Polygon>;
+  piers: GeoJSON.FeatureCollection<GeoJSON.Polygon>;
+  raisedCells: Set<string>;
+} {
+  const decks: GeoJSON.Feature<GeoJSON.Polygon>[] = [], piers: GeoJSON.Feature<GeoJSON.Polygon>[] = [];
+  const raisedCells = new Set<string>();
+  if (sys.system !== "subway") return { decks: { type: "FeatureCollection", features: decks }, piers: { type: "FeatureCollection", features: piers }, raisedCells };
+  for (const route of Object.keys(sys.shapes)) {
+    const shape = sys.shapes[route];
+    const prof = trackHeightProfile(sys, route);
+    if (!prof) continue;
+    const color = sys.routes[route]?.color ?? "#808183";
+    let sincePier = 0;
+    for (let i = 1; i < shape.c.length; i++) {
+      const top = (prof.h[i - 1] + prof.h[i]) / 2;
+      if (top < 1) continue;
+      const [a, b] = [shape.c[i - 1], shape.c[i]];
+      const mid: [number, number] = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      raisedCells.add(cellKey(a)).add(cellKey(b));
+      const dx = (b[0] - a[0]) * 111_320 * Math.cos((a[1] * Math.PI) / 180), dy = (b[1] - a[1]) * 111_320;
+      const len = Math.hypot(dx, dy);
+      if (len < 1) continue;
+      const brg = ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
+      const bridge = structureAt(mid, 150)?.kind === "bridge";
+      decks.push({ type: "Feature", properties: { color, top, bridge }, geometry: bodyPolygonFlat(mid[0], mid[1], brg, len + 1, bridge ? 3.5 : 7) });
+      sincePier += len;
+      if (!bridge && sincePier > 40) {
+        sincePier = 0;
+        piers.push({ type: "Feature", properties: { top }, geometry: bodyPolygonFlat(b[0], b[1], 0, 1.2, 1.2) });
+      }
+    }
+  }
+  return { decks: { type: "FeatureCollection", features: decks }, piers: { type: "FeatureCollection", features: piers }, raisedCells };
+}
+/** ~45 m grid cell key. */
+export const cellKey = (p: GeoJSON.Position) => `${Math.round(p[0] * 2400)},${Math.round(p[1] * 2400)}`;
+
+/** Split subway ground lines into runs, marking runs under raised track `raised` so 3D hides them and 2D draws them solid. */
+export function splitRaised(lines: GeoJSON.Feature<GeoJSON.LineString>[], raised: Set<string>): GeoJSON.Feature<GeoJSON.LineString>[] {
+  const out: GeoJSON.Feature<GeoJSON.LineString>[] = [];
+  for (const f of lines) {
+    const c = f.geometry.coordinates;
+    const flag = c.map((p) => raised.has(cellKey(p)));
+    let start = 0;
+    for (let i = 1; i <= c.length; i++) {
+      if (i === c.length || flag[i] !== flag[start]) {
+        const seg = c.slice(start, Math.min(i + 1, c.length));
+        if (seg.length > 1) out.push({ ...f, properties: { ...f.properties, grade: flag[start] ? "elevated" : (f.properties as { grade: Grade }).grade }, geometry: { type: "LineString", coordinates: seg } });
+        start = i;
+      }
+    }
+  }
+  return out;
 }

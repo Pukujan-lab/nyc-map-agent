@@ -35,3 +35,15 @@ describe("track height profile", () => {
     expect(p.grade[2]).toBe("elevated");
   });
 });
+
+import { raisedTrack } from "./model";
+describe("raised track", () => {
+  it("puts a deck at bridge height and no piers on the bridge", () => {
+    const c: Array<[number, number]> = [[-73.9944, 40.7136], [-73.9906, 40.7075], [-73.9862, 40.7032]];
+    const s = { ...sys, shapes: { B: { c, m: [0, 740, 1340], g: ["underground", "underground", "underground"] } } } as unknown as StaticSystem;
+    const r = raisedTrack(s);
+    expect(r.decks.features.length).toBe(2);
+    expect(r.decks.features[0].properties?.top).toBe(40);
+    expect(r.piers.features.length).toBe(0);
+  });
+});

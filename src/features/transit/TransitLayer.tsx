@@ -8,9 +8,8 @@ import { toast } from "sonner";
 import {
   estimateTrain,
   stationOf,
-  structureAt,
-  viaductPiers,
-  viaductPolygons,
+  raisedTrack,
+  splitRaised,
   type StaticSystem,
   type SystemId,
   type Vehicle,
@@ -28,7 +27,6 @@ import { TransitStatusDetails } from "./TransitStatus";
 const TRANSIT_CLICK_LAYERS = ["transit-vehicle-2d", "transit-vehicle-hit", "transit-access", "transit-entrance", "transit-station"];
 
 const MAX_VEHICLES = 400;
-const midpoint = (c: GeoJSON.Position[]) => c[Math.floor(c.length / 2)] as [number, number];
 const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 const ICONS: Record<string, { node: JSX.Element; sdf: boolean }> = {
   "transit-arrow": { node: <Navigation2 fill="#fff" color="#fff" strokeWidth={1.5} size={48} />, sdf: true },
@@ -120,17 +118,25 @@ export default function TransitLayer() {
 
   const statics = rail.map((s) => data[s]?.stat).filter((s): s is StaticSystem => Boolean(s));
   const staticKey = statics.map((s) => s.system).join(",");
+  // Raised subway track (viaducts, portal ramps, bridge decks) from the height profiles.
+  const raised = useMemo(() => {
+    const sub = statics.find((s) => s.system === "subway");
+    return sub ? raisedTrack(sub) : { decks: EMPTY as GeoJSON.FeatureCollection<GeoJSON.Polygon>, piers: EMPTY as GeoJSON.FeatureCollection<GeoJSON.Polygon>, raisedCells: new Set<string>() };
+  }, [staticKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const lines = useMemo<GeoJSON.FeatureCollection>(() => ({
     type: "FeatureCollection",
-    // Commuter rail is drawn at grade; only the subway gets viaducts and tunnels.
-    features: statics.flatMap((s) => s.lines.features.map((f) => ({ ...f, properties: { ...f.properties, system: s.system, grade: s.system !== "subway" ? "grade" : structureAt(midpoint(f.geometry.coordinates)) ? "elevated" : f.properties.grade } }))),
-  }), [staticKey]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Commuter rail is drawn at grade; subway ground lines step aside under raised track.
+    features: statics.flatMap((s) => {
+      const fs = s.lines.features.map((f) => ({ ...f, properties: { ...f.properties, system: s.system, grade: s.system !== "subway" ? ("grade" as const) : f.properties.grade } }));
+      return s.system === "subway" ? splitRaised(fs, raised.raisedCells) : fs;
+    }),
+  }), [staticKey, raised]); // eslint-disable-line react-hooks/exhaustive-deps
   const stations = useMemo<GeoJSON.FeatureCollection>(() => ({
     type: "FeatureCollection",
     features: statics.flatMap((s) => s.stations.features.map((f) => ({ ...f, properties: { ...f.properties, system: s.system } }))),
   }), [staticKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  const viaduct = useMemo(() => viaductPolygons(lines as StaticSystem["lines"]), [lines]);
-  const piers = useMemo(() => viaductPiers(lines as StaticSystem["lines"]), [lines]);
+  const viaduct = raised.decks;
+  const piers = raised.piers;
   const entrances = data.subway?.stat?.entrances ?? EMPTY;
 
   // Planned work: wrenches on affected stations; reroutes and planned work get an
