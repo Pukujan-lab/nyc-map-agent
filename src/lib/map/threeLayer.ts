@@ -261,8 +261,6 @@ export function createVehicleLayer() {
   // ---- Route signs: the glTF livery bakes one sign into its shared texture, so draw each
   // train's own bullet on quads over the front and rear signs, one InstancedMesh per route. ----
   const SIGN_PX = 128, SIGN_M = 0.6;
-  /** Car ends (y) and sign height (z) in scene metres; refit once the subway model loads. */
-  let signFit = { half: 10, z: 3.8 * 0.78 };
   const signGeometry = (half: number, z: number) => {
     const rear = new THREE.PlaneGeometry(SIGN_M, SIGN_M).rotateX(Math.PI / 2).translate(0, -half - 0.04, z); // faces -y, reads upright
     const front = rear.clone().rotateZ(Math.PI); // faces +y, not mirrored
@@ -276,7 +274,7 @@ export function createVehicleLayer() {
     rear.dispose(); front.dispose();
     return g;
   };
-  let signGeom = signGeometry(signFit.half, signFit.z);
+  let signGeom = signGeometry(10, 3); // box stand-in; refit to the R142 (3.66 m tall) once it loads
   const signs = new RouteSignCache((face: SignFace) => {
     const canvas = document.createElement("canvas");
     canvas.width = canvas.height = SIGN_PX;
@@ -284,7 +282,7 @@ export function createVehicleLayer() {
     if (ctx) drawSignFace(ctx, face, SIGN_PX);
     const texture = new THREE.CanvasTexture(canvas);
     texture.encoding = THREE.sRGBEncoding;
-    const material = new THREE.MeshBasicMaterial({ map: texture, polygonOffset: true, polygonOffsetFactor: -2 });
+    const material = new THREE.MeshBasicMaterial({ map: texture });
     const mesh = new THREE.InstancedMesh(signGeom, material, CAP);
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     mesh.frustumCulled = false;
@@ -292,16 +290,6 @@ export function createVehicleLayer() {
     scene.add(mesh);
     return { mesh, dispose() { scene.remove(mesh); material.dispose(); texture.dispose(); mesh.dispose(); } };
   });
-  function refitSigns(parts: THREE.InstancedMesh[]) {
-    const box = new THREE.Box3();
-    for (const m of parts) { m.geometry.computeBoundingBox(); box.union(m.geometry.boundingBox!); }
-    if (box.isEmpty()) return;
-    signFit = { half: Math.max(-box.min.y, box.max.y), z: box.max.z * 0.78 };
-    const old = signGeom;
-    signGeom = signGeometry(signFit.half, signFit.z);
-    signs.clear(); // rebuilt on the next update with the new geometry
-    old.dispose();
-  }
   function loadModels() {
     // The meshopt decoder is only needed for these models: keep it out of the shared 3D chunk.
     void import("three/examples/jsm/libs/meshopt_decoder.module.js").then(({ MeshoptDecoder }) => {
@@ -317,7 +305,7 @@ export function createVehicleLayer() {
           return mesh;
         });
         boxes[mode].count = 0;
-        if (mode === "subway") refitSigns(models.subway);
+        if (mode === "subway") { signs.clear(); signGeom.dispose(); signGeom = signGeometry(VEHICLE_MODELS.subway.length / 2, 2.85); }
         update(last);
       }, undefined, () => { /* keep the box for this mode */ });
     }

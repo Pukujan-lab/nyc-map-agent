@@ -5,14 +5,6 @@
  * (three stays in threeLayer.ts); the layer hands in the texture factory.
  */
 
-/** Official MTA bullet colours (mta.info brand guide), by route id. */
-export const MTA_ROUTE_COLORS: Record<string, string> = {
-  "1": "#EE352E", "2": "#EE352E", "3": "#EE352E", "4": "#00933C", "5": "#00933C", "6": "#00933C", "7": "#B933AD",
-  A: "#0039A6", C: "#0039A6", E: "#0039A6", B: "#FF6319", D: "#FF6319", F: "#FF6319", M: "#FF6319", G: "#6CBE45",
-  J: "#996633", Z: "#996633", L: "#A7A9AC", N: "#FCCC0A", Q: "#FCCC0A", R: "#FCCC0A", W: "#FCCC0A", S: "#808183",
-  SI: "#0039A6",
-};
-
 export interface SignFace {
   /** Cache key: one texture per distinct face. */
   key: string;
@@ -27,14 +19,14 @@ export interface SignFace {
 /**
  * The bullet for a GTFS route id, same rules as the 2D bullets
  * (src/features/transit/bullets.ts in #178): express ids ending in X are a
- * diamond, shuttles read S, N/Q/R/W take black text. `color` overrides the
- * table (the feed's own route colour).
+ * diamond, shuttles read S, N/Q/R/W take black text. `color` is the feed's
+ * own route colour (MTA bullet colour).
  */
 export function signFace(route: string, color?: string): SignFace {
   const r = route.trim().toUpperCase();
   const express = /^[0-9A-Z]X$/.test(r);
   const text = express ? r.slice(0, 1) : r === "GS" || r === "FS" || r === "H" ? "S" : r || "?";
-  const fill = (color || MTA_ROUTE_COLORS[text] || "#808183").toUpperCase();
+  const fill = (color || "#808183").toUpperCase();
   const ink = ["N", "Q", "R", "W"].includes(text) ? "#111111" : "#FFFFFF";
   return { key: `${text}|${express ? 1 : 0}|${fill}`, text, express, color: fill, ink };
 }
@@ -66,7 +58,6 @@ export class RouteSignCache<T extends Disposable> {
 
   clear(): void { this.prune(new Set()); }
   get size(): number { return this.entries.size; }
-  keys(): string[] { return [...this.entries.keys()]; }
 }
 
 /** Draws a face onto a square 2D canvas: the line-colour bullet with its letter. */
@@ -80,7 +71,7 @@ export function drawSignFace(ctx: CanvasRenderingContext2D, face: SignFace, size
   ctx.fillStyle = face.color;
   ctx.fill();
   ctx.fillStyle = face.ink;
-  ctx.font = `bold ${Math.round(size * (face.text.length > 1 ? 0.42 : 0.6))}px "Helvetica Neue", Helvetica, Arial, sans-serif`;
+  ctx.font = `bold ${Math.round(size * (face.text.length > 1 ? 0.42 : 0.6))}px Helvetica, Arial, sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(face.text, c, c + size * 0.03);

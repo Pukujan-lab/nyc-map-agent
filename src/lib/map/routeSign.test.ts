@@ -3,11 +3,11 @@ import { RouteSignCache, signFace } from "./routeSign";
 
 describe("route sign faces", () => {
   it("gives each line its own colour and letter", () => {
-    expect(signFace("A")).toMatchObject({ text: "A", color: "#0039A6", ink: "#FFFFFF" });
-    expect(signFace("Q")).toMatchObject({ text: "Q", color: "#FCCC0A", ink: "#111111" });
-    expect(signFace("6X")).toMatchObject({ text: "6", express: true, color: "#00933C" });
+    expect(signFace("A", "#0039a6")).toMatchObject({ text: "A", color: "#0039A6", ink: "#FFFFFF" });
+    expect(signFace("Q", "#FCCC0A")).toMatchObject({ text: "Q", color: "#FCCC0A", ink: "#111111" });
+    expect(signFace("6X", "#00933C")).toMatchObject({ text: "6", express: true, color: "#00933C" });
     expect(signFace("GS").text).toBe("S");
-    expect(signFace("A").key).not.toBe(signFace("Q").key);
+    expect(signFace("A", "#0039A6").key).not.toBe(signFace("Q", "#FCCC0A").key);
     expect(signFace("6").key).not.toBe(signFace("6X").key);
   });
 });
