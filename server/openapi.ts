@@ -9,6 +9,7 @@ import { Query as AreasQuery } from "../api/areas";
 import { Query as BlocksQuery } from "../api/blocks";
 import { Query as StreetQuery } from "../api/street";
 import { Query as HazardsQuery } from "./features/hazards/routes";
+import { AlongQuery as TrafficAlongQuery } from "./features/traffic/routes";
 import { Query as WeatherQuery } from "./features/weather/routes";
 
 const Json = z.record(z.unknown()).openapi("Json");
@@ -86,6 +87,8 @@ export const ROUTES = {
   "/api/street": jsonRoute("/api/street", "Street noise / crash stats", StreetQuery),
   "/api/weather": jsonRoute("/api/weather", "Current weather near a point (Open-Meteo, NWS fallback)", WeatherQuery),
   "/api/hazards": jsonRoute("/api/hazards", "Active NWS alerts for NYC and flooded FloodNet sensors", HazardsQuery),
+  "/api/traffic/along": jsonRoute("/api/traffic/along", "NYC DOT traffic speeds along a line", TrafficAlongQuery),
+  "/api/traffic": jsonRoute("/api/traffic", "NYC DOT real-time speed links and today's closures GeoJSON"),
   "/api/transit": jsonRoute("/api/transit", "Live transit capabilities ({ bus })"),
   "/api/transit/:system": jsonRoute(
     "/api/transit/{system}",

@@ -719,6 +719,101 @@
         }
       }
     },
+    "/api/traffic/along": {
+      "get": {
+        "summary": "NYC DOT traffic speeds along a line",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 20000
+            },
+            "required": true,
+            "name": "line",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 10,
+              "maximum": 300
+            },
+            "required": false,
+            "name": "buffer",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/traffic": {
+      "get": {
+        "summary": "NYC DOT real-time speed links and today's closures GeoJSON",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/transit": {
       "get": {
         "summary": "Live transit capabilities ({ bus })",

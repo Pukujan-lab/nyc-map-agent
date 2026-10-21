@@ -19,6 +19,7 @@ import * as sources from "../api/sources";
 import * as street from "../api/street";
 import * as weather from "./features/weather/routes";
 import * as hazards from "./features/hazards/routes";
+import * as traffic from "./features/traffic/routes";
 import * as agent from "./features/agent/routes";
 import * as transit from "./features/transit/routes";
 
@@ -36,6 +37,8 @@ const routes: Array<[string, Handler]> = [
   ["/api/street", street],
   ["/api/weather", weather],
   ["/api/hazards", hazards],
+  ["/api/traffic/along", { GET: traffic.GET_ALONG }],
+  ["/api/traffic", traffic],
   ["/api/transit", transit],
   ["/api/transit/:system", transit],
 ];
