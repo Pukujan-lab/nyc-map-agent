@@ -29,3 +29,7 @@ jobs:
       - run: pnpm exec tsx scripts/ingest.ts ${{ github.event.inputs.sources }}
       - if: always()
         run: pnpm db:refresh
+      # Boundaries change rarely; reloading is cheap and keeps /api/areas current.
+      - run: pnpm load:areas
+      # Precomputed browser rollups for /api/aggregate (octo backend).
+      - run: pnpm build:aggregates

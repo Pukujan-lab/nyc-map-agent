@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { fetchDistrictBoundaries } from "@/lib/api/districts";
+import { DATA_BACKEND, fetchOctoAreas } from "@/lib/datasets/backend";
 import type { NtaBoundary } from "@/lib/api/nta";
 import type { MapModel, MapScale } from "@/lib/layers";
 import { buildAreas, type AreaDatum } from "./areas";
@@ -9,7 +10,8 @@ import { buildAreas, type AreaDatum } from "./areas";
 export function useAreas(model: MapModel, boundaries: NtaBoundary[] | null, scale: MapScale): AreaDatum[] {
   const districts = useQuery({
     queryKey: ["district-boundaries"],
-    queryFn: ({ signal }) => fetchDistrictBoundaries(signal),
+    queryFn: ({ signal }) =>
+      DATA_BACKEND === "octo" ? fetchOctoAreas("cd", signal) : fetchDistrictBoundaries(signal),
     enabled: scale === "districts",
     staleTime: Infinity,
     gcTime: Infinity,
