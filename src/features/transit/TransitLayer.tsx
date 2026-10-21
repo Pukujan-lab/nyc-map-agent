@@ -28,6 +28,8 @@ import { TransitStatusDetails } from "./TransitStatus";
 import { FOCUS_OPACITY, FOCUS_VEIL_ID, WORLD, useTransitFocus } from "./focus";
 
 /** Layers a click on the map should hand to transit instead of the area pick. */
+/** CC BY 4.0 credits for the 3D vehicle models (public/models/LICENSE.md), shown while they can be on screen. */
+const VEHICLE_CREDITS = "3D vehicles: R142 by yarankepang, XD40 by kieranfarr, P32 by Sharky (Sketchfab, CC BY 4.0)";
 const TRANSIT_CLICK_LAYERS = ["transit-vehicle-2d", "transit-vehicle-hit", "transit-access", "transit-entrance", "transit-station"];
 
 const MAX_VEHICLES = 400;
@@ -352,7 +354,7 @@ export default function TransitLayer() {
     v3d.current?.update(
       vehicles
         .filter((v) => !(walking && v.grade === "underground")) // street level shows entrances instead
-        .map((v) => ({ lon: v.lon, lat: v.lat, bearing: v.bearing, z: v.z ?? 0, color: v.system === "bus" ? "#f8fafc" : v.color, kind: v.system === "bus" ? "bus" : "train", ghost: v.grade === "underground" })),
+        .map((v) => ({ lon: v.lon, lat: v.lat, bearing: v.bearing, z: v.z ?? 0, color: v.system === "bus" ? "#f8fafc" : v.color, kind: v.system === "bus" ? "bus" : v.system === "subway" ? "subway" : "rail", ghost: v.grade === "underground" })),
     );
   }, [vehicles, three, walking]);
 
@@ -429,7 +431,7 @@ export default function TransitLayer() {
       <Source id="transit-work-segs" type="geojson" data={work.segs}>
         <Layer id="transit-work-line" type="line" paint={{ "line-color": "#f59e0b", "line-width": ["interpolate", ["linear"], ["zoom"], 10, 2, 16, 6], "line-dasharray": [1, 1.5], "line-opacity": 0.85 }} />
       </Source>
-      <Source id="transit-viaduct" type="geojson" data={three ? viaduct : EMPTY}>
+      <Source id="transit-viaduct" type="geojson" data={three ? viaduct : EMPTY} attribution={three ? VEHICLE_CREDITS : undefined}>
         <Layer id="transit-viaduct" type="fill-extrusion" minzoom={13} filter={["any", ["get", "bridge"], ["<", ["zoom"], 15]]}
           paint={{ "fill-extrusion-color": ["get", "color"], "fill-extrusion-base": ["-", ["get", "top"], 1.2], "fill-extrusion-height": ["get", "top"], "fill-extrusion-opacity": 0.9 }} />
       </Source>
