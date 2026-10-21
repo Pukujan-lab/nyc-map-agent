@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 import { fetchNtaBoundaries, type NtaBoundary } from "@/lib/api/nta";
+import { DATA_BACKEND, fetchOctoAggregate, fetchOctoAreas } from "@/lib/datasets/backend";
 import {
   readCachedAggregate,
   writeCachedAggregate,
@@ -36,6 +37,8 @@ export function runAggregation({
   onProgress,
   signal,
 }: RunAggregationOptions): Promise<AggregateResult> {
+  // Octo: the rollup is precomputed nightly; one cached JSON request, no worker.
+  if (DATA_BACKEND === "octo") return fetchOctoAggregate(dataset, windowId, signal);
   const cached = readCachedAggregate(dataset, windowId);
   if (cached) return Promise.resolve(cached);
 
@@ -124,7 +127,8 @@ export function useMapData(windowId: WindowId): MapData {
 
   const boundariesQuery = useQuery({
     queryKey: ["nta-boundaries"],
-    queryFn: ({ signal }) => fetchNtaBoundaries(signal),
+    queryFn: ({ signal }) =>
+      DATA_BACKEND === "octo" ? fetchOctoAreas("nta", signal) : fetchNtaBoundaries(signal),
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: Number.POSITIVE_INFINITY,
     retry: 2,

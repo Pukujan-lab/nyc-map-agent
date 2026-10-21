@@ -1,5 +1,8 @@
 import { z } from "zod";
+import { parseNtaBoundaries, type NtaBoundary } from "@/lib/api/nta";
+import { parseDistrictBoundaries } from "@/lib/api/districts";
 import type { NtaIndex } from "@/lib/geo/ntaIndex";
+import type { AggregateResult, DatasetId } from "@/lib/geo/types";
 import type { WindowId } from "@/lib/windows";
 import { addCell, emptyCounts, type SourceCounts } from "./fetchSource";
 import type { SourceConfig } from "./registry";
@@ -68,4 +71,21 @@ export async function fetchOctoCounts(
   out.truncated = Boolean(body.truncated);
   for (const row of body.rows) addCell(out, index, row.r, row.c, row.n);
   return out;
+}
+
+/** Octo: simplified NTA / community-district shapes from /api/areas (no Socrata call). */
+export async function fetchOctoAreas(level: "nta" | "cd", signal?: AbortSignal): Promise<NtaBoundary[]> {
+  const payload = await getJson(`/api/areas?level=${level}`, signal);
+  const boundaries = level === "nta" ? parseNtaBoundaries(payload) : parseDistrictBoundaries(payload);
+  if (boundaries.length === 0) throw new Error("Could not load area boundaries.");
+  return boundaries;
+}
+
+/** Octo: the precomputed noise / crash rollup the Socrata worker would otherwise build. */
+export async function fetchOctoAggregate(
+  dataset: DatasetId,
+  windowId: WindowId,
+  signal?: AbortSignal,
+): Promise<AggregateResult> {
+  return (await getJson(`/api/aggregate?dataset=${dataset}&window=${windowId}`, signal)) as AggregateResult;
 }

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { OctoError } from "./octo";
 
 /** JSON response with CDN caching: marts change nightly, so cache at the edge. */
-export function json(body: unknown, init: { status?: number; maxAge?: number } = {}): Response {
+export function json(body: unknown, init: { status?: number; maxAge?: number; browserMaxAge?: number } = {}): Response {
   const maxAge = init.maxAge ?? 900;
   return new Response(JSON.stringify(body), {
     status: init.status ?? 200,
@@ -11,7 +11,7 @@ export function json(body: unknown, init: { status?: number; maxAge?: number } =
       "cache-control":
         init.status && init.status >= 400
           ? "no-store"
-          : `public, max-age=60, s-maxage=${maxAge}, stale-while-revalidate=86400`,
+          : `public, max-age=${init.browserMaxAge ?? 60}, s-maxage=${maxAge}, stale-while-revalidate=86400`,
     },
   });
 }
