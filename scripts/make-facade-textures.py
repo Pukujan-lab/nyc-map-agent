@@ -1,8 +1,11 @@
 """Draws the small repeating facade patterns used by the textured 3D city.
 
 Authored here (no third-party art), released with the repo. Each tile is
-32x32 px = two floors x two bays at street-level zoom, so it repeats cleanly
-along walls via MapLibre's fill-extrusion-pattern.
+drawn as 32x32 px = two floors x two bays, then scaled up (nearest) to
+OUT_PX. MapLibre sizes a wall pattern in pixels of the tile's *overscaled*
+zoom, and the 1.7 m street-level eye sits at z21-22 (0.057 m/px at z21 in
+NYC), so 112 px = two floors of ~3.2 m each where people actually look at
+walls. Overhead (z16-18) the windows read larger, which is fine from above.
 
     python3 scripts/make-facade-textures.py
 """
@@ -12,6 +15,8 @@ from PIL import Image, ImageDraw
 OUT = Path("public/textures")
 OUT.mkdir(parents=True, exist_ok=True)
 S = 32
+# 2 floors x 3.2 m / 0.0566 m per px at z21 (lat 40.7) = 113 px.
+OUT_PX = 112
 
 
 def tile(name, wall, window, frame=None, cols=2, rows=2, win=(6, 9), sill=None, band=None):
@@ -31,7 +36,7 @@ def tile(name, wall, window, frame=None, cols=2, rows=2, win=(6, 9), sill=None, 
             d.rectangle([x0, y0, x0 + win[0] - 1, y0 + win[1] - 1], fill=window)
             if sill:
                 d.rectangle([x0 - 1, y0 + win[1], x0 + win[0], y0 + win[1] + 1], fill=sill)
-    im.save(OUT / f"facade-{name}.png")
+    im.resize((OUT_PX, OUT_PX), Image.NEAREST).save(OUT / f"facade-{name}.png")
 
 
 tile("rowhouse", "#7a4a3a", "#2b3440", frame="#d8cfc0", sill="#c9bba6", win=(6, 10))
@@ -43,15 +48,15 @@ im = Image.new("RGBA", (S, S), "#5d86a8")
 d = ImageDraw.Draw(im)
 for i in range(0, S, 8):
     d.line([(i, 0), (i, S)], fill="#c4d3df")
-for j in range(0, S, 11):
+for j in range(0, S, 16):  # two floors per tile, like the others
     d.line([(0, j), (S, j)], fill="#c4d3df")
 d.polygon([(0, S), (S, 0), (S, 8), (8, S)], fill="#7aa3c4")
-im.save(OUT / "facade-tower.png")
+im.resize((OUT_PX, OUT_PX), Image.NEAREST).save(OUT / "facade-tower.png")
 # Storefront band: dark glass with a lighter sign fascia on top.
 im = Image.new("RGBA", (S, S), "#3a3f45")
 d = ImageDraw.Draw(im)
 d.rectangle([0, 0, S, 7], fill="#b23a2e")
 d.rectangle([2, 10, 14, S - 1], fill="#9fc3d6")
 d.rectangle([18, 10, 30, S - 1], fill="#9fc3d6")
-im.save(OUT / "facade-storefront.png")
+im.resize((OUT_PX, OUT_PX), Image.NEAREST).save(OUT / "facade-storefront.png")
 print(sorted(p.name for p in OUT.glob("*.png")))
