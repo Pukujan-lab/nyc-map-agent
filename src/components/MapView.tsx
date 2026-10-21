@@ -3,7 +3,7 @@ import MapLibreMap, {
   type MapLayerMouseEvent,
   type MapRef,
 } from "react-map-gl/maplibre";
-import type { GeoJSONSource } from "maplibre-gl";
+import { LngLat, type GeoJSONSource } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { NtaBoundary } from "@/lib/api/nta";
 import { formatCount, formatPercent } from "@/lib/format";
@@ -32,20 +32,51 @@ import {
 import { LAYER_IDS, SOURCE_IDS, buildFallbackStyle } from "@/lib/map/style";
 import type { WalkingRoute } from "@/lib/api/routing";
 import { useDataView } from "@/lib/store/DataViewContext";
+import type { CameraOptions, Map as MaplibreMapInstance } from "maplibre-gl";
 import {
-  clampWalkZoom,
+  approachBearing,
+  clampLookPitch,
+  EYE_HEIGHT_M,
+  LOOK_AHEAD_M,
+  LOOK_DEG_PER_PX,
   poseAlongRoute,
   resolveWalkInput,
   stepPose,
   WALK_IDLE,
   WALK_KEYS,
+  WALK_MAX_PITCH,
   WALK_MAX_ZOOM,
-  WALK_MIN_ZOOM,
   WALK_PITCH,
   WALK_SPEED,
-  WALK_ZOOM,
   type WalkInput,
 } from "@/lib/map/walk";
+
+/** The walker's eye: where they stand, which way they face, how far they look up or down. */
+interface Eye {
+  lon: number;
+  lat: number;
+  bearing: number;
+  pitch: number;
+}
+
+/**
+ * Camera options for an eye 1.7 m above the pavement. MapLibre 5 derives the
+ * centre, zoom and centre elevation from a camera position, so this is a real
+ * pedestrian viewpoint rather than a steep pitch from a rooftop.
+ */
+function eyeCamera(map: MaplibreMapInstance, eye: Eye): CameraOptions {
+  // Aim at a point LOOK_AHEAD_M along the street, raised or lowered to match
+  // the look angle. Keeping that target near the ground keeps the map centre
+  // (and so tile LOD) on the street around you rather than kilometres away.
+  const rad = (eye.bearing * Math.PI) / 180;
+  const cosLat = Math.cos((eye.lat * Math.PI) / 180);
+  const to: [number, number] = [
+    eye.lon + (LOOK_AHEAD_M * Math.sin(rad)) / (111_320 * cosLat),
+    eye.lat + (LOOK_AHEAD_M * Math.cos(rad)) / 111_320,
+  ];
+  const toAlt = EYE_HEIGHT_M - LOOK_AHEAD_M / Math.tan((eye.pitch * Math.PI) / 180);
+  return map.calculateCameraOptionsFromTo(new LngLat(eye.lon, eye.lat), EYE_HEIGHT_M, new LngLat(to[0], to[1]), toAlt);
+}
 import { useMapState } from "@/lib/store/MapStateContext";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 import { WalkControls } from "./WalkControls";
@@ -143,6 +174,8 @@ export function MapView({
   } | null>(null);
   /** So leaving walk mode can restore the overhead camera exactly once. */
   const wasWalking = useRef(false);
+  /** The walker's eye pose; the camera is derived from it every frame. */
+  const eyeRef = useRef<Eye | null>(null);
 
   const {
     layer,
@@ -591,19 +624,33 @@ export function MapView({
     const map = mapRef.current?.getMap();
     if (!map) return;
     let cancelled = false;
+    let cleanup: (() => void) | null = null;
     // Lazy chunk: users who never turn it on never download it.
     import("@/lib/map/city3d")
-      .then(async ({ installCity3d, setCity3dVisible }) => {
+      .then(async ({ installCity3d, setCity3dVisible, city3dCoversView }) => {
         if (!city3d) {
           setCity3dVisible(map, false);
           return;
         }
         await installCity3d(map);
-        if (!cancelled) setCity3dVisible(map, true);
+        if (cancelled) return;
+        // Basemap buildings only step aside where textured tiles exist.
+        let covered: boolean | null = null;
+        const sync = () => {
+          const now = city3dCoversView(map);
+          if (now === covered) return;
+          covered = now;
+          setCity3dVisible(map, true, now);
+        };
+        setCity3dVisible(map, true, false);
+        covered = false;
+        map.on("idle", sync);
+        cleanup = () => map.off("idle", sync);
       })
       .catch((err) => console.warn("3D city failed to load", err));
     return () => {
       cancelled = true;
+      cleanup?.();
     };
   }, [ready, styleEpoch, city3d]);
 
@@ -668,7 +715,14 @@ export function MapView({
     const map = mapRef.current?.getMap();
     if (!map) return;
     applyAtmosphere(map, walking);
-  }, [ready, walking]);
+    // At eye level basemap labels stand on the horizon and float in the sky,
+    // so they step aside while walking; our own route markers stay.
+    const own = new Set(Object.keys(SOURCE_IDS).map((k) => SOURCE_IDS[k as keyof typeof SOURCE_IDS] as string));
+    for (const layer of map.getStyle().layers ?? []) {
+      if (layer.type !== "symbol" || own.has((layer as { source?: string }).source ?? "")) continue;
+      map.setLayoutProperty(layer.id, "visibility", walking ? "none" : "visible");
+    }
+  }, [ready, walking, styleEpoch]);
 
   // Entering walk mode is a camera move, not a mode flag: eye level is the
   // steepest pitch the map allows, at a zoom where buildings have height.
@@ -692,13 +746,9 @@ export function MapView({
             center.lat,
           ]);
 
-    map.easeTo({
-      center: target,
-      pitch: WALK_PITCH,
-      bearing: map.getBearing(),
-      zoom: WALK_ZOOM,
-      duration: reducedMotion ? 0 : 900,
-    });
+    const eye: Eye = { lon: target[0], lat: target[1], bearing: map.getBearing(), pitch: WALK_PITCH };
+    eyeRef.current = eye;
+    map.easeTo({ ...eyeCamera(map, eye), duration: reducedMotion ? 0 : 900 });
     setWalkPlace(describeAtRef.current(target[1], target[0]));
     // `describeAt` is deliberately read through a ref: its identity changes
     // with the data, and re-running this would yank the camera back.
@@ -718,9 +768,11 @@ export function MapView({
     setTilted(false);
     const map = mapRef.current?.getMap();
     if (!map || !ready) return;
+    eyeRef.current = null;
     map.easeTo({
       pitch: 0,
       bearing: 0,
+      elevation: 0,
       zoom: Math.min(map.getZoom(), WALK_EXIT_ZOOM),
       duration: reducedMotion ? 0 : 700,
     });
@@ -768,61 +820,82 @@ export function MapView({
     let last = performance.now();
     // Crossing a block edge is the only thing worth a React update: the strip
     // then says which block you are standing in and what happened there.
-    let standingOn = blockKey(map.getCenter().lat, map.getCenter().lng).key;
+    const startEye = eyeRef.current;
+    let standingOn = startEye
+      ? blockKey(startEye.lat, startEye.lon).key
+      : blockKey(map.getCenter().lat, map.getCenter().lng).key;
+    // Drag (mouse or one finger) looks around: across turns, up/down tilts the
+    // head. Map panning is off while walking, so the drag is ours alone.
+    let lookDirty = false;
+    let dragFrom: { x: number; y: number } | null = null;
+    const canvas = map.getCanvas();
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.button !== 0) return;
+      dragFrom = { x: event.clientX, y: event.clientY };
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      const eye = eyeRef.current;
+      if (!dragFrom || !eye) return;
+      const dx = event.clientX - dragFrom.x;
+      const dy = event.clientY - dragFrom.y;
+      dragFrom = { x: event.clientX, y: event.clientY };
+      // Grab-the-world feel: drag left to turn right, drag down to look up.
+      eye.bearing = (eye.bearing - dx * LOOK_DEG_PER_PX + 360) % 360;
+      eye.pitch = clampLookPitch(eye.pitch + dy * LOOK_DEG_PER_PX);
+      lookDirty = true;
+    };
+    const onPointerUp = () => {
+      dragFrom = null;
+    };
+    canvas.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
     let routeDistance = 0;
     const tick = (now: number) => {
       const dt = (now - last) / 1000;
       last = now;
       const input = resolveWalkInput(held, walkPad.current);
       const followed = followRef.current ? routeRef.current : null;
+      const eye = eyeRef.current;
+      if (!eye) {
+        frame = requestAnimationFrame(tick);
+        return;
+      }
+      let moved = lookDirty;
+      lookDirty = false;
       if (followed) {
         // Following directions: advance along the polyline at walking pace
-        // (Shift / sprint still runs), facing down the current segment.
+        // (Shift / sprint still runs), turning smoothly into each segment.
         routeDistance +=
           WALK_SPEED * (input.sprint ? 3 : 1) * Math.min(Math.max(dt, 0), 0.2);
         const pose = poseAlongRoute(followed.coordinates, routeDistance);
         if (pose) {
-          map.jumpTo({
-            center: [pose.lon, pose.lat],
-            bearing: pose.bearing,
-            pitch: WALK_PITCH,
-            zoom: clampWalkZoom(map.getZoom()),
-          });
-          const key = blockKey(pose.lat, pose.lon).key;
-          if (key !== standingOn) {
-            standingOn = key;
-            setWalkPlace(describeAtRef.current(pose.lat, pose.lon));
-          }
+          eye.lon = pose.lon;
+          eye.lat = pose.lat;
+          eye.bearing = approachBearing(eye.bearing, pose.bearing, dt);
+          moved = true;
           if (pose.done) setFollowingRoute(false);
         }
       } else if (input.forward !== 0 || input.turn !== 0) {
-        const center = map.getCenter();
         const next = stepPose(
-          {
-            lon: center.lng,
-            lat: center.lat,
-            bearing: map.getBearing(),
-            zoom: map.getZoom(),
-          },
+          { lon: eye.lon, lat: eye.lat, bearing: eye.bearing, zoom: 0 },
           input,
           dt,
         );
-        // Pitch and zoom are both pinned while walking: moving cancels any
-        // camera animation in flight, and if the ease into street level had
-        // only got halfway there the first keypress would otherwise freeze the
-        // camera at rooftop height — a top-down map is not a walk, and neither
-        // is 85° from 100 m up.
-        map.jumpTo({
-          center: [next.lon, next.lat],
-          bearing: next.bearing,
-          pitch: WALK_PITCH,
-          // Scroll-zoom is allowed while walking, inside the sharp range.
-          zoom: clampWalkZoom(map.getZoom()),
-        });
-        const key = blockKey(next.lat, next.lon).key;
+        eye.lon = next.lon;
+        eye.lat = next.lat;
+        eye.bearing = next.bearing;
+        moved = true;
+      }
+      if (moved) {
+        // The camera is re-derived from the eye every frame: moving cancels
+        // any camera animation in flight, and the eye never drifts upward.
+        map.jumpTo(eyeCamera(map, eye));
+        const key = blockKey(eye.lat, eye.lon).key;
         if (key !== standingOn) {
           standingOn = key;
-          setWalkPlace(describeAtRef.current(next.lat, next.lon));
+          setWalkPlace(describeAtRef.current(eye.lat, eye.lon));
         }
       }
       frame = requestAnimationFrame(tick);
@@ -836,6 +909,10 @@ export function MapView({
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
+      canvas.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
     };
     // `describeAt` comes through a ref so a data refresh cannot tear down the
     // loop and drop the keys the walker is holding.
@@ -914,10 +991,12 @@ export function MapView({
         ref={mapRef}
         mapStyle={BASEMAP_STYLE_URL}
         initialViewState={viewState}
-        maxPitch={MAX_PITCH}
-        minZoom={walking ? WALK_MIN_ZOOM : 9}
-        // While walking, zoom is held inside the range where the vector tiles
-        // are still sharp (see `WALK_MAX_ZOOM` in walk.ts).
+        // Street level looks past the horizon (MapLibre 5 allows pitch > 85);
+        // the overhead map keeps its 85° ceiling.
+        maxPitch={walking ? WALK_MAX_PITCH : MAX_PITCH}
+        minZoom={9}
+        // An eye 1.7 m up sits around z22; the camera height comes from the
+        // eye pose, not from scroll-zoom.
         maxZoom={walking ? WALK_MAX_ZOOM : 22}
         // The built-in arrow-key panning has to stand down while walking, or
         // every keypress would move the camera twice.
@@ -925,7 +1004,8 @@ export function MapView({
         // Scroll-zoom stays on while walking (bounded by min/maxZoom above);
         // double-click, pinch-rotate and right-drag stay off so the pitch
         // cannot tip away from the street.
-        scrollZoom
+        scrollZoom={!walking}
+        dragPan={!walking}
         doubleClickZoom={!walking}
         touchZoomRotate={!walking}
         dragRotate={!walking}

@@ -1,29 +1,44 @@
 /**
  * First-person navigation for the map. There is no terrain and no game engine:
- * walking is just a steeply pitched camera that you drive with the keyboard, so
+ * walking is a camera placed 1.7 m above the street that you drive with the keyboard, so
  * the arithmetic lives here and can be tested without a WebGL context.
  */
 
 /**
- * Street-level pitch. 85° (MapLibre's ceiling) at zoom 21 put the eye ~7 m up
- * but rendered the vector tiles ~6 zooms past their native maximum (OpenFreeMap
- * tops out at z14 vector data), so roads, labels and building edges turned to
- * blur. 75° keeps a horizon in frame while leaving the ground readable.
+ * Eye height in metres. MapLibre 5 can place the camera itself
+ * (`calculateCameraOptionsFromCameraLngLatAltRotation`), so street level is a
+ * real pedestrian eye 1.7 m above the pavement, not a pitch/zoom compromise.
  */
-export const WALK_PITCH = 75;
+export const EYE_HEIGHT_M = 1.7;
 /**
- * Camera zoom while walking, capped at 18.5. Camera height is roughly
- * `1.5 × viewport px × metres-per-pixel × cos(pitch)`; at 75° and z18.5 that is
- * ~60 m for a 900 px viewport — a low-flying drone rather than eye level, but
- * the tiles and 3D buildings stay sharp, which is what made the old camera
- * unusable. Scroll-zoom is allowed inside `[WALK_MIN_ZOOM, WALK_MAX_ZOOM]`.
+ * Default look angle: 90° is level with the horizon, so 86° looks a touch
+ * down the street — the horizon sits in the upper third and buildings rise.
  */
-export const WALK_ZOOM = 18.5;
-export const WALK_MIN_ZOOM = 16.5;
-export const WALK_MAX_ZOOM = 19;
+export const WALK_PITCH = 86;
+/** Drag-to-look range: from the kerb at your feet up to the rooftops. */
+export const LOOK_MIN_PITCH = 55;
+export const LOOK_MAX_PITCH = 115;
+/** The map's pitch ceiling while walking (MapLibre 5 allows up to 180). */
+export const WALK_MAX_PITCH = 120;
+/** Zoom ceiling while walking; an eye 1.7 m up lands around z21.5–22.5. */
+export const WALK_MAX_ZOOM = 24;
+/** Distance to the point the camera aims at; it becomes the map centre. */
+export const LOOK_AHEAD_M = 30;
+/** Degrees of look per dragged pixel. */
+export const LOOK_DEG_PER_PX = 0.25;
 
-export function clampWalkZoom(zoom: number): number {
-  return Math.min(WALK_MAX_ZOOM, Math.max(WALK_MIN_ZOOM, zoom));
+export function clampLookPitch(pitch: number): number {
+  return Math.min(LOOK_MAX_PITCH, Math.max(LOOK_MIN_PITCH, pitch));
+}
+
+/**
+ * Eases a bearing towards a target along the short way round, so following a
+ * route turns corners like a walker rather than snapping 90°.
+ */
+export function approachBearing(current: number, target: number, dt: number, rate = 6): number {
+  const delta = ((target - current + 540) % 360) - 180;
+  const t = 1 - Math.exp(-rate * Math.max(0, dt));
+  return normalizeBearing(current + delta * t);
 }
 
 /** Metres per second, before sprinting. */

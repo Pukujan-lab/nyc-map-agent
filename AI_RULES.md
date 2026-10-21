@@ -56,6 +56,8 @@ If a task seems to need a library not on this list, prefer the closest listed op
 
 Dependency notes:
 - `@radix-ui/react-accordion` 1.2.1, `@radix-ui/react-collapsible` 1.1.1, `@radix-ui/react-dropdown-menu` 2.1.2, `@radix-ui/react-switch` 1.1.1, `@radix-ui/react-checkbox` 1.1.2 (all MIT) are the Radix primitives behind the stock shadcn `accordion`, `collapsible`, `dropdown-menu`, `switch` and `checkbox` components. They are used by the data-sources drawer, the view-mode dropdown and the collapsible details sections.
+- `maplibre-gl` 5.24.0 (BSD-3-Clause) and `react-map-gl` 8.1.3 (MIT): MapLibre 5 places the camera itself (`calculateCameraOptionsFromTo` with altitudes, pitch above 85), so street level is a real eye 1.7 m above the pavement (`eyeCamera()` in `MapView`, constants in `walk.ts`). The overhead map keeps `maxPitch` 85; only walking raises it to 120 and `maxZoom` to 24. Drag looks around while walking (map drag-pan and scroll-zoom are off), and basemap labels are hidden at eye level. This supersedes the pitch/zoom notes above.
+- Textured 3D city tiles are citywide: `pnpm build:city-tiles` writes `public/tiles/nyc-city.pmtiles` (~82 MB, gitignored); `VITE_CITY_TILES_URL` points at a CDN copy. Street level turns the textured city on by default (`city3d=0` in the Layers dropdown turns it off). Basemap extrusions only step aside where textured buildings are loaded around the camera.
 - Walking directions add no package. They are one `fetch` to OSRM (`src/lib/api/routing.ts`).
 - Dataset registry: every Socrata map source is one entry in `src/lib/datasets/registry.ts`. Add a source there; do not write a per-dataset module.
 
