@@ -34,7 +34,7 @@ export function mount(map: MapLibreMap): () => void {
     for (const layer of map.getStyle().layers ?? []) {
       const source = (layer as { source?: string }).source;
       // Our data layers, other features' overlays and the glow keep their own colours.
-      if (layer.id === GLOW_LAYER || (source && own.has(source)) || /^(hazards|restrooms|weather)/.test(layer.id)) continue;
+      if (layer.id === GLOW_LAYER || (source && own.has(source)) || /^(hazards|restrooms|weather|traffic|parking|transit)/.test(layer.id)) continue;
       for (const prop of COLOR_PROPS[layer.type] ?? []) {
         const key = `${layer.id}|${prop}`;
         const current = map.getPaintProperty(layer.id, prop);
