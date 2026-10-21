@@ -1,4 +1,5 @@
 import { Footprints, MapPin, Navigation, X } from "lucide-react";
+import { AddressCombobox } from "@/components/AddressCombobox";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { WalkingRoute } from "@/lib/api/routing";
@@ -36,6 +37,7 @@ export function RoutePanel({
     routeEnd,
     routePicking,
     setRoutePicking,
+    setRoutePoint,
     clearRoute,
     followingRoute,
     setFollowingRoute,
@@ -85,28 +87,33 @@ export function RoutePanel({
           </Button>
         </div>
 
-        <div className="mt-2 grid grid-cols-2 gap-2">
+        <div className="mt-2 space-y-1.5">
           {(["start", "end"] as const).map((end) => {
             const point = end === "start" ? routeStart : routeEnd;
             const picking = routePicking === end;
+            const name = end === "start" ? "A" : "B";
             return (
-              <Button
-                key={end}
-                type="button"
-                size="sm"
-                variant={picking ? "default" : "outline"}
-                className="h-8 justify-start text-[11px]"
-                onClick={() => setRoutePicking(picking ? null : end)}
-              >
-                <MapPin
-                  className={end === "start" ? "h-3.5 w-3.5 text-green-500" : "h-3.5 w-3.5 text-red-500"}
+              <div key={end} className="flex items-center gap-1.5">
+                <AddressCombobox
+                  label={`${name} address`}
+                  placeholder={
+                    picking ? "Click the map…" : point ? `${name} pinned on map` : `${name}: type an address`
+                  }
+                  resetKey={point ? `${point.lon},${point.lat}` : ""}
+                  onSelect={(hit) => setRoutePoint(end, { lon: hit.lon, lat: hit.lat })}
                 />
-                {picking
-                  ? "Click the map…"
-                  : point
-                    ? `${end === "start" ? "A" : "B"} set · change`
-                    : `Pick ${end === "start" ? "A (start)" : "B (end)"}`}
-              </Button>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant={picking ? "default" : "outline"}
+                  aria-label={`Pick ${name} on the map`}
+                  aria-pressed={picking}
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => setRoutePicking(picking ? null : end)}
+                >
+                  <MapPin className={end === "start" ? "h-3.5 w-3.5 text-green-500" : "h-3.5 w-3.5 text-red-500"} />
+                </Button>
+              </div>
             );
           })}
         </div>
@@ -122,7 +129,7 @@ export function RoutePanel({
               about <span className="font-semibold tabular-nums">{formatDuration(route.durationSeconds)}</span> on foot
             </span>
           ) : (
-            "Pick a start and an end point on the map."
+            "Type an address or tap the pin to pick on the map."
           )}
         </div>
 
