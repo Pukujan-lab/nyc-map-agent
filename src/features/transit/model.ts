@@ -1,3 +1,5 @@
+import { defaultDwell, motionAt } from "./dwell";
+
 /** Pure transit math: estimated train positions along GTFS shapes, arrivals, vehicle bodies. */
 export type SystemId = "subway" | "lirr" | "mnr";
 export const RAIL_SYSTEMS: SystemId[] = ["subway", "lirr", "mnr"];
@@ -21,7 +23,8 @@ export type StaticSystem = {
   stopM: Record<string, Record<string, number>>;
   entrances?: GeoJSON.FeatureCollection<GeoJSON.Point, { id: string; name: string; kind: string }>;
 };
-export type LiveTrip = { id: string; route: string; dir: number | null; stops: Array<[string, number]>; at?: string };
+/** stops: [stop id, arrival time, realtime departure when later]; origin: first stop is the trip's origin. */
+export type LiveTrip = { id: string; route: string; dir: number | null; stops: Array<[string, number] | [string, number, number]>; at?: string; origin?: boolean };
 export type LiveSystem = { at: number; trips: LiveTrip[] };
 export type Bus = { id: string; route: string; dir: number | null; lon: number; lat: number; bearing: number | null; next: string | null; t: number };
 
@@ -40,6 +43,8 @@ export type Vehicle = {
   dir: number | null;
   nextStop?: string;
   eta?: number;
+  /** Stopped at a station: dwelling, waiting at the origin, or arrived at the terminal. */
+  stopped?: { kind: "at" | "departs" | "arrived"; stop: string; t: number };
 };
 
 /** Subway platform ids are the station id plus N/S. */
@@ -71,39 +76,39 @@ function bearingOf(a: [number, number], b: [number, number]) {
 }
 
 /**
- * Approximate where a train is now: between the last stop whose time has
- * passed and the next one, linearly in time, measured along the route shape.
- * Feeds drop passed stops, so with no passed stop we extrapolate back from the
- * first two upcoming ones (capped). Returns null when we cannot place it.
+ * Where a train is now, measured along the route shape. It dwells at each
+ * stop (realtime departure when given, else a default by station), eases out
+ * of and into stations, and travels in the remaining time so predicted
+ * arrivals still hold. Waits at its origin until departure; stops at the
+ * terminal, then leaves the map. Feeds drop passed stops, so with no passed
+ * stop we extrapolate back from the first leg (capped). Null when unplaceable.
+ * One function drives 2D bullets, 3D models and the follow camera.
  */
 export function estimateTrain(sys: StaticSystem, trip: LiveTrip, now: number): Vehicle | null {
   const shape = sys.shapes[trip.route];
   const sm = sys.stopM[trip.route];
   if (!shape || !sm) return null;
   const pts = trip.stops
-    .map(([id, t]) => ({ id, t, m: sm[stationOf(sys.system, id)] }))
-    .filter((p): p is { id: string; t: number; m: number } => p.m !== undefined);
+    .map(([id, arr, dep]) => ({ id, arr, dep, m: sm[stationOf(sys.system, id)] }))
+    .filter((p): p is { id: string; arr: number; dep: number | undefined; m: number } => p.m !== undefined);
   if (!pts.length) return null;
-  const k = pts.findIndex((p) => p.t > now);
-  if (k === -1) return null; // finished
-  const next = pts[k];
-  if (next.t - now > 30 * 60) return null; // not running yet
-  let m: number;
-  let forward: number;
-  if (k > 0) {
-    const prev = pts[k - 1];
-    const f = (now - prev.t) / Math.max(1, next.t - prev.t);
-    m = prev.m + (next.m - prev.m) * f;
-    forward = Math.sign(next.m - prev.m) || 1;
-  } else if (pts[1]) {
-    const speed = (pts[1].m - next.m) / Math.max(1, pts[1].t - next.t);
-    forward = Math.sign(speed) || 1;
-    const back = Math.min(Math.abs(speed * (next.t - now)), 1500);
-    m = next.m - forward * back;
-  } else {
-    m = next.m;
-    forward = 1;
-  }
+  if (pts[0].arr - now > 30 * 60) return null; // not running yet
+  const names = stationNames(sys);
+  const mo = motionAt(pts, now, (p) => {
+    const st = stationOf(sys.system, p.id);
+    return sys.system === "subway" ? defaultDwell(st, names.get(st)) : 45;
+  }, { origin: trip.origin });
+  if (!mo) return null; // finished
+  const m = mo.m;
+  const nextI = mo.phase === "moving" ? (mo.f === 0 && mo.i === 0 && now < pts[0].arr ? 0 : mo.i + 1) : mo.i;
+  const next = pts[Math.min(nextI, pts.length - 1)];
+  const onward = pts[Math.min(mo.i + 1, pts.length - 1)];
+  const forward = Math.sign(onward.m - pts[mo.i].m) || Math.sign(pts[mo.i].m - (pts[mo.i - 1]?.m ?? pts[mo.i].m)) || 1;
+  const stopped: Vehicle["stopped"] =
+    mo.phase === "origin" ? { kind: "departs", stop: pts[0].id, t: mo.departs }
+    : mo.phase === "dwell" ? { kind: "at", stop: pts[mo.i].id, t: mo.departs }
+    : mo.phase === "terminal" ? { kind: "arrived", stop: pts[mo.i].id, t: mo.arrived }
+    : undefined;
   const here = pointAt(shape, m);
   const prof = trackHeightProfile(sys, trip.route);
   const z = prof ? prof.h[here.lo] + (prof.h[here.hi] - prof.h[here.lo]) * here.f : 0;
@@ -122,9 +127,17 @@ export function estimateTrain(sys: StaticSystem, trip: LiveTrip, now: number): V
     grade,
     z,
     dir: trip.dir,
-    nextStop: next.id,
-    eta: next.t,
+    nextStop: mo.phase === "dwell" || mo.phase === "origin" ? onward.id : next.id,
+    eta: mo.phase === "dwell" || mo.phase === "origin" ? onward.arr : next.arr,
+    stopped,
   };
+}
+
+const nameCache = new WeakMap<StaticSystem, Map<string, string>>();
+function stationNames(sys: StaticSystem) {
+  let m = nameCache.get(sys);
+  if (!m) nameCache.set(sys, (m = new Map(sys.stations.features.map((f) => [f.properties.id, f.properties.name]))));
+  return m;
 }
 
 export type Arrival = { route: string; direction: string; times: number[] };

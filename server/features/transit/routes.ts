@@ -43,7 +43,10 @@ export type TransitTrip = {
   route: string;
   dir: number | null;
   /** Upcoming (and just-passed) stops: [stopId, unix seconds]. */
-  stops: Array<[string, number]>;
+  /** [stop id, arrival (or departure) time, departure time when the feed gives a later one]. */
+  stops: Array<[string, number] | [string, number, number]>;
+  /** First update has only a departure: the train is at its origin terminal. */
+  origin?: boolean;
   /** Vehicle-reported current stop, if any. */
   at?: string;
 };
@@ -62,17 +65,21 @@ async function loadTrips(system: string) {
     for (const e of f.value.entity) {
       const tu = e.tripUpdate;
       if (!tu?.trip) continue;
-      const stops: Array<[string, number]> = [];
-      for (const s of tu.stopTimeUpdate ?? []) {
-        const t = num(s.arrival?.time) || num(s.departure?.time);
-        if (s.stopId && t && t > now - 600) stops.push([s.stopId, t]);
+      const stops: TransitTrip["stops"] = [];
+      const updates = tu.stopTimeUpdate ?? [];
+      for (const s of updates) {
+        const a = num(s.arrival?.time), d = num(s.departure?.time);
+        const t = a || d;
+        if (!s.stopId || !t || t <= now - 600) continue;
+        stops.push(a && d && d > a ? [s.stopId, a, d] : [s.stopId, t]);
       }
+      const origin = !!updates[0] && !num(updates[0].arrival?.time) && !!num(updates[0].departure?.time);
       if (!stops.length) continue;
       const tripId = tu.trip.tripId ?? e.id;
       // NYCT trip ids carry the direction (..N / ..S); rail uses direction_id.
       const m = /\.\.?([NS])/.exec(tripId);
       const dir = tu.trip.directionId ?? (m ? (m[1] === "N" ? 0 : 1) : null);
-      trips.push({ id: tripId, route: tu.trip.routeId ?? "", dir, stops, at: at.get(tripId) });
+      trips.push({ id: tripId, route: tu.trip.routeId ?? "", dir, stops, at: at.get(tripId), ...(origin ? { origin } : {}) });
     }
   }
   if (feeds.every((f) => f.status === "rejected")) throw new Error(`all ${system} feeds failed`);
