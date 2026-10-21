@@ -110,6 +110,9 @@ importers:
       postcss:
         specifier: 8.4.47
         version: 8.4.47
+      proj4:
+        specifier: 2.22.0
+        version: 2.22.0(geotiff@3.0.5)
       react:
         specifier: 18.3.1
         version: 18.3.1
@@ -3774,6 +3777,14 @@ packages:
     resolution: {integrity: sha512-cdGef/drWFoydD1JsMzuFf8100nZl+GT+yacc2bEced5f9Rjk4z+WtFUTBu9PhOi9j/jfmBPu0mMEY4wIdAF8A==}
     engines: {node: '>= 0.6.0'}
 
+  proj4@2.22.0:
+    resolution: {integrity: sha512-MVvH09QrYm3A235rcX39WDiCKanrBiblu28l0KYIn/B2DofmYhvP/LLS43kE66jNDfx/P1l/nah3JmsAq8UgbQ==}
+    peerDependencies:
+      geotiff: '*'
+    peerDependenciesMeta:
+      geotiff:
+        optional: true
+
   proj4@2.8.0:
     resolution: {integrity: sha512-baC+YcD4xsSqJ+CpCZljj2gcQDhlKb+J+Zjv/2KSBwWNjk4M0pafgQsE+mWurd84tflMIsP+7j7mtIpFDHzQfQ==}
 
@@ -5324,7 +5335,7 @@ snapshots:
       '@tybys/wasm-util': 0.10.4
     optional: true
 
-  '@ngageoint/geopackage@4.2.10(@types/node@22.10.2)':
+  '@ngageoint/geopackage@4.2.10(@types/node@22.10.2)(geotiff@3.0.5)':
     dependencies:
       '@turf/bbox': 6.3.0
       '@turf/boolean-clockwise': 6.5.0
@@ -5342,7 +5353,7 @@ snapshots:
       lodash: 4.18.1
       magic-bytes.js: 1.13.1
       proj4: 2.8.0
-      reproject: 1.2.5
+      reproject: 1.2.5(geotiff@3.0.5)
       rtree-sql.js: 1.7.0
       simplify-js: 1.2.4
       webworkify: 1.5.0
@@ -5353,6 +5364,7 @@ snapshots:
       inquirer: 14.2.4(@types/node@22.10.2)
     transitivePeerDependencies:
       - '@types/node'
+      - geotiff
 
   '@nodelib/fs.scandir@2.1.5':
     dependencies:
@@ -7926,7 +7938,7 @@ snapshots:
   mapshaper@0.7.89(@types/geojson@7946.0.14)(@types/node@22.10.2):
     dependencies:
       '@bokuweb/zstd-wasm': 0.0.27
-      '@ngageoint/geopackage': 4.2.10(@types/node@22.10.2)
+      '@ngageoint/geopackage': 4.2.10(@types/node@22.10.2)(geotiff@3.0.5)
       '@placemarkio/tokml': 0.3.9
       '@resvg/resvg-wasm': 2.6.2
       '@tmcw/togeojson': 5.8.1(@types/geojson@7946.0.14)
@@ -8349,6 +8361,13 @@ snapshots:
 
   process@0.11.10: {}
 
+  proj4@2.22.0(geotiff@3.0.5):
+    dependencies:
+      mgrs: 1.0.0
+      wkt-parser: 1.6.0
+    optionalDependencies:
+      geotiff: 3.0.5
+
   proj4@2.8.0:
     dependencies:
       mgrs: 1.0.0
@@ -8571,13 +8590,15 @@ snapshots:
       gopd: 1.2.0
       set-function-name: 2.0.2
 
-  reproject@1.2.5:
+  reproject@1.2.5(geotiff@3.0.5):
     dependencies:
       concat-stream: 2.0.0
       event-stream: 4.0.1
       geojson-stream: 0.1.0
       minimist: 1.2.8
-      proj4: 2.8.0
+      proj4: 2.22.0(geotiff@3.0.5)
+    transitivePeerDependencies:
+      - geotiff
 
   require-from-string@2.0.2: {}
 

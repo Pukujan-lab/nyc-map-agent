@@ -9,6 +9,7 @@ import { Query as AreasQuery } from "../api/areas";
 import { Query as BlocksQuery } from "../api/blocks";
 import { Query as StreetQuery } from "../api/street";
 import { Query as HazardsQuery } from "./features/hazards/routes";
+import { NearQuery as ParkingNearQuery } from "./features/parking/routes";
 import { AlongQuery as TrafficAlongQuery } from "./features/traffic/routes";
 import { Query as WeatherQuery } from "./features/weather/routes";
 
@@ -89,6 +90,9 @@ export const ROUTES = {
   "/api/hazards": jsonRoute("/api/hazards", "Active NWS alerts for NYC and flooded FloodNet sensors", HazardsQuery),
   "/api/traffic/along": jsonRoute("/api/traffic/along", "NYC DOT traffic speeds along a line", TrafficAlongQuery),
   "/api/traffic": jsonRoute("/api/traffic", "NYC DOT real-time speed links and today's closures GeoJSON"),
+  "/api/parking/near": jsonRoute("/api/parking/near", "Licensed garages and lots near a point", ParkingNearQuery),
+  "/api/parking/rules": jsonRoute("/api/parking/rules", "Street parking sign and meter rules near a point", ParkingNearQuery),
+  "/api/parking": jsonRoute("/api/parking", "Licensed garages and lots GeoJSON (DCWP + OSM)"),
   "/api/transit": jsonRoute("/api/transit", "Live transit capabilities ({ bus })"),
   "/api/transit/:system": jsonRoute(
     "/api/transit/{system}",
