@@ -15,6 +15,7 @@ import * as cityTiles from "../api/city-tiles";
 import * as restrooms from "../api/restrooms";
 import * as sources from "../api/sources";
 import * as street from "../api/street";
+import * as transit from "../api/transit";
 
 type Handler = { GET: (request: Request) => Promise<Response> };
 
@@ -28,6 +29,8 @@ const routes: Array<[string, Handler]> = [
   ["/api/restrooms", restrooms],
   ["/api/sources", sources],
   ["/api/street", street],
+  ["/api/transit", transit],
+  ["/api/transit/:system", transit],
 ];
 
 export const app = new Hono();

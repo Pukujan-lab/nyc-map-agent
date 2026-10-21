@@ -105,6 +105,7 @@ function eyeCamera(map: MaplibreMapInstance, eye: Eye): CameraOptions {
 import { useMapState } from "@/lib/store/MapStateContext";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 import { WalkControls } from "./WalkControls";
+import { hitsTransit, TransitLayer } from "./TransitLayer";
 
 /**
  * How far the camera may tilt — MapLibre's own ceiling. Anything less and walk
@@ -511,6 +512,9 @@ export function MapView({
         });
         return;
       }
+      // Stations and vehicles open their own card (TransitLayer).
+      const clicked = mapRef.current?.getMap();
+      if (clicked && hitsTransit(clicked, event.point)) return;
       // Clicks stay live at street level: picking the block underfoot opens
       // its details like it does overhead.
       const picked = pickAt(event.point.x, event.point.y, event.lngLat);
@@ -1111,7 +1115,9 @@ export function MapView({
         onClick={handleClick}
         onMoveEnd={handleMoveEnd}
         style={{ position: "absolute", inset: 0 }}
-      />
+      >
+        <TransitLayer />
+      </MapLibreMap>
 
 
       {walking ? (
