@@ -16,6 +16,7 @@
  * Needs tippecanoe >= 2.17 and the duckdb CLI (>= 1.1, spatial extension) on PATH.
  */
 import { execFileSync } from "node:child_process";
+import { bridgeFeatures, loadBridgeWays } from "./bridges";
 import { storefrontFeatures } from "./storefronts";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync, writeFileSync, writeSync } from "node:fs";
 
@@ -357,6 +358,8 @@ async function main() {
   if (process.env.CITY3D_SIGNS !== "0") {
     for (const f of storefrontFeatures(PILOT_BBOX, `/tmp/${AREA}-footprints.ndjson`, AREA)) add(f, "storefront-sign");
   }
+  // 3D bridge decks, railings and piers (OSM, ODbL), scripts/bridges.ts.
+  for (const f of bridgeFeatures(loadBridgeWays().filter((w) => w.pts.some(([x, y]) => inBox(y, x))))) add(f, "bridge");
   // Small school icons (optional chip): the DOE point itself, with its name.
   for (const sc of schools) {
     const c = (sc.the_geom as { coordinates?: number[] } | undefined)?.coordinates;
