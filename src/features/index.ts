@@ -8,6 +8,7 @@ import traffic from "./traffic";
 import transit from "./transit";
 import weather from "./weather";
 import schools from "./schools";
+import storefronts from "./storefronts";
 
 /** Every feature module. Core reads features only through this list. */
-export const FEATURES: FeatureModule[] = [restrooms, agent, transit, daylight, weather, hazards, traffic, parking, schools];
+export const FEATURES: FeatureModule[] = [restrooms, agent, transit, daylight, weather, hazards, traffic, parking, schools, storefronts];
