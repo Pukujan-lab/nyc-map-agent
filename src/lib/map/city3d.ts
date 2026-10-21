@@ -86,9 +86,9 @@ async function ensureSource(map: MapLibreMap): Promise<void> {
  * stands up at once instead of popping in late. Independent of the textured-city
  * toggle: it is plain colour, a few hundred kB for the whole city.
  */
-export const SKYLINE_LAYER = "city3d-skyline";
-export const SKYLINE_MIN_ZOOM = 11;
-export const SKYLINE_MAX_ZOOM = 14;
+const SKYLINE_LAYER = "city3d-skyline";
+const SKYLINE_MIN_ZOOM = 11;
+const SKYLINE_MAX_ZOOM = 14;
 
 const SKYLINE_COLOR: ExpressionSpecification = [
   "match", ["get", "facade"],
