@@ -8,6 +8,51 @@ import type { Map as MaplibreMap } from "maplibre-gl";
  * the bearing, sits on the rim so the bullet text never rotates. An amber
  * '!' corner mark flags routes with an active delay or reroute alert.
  */
+/**
+ * Shared, neutral module (#177): used by live-train bullets, station labels and
+ * the 3D entrance signs. LINE_COLORS is the MTA line-colour table; routeBullet
+ * draws one bullet on any canvas.
+ */
+export const LINE_COLORS: Record<string, string> = {
+  A: "#0039A6", C: "#0039A6", E: "#0039A6",
+  B: "#FF6319", D: "#FF6319", F: "#FF6319", FX: "#FF6319", M: "#FF6319",
+  G: "#6CBE45", J: "#996633", Z: "#996633", L: "#A7A9AC",
+  N: "#FCCC0A", Q: "#FCCC0A", R: "#FCCC0A", W: "#FCCC0A",
+  "1": "#EE352E", "2": "#EE352E", "3": "#EE352E",
+  "4": "#00933C", "5": "#00933C", "6": "#00933C", "6X": "#00933C",
+  "7": "#B933AD", "7X": "#B933AD", GS: "#808183", FS: "#808183", H: "#808183", SI: "#0039A6",
+};
+export const lineColor = (route: string): string => LINE_COLORS[route] ?? "#808183";
+
+/** Draw one MTA-style bullet (circle, or diamond for express) centred at (cx, cy) with radius r. */
+export function routeBullet(ctx: CanvasRenderingContext2D, route: string, cx: number, cy: number, r: number, color = lineColor(route), ring = true): void {
+  const { text, express, darkText } = bulletFace(route);
+  ctx.beginPath();
+  if (express) { ctx.moveTo(cx, cy - r - 2); ctx.lineTo(cx + r + 2, cy); ctx.lineTo(cx, cy + r + 2); ctx.lineTo(cx - r - 2, cy); ctx.closePath(); }
+  else ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+  if (ring) { ctx.lineWidth = Math.max(1.5, r / 9); ctx.strokeStyle = "rgba(255,255,255,0.95)"; ctx.stroke(); }
+  ctx.fillStyle = darkText ? "#111111" : "#ffffff";
+  ctx.font = `bold ${Math.round(r * (text.length > 1 ? 0.9 : 1.2))}px "Helvetica Neue", Helvetica, Arial, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, cx, cy + r * 0.08);
+}
+
+/** A compact row of bullets for a station's routes, as one map image id. */
+export const STATION_ROW_PREFIX = "strow|";
+export const stationRowId = (routes: string[]): string => `${STATION_ROW_PREFIX}${routes.join(",")}`;
+function drawRow(routes: string[]): ImageData | null {
+  const ctx = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+  if (!ctx || !routes.length) return null;
+  const r = 14, step = 2 * r + 4;
+  ctx.canvas.width = routes.length * step + 4;
+  ctx.canvas.height = 2 * r + 8;
+  routes.forEach((rt, i) => routeBullet(ctx, rt, 2 + r + 2 + i * step, r + 4, r));
+  return ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height);
+}
+
 export const BULLET_PREFIX = "bullet|";
 export const NOTCH_ICON = "bullet-notch";
 const SIZE = 64; // drawn at pixelRatio 2 -> 32 css px at icon-size 1
@@ -85,21 +130,7 @@ function draw(route: string, color: string, alert: boolean): ImageData | null {
   const ctx = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
   if (!ctx) return null;
   ctx.canvas.width = ctx.canvas.height = SIZE;
-  const { text, express, darkText } = bulletFace(route);
-  const c = SIZE / 2, r = SIZE / 2 - 5;
-  ctx.beginPath();
-  if (express) { ctx.moveTo(c, c - r - 2); ctx.lineTo(c + r + 2, c); ctx.lineTo(c, c + r + 2); ctx.lineTo(c - r - 2, c); ctx.closePath(); }
-  else ctx.arc(c, c, r, 0, Math.PI * 2);
-  ctx.fillStyle = color;
-  ctx.fill();
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = "rgba(255,255,255,0.95)";
-  ctx.stroke();
-  ctx.fillStyle = darkText ? "#111111" : "#ffffff";
-  ctx.font = `bold ${text.length > 1 ? 24 : 32}px "Helvetica Neue", Helvetica, Arial, sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(text, c, c + 2);
+  routeBullet(ctx, route, SIZE / 2, SIZE / 2, SIZE / 2 - 5, color);
   if (alert) alertMark(ctx, SIZE - 10, 10);
   return ctx.getImageData(0, 0, SIZE, SIZE);
 }
@@ -122,6 +153,7 @@ function notch(): ImageData | null {
 export function addBulletImage(map: MaplibreMap, id: string): void {
   if (map.hasImage(id)) return;
   if (id === NOTCH_ICON) { const n = notch(); if (n) map.addImage(id, n, { pixelRatio: 2 }); return; }
+  if (id.startsWith(STATION_ROW_PREFIX)) { const img = drawRow(id.slice(STATION_ROW_PREFIX.length).split(",").filter(Boolean)); if (img) map.addImage(id, img, { pixelRatio: 2 }); return; }
   const [kind, text = "", hex = "808080", alert] = id.split("|");
   const img = kind === "busbadge" ? drawBus(text, `#${hex}`, alert === "1") : kind === "bullet" ? draw(text, `#${hex}`, alert === "1") : null;
   if (img) map.addImage(id, img, { pixelRatio: 2 });

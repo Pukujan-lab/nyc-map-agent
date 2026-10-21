@@ -26,7 +26,7 @@ import { SYSTEM_LABELS } from "./model";
 import { StationDetails, VehicleDetails } from "./TransitCard";
 import { TransitStatusDetails } from "./TransitStatus";
 import { lineOpacity, useMapOptions } from "@/lib/map/mapOptions";
-import { NOTCH_ICON, addBulletImage, bulletId, busBadgeId, busPrefix } from "./bullets";
+import { NOTCH_ICON, addBulletImage, stationRowId, bulletId, busBadgeId, busPrefix } from "@/lib/transit/bullets";
 import { THEMES, useTheme } from "@/lib/theme";
 import { FOCUS_OPACITY, FOCUS_VEIL_ID, WORLD, useTransitFocus } from "@/lib/map/transitFocus";
 
@@ -158,7 +158,11 @@ export default function TransitLayer() {
   }), [staticKey, raised]); // eslint-disable-line react-hooks/exhaustive-deps
   const stations = useMemo<GeoJSON.FeatureCollection>(() => ({
     type: "FeatureCollection",
-    features: statics.flatMap((s) => s.stations.features.map((f) => ({ ...f, properties: { ...f.properties, system: s.system } }))),
+    features: statics.flatMap((s) => s.stations.features.map((f) => {
+      // Subway stations carry a compact row of route bullets for their label (#177).
+      const routes = s.system === "subway" ? String(f.properties.routes ?? "").split(/[\s,]+/).filter((r) => r && !r.endsWith("X")) : [];
+      return { ...f, properties: { ...f.properties, system: s.system, row: routes.length ? stationRowId([...new Set(routes)]) : "" } };
+    })),
   }), [staticKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const viaduct = raised.decks;
   const piers = raised.piers;
@@ -289,6 +293,17 @@ export default function TransitLayer() {
     return () => window.clearInterval(id);
   }, [three]);
   const theme = THEMES[useTheme()];
+  const [hoverStation, setHoverStation] = useState("");
+  const openStationId = content?.id.startsWith("transit:station:") ? content.id.split(":").pop() ?? "" : "";
+  useEffect(() => {
+    if (!map) return;
+    const move = (e: MapLayerMouseEvent) => {
+      const f = map.getLayer("transit-station") ? map.queryRenderedFeatures(e.point, { layers: ["transit-station"] })[0] : undefined;
+      setHoverStation(f?.properties?.system === "subway" ? String(f.properties.id) : "");
+    };
+    map.on("mousemove", move);
+    return () => { map.off("mousemove", move); };
+  }, [map]);
   const alerted = useMemo(() => alertedRoutes(alerts.data?.alerts), [alerts.data]);
   const vehicleFc = useMemo<GeoJSON.FeatureCollection>(() => ({
     type: "FeatureCollection",
@@ -474,6 +489,14 @@ export default function TransitLayer() {
       <Source id="transit-stations" type="geojson" data={stations}>
         <Layer id="transit-station" type="circle" minzoom={11}
           paint={{ "circle-color": "#ffffff", "circle-stroke-color": "#6b6a66", "circle-stroke-width": 1, "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 1.5, 16, 4] }} />
+        {/* Name + route bullets: every station from z15, or the hovered / open one at any zoom.
+            Collision detection drops overlapping labels so they never pile up. */}
+        <Layer id="transit-station-label" type="symbol" minzoom={11}
+          filter={["all", ["==", ["get", "system"], "subway"], ["any", [">=", ["zoom"], 15], ["==", ["get", "id"], hoverStation], ["==", ["get", "id"], openStationId]]]}
+          layout={{ "icon-image": ["get", "row"], "icon-size": ["interpolate", ["linear"], ["zoom"], 13, 0.55, 17, 0.75], "icon-anchor": "top", "icon-offset": [0, 14],
+            "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-anchor": "bottom", "text-offset": [0, -0.6], "text-max-width": 9,
+            "symbol-sort-key": ["case", ["any", ["==", ["get", "id"], hoverStation], ["==", ["get", "id"], openStationId]], 0, 1] }}
+          paint={{ "text-color": theme.dark ? "#f2f1ed" : "#111111", "text-halo-color": theme.land, "text-halo-width": 1.6 }} />
       </Source>
       <Source id="transit-entrances" type="geojson" data={entrances}>
         {/* Overhead: a small green dot. Street level: the 3D kit draws it; this stays as an invisible tap target. */}

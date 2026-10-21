@@ -4,6 +4,16 @@
 
 @layer base {
   :root {
+    /* One spacing scale for the Layout A chrome (#177): 4 / 8 / 12 / 16 / 24 / 32. */
+    --sp-1: 4px;
+    --sp-2: 8px;
+    --sp-3: 12px;
+    --sp-4: 16px;
+    --sp-5: 24px;
+    --sp-6: 32px;
+    /* Gap between the chrome and the screen edge; safe-area insets are added on top where they apply. */
+    --edge: var(--sp-3);
+    --topbar-h: 90px; /* search row 46 + gap 8 + chip row 36 */
     --background: 0 0% 100%;
     --foreground: 222 47% 11%;
     --card: 0 0% 100%;
@@ -225,4 +235,8 @@
     --map-street: #1F1A3A;
     --serif: "DejaVu Serif", Georgia, serif;
   }
+}
+
+@media (min-width: 1024px) {
+  :root { --edge: var(--sp-4); }
 }
