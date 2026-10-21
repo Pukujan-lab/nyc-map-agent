@@ -169,7 +169,7 @@ export function viaductPolygons(lines: StaticSystem["lines"]): GeoJSON.FeatureCo
       const len = Math.hypot(dx, dy);
       if (len < 1) continue;
       const brg = ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
-      features.push({ type: "Feature", properties: {}, geometry: bodyPolygonFlat(mid[0], mid[1], brg, len + 1, 7) });
+      features.push({ type: "Feature", properties: { color: f.properties.color }, geometry: bodyPolygonFlat(mid[0], mid[1], brg, len + 1, 7) });
     }
   }
   return { type: "FeatureCollection", features };
@@ -177,4 +177,22 @@ export function viaductPolygons(lines: StaticSystem["lines"]): GeoJSON.FeatureCo
 function bodyPolygonFlat(lon: number, lat: number, bearing: number, length: number, width: number): GeoJSON.Polygon {
   const p = bodyPolygon(lon, lat, bearing, length, width).coordinates[0];
   return { type: "Polygon", coordinates: [[p[1], p[2], p[3], p[4], p[1]]] };
+}
+
+/** Square piers every ~40 m under elevated runs. */
+export function viaductPiers(lines: StaticSystem["lines"]): GeoJSON.FeatureCollection<GeoJSON.Polygon> {
+  const features: GeoJSON.Feature<GeoJSON.Polygon>[] = [];
+  for (const f of lines.features) {
+    if (f.properties.grade !== "elevated") continue;
+    let acc = 0;
+    const c = f.geometry.coordinates;
+    for (let i = 1; i < c.length; i++) {
+      const dx = (c[i][0] - c[i - 1][0]) * 111_320 * Math.cos((c[i][1] * Math.PI) / 180), dy = (c[i][1] - c[i - 1][1]) * 111_320;
+      acc += Math.hypot(dx, dy);
+      if (acc < 40) continue;
+      acc = 0;
+      features.push({ type: "Feature", properties: {}, geometry: bodyPolygonFlat(c[i][0], c[i][1], 0, 1.2, 1.2) });
+    }
+  }
+  return { type: "FeatureCollection", features };
 }

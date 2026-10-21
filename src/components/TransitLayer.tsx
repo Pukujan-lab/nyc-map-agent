@@ -5,9 +5,9 @@ import type { Map as MaplibreMap, MapLayerMouseEvent } from "maplibre-gl";
 import { Accessibility, Navigation2, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import {
-  bodyPolygon,
   estimateTrain,
   stationOf,
+  viaductPiers,
   viaductPolygons,
   VIADUCT_TOP,
   type StaticSystem,
@@ -23,7 +23,7 @@ import { StationDetails, VehicleDetails } from "./TransitCard";
 import { TransitStatusDetails } from "./TransitStatus";
 
 /** Layers a click on the map should hand to transit instead of the area pick. */
-export const TRANSIT_CLICK_LAYERS = ["transit-vehicle-2d", "transit-vehicle-3d", "transit-vehicle-xray", "transit-access", "transit-entrance", "transit-station"];
+export const TRANSIT_CLICK_LAYERS = ["transit-vehicle-2d", "transit-vehicle-hit", "transit-access", "transit-entrance", "transit-station"];
 export function hitsTransit(map: MaplibreMap, point: { x: number; y: number }): boolean {
   const layers = TRANSIT_CLICK_LAYERS.filter((id) => map.getLayer(id));
   return layers.length > 0 && map.queryRenderedFeatures([point.x, point.y], { layers }).length > 0;
@@ -116,13 +116,15 @@ export function TransitLayer() {
   const staticKey = statics.map((s) => s.system).join(",");
   const lines = useMemo<GeoJSON.FeatureCollection>(() => ({
     type: "FeatureCollection",
-    features: statics.flatMap((s) => s.lines.features.map((f) => ({ ...f, properties: { ...f.properties, system: s.system } }))),
+    // Commuter rail is drawn at grade; only the subway gets viaducts and tunnels.
+    features: statics.flatMap((s) => s.lines.features.map((f) => ({ ...f, properties: { ...f.properties, system: s.system, grade: s.system === "subway" ? f.properties.grade : "grade" } }))),
   }), [staticKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const stations = useMemo<GeoJSON.FeatureCollection>(() => ({
     type: "FeatureCollection",
     features: statics.flatMap((s) => s.stations.features.map((f) => ({ ...f, properties: { ...f.properties, system: s.system } }))),
   }), [staticKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const viaduct = useMemo(() => viaductPolygons(lines as StaticSystem["lines"]), [lines]);
+  const piers = useMemo(() => viaductPiers(lines as StaticSystem["lines"]), [lines]);
   const entrances = data.subway?.stat?.entrances ?? EMPTY;
 
   // Planned work: wrenches on affected stations; reroutes and planned work get an
@@ -202,7 +204,8 @@ export function TransitLayer() {
         const st = data[s]?.stat, lv = data[s]?.live;
         if (!st || !lv) continue;
         for (const trip of lv.trips) {
-          const v = estimateTrain(st, trip, now);
+          const est = estimateTrain(st, trip, now);
+          const v = est && s !== "subway" ? { ...est, grade: "grade" as const } : est;
           if (v && (inView(v) || v.key === selectedKey)) out.push(v);
         }
       }
@@ -224,7 +227,7 @@ export function TransitLayer() {
     let raf = 0, last = 0;
     const loop = (t: number) => {
       raf = requestAnimationFrame(loop);
-      if (t - last < 50) return;
+      if (t - last < 66) return;
       last = t;
       const next = new Map<string, Vehicle>();
       for (const v of targets.current) {
@@ -241,25 +244,38 @@ export function TransitLayer() {
     return () => cancelAnimationFrame(raf);
   }, []);
 
+  // 3D click targets only need ~1 Hz accuracy; re-tiling them every frame is wasted work.
+  const [hitFc, setHitFc] = useState<GeoJSON.FeatureCollection>(EMPTY);
+  useEffect(() => {
+    if (!three) return;
+    const id = window.setInterval(() => setHitFc({ type: "FeatureCollection", features: [...display.current.values()].map((v) => ({ type: "Feature", properties: { key: v.key, label: v.label }, geometry: { type: "Point", coordinates: [v.lon, v.lat] } })) }), 1000);
+    return () => window.clearInterval(id);
+  }, [three]);
   const vehicleFc = useMemo<GeoJSON.FeatureCollection>(() => ({
     type: "FeatureCollection",
     features: vehicles.map((v) => ({ type: "Feature", properties: { key: v.key, color: v.color, bearing: v.bearing, grade: v.grade, label: v.label }, geometry: { type: "Point", coordinates: [v.lon, v.lat] } })),
   }), [vehicles]);
-  const bodies = useMemo<GeoJSON.FeatureCollection>(() => {
-    if (!three) return EMPTY;
-    return {
-      type: "FeatureCollection",
-      features: vehicles.map((v) => {
-        const base = v.grade === "elevated" ? VIADUCT_TOP : v.grade === "underground" ? 0 : 0.3;
-        const bus = v.system === "bus";
-        return {
-          type: "Feature",
-          properties: { key: v.key, color: v.color, grade: v.grade, base, top: base + (bus ? 3.2 : 3.8) },
-          geometry: bodyPolygon(v.lon, v.lat, v.bearing, bus ? 12 : 20, bus ? 2.6 : 3),
-        };
-      }),
+  // 3D: one three.js custom layer in the map's canvas, loaded on first tilt.
+  const v3d = useRef<ReturnType<typeof import("@/lib/map/vehicles3d").createVehicleLayer> | null>(null);
+  useEffect(() => {
+    if (!map || !three) return;
+    let cancelled = false;
+    const ensure = () => {
+      if (cancelled || !v3d.current || map.getLayer(v3d.current.layer.id)) return;
+      try { map.addLayer(v3d.current.layer); } catch { /* style mid-swap; retried on the next styledata */ }
     };
-  }, [vehicles, three]);
+    import("@/lib/map/vehicles3d").then(({ createVehicleLayer }) => {
+      v3d.current ??= createVehicleLayer();
+      ensure();
+    });
+    map.on("styledata", ensure);
+    return () => {
+      cancelled = true;
+      map.off("styledata", ensure);
+      if (v3d.current && map.getLayer(v3d.current.layer.id)) map.removeLayer(v3d.current.layer.id);
+    };
+  }, [map, three]);
+  useEffect(() => { if (three) v3d.current?.update(vehicles, walking); }, [vehicles, three, walking]);
 
   // Follow mode: ease the camera onto the tweened vehicle; drag or Esc exits.
   const followed = following ? vehicles.find((v) => v.key === selectedKey) : undefined;
@@ -319,13 +335,9 @@ export function TransitLayer() {
   return (
     <>
       <Source id="transit-lines" type="geojson" data={lines}>
-        <Layer id="transit-line-under-glow" type="line" filter={["==", ["get", "grade"], "underground"]}
-          layout={{ "line-cap": "round", "line-join": "round" }}
-          paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 4, 16, 14], "line-blur": ["interpolate", ["linear"], ["zoom"], 10, 3, 16, 10], "line-opacity": 0.3 }} />
         <Layer id="transit-line-under" type="line" filter={["==", ["get", "grade"], "underground"]}
-          layout={{ "line-cap": "round", "line-join": "round" }}
-          paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 16, 2.5], "line-opacity": 0.7 }} />
-        <Layer id="transit-line" type="line" filter={["!=", ["get", "grade"], "underground"]}
+          paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 16, 2.5], "line-opacity": 0.45, "line-dasharray": [2, 2] }} />
+        <Layer id="transit-line" type="line" filter={three ? ["==", ["get", "grade"], "grade"] : ["!=", ["get", "grade"], "underground"]}
           layout={{ "line-cap": "round", "line-join": "round" }}
           paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1.5, 16, 4] }} />
       </Source>
@@ -334,7 +346,11 @@ export function TransitLayer() {
       </Source>
       <Source id="transit-viaduct" type="geojson" data={three ? viaduct : EMPTY}>
         <Layer id="transit-viaduct" type="fill-extrusion" minzoom={13}
-          paint={{ "fill-extrusion-color": "#8b8f94", "fill-extrusion-base": VIADUCT_TOP - 1.5, "fill-extrusion-height": VIADUCT_TOP, "fill-extrusion-opacity": 0.9 }} />
+          paint={{ "fill-extrusion-color": ["get", "color"], "fill-extrusion-base": VIADUCT_TOP - 1.2, "fill-extrusion-height": VIADUCT_TOP, "fill-extrusion-opacity": 0.9 }} />
+      </Source>
+      <Source id="transit-piers" type="geojson" data={three ? piers : EMPTY}>
+        <Layer id="transit-pier" type="fill-extrusion" minzoom={14}
+          paint={{ "fill-extrusion-color": "#6b7280", "fill-extrusion-base": 0, "fill-extrusion-height": VIADUCT_TOP - 1.2, "fill-extrusion-opacity": 0.9 }} />
       </Source>
       <Source id="transit-stations" type="geojson" data={stations}>
         <Layer id="transit-station" type="circle" minzoom={11}
@@ -356,16 +372,13 @@ export function TransitLayer() {
         <Layer id="transit-access" type="symbol" minzoom={11}
           layout={{ "icon-image": "transit-access", "icon-size": ["interpolate", ["linear"], ["zoom"], 11, 0.35, 16, 0.6], "icon-offset": [-18, -18], "icon-allow-overlap": true }} />
       </Source>
+      <Source id="transit-vehicle-hits" type="geojson" data={hide2d ? hitFc : EMPTY}>
+        <Layer id="transit-vehicle-hit" type="circle" paint={{ "circle-radius": 14, "circle-opacity": 0, "circle-pitch-alignment": "map" }} />
+      </Source>
       <Source id="transit-vehicles" type="geojson" data={hide2d ? EMPTY : vehicleFc}>
         <Layer id="transit-vehicle-2d" type="symbol"
-          layout={{ "icon-image": "transit-arrow", "icon-rotate": ["get", "bearing"], "icon-rotation-alignment": "map", "icon-allow-overlap": true, "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.3, 16, 0.6] }}
+          layout={{ "icon-image": "transit-arrow", "icon-rotate": ["get", "bearing"], "icon-rotation-alignment": "map", "icon-allow-overlap": true, "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.45, 16, 0.9] }}
           paint={{ "icon-color": ["get", "color"], "icon-halo-color": "#111827", "icon-halo-width": 1, "icon-opacity": ["case", ["==", ["get", "grade"], "underground"], 0.55, 1] }} />
-      </Source>
-      <Source id="transit-bodies" type="geojson" data={bodies}>
-        <Layer id="transit-vehicle-3d" type="fill-extrusion" filter={["!=", ["get", "grade"], "underground"]}
-          paint={{ "fill-extrusion-color": ["get", "color"], "fill-extrusion-base": ["get", "base"], "fill-extrusion-height": ["get", "top"], "fill-extrusion-opacity": 0.95 }} />
-        <Layer id="transit-vehicle-xray" type="fill-extrusion" filter={walking ? ["==", ["get", "grade"], "__never"] : ["==", ["get", "grade"], "underground"]}
-          paint={{ "fill-extrusion-color": ["get", "color"], "fill-extrusion-base": 0, "fill-extrusion-height": 1.2, "fill-extrusion-opacity": 0.35 }} />
       </Source>
     </>
   );

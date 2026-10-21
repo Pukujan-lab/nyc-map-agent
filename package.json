@@ -24,7 +24,8 @@
     "lint:boundaries": "depcruise src server api scripts --config .dependency-cruiser.cjs",
     "build:size": "vite build --outDir .size-build --emptyOutDir",
     "size": "size-limit",
-    "feeds:health": "tsx scripts/feed-health.ts"
+    "feeds:health": "tsx scripts/feed-health.ts",
+    "build:transit": "tsx scripts/build-transit.ts"
   },
   "dependencies": {
     "@hono/node-server": "2.1.5",
@@ -53,6 +54,7 @@
     "clsx": "2.1.1",
     "date-fns": "3.6.0",
     "downshift": "9.4.0",
+    "gtfs-realtime-bindings": "1.1.1",
     "hono": "4.13.13",
     "lucide-react": "0.454.0",
     "mapillary-js": "^4.1.2",
