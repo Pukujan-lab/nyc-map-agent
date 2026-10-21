@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { createRunner } from "./runner";
 
 const node = process.execPath;
-const runner = createRunner();
 
 describe("process runner", () => {
   it("captures output and exit code", async () => {
@@ -34,7 +33,7 @@ describe("process runner", () => {
 
   it("streams stderr lines without merging them into stdout", async () => {
     const lines: string[] = [];
-    await runner.run(
+    await createRunner().run(
       process.execPath,
       ["-e", "process.stdout.write('out-no-newline'); process.stderr.write('err\\n')"],
       { onLine: (line) => lines.push(line) },
@@ -45,18 +44,18 @@ describe("process runner", () => {
 
   it("flushes a trailing partial line when the process exits", async () => {
     const lines: string[] = [];
-    await runner.run(process.execPath, ["-e", "process.stdout.write('tail')"], {
+    await createRunner().run(process.execPath, ["-e", "process.stdout.write('tail')"], {
       onLine: (line) => lines.push(line),
     });
     expect(lines).toEqual(["tail"]);
   });
 
   it("rejects when the command cannot be spawned", async () => {
-    await expect(runner.run("definitely-not-a-real-binary-xyz", [])).rejects.toThrow();
+    await expect(createRunner().run("definitely-not-a-real-binary-xyz", [])).rejects.toThrow();
   });
 
   it("passes arguments through without a shell", async () => {
-    const result = await runner.run(process.execPath, [
+    const result = await createRunner().run(process.execPath, [
       "-e",
       "process.stdout.write(process.argv[1] ?? '')",
       "a && b",

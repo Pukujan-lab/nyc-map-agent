@@ -33,7 +33,7 @@ export function createRunner(): Runner {
         let output = "";
 
         // Each stream needs its own partial line: a stdout fragment followed by
-        // a stderr line must not be glued into one fabricated line.
+        // a stderr line must not be glued into a line neither stream wrote.
         const splitter = (): LineSplitter => {
           let pending = "";
           const emit = (line: string) => opts.onLine?.(line.endsWith("\r") ? line.slice(0, -1) : line);
@@ -53,6 +53,8 @@ export function createRunner(): Runner {
         const out = splitter();
         const err = splitter();
 
+        // Decoding at the stream keeps a multi-byte character split across two
+        // chunks from being emitted as a replacement character.
         child.stdout.setEncoding("utf8");
         child.stderr.setEncoding("utf8");
         child.stdout.on("data", (text: string) => {

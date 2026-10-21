@@ -16,8 +16,8 @@ export function lockOwner(file: string): LockOwner | null {
 }
 
 /**
- * `link` publishes a file whose content is already written, so no reader can
- * ever observe a lock that exists but has no owner. The path is the lock.
+ * `link` publishes an inode whose content is already written, so a reader can
+ * never observe a lock that exists but has no owner. The path is the lock.
  */
 export function acquireLock(file: string, opts: { nowMs?: number; staleMs?: number } = {}): boolean {
   const nowMs = opts.nowMs ?? Date.now();
