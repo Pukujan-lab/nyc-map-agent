@@ -107,6 +107,7 @@ const ROAD_WIDTH_M: Array<[RegExp, number]> = [
   [/secondary_tertiary/, 14],
   [/link/, 9],
   [/minor/, 10],
+  [/^bridge_street/, 10],
   [/service_track/, 6],
   [/path_pedestrian/, 3],
 ];
@@ -143,6 +144,16 @@ function setPaint(map: MapLibreMap, layer: string, prop: string, value: unknown,
   }
 }
 
+/** Sidewalk texture (generated in-repo by scripts/make-facade-textures.py, CC0). */
+const CONCRETE = "street-concrete";
+
+/** Loads the sidewalk texture once per style; call before applyStreetPalette. */
+export async function loadStreetTextures(map: MapLibreMap): Promise<void> {
+  if (map.hasImage(CONCRETE)) return;
+  const { data } = await map.loadImage("/textures/concrete.png");
+  if (!map.hasImage(CONCRETE)) map.addImage(CONCRETE, data);
+}
+
 /** Street-level ground, roads and sidewalks; `street = false` restores the style. */
 export function applyStreetPalette(map: MapLibreMap, street: boolean): void {
   for (const layer of map.getStyle().layers ?? []) {
@@ -150,11 +161,17 @@ export function applyStreetPalette(map: MapLibreMap, street: boolean): void {
     if (layer.type === "background") setPaint(map, id, "background-color", STREET_COLORS.ground, street);
     if (layer.type === "fill" && /^landuse_residential$/.test(id)) setPaint(map, id, "fill-color", STREET_COLORS.ground, street);
     if (layer.type === "fill" && /^park$|landcover_grass/.test(id)) setPaint(map, id, "fill-color", STREET_COLORS.park, street);
+    // The 0.5 m choropleth slabs span whole grid squares, streets included:
+    // at eye level they read as knee-high white walls across the road.
+    if (id === "block-extrusion" || id === "block-selection-rim") setPaint(map, id, "fill-extrusion-opacity", 0, street);
+    // Tunnels run under the street; drawn on the ground they are a pale stripe.
+    if (layer.type === "line" && /^tunnel_/.test(id)) setPaint(map, id, "line-opacity", 0, street);
     if (layer.type !== "line" || !/^(road|bridge)_/.test(id) || /rail/.test(id)) continue;
     const width = ROAD_WIDTH_M.find(([re]) => re.test(id))?.[1];
     if (!width) continue;
     const casing = id.endsWith("_casing");
     const pedestrian = /path_pedestrian/.test(id);
+    if (casing) setPaint(map, id, "line-pattern", map.hasImage(CONCRETE) ? CONCRETE : undefined, street);
     setPaint(map, id, "line-color", casing ? STREET_COLORS.sidewalk : pedestrian ? STREET_COLORS.path : STREET_COLORS.asphalt, street);
     setPaint(map, id, "line-width", metresWidth(casing ? width + 2 * SIDEWALK_M : width), street);
     if (!pedestrian) setPaint(map, id, "line-dasharray", undefined, street);
