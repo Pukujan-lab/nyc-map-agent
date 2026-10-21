@@ -186,3 +186,49 @@ export function poseAlongRoute(
   }
   return null;
 }
+
+/**
+ * Snaps a point to the nearest street centreline so the eye never spawns
+ * inside a building footprint or against a wall: the middle of the street is
+ * the one place guaranteed to be clear on both sides. Returns the snapped
+ * point and the street's direction, picking whichever way along the street
+ * is closer to `preferBearing`. `maxMetres` bounds the search.
+ */
+export function snapToStreet(
+  point: [number, number],
+  lines: Array<Array<[number, number]>>,
+  preferBearing: number,
+  maxMetres = 250,
+): { lon: number; lat: number; bearing: number; distance: number } | null {
+  const cosLat = Math.cos((point[1] * Math.PI) / 180);
+  const toXY = (p: [number, number]): [number, number] => [
+    (p[0] - point[0]) * METERS_PER_DEGREE * cosLat,
+    (p[1] - point[1]) * METERS_PER_DEGREE,
+  ];
+  let best: { x: number; y: number; d: number; dx: number; dy: number } | null = null;
+  for (const line of lines) {
+    for (let i = 1; i < line.length; i += 1) {
+      const [ax, ay] = toXY(line[i - 1]);
+      const [bx, by] = toXY(line[i]);
+      const dx = bx - ax;
+      const dy = by - ay;
+      const len2 = dx * dx + dy * dy;
+      if (len2 === 0) continue;
+      const t = Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2));
+      const x = ax + t * dx;
+      const y = ay + t * dy;
+      const d = Math.hypot(x, y);
+      if (d <= maxMetres && (!best || d < best.d)) best = { x, y, d, dx, dy };
+    }
+  }
+  if (!best) return null;
+  const along = normalizeBearing((Math.atan2(best.dx, best.dy) * 180) / Math.PI);
+  const diff = (b: number) => Math.abs(((b - preferBearing + 540) % 360) - 180);
+  const bearing = diff(along) <= diff(along + 180) ? along : normalizeBearing(along + 180);
+  return {
+    lon: point[0] + best.x / (METERS_PER_DEGREE * cosLat),
+    lat: point[1] + best.y / METERS_PER_DEGREE,
+    bearing,
+    distance: best.d,
+  };
+}

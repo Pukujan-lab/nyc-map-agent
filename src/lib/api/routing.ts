@@ -77,3 +77,18 @@ export function useWalkingRoute(a: LngLat | null, b: LngLat | null) {
     queryFn: ({ signal }) => fetchWalkingRoute(a as LngLat, b as LngLat, signal),
   });
 }
+
+const nearestSchema = z.object({
+  code: z.string(),
+  waypoints: z.array(z.object({ location: z.tuple([z.number(), z.number()]) })).optional(),
+});
+
+/** Nearest walkable street point (OSRM `nearest`), used when no road tiles are loaded yet. */
+export async function fetchNearestStreet(p: LngLat, signal?: AbortSignal): Promise<LngLat | null> {
+  const url = `${OSRM_FOOT_URL}/nearest/v1/foot/${p.lon.toFixed(6)},${p.lat.toFixed(6)}?number=1`;
+  const response = await fetch(url, { signal });
+  if (!response.ok) return null;
+  const parsed = nearestSchema.safeParse(await response.json());
+  const loc = parsed.success ? parsed.data.waypoints?.[0]?.location : undefined;
+  return loc ? { lon: loc[0], lat: loc[1] } : null;
+}
