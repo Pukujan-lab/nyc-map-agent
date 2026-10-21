@@ -1,7 +1,7 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { useSearchParams } from "react-router-dom";
-import { RAIL_SYSTEMS, type Bus, type LiveSystem, type StaticSystem, type SystemId } from "./model";
+import { RAIL_SYSTEMS, type Bus, type LiveSystem, type StaticSystem, type SystemId , type XrayStation } from "./model";
 
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
 const REFRESH = 15_000;
@@ -126,4 +126,9 @@ export function useStarred() {
     listeners.forEach((l) => l());
   }, []);
   return { starred, isStarred: (k: string) => starred.includes(k), toggle, notify: notifyRaw === "1", setNotify };
+}
+
+/** Baked station insides for the x-ray view (~60 kB gz), fetched the first time x-ray is opened. */
+export function useXrayData(enabled: boolean) {
+  return useQuery({ queryKey: ["transit", "xray"], queryFn: () => getJson<Record<string, XrayStation>>("/transit/xray.json"), staleTime: Infinity, enabled });
 }

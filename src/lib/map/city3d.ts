@@ -24,11 +24,12 @@ function tilesUrl(): string {
 export const CITY3D_MIN_ZOOM = 16;
 export const FACADES = [
   "rowhouse", "brownstone", "walkup", "prewar", "limestone", "castiron", "modern", "tower", "glass", "school", "storefront",
+  "rowhouse-2", "rowhouse-3", "walkup-2", "walkup-3", "prewar-2", "prewar-3", "modern-2", "modern-3",
 ] as const;
 const SOURCE = "city3d";
 const STOREFRONT_M = 4.5;
 
-export const CITY3D_LAYERS = ["city3d-storefront", "city3d-walls", "city3d-roofs", "city3d-props", "city3d-signs", "city3d-hydrants", "city3d-landmarks", "city3d-storefront-signs"] as const;
+export const CITY3D_LAYERS = ["city3d-storefront", "city3d-walls", "city3d-roofs", "city3d-props", "city3d-bridges", "city3d-signs", "city3d-hydrants", "city3d-landmarks", "city3d-storefront-signs"] as const;
 
 async function loadFacades(map: MapLibreMap): Promise<void> {
   await Promise.all(
@@ -102,7 +103,10 @@ export async function installCity3d(map: MapLibreMap): Promise<void> {
       type: "fill-extrusion",
       "source-layer": "buildings",
       paint: {
-        "fill-extrusion-pattern": ["concat", "facade-", ["get", "facade"]],
+        // Material variant `v` (2, 3) where the tiles carry one; older tiles have none.
+        "fill-extrusion-pattern": ["case", ["has", "v"],
+          ["concat", "facade-", ["get", "facade"], "-", ["to-string", ["get", "v"]]],
+          ["concat", "facade-", ["get", "facade"]]],
         "fill-extrusion-height": ["get", "h"],
         // OSM building:part setbacks and podiums carry their own base (min_height).
         "fill-extrusion-base": ["case", ["==", ["get", "store"], 1], ["min", STOREFRONT_M, ["get", "h"]], ["coalesce", ["get", "base"], 0]],
@@ -121,6 +125,23 @@ export async function installCity3d(map: MapLibreMap): Promise<void> {
         "fill-extrusion-color": ROOF,
         "fill-extrusion-base": ["get", "h"],
         "fill-extrusion-height": ["+", ["get", "h"], 0.4],
+      },
+    },
+    beforeId,
+  );
+  // Bridge decks, railings and piers (scripts/bridges.ts): visible from z14,
+  // since a bridge is a landmark from afar, unlike street props.
+  map.addLayer(
+    {
+      ...common,
+      id: "city3d-bridges",
+      type: "fill-extrusion",
+      "source-layer": "bridges",
+      minzoom: 14,
+      paint: {
+        "fill-extrusion-color": ["match", ["get", "kind"], "rail", "#b9bcc0", "pier", "#7b7e82", "#8e9196"],
+        "fill-extrusion-base": ["get", "base"],
+        "fill-extrusion-height": ["get", "height"],
       },
     },
     beforeId,

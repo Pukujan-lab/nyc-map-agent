@@ -67,6 +67,15 @@ for j in range(0, S, 16):
 d.polygon([(0, 20), (20, 0), (28, 0), (0, 28)], fill="#5a7d99")
 im.resize((OUT_PX, OUT_PX), Image.NEAREST).save(OUT / "facade-glass.png")
 tile("modern", "#9aa3ab", "#3d5366", cols=1, rows=2, win=(28, 7))
+# Variants (building variety): same layout, other materials NYC streets mix.
+tile("rowhouse-2", "#a0806a", "#2b3440", frame="#f0ebe2", sill="#d9cdb9", win=(6, 10))  # tan brick
+tile("rowhouse-3", "#c9c3b5", "#2b3440", frame="#7b2e2a", sill="#b1a998", win=(6, 10))  # painted, red trim
+tile("walkup-2", "#b07a52", "#27313d", frame="#efe7da", cols=3, win=(5, 9), band="#986645")  # orange brick
+tile("walkup-3", "#6e3b30", "#27313d", frame="#cfc6b6", cols=3, win=(5, 9), band="#5e3027")  # dark brick
+tile("prewar-2", "#b9a07c", "#34404d", frame="#e6dccb", cols=4, win=(4, 9), band="#a48b68", sill="#ddd0bb")
+tile("prewar-3", "#a8604a", "#34404d", frame="#efe6d6", cols=3, win=(5, 9), band="#e2d6c2", sill="#efe6d6")  # brick + stone bands
+tile("modern-2", "#c8c3b8", "#3d5366", cols=4, rows=2, win=(5, 9))  # punched windows, light panels
+tile("modern-3", "#7f8790", "#2f4659", cols=2, rows=4, win=(13, 4))  # ribbon windows
 # Glass curtain wall: thin mullions over blue glass.
 im = Image.new("RGBA", (S, S), "#5d86a8")
 d = ImageDraw.Draw(im)

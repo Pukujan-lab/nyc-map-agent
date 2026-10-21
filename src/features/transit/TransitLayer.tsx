@@ -16,7 +16,8 @@ import {
   type SystemId,
   type Vehicle,
 } from "./model";
-import { useAlerts, useBuses, useStarred, useTransitData, useTransitMeta, useTransitToggles } from "./hooks";
+import { useAlerts, useBuses, useStarred, useTransitData, useTransitMeta, useTransitToggles, useXrayData } from "./hooks";
+import { useXray, xrayPrims } from "./xray";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { useFlag } from "@/lib/flags";
 import { usePanel, usePanelChip, usePanelSearch, type SearchProvider } from "@/lib/store/PanelContext";
@@ -304,7 +305,8 @@ export default function TransitLayer() {
     };
   }, [map, three]);
   // Street level: the 3D entrance kit within ~300 m of the camera; elevator entrances gray when out.
-  const outStations = useMemo(() => new Set(work.access.features.map((f) => String(f.properties?.id))), [work.access]);
+  const outKey = work.access.features.map((f) => String(f.properties?.id)).sort().join(",");
+  const outStations = useMemo(() => new Set(outKey ? outKey.split(",") : []), [outKey]);
   useEffect(() => {
     if (!map) return;
     const sync = () => {
@@ -317,6 +319,27 @@ export default function TransitLayer() {
     map.on("moveend", sync);
     return () => { map.off("moveend", sync); };
   }, [map, walking, outStations, staticKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // X-ray: a station's insides through a dimmed ground; the camera tilts in so the 3D layer is on.
+  const xrayId = useXray();
+  const xrayData = useXrayData(Boolean(xrayId)).data;
+  const xrayStation = useMemo(() => {
+    const sub = statics.find((s) => s.system === "subway");
+    const st = xrayId ? sub?.stations.features.find((f) => String(f.properties.id) === xrayId) : undefined;
+    const inside = xrayId ? xrayData?.[xrayId] : undefined;
+    if (!st || !inside) return null;
+    const ents = (sub?.entrances?.features ?? []).filter((e) => String(e.properties.id) === xrayId).map((e) => e.geometry.coordinates as [number, number]);
+    return { center: st.geometry.coordinates as [number, number], prims: xrayPrims(inside, ents, outStations.has(xrayId!)) };
+  }, [xrayId, xrayData, outStations, staticKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!map || !xrayStation) return;
+    map.easeTo({ center: xrayStation.center, zoom: Math.max(map.getZoom(), 17.3), pitch: Math.max(map.getPitch(), 55), duration: 800 });
+  }, [map, xrayStation]);
+  useEffect(() => {
+    const push = () => v3d.current?.setXray(xrayStation?.center ?? null, xrayStation?.prims ?? []);
+    push();
+    const id = window.setTimeout(push, 1200); // the three layer loads on the first tilt
+    return () => window.clearTimeout(id);
+  }, [xrayStation, three]);
   useEffect(() => {
     if (!three) return;
     v3d.current?.update(

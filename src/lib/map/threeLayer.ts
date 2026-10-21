@@ -131,6 +131,21 @@ function elevatorKit(): THREE.BufferGeometry {
   return kit([[2.2, 2.2, 2.6, 0, 0, 0, "#93c5fd"], [2.4, 2.4, 0.25, 0, 0, 2.6, "#1f2937"], [1.2, 0.08, 0.35, 0, -1.2, 2.0, "#111827"]], [[1.3, -1.3, 2.4]]);
 }
 
+/**
+ * X-ray primitive (a station's insides, drawn through a dimmed ground):
+ * "area" = flat polygon, "ribbon" = a polyline of `width` m with per-vertex z
+ * (stairs slope), "shaft" = a vertical box from pts[0].z up to 0.
+ * Higher `order` draws later (on top), so shallower levels read over deeper ones.
+ */
+export interface XrayPrim {
+  kind: "area" | "ribbon" | "shaft";
+  pts: Array<[number, number, number]>;
+  width: number;
+  color: string;
+  order: number;
+}
+export const XRAY_GROUND_RADIUS = 170;
+
 const UNIT = new THREE.BoxGeometry(1, 1, 1).toNonIndexed().translate(0, 0, 0.5);
 
 export const VEHICLES_3D_LAYER = "three-vehicles";
@@ -248,6 +263,51 @@ export function createVehicleLayer() {
     map?.triggerRepaint();
   }
 
+  // ---- X-ray station view: one group, rebuilt per station. ----
+  let xray: THREE.Group | null = null;
+  const toLocal = (lon: number, lat: number, z: number) => {
+    const mc = MercatorCoordinate.fromLngLat([lon, lat], 0);
+    return new THREE.Vector3((mc.x - origin.x) / s, -(mc.y - origin.y) / s, z);
+  };
+  const seeThrough = (color: string, opacity: number, order: number) => {
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthTest: false, depthWrite: false, side: THREE.DoubleSide });
+    return (g: THREE.BufferGeometry) => { const m = new THREE.Mesh(g, mat); m.renderOrder = order; m.frustumCulled = false; return m; };
+  };
+  function ribbon(pts: THREE.Vector3[], width: number): THREE.BufferGeometry {
+    const pos: number[] = [];
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i], d = new THREE.Vector3(b.x - a.x, b.y - a.y, 0).normalize(), n = new THREE.Vector3(-d.y, d.x, 0).multiplyScalar(width / 2);
+      const q1 = a.clone().add(n), q2 = a.clone().sub(n), q3 = b.clone().add(n), q4 = b.clone().sub(n);
+      pos.push(q1.x, q1.y, q1.z, q2.x, q2.y, q2.z, q3.x, q3.y, q3.z, q3.x, q3.y, q3.z, q2.x, q2.y, q2.z, q4.x, q4.y, q4.z);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    return g;
+  }
+  /** Show one station's insides around `center` (null clears). */
+  function setXray(center: [number, number] | null, prims: XrayPrim[] = []) {
+    if (xray) { scene.remove(xray); for (const o of xray.children as THREE.Mesh[]) { o.geometry.dispose(); (o.material as THREE.Material).dispose(); } xray = null; }
+    if (center) {
+      xray = new THREE.Group();
+      const c = toLocal(center[0], center[1], 0.3);
+      xray.add(seeThrough("#0b1220", 0.6, 1)(new THREE.CircleGeometry(XRAY_GROUND_RADIUS, 48).translate(c.x, c.y, c.z)));
+      for (const p of prims) {
+        const v = p.pts.map(([lon, lat, z]) => toLocal(lon, lat, z));
+        const mk = seeThrough(p.color, p.kind === "area" ? 0.75 : 0.95, 2 + p.order);
+        if (p.kind === "area" && v.length >= 3) {
+          const g = new THREE.ShapeGeometry(new THREE.Shape(v.map((q) => new THREE.Vector2(q.x, q.y))));
+          xray.add(mk(g.translate(0, 0, v[0].z)));
+          xray.add(mk(ribbon([...v, v[0]], 0.4))); // crisp edge
+        } else if (p.kind === "shaft") {
+          const h = Math.max(-v[0].z, 1);
+          xray.add(mk(new THREE.BoxGeometry(p.width, p.width, h).translate(v[0].x, v[0].y, v[0].z + h / 2)));
+        } else if (v.length >= 2) xray.add(mk(ribbon(v, p.width)));
+      }
+      scene.add(xray);
+    }
+    map?.triggerRepaint();
+  }
+
   /** Replace the viaduct bays (static; call once per network load). */
   function setStructure(bays: BayInstance[]) {
     bayChunks = new Map();
@@ -270,8 +330,7 @@ export function createVehicleLayer() {
     },
     onRemove() {
       map?.off("moveend", syncChunks);
-      // The renderer is shared by every three.js layer; never dispose it here.
-      renderer = null;
+      renderer = null; // shared with the other three.js layers: never dispose it here
     },
     render(_gl, args) {
       if (!renderer) return;
@@ -302,7 +361,7 @@ export function createVehicleLayer() {
     }
     map?.triggerRepaint();
   }
-  return { layer, update, setStructure, setEntrances };
+  return { layer, update, setStructure, setEntrances, setXray };
 }
 
 /* ------------------------------------------------------------------------ */

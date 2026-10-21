@@ -33,7 +33,8 @@
     "openapi:check": "tsx scripts/openapi.ts --check",
     "build:transit": "tsx scripts/build-transit.ts",
     "build:e2e": "VITE_DATA_BACKEND=octo vite build --outDir .e2e-build --emptyOutDir",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "build:xray": "tsx scripts/build-xray.ts"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "3.0.71",
