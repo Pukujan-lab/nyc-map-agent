@@ -109,6 +109,10 @@ export function CaveatsSheet({ boundaries, noise, crashes }: CaveatsSheetProps) 
               </span>{" "}
               They are never dropped silently — see the coverage numbers below.
             </li>
+            <li>
+              <span className="font-medium text-foreground">Weather.</span>{" "}
+              Open-Meteo (National Weather Service as fallback), refreshed every 10 minutes.
+            </li>
           </ul>
 
           <div>
