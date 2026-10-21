@@ -67,8 +67,7 @@ const PROP_COLOR: ExpressionSpecification = [
   "#888888",
 ];
 
-/** Adds the source, images and layers (hidden). Safe to call after every style load. */
-export async function installCity3d(map: MapLibreMap): Promise<void> {
+async function ensureSource(map: MapLibreMap): Promise<void> {
   await ensurePmtilesProtocol();
   if (!map.getSource(SOURCE)) {
     map.addSource(SOURCE, {
@@ -77,6 +76,60 @@ export async function installCity3d(map: MapLibreMap): Promise<void> {
       attribution: "NYC Open Data (footprints, PLUTO, DOE schools, trees, hydrants, benches)",
     });
   }
+}
+
+/**
+ * Distance skyline: towers over 60 m (over 120 m already at z11) from the
+ * `skyline` layer that `pnpm build:skyline-tiles` bakes into z11-16 of the city
+ * tiles. It fills the zooms below the basemap's own 3D buildings and the
+ * hero landmarks (both z14), so Manhattan seen from DUMBO or Long Island City
+ * stands up at once instead of popping in late. Independent of the textured-city
+ * toggle: it is plain colour, a few hundred kB for the whole city.
+ */
+export const SKYLINE_LAYER = "city3d-skyline";
+export const SKYLINE_MIN_ZOOM = 11;
+export const SKYLINE_MAX_ZOOM = 14;
+
+const SKYLINE_COLOR: ExpressionSpecification = [
+  "match", ["get", "facade"],
+  "glass", "#8a9aa8",
+  "limestone", "#c8bca6",
+  "#a9aaab",
+];
+
+export async function installSkyline(map: MapLibreMap): Promise<void> {
+  await ensureSource(map);
+  if (map.getLayer(SKYLINE_LAYER)) return;
+  const beforeId = map.getStyle().layers?.find((l) => l.type === "symbol")?.id;
+  map.addLayer(
+    {
+      id: SKYLINE_LAYER,
+      type: "fill-extrusion",
+      source: SOURCE,
+      "source-layer": "skyline",
+      // No layer maxzoom: MapLibre skips a layer in any tile whose own zoom is past
+      // it, and a pitched camera below z14 still draws z14-16 tiles near the eye.
+      // The hand-over to the basemap's buildings is an opacity step instead.
+      minzoom: SKYLINE_MIN_ZOOM,
+      paint: {
+        "fill-extrusion-opacity": ["step", ["zoom"], 1, SKYLINE_MAX_ZOOM, 0],
+        "fill-extrusion-color": SKYLINE_COLOR,
+        "fill-extrusion-height": ["get", "h"],
+        "fill-extrusion-base": 0,
+        "fill-extrusion-vertical-gradient": true,
+      },
+    },
+    beforeId,
+  );
+}
+
+export function setSkylineVisible(map: MapLibreMap, on: boolean): void {
+  if (map.getLayer(SKYLINE_LAYER)) map.setLayoutProperty(SKYLINE_LAYER, "visibility", on ? "visible" : "none");
+}
+
+/** Adds the source, images and layers (hidden). Safe to call after every style load. */
+export async function installCity3d(map: MapLibreMap): Promise<void> {
+  await ensureSource(map);
   await loadFacades(map);
   if (map.getLayer("city3d-walls")) return;
   const beforeId = map.getStyle().layers?.find((l) => l.type === "symbol")?.id;

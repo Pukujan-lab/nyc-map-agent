@@ -767,6 +767,10 @@ export function MapView({
       .then(async (mod) => {
         const { installCity3d, setCity3dVisible, city3dCoversView } = mod;
         city3dMod.current = mod;
+        // Distance skyline (z11-14): on unless low-power mode; tiny and plain colour.
+        if (!eco) await mod.installSkyline(map);
+        if (cancelled) return;
+        mod.setSkylineVisible(map, !eco);
         if (!city3d && !schoolIcons) {
           setCity3dVisible(map, false);
           return;
@@ -801,7 +805,7 @@ export function MapView({
       cancelled = true;
       cleanup?.();
     };
-  }, [ready, styleEpoch, city3d, schoolIcons, storefrontsOn]);
+  }, [ready, styleEpoch, city3d, schoolIcons, storefrontsOn, eco]);
 
   useEffect(() => {
     if (!ready) return;
