@@ -1,6 +1,7 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useSearchParams } from "react-router-dom";
+import { lookupFrom, type SegmentLookup, type SegmentRow } from "./history";
 import { RAIL_SYSTEMS, type Bus, type LiveSystem, type StaticSystem, type SystemId , type XrayStation } from "./model";
 
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
@@ -140,4 +141,20 @@ export function useStarred() {
 /** Baked station insides for the x-ray view (~60 kB gz), fetched the first time x-ray is opened. */
 export function useXrayData(enabled: boolean) {
   return useQuery({ queryKey: ["transit", "xray"], queryFn: () => getJson<Record<string, XrayStation>>("/transit/xray.json"), staleTime: Infinity, enabled });
+}
+
+/** Historical subway segment times for the routes on the map (refetched each 10 min). */
+export function useSegmentHistory(routes: string[]): SegmentLookup | undefined {
+  const qs = useQueries({
+    queries: routes.map((r) => ({
+      queryKey: ["transit", "segments", r],
+      queryFn: () => getJson<{ segments: SegmentRow[] }>(`${API_BASE}/api/transit-segments?${new URLSearchParams({ route: r })}`),
+      staleTime: 10 * 60_000,
+      refetchInterval: 10 * 60_000,
+      retry: 0,
+    })),
+  });
+  const key = qs.map((q) => q.dataUpdatedAt).join(",");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useMemo(() => (qs.some((q) => q.data) ? lookupFrom(new Map(routes.map((r, i) => [r, qs[i].data?.segments ?? []]))) : undefined), [key]);
 }

@@ -24,6 +24,7 @@ import * as traffic from "./features/traffic/routes";
 import * as parking from "./features/parking/routes";
 import * as agent from "./features/agent/routes";
 import * as transit from "./features/transit/routes";
+import * as transitSegments from "./features/transit/segments";
 
 type Handler = { GET: (request: Request) => Promise<Response> };
 
@@ -45,6 +46,7 @@ const routes: Array<[string, Handler]> = [
   ["/api/parking/near", { GET: parking.GET_NEAR }],
   ["/api/parking/rules", { GET: parking.GET_RULES }],
   ["/api/parking", parking],
+  ["/api/transit-segments", transitSegments],
   ["/api/transit", transit],
   ["/api/transit/:system", transit],
 ];

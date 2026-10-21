@@ -12,6 +12,7 @@ import { Query as HazardsQuery } from "./features/hazards/routes";
 import { NearQuery as ParkingNearQuery } from "./features/parking/routes";
 import { AlongQuery as TrafficAlongQuery } from "./features/traffic/routes";
 import { Query as WeatherQuery } from "./features/weather/routes";
+import { Query as SegmentsQuery, Response_ as SegmentsResponse } from "./features/transit/segments";
 
 const Json = z.record(z.unknown()).openapi("Json");
 const ApiError = z.object({ error: z.string(), issues: z.array(z.string()).optional() }).openapi("ApiError");
@@ -94,6 +95,13 @@ export const ROUTES = {
   "/api/parking/near": jsonRoute("/api/parking/near", "Licensed garages and lots near a point", ParkingNearQuery),
   "/api/parking/rules": jsonRoute("/api/parking/rules", "Street parking sign and meter rules near a point", ParkingNearQuery),
   "/api/parking": jsonRoute("/api/parking", "Licensed garages and lots GeoJSON (DCWP + OSM)"),
+  "/api/transit-segments": createRoute({
+    method: "get",
+    path: "/api/transit-segments",
+    summary: "Historical subway segment travel and dwell times (median, p80) for a route at an hour of the week",
+    request: { query: SegmentsQuery },
+    responses: { 200: { description: "OK", content: { "application/json": { schema: SegmentsResponse } } }, ...errors },
+  }),
   "/api/transit": jsonRoute("/api/transit", "Live transit capabilities ({ bus })"),
   "/api/transit/:system": jsonRoute(
     "/api/transit/{system}",
