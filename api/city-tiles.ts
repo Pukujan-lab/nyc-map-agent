@@ -71,8 +71,10 @@ async function serve(name: string, request: Request): Promise<Response> {
   const common = {
     "accept-ranges": "bytes",
     etag: `"${asset.etag}"`,
-    // The etag changes on every publish, so caches can hold a range for a day.
-    "cache-control": "public, max-age=86400",
+    // The URL stays the same across publishes, so a long max-age kept old
+    // ranges (blocky trees, props in the road) in browsers for a day after a
+    // rebuild. Five minutes bounds that; PMTiles' own etag check catches the rest.
+    "cache-control": "public, max-age=300",
     "content-type": "application/vnd.pmtiles",
     // Same-origin in the app; open to other origins so a separately hosted
     // frontend can point VITE_CITY_TILES_URL here too.
