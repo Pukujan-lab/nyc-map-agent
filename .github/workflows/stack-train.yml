@@ -1,5 +1,33 @@
 name: stack-train
 on: [pull_request, workflow_dispatch]
+permissions:
+  contents: read
+concurrency: 
+  group: stack-train-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+# The reusable Pukujan/agent-stack-train check-adopter.yml hard-codes
+# runs-on: ubuntu-latest (no input to override), so it can't run on the
+# self-hosted runner. This job runs the same check inline; drop it and go back
+# to `uses:` once that workflow accepts a runs-on input.
 jobs:
   check-adopter:
-    uses: Pukujan/agent-stack-train/.github/workflows/check-adopter.yml@main
+    runs-on: [self-hosted, linux, x64, gravebuster]
+    timeout-minutes: 10
+    container: { image: python:3.12-slim }
+    steps:
+      - name: Check out the adopter
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check out the train
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: Pukujan/agent-stack-train
+          ref: main
+          path: .stack-train
+      - name: Validate the manifest against the certified train
+        run: |
+          python .stack-train/scripts/check_manifest.py \
+            --manifest stack-manifest.json \
+            --train .stack-train/stack-releases.json
+      - name: Clean workspace (persistent runner)
+        if: always()
+        run: find "$GITHUB_WORKSPACE" -mindepth 1 -delete || true
