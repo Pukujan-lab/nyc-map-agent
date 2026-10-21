@@ -10,6 +10,7 @@ import {
   stationOf,
   raisedTrack,
   viaductBays,
+  entranceInstances,
   splitRaised,
   type StaticSystem,
   type SystemId,
@@ -72,8 +73,12 @@ export default function TransitLayer() {
   const enabled = useFlag("transit");
   const { current } = useMap();
   const map = current?.getMap();
-  const { tilted, walking } = useMapState();
+  const { tilted, walking, startWalk } = useMapState();
   const three = tilted || walking;
+  // Dev-only: lets headless QA enter street level at a point.
+  useEffect(() => {
+    if (import.meta.env.DEV) (window as unknown as { __walk?: unknown }).__walk = startWalk;
+  }, [startWalk]);
   const { on, set, panelOpen, setPanelOpen } = useTransitToggles();
   const { content, showPanel } = usePanel();
   const meta = useTransitMeta();
@@ -269,6 +274,7 @@ export default function TransitLayer() {
     features: vehicles.map((v) => ({ type: "Feature", properties: { key: v.key, color: v.color, bearing: v.bearing, grade: v.grade, label: v.label }, geometry: { type: "Point", coordinates: [v.lon, v.lat] } })),
   }), [vehicles]);
   // 3D: one three.js custom layer in the map's canvas, loaded on first tilt.
+  const entr = useRef<ReturnType<typeof entranceInstances>>([]);
   const bays = useRef<ReturnType<typeof viaductBays>>([]);
   useEffect(() => {
     const sub = statics.find((s) => s.system === "subway");
@@ -286,6 +292,8 @@ export default function TransitLayer() {
     void import("@/lib/map/threeLayer").then(({ createVehicleLayer }) => {
       v3d.current ??= createVehicleLayer();
       v3d.current.setStructure(bays.current);
+      v3d.current.setEntrances(entr.current);
+      if (import.meta.env.DEV) Object.assign(window, { __v3d: v3d.current, __entr: entr });
       ensure();
     });
     map.on("styledata", ensure);
@@ -295,6 +303,20 @@ export default function TransitLayer() {
       if (v3d.current && map.getLayer(v3d.current.layer.id)) map.removeLayer(v3d.current.layer.id);
     };
   }, [map, three]);
+  // Street level: the 3D entrance kit within ~300 m of the camera; elevator entrances gray when out.
+  const outStations = useMemo(() => new Set(work.access.features.map((f) => String(f.properties?.id))), [work.access]);
+  useEffect(() => {
+    if (!map) return;
+    const sync = () => {
+      const sub = statics.find((s) => s.system === "subway");
+      const c = map.getCenter();
+      entr.current = walking && sub ? entranceInstances(sub, outStations, [c.lng, c.lat]) : [];
+      v3d.current?.setEntrances(entr.current);
+    };
+    sync();
+    map.on("moveend", sync);
+    return () => { map.off("moveend", sync); };
+  }, [map, walking, outStations, staticKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!three) return;
     v3d.current?.update(
@@ -383,9 +405,10 @@ export default function TransitLayer() {
         <Layer id="transit-station" type="circle" minzoom={11}
           paint={{ "circle-color": "#ffffff", "circle-stroke-color": "#111827", "circle-stroke-width": 1.5, "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 2, 16, 6] }} />
       </Source>
-      <Source id="transit-entrances" type="geojson" data={walking ? entrances : EMPTY}>
-        <Layer id="transit-entrance" type="circle"
-          paint={{ "circle-color": "#16a34a", "circle-stroke-color": "#ffffff", "circle-stroke-width": 2, "circle-radius": 7, "circle-pitch-alignment": "viewport" }} />
+      <Source id="transit-entrances" type="geojson" data={entrances}>
+        {/* Overhead: a small green dot. Street level: the 3D kit draws it; this stays as an invisible tap target. */}
+        <Layer id="transit-entrance" type="circle" minzoom={16}
+          paint={{ "circle-color": "#16a34a", "circle-stroke-color": "#ffffff", "circle-stroke-width": walking ? 0 : 1, "circle-radius": walking ? 14 : 3.5, "circle-opacity": walking ? 0.01 : 1, "circle-stroke-opacity": walking ? 0 : 1 }} />
       </Source>
       <Source id="transit-work-points" type="geojson" data={work.points}>
         <Layer id="transit-work" type="symbol" minzoom={11}
