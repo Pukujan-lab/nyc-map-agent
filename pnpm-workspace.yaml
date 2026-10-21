@@ -292,6 +292,7 @@ allowBuilds:
   pre-commit: true
   pre-push: true
   prisma: true
+  protobufjs: false
   protoc: true
   protoc-gen-grpc-web: true
   puppeteer: true

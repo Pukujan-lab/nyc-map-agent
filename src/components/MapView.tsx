@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { setMapInstance } from "@/lib/map/mapInstance";
 import { RestroomDetails } from "@/components/RestroomCard";
 import { usePanel } from "@/lib/store/PanelContext";
@@ -106,6 +106,7 @@ function eyeCamera(map: MaplibreMapInstance, eye: Eye): CameraOptions {
 import { useMapState } from "@/lib/store/MapStateContext";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 import { WalkControls } from "./WalkControls";
+import { FEATURES } from "@/features";
 
 /**
  * How far the camera may tilt — MapLibre's own ceiling. Anything less and walk
@@ -515,6 +516,10 @@ export function MapView({
         });
         return;
       }
+      // Feature layers (transit stations, vehicles…) open their own panel.
+      const clicked = mapRef.current?.getMap();
+      const own = FEATURES.flatMap((f) => f.clickLayers ?? []).filter((id) => clicked?.getLayer(id));
+      if (clicked && own.length && clicked.queryRenderedFeatures([event.point.x, event.point.y], { layers: own }).length) return;
       // Clicks stay live at street level: picking the block underfoot opens
       // its details like it does overhead.
       const picked = pickAt(event.point.x, event.point.y, event.lngLat);
@@ -1115,7 +1120,11 @@ export function MapView({
         onClick={handleClick}
         onMoveEnd={handleMoveEnd}
         style={{ position: "absolute", inset: 0 }}
-      />
+      >
+        <Suspense fallback={null}>
+          {FEATURES.map((f) => (f.MapLayer ? <f.MapLayer key={f.id} /> : null))}
+        </Suspense>
+      </MapLibreMap>
 
 
       {walking ? (

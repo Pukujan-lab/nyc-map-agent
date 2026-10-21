@@ -15,7 +15,7 @@ function devApi(env: Record<string, string>): Plugin {
     name: "dev-api",
     apply: "serve",
     configureServer(server: ViteDevServer) {
-      for (const [k, v] of Object.entries(env)) if (k.startsWith("OCTO_") || k.startsWith("INFERHUB_")) process.env[k] ??= v;
+      for (const [k, v] of Object.entries(env)) if (k.startsWith("OCTO_") || k.startsWith("INFERHUB_") || k === "MTA_BUSTIME_KEY") process.env[k] ??= v;
       server.middlewares.use(async (req, res, next) => {
         if (!req.url?.startsWith("/api/")) return next();
         try {

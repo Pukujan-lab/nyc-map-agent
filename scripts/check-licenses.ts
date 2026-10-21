@@ -16,6 +16,7 @@ const EXCEPTIONS: Record<string, string> = {
   "@resvg/resvg-wasm": "MPL-2.0, transitive dev dependency, unmodified",
   "caniuse-lite": "CC-BY-4.0 browser-support data used by the build only",
   "axe-core": "MPL-2.0, dev-only via eslint-plugin-jsx-a11y, unmodified",
+  "gtfs-realtime-bindings": "Apache-2.0 (package.json spells it \"Apache 2.0\"), MTA's official GTFS-rt bindings",
 };
 
 function allowed(expr: string): boolean {

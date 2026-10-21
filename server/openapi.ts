@@ -82,4 +82,11 @@ export const ROUTES = {
   "/api/restrooms": jsonRoute("/api/restrooms", "Public restrooms GeoJSON"),
   "/api/sources": jsonRoute("/api/sources", "Source registry metadata and freshness"),
   "/api/street": jsonRoute("/api/street", "Street noise / crash stats", StreetQuery),
+  "/api/transit": jsonRoute("/api/transit", "Live transit capabilities ({ bus })"),
+  "/api/transit/:system": jsonRoute(
+    "/api/transit/{system}",
+    "Live MTA GTFS-rt (subway / lirr / mnr trips, bus positions, alerts + elevator outages), cached ~15 s",
+    undefined,
+    z.object({ system: z.enum(["subway", "lirr", "mnr", "bus", "alerts"]).openapi({ param: { name: "system", in: "path" }, example: "subway" }) }),
+  ),
 } as const;
