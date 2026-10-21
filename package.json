@@ -25,7 +25,9 @@
     "build:size": "vite build --outDir .size-build --emptyOutDir",
     "size": "size-limit",
     "feeds:health": "tsx scripts/feed-health.ts",
-    "licenses:check": "tsx scripts/check-licenses.ts"
+    "licenses:check": "tsx scripts/check-licenses.ts",
+    "lint": "eslint . --max-warnings=0 --suppressions-location eslint-suppressions.json --pass-on-unpruned-suppressions",
+    "lint:prune": "eslint . --suppressions-location eslint-suppressions.json --prune-suppressions"
   },
   "dependencies": {
     "@hono/node-server": "2.1.5",
@@ -78,13 +80,19 @@
   },
   "devDependencies": {
     "@duckdb/node-api": "1.5.6-r.1",
+    "@eslint/js": "9.39.1",
     "@size-limit/file": "11.2.0",
     "@types/node": "22.10.2",
     "@types/three": "0.134.0",
     "dependency-cruiser": "16.10.4",
+    "eslint": "9.39.1",
+    "eslint-plugin-jsx-a11y": "6.10.2",
+    "eslint-plugin-react-hooks": "5.2.0",
+    "globals": "16.5.0",
     "mapshaper": "0.7.89",
     "size-limit": "11.2.0",
-    "tsx": "4.19.2"
+    "tsx": "4.19.2",
+    "typescript-eslint": "8.46.4"
   },
   "packageManager": "pnpm@11.19.0"
 }
