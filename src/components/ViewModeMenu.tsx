@@ -2,6 +2,7 @@ import { ChevronDown, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
@@ -27,7 +28,7 @@ export function ViewModeMenu({
   compact?: boolean;
   onOpenSources?: () => void;
 }) {
-  const { layer, setLayer } = useMapState();
+  const { layer, setLayer, city3d, setCity3d } = useMapState();
   const { viewMode, setViewMode, enabledSources, averageSources } = useDataView();
 
   const value =
@@ -100,6 +101,10 @@ export function ViewModeMenu({
             {averageSources.length === 1 ? "" : "s"}
           </DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuCheckboxItem checked={city3d} onCheckedChange={(on) => setCity3d(on === true)}>
+          Textured 3D city (Lower Manhattan + Brownstone Brooklyn, zoom in)
+        </DropdownMenuCheckboxItem>
         {onOpenSources ? (
           <>
             <DropdownMenuSeparator />

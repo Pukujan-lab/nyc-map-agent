@@ -52,6 +52,8 @@ interface MapState {
   scale: MapScale;
   /** How areas are drawn: filled polygons, 3D columns, or a heatmap. */
   mapStyle: MapStyleId;
+  /** Textured 3D buildings and street props (pilot area, zoom 16+). */
+  city3d: boolean;
   /** True while the camera is pitched; drives the "3D" toggle's pressed state. */
   tilted: boolean;
   /** True while the camera is driven first-person from the keyboard. */
@@ -86,6 +88,7 @@ interface MapStateActions {
   setWindow: (window: WindowId) => void;
   setScale: (scale: MapScale) => void;
   setMapStyle: (style: MapStyleId) => void;
+  setCity3d: (on: boolean) => void;
   setTilted: (tilted: boolean) => void;
   /** Enter walk mode, optionally framing a point first. */
   startWalk: (target?: { lon: number; lat: number } | null) => void;
@@ -115,6 +118,7 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
   const windowId = parseWindowId(searchParams.get("window"));
   const scale = parseMapScale(searchParams.get("scale"));
   const mapStyle = parseMapStyle(searchParams.get("style"));
+  const city3d = searchParams.get("city3d") === "1";
 
   const [tilted, setTilted] = useState(false);
   const [walking, setWalking] = useState(false);
@@ -139,7 +143,7 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateSearch = useCallback(
-    (key: "layer" | "window" | "scale" | "style", value: string) => {
+    (key: "layer" | "window" | "scale" | "style" | "city3d", value: string) => {
       setSearchParams(
         (previous) => {
           const next = new URLSearchParams(previous);
@@ -169,6 +173,11 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
 
   const setMapStyle = useCallback(
     (next: MapStyleId) => updateSearch("style", next),
+    [updateSearch],
+  );
+
+  const setCity3d = useCallback(
+    (on: boolean) => updateSearch("city3d", on ? "1" : "0"),
     [updateSearch],
   );
 
@@ -240,6 +249,8 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
       scale,
       mapStyle,
       setMapStyle,
+      city3d,
+      setCity3d,
       tilted,
       walking,
       walkRequest,
@@ -279,6 +290,8 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
       scale,
       mapStyle,
       setMapStyle,
+      city3d,
+      setCity3d,
       tilted,
       walking,
       walkRequest,

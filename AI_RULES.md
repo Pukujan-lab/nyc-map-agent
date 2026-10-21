@@ -130,3 +130,7 @@ Dependency notes:
 - **No tooltips.** Explanations, legends and guides live inside drawers (`Drawer`/`Sheet`) or dropdowns (`DropdownMenu`/`Select`). When you touch a component that uses a tooltip, move that content into its drawer or dropdown.
 - Use the existing stack only (shadcn/Radix, Tailwind, lucide). No hand-built components unless no shadcn primitive fits.
 - Prefer glue code over mature, pinned OSS dependencies to custom code. Justify every new dependency (license, maturity, version) in the PR.
+
+## Textured 3D city (opt-in)
+
+- The "Textured 3D city" item in the map view dropdown adds `fill-extrusion` layers from `public/tiles/nyc-city-pilot.pmtiles` (built by `scripts/build-city-tiles.ts`). Facade patterns (`public/textures/`) and props draw only from zoom 16, and the basemap's own buildings stop at zoom 16 while it is on. This is still MapLibre, not a second renderer. Patterns are the one exception to the single-glass-hue rule, and they apply to buildings, never to data areas.

@@ -42,6 +42,7 @@
     "lucide-react": "0.454.0",
     "mapillary-js": "^4.1.2",
     "maplibre-gl": "4.7.1",
+    "pmtiles": "4.3.0",
     "postcss": "8.4.47",
     "react": "18.3.1",
     "react-dom": "18.3.1",
