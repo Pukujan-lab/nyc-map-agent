@@ -4,13 +4,15 @@
  *   props      street trees (uvpi-gqnh), hydrants (5bgh-vtsn), benches (kuxa-tauh),
  *              street-light poles reserved for small cells (tbgj-tdd6), pushed off the
  *              roadway to the kerb with DCP LION widths (scripts/props-clearance.sql)
+ *   schools    DOE School Point Locations (a3nt-yts4, LCGMS) spatially joined to the
+ *              nearest footprint with DuckDB spatial (PLUTO class W* is the fallback)
  * Props become tiny low-poly polygons (canopy octagon, trunk, pole, box) so MapLibre's own
  * fill-extrusion draws them: no second renderer. tippecanoe packs everything into one
  * PMTiles file served statically from public/tiles/.
  *
  *   pnpm build:city-tiles                       full city -> public/tiles/nyc-city.pmtiles (gitignored)
  *   CITY3D_AREA=pilot pnpm build:city-tiles     small pilot -> public/tiles/nyc-city-pilot.pmtiles
- * Needs tippecanoe >= 2.17 on PATH.
+ * Needs tippecanoe >= 2.17 and the duckdb CLI (>= 1.1, spatial extension) on PATH.
  */
 import { execFileSync } from "node:child_process";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync, writeFileSync, writeSync } from "node:fs";
@@ -59,10 +61,10 @@ const latLonBox = (lat = "latitude", lon = "longitude") =>
 const inBox = (lat: number, lon: number) =>
   lat >= PILOT_BBOX.south && lat <= PILOT_BBOX.north && lon >= PILOT_BBOX.west && lon <= PILOT_BBOX.east;
 
-export type Facade = "rowhouse" | "walkup" | "prewar" | "modern" | "tower";
+export type Facade = "rowhouse" | "walkup" | "prewar" | "modern" | "tower" | "school";
 
 /** Picks a facade from PLUTO building class, floors, height and year. */
-export function classify(p: { bldgclass?: string; floors: number; heightM: number; year?: number }): {
+export function classify(p: { bldgclass?: string; floors: number; heightM: number; year?: number; school?: boolean }): {
   facade: Facade;
   storefront: boolean;
 } {
@@ -70,7 +72,9 @@ export function classify(p: { bldgclass?: string; floors: number; heightM: numbe
   const k = cls.charAt(0);
   const storefront = /^(S|K)/.test(cls) || ["C7", "D6", "D7", "O8", "RR"].includes(cls);
   let facade: Facade;
-  if (p.heightM > 70 || (k === "O" && p.floors > 15) || k === "H" && p.floors > 15) facade = "tower";
+  // A DOE school point on the footprint, or PLUTO class W* (educational).
+  if (p.school || k === "W") facade = "school";
+  else if (p.heightM > 70 || (k === "O" && p.floors > 15) || k === "H" && p.floors > 15) facade = "tower";
   else if ((k === "A" || k === "B" || k === "S") && p.floors <= 4) facade = "rowhouse";
   else if (k === "C" || (p.floors <= 6 && (p.year ?? 1900) < 1940)) facade = "walkup";
   else if ((p.year ?? 1900) < 1950) facade = "prewar";
@@ -152,9 +156,40 @@ function prop(kind: string, lon: number, lat: number, r: number, sides: number, 
   };
 }
 
+function writeLines(path: string, lines: Iterable<string>): void {
+  const fd = openSync(path, "w");
+  for (const line of lines) writeSync(fd, line + "\n");
+  closeSync(fd);
+}
+
+/**
+ * Footprint indexes that hold a DOE school point: DuckDB spatial joins each
+ * school to the footprint containing it, else the nearest one within ~25 m
+ * (points often sit on the frontage or in the yard).
+ */
+export function schoolFootprints(footprints: Row[], schools: Row[]): Map<number, string> {
+  const fp = `/tmp/${AREA}-footprints.ndjson`, sp = `/tmp/${AREA}-schools.ndjson`, out = `/tmp/${AREA}-school-bins.csv`;
+  writeLines(fp, (function* () {
+    for (let i = 0; i < footprints.length; i++) if (footprints[i].the_geom) yield JSON.stringify({ i, g: JSON.stringify(footprints[i].the_geom) });
+  })());
+  writeLines(sp, schools.map((s, j) => JSON.stringify({ j, g: JSON.stringify(s.the_geom) })));
+  const sql = `INSTALL spatial; LOAD spatial;
+    CREATE TABLE f AS SELECT i, ST_GeomFromGeoJSON(g) AS geom FROM read_json('${fp}', format = 'newline_delimited', columns = {i: 'INTEGER', g: 'VARCHAR'});
+    CREATE TABLE s AS SELECT j, ST_GeomFromGeoJSON(g) AS p FROM read_json('${sp}', format = 'newline_delimited', columns = {j: 'INTEGER', g: 'VARCHAR'});
+    COPY (SELECT i, any_value(j) FROM (
+      SELECT f.i, s.j, row_number() OVER (PARTITION BY s.j ORDER BY ST_Distance(f.geom, s.p)) AS rk
+      FROM s JOIN f ON ST_DWithin(f.geom, s.p, 0.00025)) WHERE rk = 1 GROUP BY i) TO '${out}' (HEADER false);`;
+  execFileSync("duckdb", ["-c", sql], { stdio: ["ignore", "ignore", "inherit"] });
+  const name = (j: number) => (typeof schools[j]?.loc_name === "string" ? schools[j].loc_name : "School").trim();
+  return new Map(readFileSync(out, "utf8").split("\n").filter(Boolean).map((l) => {
+    const [i, j] = l.split(",").map(Number);
+    return [i, name(j)];
+  }));
+}
+
 async function main() {
   const t0 = Date.now();
-  const [footprints, pluto, trees, hydrants, benches, poles] = await Promise.all([
+  const [footprints, pluto, trees, hydrants, benches, poles, schools] = await Promise.all([
     soqlAll("5zhs-2jue", { $select: "the_geom,base_bbl,height_roof,construction_year", $where: box("the_geom") }),
     soqlAll("64uk-42ks", {
       $select: "bbl,bldgclass,numfloors,yearbuilt",
@@ -164,7 +199,9 @@ async function main() {
     soqlAll("5bgh-vtsn", { $select: "latitude,longitude", $where: latLonBox() }),
     soqlAll("kuxa-tauh", { $select: "the_geom" }),
     soqlAll("tbgj-tdd6", { $select: "latitude,longitude", $where: latLonBox() }).catch(() => []),
+    soqlAll("a3nt-yts4", { $select: "the_geom,loc_name", $where: box("the_geom") }),
   ]);
+  const schoolIdx = schoolFootprints(footprints, schools);
   const plutoByBbl = new Map(pluto.map((p) => [String(Number(p.bbl)), p]));
   const lines: string[] = [];
   const counts: Record<string, number> = {};
@@ -173,22 +210,37 @@ async function main() {
     counts[kind] = (counts[kind] ?? 0) + 1;
   };
 
-  for (const f of footprints) {
+  for (const [i, f] of footprints.entries()) {
     const heightM = Number(f.height_roof ?? 0) * FT;
     if (!(heightM > 2)) continue;
     const p = plutoByBbl.get(String(Number(f.base_bbl)));
     const floors = Number(p?.numfloors ?? 0) || Math.max(1, Math.round(heightM / 3.3));
     const year = Number(p?.yearbuilt ?? f.construction_year ?? 0) || undefined;
-    const { facade, storefront } = classify({ bldgclass: p?.bldgclass as string | undefined, floors, heightM, year });
+    const { facade, storefront } = classify({
+      bldgclass: p?.bldgclass as string | undefined, floors, heightM, year, school: schoolIdx.has(i),
+
+    });
     add(
       {
         type: "Feature",
         tippecanoe: { layer: "buildings", minzoom: 14 },
-        properties: { h: Math.round(heightM * 10) / 10, facade, store: storefront ? 1 : 0 },
+        properties: {
+          h: Math.round(heightM * 10) / 10, facade, store: storefront ? 1 : 0,
+          ...(schoolIdx.has(i) ? { school: schoolIdx.get(i) } : {}),
+        },
         geometry: f.the_geom,
       },
       `building:${facade}`,
     );
+  }
+  // Small school icons (optional chip): the DOE point itself, with its name.
+  for (const sc of schools) {
+    const c = (sc.the_geom as { coordinates?: number[] } | undefined)?.coordinates;
+    if (c && inBox(c[1], c[0])) add({
+      type: "Feature", tippecanoe: { layer: "schools", minzoom: 14 },
+      properties: { name: (typeof sc.loc_name === "string" ? sc.loc_name : "School").trim() },
+      geometry: { type: "Point", coordinates: c },
+    }, "school-point");
   }
   // Street props, checked against the roadway first so none stands in the street.
   const pts: Array<{ kind: string; lon: number; lat: number; dbh?: number }> = [];
@@ -248,9 +300,7 @@ async function main() {
   mkdirSync("public/tiles", { recursive: true });
   const seq = `/tmp/${AREA}-city.geojsonseq`;
   // Streamed: the citywide feature list is larger than one JS string can hold.
-  const fd = openSync(seq, "w");
-  for (const line of lines) writeSync(fd, line + "\n");
-  closeSync(fd);
+  writeLines(seq, lines);
   const out = OUT;
   execFileSync("tippecanoe", [
     "-o", out, "--force", "-Z14", "-z16", "--read-parallel", "-P",
