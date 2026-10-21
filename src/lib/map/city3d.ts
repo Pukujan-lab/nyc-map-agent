@@ -22,7 +22,9 @@ function tilesUrl(): string {
   return /^https?:\/\//.test(CITY3D_TILES) ? CITY3D_TILES : `${window.location.origin}${CITY3D_TILES}`;
 }
 export const CITY3D_MIN_ZOOM = 16;
-export const FACADES = ["rowhouse", "walkup", "prewar", "modern", "tower", "school", "storefront"] as const;
+export const FACADES = [
+  "rowhouse", "brownstone", "walkup", "prewar", "limestone", "castiron", "modern", "tower", "glass", "school", "storefront",
+] as const;
 const SOURCE = "city3d";
 const STOREFRONT_M = 4.5;
 
@@ -39,13 +41,15 @@ async function loadFacades(map: MapLibreMap): Promise<void> {
   );
 }
 
+/** Roofs read darker than walls (tar, gravel, mechanical decks), as in aerials. */
 const ROOF: ExpressionSpecification = [
   "match", ["get", "facade"],
-  "tower", "#9fb4c6",
-  "modern", "#b7bcc2",
-  "prewar", "#b8ab95",
-  "school", "#a0705a",
-  "#8d8a86",
+  "glass", "#4e5b66",
+  "tower", "#5f6a73",
+  "modern", "#6b6e72",
+  ["prewar", "limestone"], "#6d665c",
+  "school", "#5e4a40",
+  "#57534f",
 ];
 
 const PROP_COLOR: ExpressionSpecification = [
@@ -56,6 +60,9 @@ const PROP_COLOR: ExpressionSpecification = [
   "bench", "#7a5a3a",
   "pole", "#5d646b",
   "lamp", "#f2e7b8",
+  "tank", "#7a5a3c",
+  "tankroof", "#4a3a2c",
+  "tankleg", "#3b3b3b",
   "#888888",
 ];
 
@@ -97,7 +104,8 @@ export async function installCity3d(map: MapLibreMap): Promise<void> {
       paint: {
         "fill-extrusion-pattern": ["concat", "facade-", ["get", "facade"]],
         "fill-extrusion-height": ["get", "h"],
-        "fill-extrusion-base": ["case", ["==", ["get", "store"], 1], ["min", STOREFRONT_M, ["get", "h"]], 0],
+        // OSM building:part setbacks and podiums carry their own base (min_height).
+        "fill-extrusion-base": ["case", ["==", ["get", "store"], 1], ["min", STOREFRONT_M, ["get", "h"]], ["coalesce", ["get", "base"], 0]],
       },
     },
     beforeId,
