@@ -1,8 +1,9 @@
-import type { Map as MapLibreMap } from "maplibre-gl";
+import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 
 /**
  * Public restrooms (NYC Open Data i7jb-7jku, ingested into Octo core.restrooms)
- * as one MapLibre symbol layer on a GeoJSON source from /api/restrooms.
+ * as one MapLibre symbol layer. The city-wide list from /api/restrooms is
+ * fetched once; only the closest few to the map centre are drawn.
  * Click opens a small card; there is no hover tooltip.
  */
 export const RESTROOMS_LAYER = "restrooms";
@@ -38,16 +39,67 @@ function restroomIcon(): ImageData {
   return ctx.getImageData(0, 0, size, size);
 }
 
+/** How many restrooms are shown: the closest few to the map centre. */
+export const NEAREST_COUNT = 5;
+const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
+
+/** Rough metres between two lon/lat points (equirectangular; fine at city scale). */
+function metres(a: [number, number], b: [number, number]): number {
+  const k = Math.cos(((a[1] + b[1]) / 2) * (Math.PI / 180));
+  const dx = (a[0] - b[0]) * k * 111_320;
+  const dy = (a[1] - b[1]) * 110_540;
+  return Math.hypot(dx, dy);
+}
+
+/** The `n` point features closest to `center`, nearest first. */
+export function nearestRestrooms(
+  all: GeoJSON.FeatureCollection,
+  center: [number, number],
+  n = NEAREST_COUNT,
+): GeoJSON.FeatureCollection {
+  const scored: Array<[number, GeoJSON.Feature]> = [];
+  for (const f of all.features) {
+    if (f.geometry?.type !== "Point") continue;
+    const [lon, lat] = f.geometry.coordinates as [number, number];
+    scored.push([metres(center, [lon, lat]), f]);
+  }
+  scored.sort((x, y) => x[0] - y[0]);
+  return { type: "FeatureCollection", features: scored.slice(0, n).map(([, f]) => f) };
+}
+
+let cityWide: Promise<GeoJSON.FeatureCollection> | null = null;
+const wired = new WeakSet<MapLibreMap>();
+
+/** Re-pick the nearest few whenever the map stops moving. */
+function wireNearest(map: MapLibreMap): void {
+  if (wired.has(map)) return;
+  wired.add(map);
+  cityWide ??= fetch(`${window.location.origin}/api/restrooms`)
+    .then((r) => (r.ok ? (r.json() as Promise<GeoJSON.FeatureCollection>) : EMPTY))
+    .catch(() => EMPTY);
+  const update = () => {
+    void cityWide!.then((all) => {
+      const src = map.getSource<GeoJSONSource>(SOURCE);
+      const c = map.getCenter();
+      src?.setData(nearestRestrooms(all, [c.lng, c.lat]));
+    });
+  };
+  map.on("moveend", update);
+  map.on("styledata", () => { if (map.getSource(SOURCE)) update(); });
+  update();
+}
+
 /** Adds source + layer once per style; safe to call after every style load. */
 export function installRestrooms(map: MapLibreMap): void {
   if (!map.hasImage(ICON)) map.addImage(ICON, restroomIcon(), { pixelRatio: 2 });
   if (!map.getSource(SOURCE)) {
     map.addSource(SOURCE, {
       type: "geojson",
-      data: `${window.location.origin}/api/restrooms`,
+      data: EMPTY,
       attribution: "NYC Open Data (Public Restrooms)",
     });
   }
+  wireNearest(map);
   if (map.getLayer(RESTROOMS_LAYER)) return;
   map.addLayer({
     id: RESTROOMS_LAYER,
