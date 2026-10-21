@@ -17,3 +17,15 @@ jobs:
       - run: pnpm test
       - name: Module boundaries (dependency-cruiser)
         run: pnpm lint:boundaries
+  size:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:size
+      - name: Performance budget (size-limit, brotli per chunk)
+        run: pnpm size
