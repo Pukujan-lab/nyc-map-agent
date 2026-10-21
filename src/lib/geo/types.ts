@@ -67,6 +67,9 @@ export interface BlockCell {
    */
   label?: string;
   bbox?: [number, number, number, number];
+  /** Tax-block land area; the Blocks scale shades by count per hectare. */
+  areaM2?: number;
+  /* Counts on real blocks can be fractional: a street point is split between the facing blocks. */
 }
 
 export interface BoroughAggregate {

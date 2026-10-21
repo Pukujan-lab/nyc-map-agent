@@ -97,12 +97,12 @@ async function writeBlockStats(dataset: DatasetId, windowId: WindowId, cells: Ag
   for (let i = 0; i < cells.length; i += 2000) {
     const batch = cells.slice(i, i + 2000).map((c) => ({
       block_id: Number(c.key), label: c.label ?? "", nta2020: c.ntaCode || null, n: c.count, night: c.nightCount,
-      injured: c.injured, killed: c.killed, cyclists: c.cyclists,
+      injured: c.injured, killed: c.killed, cyclists: c.cyclists, area_m2: c.areaM2 ?? null,
     }));
     await octoQuery(
-      `INSERT INTO marts.block_stats (dataset, window_id, block_id, boro, block, label, nta2020, n, night, injured, killed, cyclists)
-       SELECT $1, $2, x.block_id, x.block_id / 100000, x.block_id % 100000, x.label, x.nta2020, x.n, x.night, x.injured, x.killed, x.cyclists
-       FROM jsonb_to_recordset($3::jsonb) AS x(block_id int, label text, nta2020 text, n int, night int, injured int, killed int, cyclists int)`,
+      `INSERT INTO marts.block_stats (dataset, window_id, block_id, boro, block, label, nta2020, n, night, injured, killed, cyclists, area_m2)
+       SELECT $1, $2, x.block_id, x.block_id / 100000, x.block_id % 100000, x.label, x.nta2020, x.n, x.night, x.injured, x.killed, x.cyclists, x.area_m2
+       FROM jsonb_to_recordset($3::jsonb) AS x(block_id int, label text, nta2020 text, n numeric, night numeric, injured numeric, killed numeric, cyclists numeric, area_m2 int)`,
       [dataset, windowId, JSON.stringify(batch)],
     );
   }

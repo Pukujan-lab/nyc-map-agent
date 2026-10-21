@@ -69,11 +69,11 @@ export function pushBlocks(map: MapLibreMap, blocks: BlockDatum[], geojson: Feat
     return;
   }
   map.removeFeatureState({ source: SOURCE_IDS.blocks, sourceLayer: SOURCE_LAYER });
-  const max = blocks.reduce((m, b) => (b.value > m ? b.value : m), 0);
+  const max = blocks.reduce((m, b) => Math.max(m, b.shade ?? b.value), 0);
   for (const block of blocks) {
     const id = Number(block.key);
     if (Number.isInteger(id)) {
-      const t = max > 0 ? Math.sqrt(Math.max(block.value, 0) / max) : 0;
+      const t = max > 0 ? Math.sqrt(Math.max(block.shade ?? block.value, 0) / max) : 0;
       map.setFeatureState({ source: SOURCE_IDS.blocks, sourceLayer: SOURCE_LAYER, id }, { height: block.height, t });
     }
   }
