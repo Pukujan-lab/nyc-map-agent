@@ -1,6 +1,6 @@
 import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import { isFlagId, useFlags } from "@/lib/flags";
-import { useEffect, type ReactNode } from "react";
+import { Suspense, useEffect, type ReactNode } from "react";
 import { Drawer } from "vaul";
 import { Button } from "@/components/ui/button";
 import type { NtaBoundary } from "@/lib/api/nta";
@@ -9,6 +9,7 @@ import { useMapState } from "@/lib/store/MapStateContext";
 import { usePanel, type PanelChip, type SheetSnap } from "@/lib/store/PanelContext";
 import { cn } from "@/lib/utils";
 import { PanelSearch } from "./PanelSearch";
+import { ViewModeMenu } from "./ViewModeMenu";
 import { FEATURES } from "@/features";
 import { useFeatureToggles } from "@/lib/featureToggles";
 
@@ -36,28 +37,16 @@ function FeatureTopBar() {
   );
 }
 
+/** Always-visible chips; everything else is one level down in "More layers". */
+const PRIMARY = ["transit", "transitFocus", "restrooms", "weather"];
+
 function Chips() {
   const { restrooms, setRestrooms } = useMapState();
-  const { viewMode, setViewMode } = useDataView();
   const { chips } = usePanel();
-  const shows = (id: string) => viewMode.kind === "source" && viewMode.sourceId === id;
   const flags = useFlags();
   const builtIn: PanelChip[] = [
-    // The chips pick the same registry views as the Layers dropdown.
-    { id: "noise", label: "Noise", active: shows("noise"), onToggle: () => setViewMode({ kind: "source", sourceId: "noise" }) },
-    { id: "crashes", label: "Crashes", active: shows("crashes"), onToggle: () => setViewMode({ kind: "source", sourceId: "crashes" }) },
     { id: "restrooms", label: "Restrooms", active: restrooms, onToggle: () => setRestrooms(!restrooms) },
   ];
-  const registered = new Map(chips.map((chip) => [chip.id, chip]));
-  // Simple mode hides advanced-tier chips (e.g. Crashes); see src/lib/flags.
-  const order = ["noise", "crashes", "transit", "restrooms", "schools"].filter(
-    (id) => !isFlagId(id) || flags[id],
-  );
-  // Transit and Schools appear once those features register a chip with that id.
-  const all = order.flatMap((id) => {
-    const chip = registered.get(id) ?? builtIn.find((c) => c.id === id);
-    return chip ? [chip] : [];
-  });
   const [toggledOn, toggle] = useFeatureToggles();
   const featureChips: PanelChip[] = FEATURES.filter((f) => f.chip && flags[f.id]).map((f) => ({
     id: f.chip!.id,
@@ -65,10 +54,16 @@ function Chips() {
     active: toggledOn.has(f.chip!.id),
     onToggle: () => toggle(f.chip!.id),
   }));
-  const extra = [...chips.filter((c) => !order.includes(c.id)), ...featureChips];
+  // Registered chips (Transit, Schools) win over built-ins; flags gate them all.
+  const byId = new Map<string, PanelChip>();
+  for (const chip of [...builtIn, ...featureChips, ...chips]) {
+    if (!isFlagId(chip.id) || flags[chip.id]) byId.set(chip.id, chip);
+  }
+  const primary = PRIMARY.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []));
+  const secondary = [...byId.values()].filter((c) => !PRIMARY.includes(c.id));
   return (
     <div className="-mx-3 flex snap-x snap-mandatory scroll-px-3 gap-1.5 overflow-x-auto px-3 pb-0.5 [mask-image:linear-gradient(to_right,transparent,black_12px,black_calc(100%-24px),transparent)] [scrollbar-width:none]">
-      {[...all, ...extra].map((chip) => (
+      {primary.map((chip) => (
         <button
           key={chip.id}
           type="button"
@@ -84,17 +79,33 @@ function Chips() {
           {chip.label}
         </button>
       ))}
+      <ViewModeMenu chip toggles={secondary} />
     </div>
   );
 }
 
 function Home() {
+  const flags = useFlags();
+  const { routeStart, setRoutePicking } = useDataView();
   return (
-    <div className="px-4 py-2.5">
-      <div className="text-base font-semibold">Explore NYC</div>
-      <div className="mt-3 text-xs text-muted-foreground">
-        Search, or tap a neighborhood or block on the map.
-      </div>
+    <div className="space-y-3 overflow-y-auto px-4 py-3">
+      {flags.directions ? (
+        <Button
+          type="button"
+          className="h-11 w-full justify-start rounded-xl text-sm"
+          onClick={() => setRoutePicking(routeStart ? "end" : "start")}
+        >
+          Where to?
+        </Button>
+      ) : null}
+      {FEATURES.filter((f) => f.HomeSection && flags[f.id]).map((f) => {
+        const Section = f.HomeSection!;
+        return (
+          <Suspense key={f.id} fallback={null}>
+            <Section />
+          </Suspense>
+        );
+      })}
     </div>
   );
 }

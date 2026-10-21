@@ -25,12 +25,12 @@ test("map loads, search opens a panel, street level toggles, no console errors",
   await expect(page.getByText("Greenpoint").first()).toBeVisible();
 
   // Street level on, then off.
-  const street = page.getByRole("button", { name: "Street level", exact: true });
+  const street = page.getByRole("button", { name: "Street view", exact: true });
   await street.click();
-  const leave = page.getByRole("button", { name: "Leave street level", exact: true });
+  const leave = page.getByRole("button", { name: "Leave street view", exact: true });
   await expect(leave).toHaveAttribute("aria-pressed", "true");
   await leave.click();
-  await expect(page.getByRole("button", { name: "Street level", exact: true })).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByRole("button", { name: "Street view", exact: true })).toHaveAttribute("aria-pressed", "false");
 
   expect(errors, errors.join("\n")).toEqual([]);
 });

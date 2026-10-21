@@ -26,7 +26,7 @@ import type { Trip, TripMode } from "./schema";
 import { askAgent } from "./stream";
 import { TripSummary } from "./TripSummary";
 import { showTrip } from "./tripLayer";
-import { useGeolocation } from "./useGeolocation";
+import { sharedCoords, startSharing, stopSharing, useSharedLocation } from "@/lib/geo/sharedLocation";
 import { usePlayer, type Speed } from "./usePlayer";
 import { useWakePhrase } from "./useWakePhrase";
 
@@ -50,7 +50,7 @@ export default function AgentOverlay() {
   const [mode, setMode] = useState<TripMode>("transit");
   const [wake, setWake] = useState(false);
   const [mapTime, setMapTime] = useState<string | null>(null);
-  const getLocation = useGeolocation();
+  const shared = useSharedLocation();
   const abort = useRef<AbortController | null>(null);
 
   const speech = useSpeech({ onFinalTranscript: (t) => void send(t) });
@@ -81,7 +81,8 @@ export default function AgentOverlay() {
     setBusy(true);
     abort.current?.abort();
     abort.current = new AbortController();
-    const location = await getLocation();
+    // Only a position the person chose to share with My location; never asked for here.
+    const location = sharedCoords();
     let spoken = "";
     try {
       for await (const ev of askAgent({ messages: history.map(({ role, content }) => ({ role, content })), location, mode, now: new Date().toISOString() }, abort.current.signal)) {
@@ -100,7 +101,7 @@ export default function AgentOverlay() {
       setBusy(false);
       if (spoken) speech.speak(spoken);
     }
-  }, [busy, messages, mode, getLocation, setChatOpen, speech]);
+  }, [busy, messages, mode, setChatOpen, speech]);
 
   useWakePhrase(wake && speech.sttSupported, speech.listening || busy || speech.speaking, (t) => void send(t));
   useEffect(() => () => abort.current?.abort(), []);
@@ -139,7 +140,7 @@ export default function AgentOverlay() {
             <DropdownMenuSeparator />
             <p className="px-2 py-1.5 text-xs text-muted-foreground">
               {speech.sttSupported
-                ? "Hold a conversation by voice: tap the mic, or turn on “Hey map”. Your location is used only for “from here”, and only with permission."
+                ? "Hold a conversation by voice: tap the mic, or turn on “Hey map”. Your location is sent only after you tap My location, and only for that question."
                 : "Voice input is not available in this browser, so type instead. Answers can still be spoken."}
             </p>
           </DropdownMenuContent>
@@ -169,7 +170,24 @@ export default function AgentOverlay() {
         ) : null}
       </div>
 
-      <form className="flex items-end gap-2 border-t p-3" onSubmit={(e) => { e.preventDefault(); void send(input); }}>
+      <div className="flex items-center justify-between gap-2 border-t px-3 pt-2 text-xs text-muted-foreground" role="status">
+        {shared.status === "on" ? (
+          <>
+            <span>Using your exact location for directions. It is not saved.</span>
+            <Button type="button" size="sm" variant="outline" className="h-7 shrink-0 rounded-full px-2.5 text-xs" onClick={() => stopSharing()}>
+              Stop sharing location
+            </Button>
+          </>
+        ) : (
+          <>
+            <span>{shared.status === "denied" ? "Location is blocked in this browser." : shared.status === "asking" ? "Finding your location…" : "Your location is not shared."}</span>
+            <Button type="button" size="sm" variant="outline" className="h-7 shrink-0 rounded-full px-2.5 text-xs" disabled={shared.status === "asking"} onClick={() => void startSharing()}>
+              Use my location
+            </Button>
+          </>
+        )}
+      </div>
+      <form className="flex items-end gap-2 p-3" onSubmit={(e) => { e.preventDefault(); void send(input); }}>
         {speech.listening ? (
           <div className="flex h-9 flex-1 items-center gap-2 rounded-md border px-3 text-sm" role="status">
             <span className="h-2 w-2 animate-pulse rounded-full bg-destructive" />

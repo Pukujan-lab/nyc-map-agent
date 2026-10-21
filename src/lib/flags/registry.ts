@@ -29,7 +29,7 @@ export const FLAGS = {
   signs: { tier: "basic", default: true, label: "Street signs" },
   streetLevel: { tier: "basic", default: true, label: "Street level" },
   city3d: { tier: "basic", default: true, label: "Textured 3D city" },
-  noise: { tier: "basic", default: true, label: "Noise layer" },
+  noise: { tier: "advanced", default: true, label: "Noise layer" },
   blockDensity: { tier: "basic", default: true, label: "Shade blocks per hectare" },
   daylight: { tier: "basic", default: true, label: "Time-of-day lighting" },
   weather: { tier: "basic", default: true, label: "Live weather" },
@@ -64,16 +64,24 @@ export interface FlagInputs {
   env?: string;
   url?: string | null;
   advancedMode: boolean;
+  /**
+   * A saved link that names an analytics view (`view=src:noise`, `layer=…`):
+   * the noise / crash / data layers it needs are honoured in simple mode too.
+   */
+  analyticsLink?: boolean;
 }
 
-export function resolveFlags({ env, url, advancedMode }: FlagInputs): Record<FlagId, boolean> {
+/** Analytics flags a saved `view=` link may switch on without Advanced. */
+const ANALYTICS: ReadonlySet<string> = new Set(["noise", "crashes", "combined", "dataLayers"]);
+
+export function resolveFlags({ env, url, advancedMode, analyticsLink = false }: FlagInputs): Record<FlagId, boolean> {
   const envO = parseOverrides(env);
   const urlO = parseOverrides(url);
   const out = {} as Record<FlagId, boolean>;
   for (const id of Object.keys(FLAGS) as FlagId[]) {
     const meta: FlagMeta = FLAGS[id];
     const on = urlO[id] ?? envO[id] ?? meta.default;
-    out[id] = on && (meta.tier === "basic" || advancedMode);
+    out[id] = on && (meta.tier === "basic" || advancedMode || (analyticsLink && ANALYTICS.has(id)));
   }
   return out;
 }

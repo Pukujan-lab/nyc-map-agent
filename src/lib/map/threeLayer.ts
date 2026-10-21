@@ -40,8 +40,66 @@ export interface VehicleInstance {
   bearing: number;
   z: number;
   color: string;
-  kind: "train" | "bus";
+  kind: VehicleMode;
   ghost: boolean;
+}
+
+/** Live-vehicle modes, each with its own swappable glTF slot. */
+export type VehicleMode = "subway" | "rail" | "bus";
+
+/**
+ * Per-mode glTF slots. Swap a model by publishing a new vehicle-<mode>.glb
+ * (`pnpm publish:city-tiles <file>`) or by pointing `url` elsewhere; `length`
+ * is the real car length in metres the model is scaled to. Until a model loads
+ * (or if it fails) the mode keeps its low-poly box. Sources and CC-BY credits:
+ * public/models/LICENSE.md.
+ */
+export const VEHICLE_MODELS: Record<VehicleMode, { url: string; length: number }> = {
+  subway: { url: "/api/vehicle-models/subway", length: 15.7 }, // R142, 51 ft
+  rail: { url: "/api/vehicle-models/rail", length: 21.2 }, // P32AC-DM, 69 ft
+  bus: { url: "/api/vehicle-models/bus", length: 12.2 }, // New Flyer XD40, 40 ft
+};
+
+/** meshopt/quantized glTF stores positions as normalized ints; transforms would clamp them, so expand to float first. */
+function dequantize(g: THREE.BufferGeometry): THREE.BufferGeometry {
+  for (const name of ["position", "normal"]) {
+    const a = g.getAttribute(name) as THREE.BufferAttribute | THREE.InterleavedBufferAttribute | undefined;
+    if (!a) continue;
+    const raw = "isInterleavedBufferAttribute" in a ? a.data.array : a.array;
+    if (raw instanceof Float32Array && !a.normalized) continue;
+    // Normalized ints map to [-1, 1] (signed) or [0, 1] (unsigned); three 0.134's getX does not do this.
+    const k = !a.normalized ? 1 : raw instanceof Int8Array ? 1 / 127 : raw instanceof Int16Array ? 1 / 32767 : raw instanceof Uint8Array ? 1 / 255 : raw instanceof Uint16Array ? 1 / 65535 : 1;
+    const out = new Float32Array(a.count * 3);
+    for (let i = 0; i < a.count; i++) {
+      out[i * 3] = a.getX(i) * k;
+      out[i * 3 + 1] = a.getY(i) * k;
+      out[i * 3 + 2] = a.getZ(i) * k;
+    }
+    g.setAttribute(name, new THREE.BufferAttribute(out, 3));
+  }
+  return g;
+}
+
+/** glTF (Y up, any axis along the car) to scene space: Z up, length along +Y, base on z = 0, scaled to `length` m. */
+function vehicleParts(root: THREE.Object3D, length: number): Array<{ geometry: THREE.BufferGeometry; material: THREE.Material }> {
+  root.updateMatrixWorld(true);
+  const parts: Array<{ geometry: THREE.BufferGeometry; material: THREE.Material }> = [];
+  const upright = new THREE.Matrix4().makeRotationX(Math.PI / 2);
+  root.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const g = dequantize(mesh.geometry.clone()).applyMatrix4(new THREE.Matrix4().multiplyMatrices(upright, mesh.matrixWorld));
+    for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) parts.push({ geometry: g, material });
+  });
+  const box = new THREE.Box3();
+  for (const p of parts) { p.geometry.computeBoundingBox(); box.union(p.geometry.boundingBox!); }
+  const size = box.getSize(new THREE.Vector3());
+  const turn = size.x > size.y ? new THREE.Matrix4().makeRotationZ(Math.PI / 2) : new THREE.Matrix4();
+  const k = length / Math.max(size.x, size.y, 1e-6);
+  const c = box.getCenter(new THREE.Vector3());
+  const fit = new THREE.Matrix4().makeScale(k, k, k).multiply(turn).multiply(new THREE.Matrix4().makeTranslation(-c.x, -c.y, -box.min.z));
+  for (const p of parts) p.geometry.applyMatrix4(fit);
+  return parts;
 }
 
 /** One viaduct bay; mirrors `Bay` in features/transit/model.ts (shared lib must not import features). */
@@ -187,9 +245,35 @@ export function createVehicleLayer() {
     scene.add(mesh);
     return mesh;
   };
-  const trains = make(bodyGeometry(20, 3, 3.8), false);
-  const buses = make(bodyGeometry(12, 2.6, 3.2), false);
+  const boxes: Record<VehicleMode, THREE.InstancedMesh> = {
+    subway: make(bodyGeometry(20, 3, 3.8), false),
+    rail: make(bodyGeometry(20, 3, 3.8), false),
+    bus: make(bodyGeometry(12, 2.6, 3.2), false),
+  };
   const ghosts = make(bodyGeometry(20, 3, 3.8), true);
+  /** Loaded glTF parts per mode, one InstancedMesh each; empty until the model arrives. */
+  const models: Record<VehicleMode, THREE.InstancedMesh[]> = { subway: [], rail: [], bus: [] };
+  let last: VehicleInstance[] = [];
+  function loadModels() {
+    // The meshopt decoder is only needed for these models: keep it out of the shared 3D chunk.
+    void import("three/examples/jsm/libs/meshopt_decoder.module.js").then(({ MeshoptDecoder }) => {
+    const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+    for (const mode of Object.keys(VEHICLE_MODELS) as VehicleMode[]) {
+      loader.load(VEHICLE_MODELS[mode].url, (gltf) => {
+        models[mode] = vehicleParts(gltf.scene, VEHICLE_MODELS[mode].length).map(({ geometry, material }) => {
+          const mesh = new THREE.InstancedMesh(geometry, material, CAP);
+          mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+          mesh.frustumCulled = false;
+          mesh.count = 0;
+          scene.add(mesh);
+          return mesh;
+        });
+        boxes[mode].count = 0;
+        update(last);
+      }, undefined, () => { /* keep the box for this mode */ });
+    }
+    }, () => { /* no decoder: keep the boxes */ });
+  }
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1), zAxis = new THREE.Vector3(0, 0, 1), color = new THREE.Color();
 
   // ---- Elevated structure: lazily merged per-chunk meshes near the camera. ----
@@ -329,6 +413,7 @@ export function createVehicleLayer() {
       renderer = sharedRenderer(m, gl);
       m.on("moveend", syncChunks);
       syncChunks();
+      loadModels();
     },
     onRemove() {
       map?.off("moveend", syncChunks);
@@ -344,23 +429,38 @@ export function createVehicleLayer() {
 
   /** Push the tweened vehicles (already culled and capped by the caller). */
   function update(vehicles: VehicleInstance[]) {
-    let t = 0, b = 0, g = 0;
+    last = vehicles;
+    const n: Record<VehicleMode, number> = { subway: 0, rail: 0, bus: 0 };
+    let g = 0;
     for (const v of vehicles) {
-      const ghost = v.ghost;
-      const mesh = v.kind === "bus" ? buses : ghost ? ghosts : trains;
-      const i = v.kind === "bus" ? b++ : ghost ? g++ : t++;
-      if (i >= CAP) continue;
       const mc = MercatorCoordinate.fromLngLat([v.lon, v.lat], 0);
       p.set((mc.x - origin.x) / s, -(mc.y - origin.y) / s, v.z);
       q.setFromAxisAngle(zAxis, (-v.bearing * Math.PI) / 180);
-      mesh.setMatrixAt(i, m4.compose(p, q, one));
-      mesh.setColorAt(i, color.set(v.color));
+      m4.compose(p, q, one);
+      if (v.ghost) {
+        if (g >= CAP) continue;
+        ghosts.setMatrixAt(g, m4);
+        ghosts.setColorAt(g++, color.set(v.color));
+        continue;
+      }
+      const i = n[v.kind]++;
+      if (i >= CAP) continue;
+      const parts = models[v.kind];
+      // A loaded model keeps its own livery; the box stand-in carries the route colour.
+      if (parts.length) for (const part of parts) part.setMatrixAt(i, m4);
+      else { boxes[v.kind].setMatrixAt(i, m4); boxes[v.kind].setColorAt(i, color.set(v.color)); }
     }
-    for (const [mesh, n] of [[trains, t], [buses, b], [ghosts, g]] as const) {
-      mesh.count = Math.min(n, CAP);
-      mesh.instanceMatrix.needsUpdate = true;
-      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    for (const mode of Object.keys(n) as VehicleMode[]) {
+      const count = Math.min(n[mode], CAP);
+      for (const mesh of models[mode].length ? models[mode] : [boxes[mode]]) {
+        mesh.count = count;
+        mesh.instanceMatrix.needsUpdate = true;
+        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      }
     }
+    ghosts.count = Math.min(g, CAP);
+    ghosts.instanceMatrix.needsUpdate = true;
+    if (ghosts.instanceColor) ghosts.instanceColor.needsUpdate = true;
     map?.triggerRepaint();
   }
   return { layer, update, setStructure, setEntrances, setXray };

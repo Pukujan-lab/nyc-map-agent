@@ -1,5 +1,5 @@
 import { MockLanguageModelV4, convertArrayToReadableStream } from "ai/test";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { streamEvent, type StreamEvent } from "../../../src/features/agent/schema";
 import { POST } from "./routes";
 
@@ -43,5 +43,26 @@ describe("POST /api/agent (mocked LLM)", () => {
   it("never sends a command when 'here' is unknown", async () => {
     const events = await run({ messages: [{ role: "user", content: "street view here" }] });
     expect(events.some((e) => e.type === "command")).toBe(false);
+  });
+});
+
+describe("POST /api/agent: shared location privacy", () => {
+  it("sends the exact coordinates to the model and never logs them", async () => {
+    const spies = (["log", "info", "warn", "error", "debug"] as const).map((k) => vi.spyOn(console, k).mockImplementation(() => {}));
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const m = model();
+    const res = await POST(
+      new Request("http://x/api/agent", { method: "POST", body: JSON.stringify({ messages: [{ role: "user", content: "street view here" }], location: { lon: -73.990312, lat: 40.735901 } }) }),
+      { model: m },
+    );
+    await res.text();
+    expect(JSON.stringify(m.doStreamCalls[0]?.prompt)).toContain("longitude -73.990312, latitude 40.735901");
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    const logged = spies.flatMap((s) => s.mock.calls).map((c) => JSON.stringify(c)).join("\n");
+    expect(logged).not.toMatch(/73\.9903|40\.7359/);
+    const outbound = fetchSpy.mock.calls.map((c) => JSON.stringify(c)).join("\n");
+    expect(outbound).not.toMatch(/octo|r2\.|cloudflarestorage/i);
+    spies.forEach((s) => s.mockRestore());
+    fetchSpy.mockRestore();
   });
 });

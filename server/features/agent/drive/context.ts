@@ -110,7 +110,11 @@ export function tolls(route: LngLatTuple[]): Note[] {
 
 export async function crashHotspots(route: LngLatTuple[]): Promise<Note[]> {
   if (!process.env.OCTO_API_KEY) return [];
-  const cells = [...new Set(samples(route, 300).map(([lo, la]) => `${Math.floor(la / 0.003)}:${Math.floor(lo / 0.003)}`))];
+  // The route starts at the person's shared location; leave its first 600 m out
+  // of the Octo query so no cell near their position ever reaches Octo.
+  const start = route[0];
+  const far = (p: LngLatTuple) => !start || Math.hypot((p[0] - start[0]) * 84_300, (p[1] - start[1]) * 111_000) > 600;
+  const cells = [...new Set(samples(route, 300).filter(far).map(([lo, la]) => `${Math.floor(la / 0.003)}:${Math.floor(lo / 0.003)}`))];
   const r = cells.map((k) => Number(k.split(":")[0]));
   const c = cells.map((k) => Number(k.split(":")[1]));
   const { rows } = await octoQuery<{ r: number; c: number; n: number }>(

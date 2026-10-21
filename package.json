@@ -18,6 +18,7 @@
     "build:aggregates": "tsx scripts/build-aggregates.ts",
     "start": "tsx server/node.ts",
     "build:sign-tiles": "tsx scripts/build-sign-tiles.ts",
+    "build:skyline-tiles": "tsx scripts/build-skyline-tiles.ts",
     "publish:city-tiles": "tsx scripts/publish-city-tiles.ts",
     "build:block-tiles": "tsx scripts/build-block-tiles.ts",
     "publish:block-tiles": "tsx scripts/publish-city-tiles.ts public/tiles/nyc-blocks.pmtiles && tsx scripts/publish-city-tiles.ts public/tiles/nyc-blocks.geojson",

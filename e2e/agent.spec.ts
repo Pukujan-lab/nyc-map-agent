@@ -32,7 +32,10 @@ test("smart mode: trip question draws the route, opens the trip card and plays t
 
   await page.goto("/");
   await expect(page.locator("canvas.maplibregl-canvas")).toBeVisible();
-  await page.getByRole("button", { name: "Ask the map" }).click();
+  // Location is shared only from a tap on My location; then the rail offers to stop.
+  await page.getByRole("button", { name: "My location" }).click();
+  await expect(page.getByRole("button", { name: "Stop sharing location" }).first()).toBeVisible();
+  await page.getByRole("button", { name: "Ask", exact: true }).click();
   await page.getByLabel("Ask the assistant").fill("How will my trip be tomorrow from here to Grand Central at 9am?");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("Take the 4 and use the NW exit on E 41 St.")).toBeVisible();
