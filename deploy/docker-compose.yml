@@ -1,0 +1,84 @@
+# nyc-map-agent on gravebuster: app, deploy service, edge router.
+# See deploy/README.md. Loopback-only binds; the Cloudflare tunnel reaches the
+# edge container over the study-os_edge network (docker-compose.edge.yml).
+#
+# The env file is read by the compose client, not the container, so its path must
+# resolve where compose runs: /work/.env inside the CD container (where /work is
+# mounted), /srv/nyc-map-agent/.env on the host during bootstrap. The runbook
+# exports CD_HOST_ENV_FILE on the host; the default covers the deploy path.
+name: nyc-map-agent
+
+services:
+  web:
+    container_name: nyc-map-web
+    image: ${NYC_MAP_IMAGE:-nyc-map-agent:local}
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        VITE_DATA_BACKEND: ${VITE_DATA_BACKEND:-octo}
+        MAPILLARY_TOKEN: ${MAPILLARY_TOKEN:-}
+    restart: unless-stopped
+    env_file:
+      - path: ${CD_HOST_ENV_FILE:-/work/.env}
+        required: false
+    environment:
+      PORT: "8080"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  cd:
+    container_name: nyc-map-cd
+    image: nyc-map-cd:local
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.cd
+    restart: unless-stopped
+    env_file:
+      - path: ${CD_HOST_ENV_FILE:-/work/.env}
+        required: true
+    # Runs as the host user that owns the checkout: git refuses a repo owned by
+    # another uid ("dubious ownership"), and running as root would leave the
+    # checkout full of root-owned files after every checkout/clean. The extra
+    # group is the docker socket's, so the CLI inside can reach the daemon.
+    user: "${CD_UID:-1000}:${CD_GID:-1000}"
+    group_add:
+      - "${CD_DOCKER_GID:-988}"
+    environment:
+      CD_REPO_DIR: /app
+      CD_DEPLOY_DIR: /app/deploy
+      CD_STATE_DIR: /work/state
+      CD_ENV_FILE: /work/.env
+      # uid 1000 has no passwd entry in the image; git and tsx both want a
+      # writable home, and /root is not one for that uid.
+      HOME: /tmp
+    volumes:
+      - /srv/nyc-map-agent/app:/app
+      - /srv/nyc-map-agent:/work
+      - /var/run/docker.sock:/var/run/docker.sock
+      # The repo is private, so the pipeline's `git fetch` needs the same
+      # credential the host clone uses. Mounted read-only; the entrypoint copies
+      # it to a writable path because git rewrites the store after each auth.
+      - ${CD_GIT_CREDENTIALS:-/home/yoav/.git-credentials}:/run/git-credentials:ro
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  edge:
+    container_name: nyc-map-edge
+    image: nyc-map-edge:local
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.edge
+    restart: unless-stopped
+    depends_on: [web, cd]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
