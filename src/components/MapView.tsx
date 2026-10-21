@@ -110,6 +110,7 @@ function eyeCamera(map: MaplibreMapInstance, eye: Eye): CameraOptions {
 import { useMapState } from "@/lib/store/MapStateContext";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 import { WalkControls } from "./WalkControls";
+import { nearestCorner, type CornerSign } from "@/lib/map/corner";
 import { MAX_HEIGHT_M, pitchForHeight, STREET_LEVEL_M } from "@/lib/map/cameraHeight";
 import { FEATURES } from "@/features";
 
@@ -204,6 +205,8 @@ export function MapView({
     name: string;
     detail: string;
   } | null>(null);
+  /** "W 44 St at 8 Av": the nearest corner sign while walking. */
+  const [corner, setCorner] = useState<string | null>(null);
   const { showPanel } = usePanel();
   // The hover card is a mouse affordance; on touch / narrow screens the sheet
   // already shows the same numbers.
@@ -853,6 +856,38 @@ export function MapView({
     }
   }, [ready, walking, styleEpoch]);
 
+  // The location card names the nearest corner from the baked sign points.
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!ready || !walking || !map) {
+      setCorner(null);
+      return;
+    }
+    const update = () => {
+      if (!map.getSource("city3d")) return;
+      const signs: CornerSign[] = [];
+      for (const f of map.querySourceFeatures("city3d", { sourceLayer: "signs" })) {
+        if (f.geometry.type !== "Point") continue;
+        const p = f.properties as { a?: string; b?: string };
+        if (p.a && p.b) signs.push({ lng: f.geometry.coordinates[0], lat: f.geometry.coordinates[1], a: p.a, b: p.b });
+      }
+      const { lng, lat } = map.getCenter();
+      setCorner(nearestCorner(signs, lng, lat));
+    };
+    // Sign tiles arrive after the walk starts; a custom layer repaints every
+    // frame, so "idle" may never fire — listen for the source instead.
+    const onData = (e: { sourceId?: string; isSourceLoaded?: boolean }) => {
+      if (e.sourceId === "city3d" && e.isSourceLoaded) update();
+    };
+    update();
+    map.on("moveend", update);
+    map.on("sourcedata", onData);
+    return () => {
+      map.off("moveend", update);
+      map.off("sourcedata", onData);
+    };
+  }, [ready, walking]);
+
   // Entering walk mode is a camera move, not a mode flag: eye level is the
   // steepest pitch the map allows, at a zoom where buildings have height.
   useEffect(() => {
@@ -1230,6 +1265,7 @@ export function MapView({
       {walking ? (
         <WalkControls
           place={walkPlace}
+          corner={corner}
           onInput={(input) => {
             walkPad.current = input;
           }}
