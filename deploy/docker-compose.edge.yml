@@ -1,0 +1,14 @@
+# Joins the Cloudflare tunnel's docker network with a stable alias. The network is
+# owned by the study-os project; never create or remove it here.
+services:
+  edge:
+    networks:
+      default: {}
+      edge:
+        aliases:
+          - nyc-map-edge
+
+networks:
+  edge:
+    external: true
+    name: ${EDGE_NETWORK:-study-os_edge}
