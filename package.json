@@ -31,7 +31,7 @@
     "lint:prune": "eslint . --suppressions-location eslint-suppressions.json --prune-suppressions",
     "knip": "knip --no-progress",
     "openapi": "tsx scripts/openapi.ts && pnpm -s openapi:types",
-    "openapi:check": "tsx scripts/openapi.ts --check && pnpm -s openapi:types && git diff --exit-code -- src/lib/api/schema.d.ts",
+    "openapi:check": "tsx scripts/openapi.ts --check && openapi-typescript openapi.json -o src/lib/api/schema.d.ts --check",
     "openapi:types": "openapi-typescript openapi.json -o src/lib/api/schema.d.ts",
     "build:transit": "tsx scripts/build-transit.ts",
     "build:e2e": "VITE_DATA_BACKEND=octo vite build --outDir .e2e-build --emptyOutDir",
