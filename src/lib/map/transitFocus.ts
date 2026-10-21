@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 /**
  * Transit Focus: a pale veil drawn just under the transit layers, so the
@@ -30,15 +30,30 @@ export function readFocus(storage: Pick<Storage, "getItem"> | undefined = global
   }
 }
 
+let focusOn = readFocus();
+const listeners = new Set<() => void>();
+function setFocusOn(on: boolean): void {
+  focusOn = on;
+  try {
+    if (on) localStorage.setItem(FOCUS_KEY, "1");
+    else localStorage.removeItem(FOCUS_KEY);
+  } catch {
+    /* private mode: the choice lasts for this visit only */
+  }
+  listeners.forEach((l) => l());
+}
+
+/** Shared by the transit layer (the veil) and the map (the readable basemap). */
 export function useTransitFocus(): [boolean, (on: boolean) => void] {
-  const [on, setOn] = useState(() => readFocus());
-  useEffect(() => {
-    try {
-      if (on) localStorage.setItem(FOCUS_KEY, "1");
-      else localStorage.removeItem(FOCUS_KEY);
-    } catch {
-      /* private mode: the choice lasts for this visit only */
-    }
-  }, [on]);
-  return [on, useCallback((v: boolean) => setOn(v), [])];
+  const on = useSyncExternalStore(
+    (l) => { listeners.add(l); return () => listeners.delete(l); },
+    () => focusOn,
+    () => focusOn,
+  );
+  return [on, setFocusOn];
+}
+
+/** Clear all in the Layers & filters drawer turns Focus off too. */
+export function setTransitFocusOff(): void {
+  setFocusOn(false);
 }

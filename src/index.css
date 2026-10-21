@@ -118,3 +118,111 @@
     min-height: 24px;
   }
 }
+
+/* Layout A design tokens (#171): three near-monochrome themes, one accent each. */
+@layer base {
+  html.theme-ivory {
+    --background: 48 16% 94%;
+    --foreground: 0 0% 7%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 7%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 7%;
+    --primary: 0 0% 7%;
+    --primary-foreground: 48 16% 94%;
+    --secondary: 45 17% 91%;
+    --secondary-foreground: 0 0% 7%;
+    --muted: 45 17% 91%;
+    --muted-foreground: 48 2% 41%;
+    --accent: 45 17% 91%;
+    --accent-foreground: 0 0% 7%;
+    --border: 45 13% 88%;
+    --input: 45 13% 88%;
+    --ring: 0 0% 7%;
+    --acc: 72 98% 49%;
+    --acc-foreground: 0 0% 7%;
+    --map-land: #F2F1ED;
+    --map-water: #CFE0EE;
+    --map-park: #DCEFE3;
+    --map-street: #FFFFFF;
+    --serif: "DejaVu Serif", Georgia, serif;
+  }
+  html.theme-ink {
+    --background: 0 0% 8%;
+    --foreground: 48 16% 94%;
+    --card: 0 0% 10%;
+    --card-foreground: 48 16% 94%;
+    --popover: 0 0% 10%;
+    --popover-foreground: 48 16% 94%;
+    --primary: 48 16% 94%;
+    --primary-foreground: 0 0% 7%;
+    --secondary: 60 1% 15%;
+    --secondary-foreground: 48 16% 94%;
+    --muted: 60 1% 15%;
+    --muted-foreground: 43 3% 59%;
+    --accent: 60 1% 15%;
+    --accent-foreground: 48 16% 94%;
+    --border: 60 2% 18%;
+    --input: 60 2% 18%;
+    --ring: 48 16% 94%;
+    --acc: 72 98% 49%;
+    --acc-foreground: 0 0% 7%;
+    --map-land: #141414;
+    --map-water: #1D2523;
+    --map-park: #1C2620;
+    --map-street: #2A2A29;
+    --serif: "DejaVu Serif", Georgia, serif;
+  }
+  html.theme-mta {
+    --background: 60 8% 95%;
+    --foreground: 0 0% 7%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 7%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 7%;
+    --primary: 0 0% 7%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 93%;
+    --secondary-foreground: 0 0% 7%;
+    --muted: 0 0% 93%;
+    --muted-foreground: 0 0% 33%;
+    --accent: 0 0% 93%;
+    --accent-foreground: 0 0% 7%;
+    --border: 0 0% 85%;
+    --input: 0 0% 85%;
+    --ring: 0 0% 7%;
+    --acc: 219 100% 33%;
+    --acc-foreground: 0 0% 100%;
+    --map-land: #F4F4F2;
+    --map-water: #D9ECE4;
+    --map-park: #D9EAD2;
+    --map-street: #FFFFFF;
+    --serif: "DejaVu Serif", Georgia, serif;
+  }
+  html.theme-neon {
+    --background: 248 47% 7%;
+    --foreground: 259 89% 96%;
+    --card: 247 42% 12%;
+    --card-foreground: 259 89% 96%;
+    --popover: 247 42% 12%;
+    --popover-foreground: 259 89% 96%;
+    --primary: 258 90% 66%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 248 39% 18%;
+    --secondary-foreground: 259 89% 96%;
+    --muted: 248 39% 18%;
+    --muted-foreground: 251 29% 70%;
+    --accent: 248 39% 18%;
+    --accent-foreground: 259 89% 96%;
+    --border: 249 36% 23%;
+    --input: 249 36% 23%;
+    --ring: 258 90% 66%;
+    --acc: 339 100% 70%;
+    --acc-foreground: 248 47% 7%;
+    --map-land: #0B0919;
+    --map-water: #111A2C;
+    --map-park: #10241E;
+    --map-street: #1F1A3A;
+    --serif: "DejaVu Serif", Georgia, serif;
+  }
+}
