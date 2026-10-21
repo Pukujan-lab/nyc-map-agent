@@ -16,6 +16,7 @@
  * Needs tippecanoe >= 2.17 and the duckdb CLI (>= 1.1, spatial extension) on PATH.
  */
 import { execFileSync } from "node:child_process";
+import { landmarkAt } from "../src/lib/map/landmarks";
 import { storefrontFeatures } from "./storefronts";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync, writeFileSync, writeSync } from "node:fs";
 
@@ -313,6 +314,11 @@ async function main() {
     const floors = Number(p?.numfloors ?? 0) || Math.max(1, Math.round(heightM / 3.3));
     const year = Number(p?.yearbuilt ?? f.construction_year ?? 0) || undefined;
     const c = centre(f.the_geom);
+    // Hero landmarks are glTF models (src/lib/map/landmarks.ts); no box under them.
+    if (c && landmarkAt(c[0], c[1])) {
+      counts["building:hero-replaced"] = (counts["building:hero-replaced"] ?? 0) + 1;
+      continue;
+    }
     const { facade, storefront } = classify({
       bldgclass: p?.bldgclass as string | undefined, floors, heightM, year, school: schoolIdx.has(i), lon: c?.[0], lat: c?.[1],
     });

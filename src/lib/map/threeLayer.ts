@@ -9,6 +9,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { distanceFade } from "./corner";
+import { LANDMARKS } from "./landmarks";
 import { MercatorCoordinate, type CustomLayerInterface, type CustomRenderMethodInput, type Map as MaplibreMap } from "maplibre-gl";
 type MapLibreMap = MaplibreMap;
 
@@ -269,7 +270,7 @@ export function createVehicleLayer() {
     },
     onRemove() {
       map?.off("moveend", syncChunks);
-      renderer?.dispose();
+      // The renderer is shared by every three.js layer; never dispose it here.
       renderer = null;
     },
     render(_gl, args) {
@@ -457,7 +458,7 @@ export function createHydrantLayer(): CustomLayerInterface {
     onRemove(m) {
       m.off("moveend", refresh);
       m.off("sourcedata", onData);
-      renderer?.dispose();
+      // The renderer is shared by every three.js layer; never dispose it here.
       renderer = null;
     },
     render(_gl, args) {
@@ -915,6 +916,72 @@ export function createStorefrontLayer(): CustomLayerInterface {
       if (!mesh.count) return;
       const l = new THREE.Matrix4().makeTranslation(origin.x, origin.y, origin.z ?? 0).scale(new THREE.Vector3(scale, -scale, scale));
       camera.projectionMatrix = new THREE.Matrix4().fromArray(args.defaultProjectionData.mainMatrix as unknown as number[]).multiply(l);
+      renderer.resetState();
+      renderer.render(scene, camera);
+    },
+  };
+}
+
+// ---- Hero landmarks (glTF) ----
+export const LANDMARKS_3D_LAYER = "city3d-landmarks";
+export const LANDMARKS_MIN_ZOOM = 14;
+
+/**
+ * Empire State, Chrysler, One WTC and the Statue of Liberty as small glTF
+ * models (public/models/landmarks, scripts/make-landmarks.mjs, CC0), each
+ * fetched only once the camera is within ~3 km. Their footprints are left out
+ * of the tile extrusions, so the model is the building.
+ */
+export function createLandmarksLayer(): CustomLayerInterface {
+  let map: MaplibreMap | null = null;
+  let renderer: THREE.WebGLRenderer | null = null;
+  const scene = new THREE.Scene();
+  const camera = new THREE.Camera();
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x7a7a7a, 1.15));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+  sun.position.set(0.4, -0.6, 1);
+  scene.add(sun);
+  const origin = MercatorCoordinate.fromLngLat([-73.99, 40.73], 0);
+  const s = origin.meterInMercatorCoordinateUnits();
+  const local = new THREE.Matrix4().makeTranslation(origin.x, origin.y, origin.z).scale(new THREE.Vector3(s, -s, s));
+  const loading = new Set<string>();
+  const loader = new GLTFLoader();
+
+  const refresh = () => {
+    if (!map || map.getZoom() < LANDMARKS_MIN_ZOOM) return;
+    const c = map.getCenter();
+    for (const l of LANDMARKS) {
+      if (loading.has(l.id)) continue;
+      const d = Math.hypot((l.lon - c.lng) * 111_320 * Math.cos((c.lat * Math.PI) / 180), (l.lat - c.lat) * 111_320);
+      if (d > 3000) continue;
+      loading.add(l.id);
+      loader.load(`/models/landmarks/${l.id}.glb`, (gltf) => {
+        const mc = MercatorCoordinate.fromLngLat([l.lon, l.lat], 0);
+        const model = gltf.scene;
+        model.position.set((mc.x - origin.x) / s, -(mc.y - origin.y) / s, 0);
+        model.rotation.z = (-l.bearing * Math.PI) / 180;
+        scene.add(model);
+        map?.triggerRepaint();
+      });
+    }
+  };
+
+  return {
+    id: LANDMARKS_3D_LAYER,
+    type: "custom",
+    renderingMode: "3d",
+    onAdd(m, gl) {
+      map = m;
+      renderer = sharedRenderer(m, gl);
+      m.on("moveend", refresh);
+      refresh();
+    },
+    onRemove(m) {
+      m.off("moveend", refresh);
+    },
+    render(_gl, args) {
+      if (!renderer || !map || map.getZoom() < LANDMARKS_MIN_ZOOM || scene.children.length <= 2) return;
+      camera.projectionMatrix = new THREE.Matrix4().fromArray(args.defaultProjectionData.mainMatrix as unknown as number[]).multiply(local);
       renderer.resetState();
       renderer.render(scene, camera);
     },

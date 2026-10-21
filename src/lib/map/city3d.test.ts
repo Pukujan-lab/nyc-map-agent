@@ -8,3 +8,11 @@ describe("isPoiLabelLayer", () => {
     expect(isPoiLabelLayer({ id: "highway-name-minor", type: "symbol", "source-layer": "transportation_name" })).toBe(false);
   });
 });
+
+describe("landmarkAt", () => {
+  it("finds the Empire State footprint and nothing a block away", async () => {
+    const { landmarkAt } = await import("./landmarks");
+    expect(landmarkAt(-73.98566, 40.74844)?.id).toBe("empire-state");
+    expect(landmarkAt(-73.9875, 40.7493)).toBeUndefined();
+  });
+});
