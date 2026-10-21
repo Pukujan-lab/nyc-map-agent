@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assetEtag, selectPrunable, verifyParts, type AssetPart } from "./asset-prune";
+import { assetEtag, assetSha256, selectPrunable, verifyParts, versionsToPrune, type AssetPart } from "./asset-prune";
 
 const part = (fileId: string, bytes = 1): AssetPart => ({ fileId, url: `https://x/${fileId}`, bytes });
 
@@ -32,5 +32,24 @@ describe("verifyParts", () => {
   });
   it("rejects an etag mismatch", async () => {
     expect(await verifyParts(parts, { ...expected, etag: "0".repeat(32) }, ok)).toMatch(/etag/);
+  });
+});
+
+describe("versionsToPrune", () => {
+  const v = (sha256: string, pruned = false) => ({ sha256, parts: [part(`${sha256}0`)], pruned });
+  it("keeps the new current and the version it replaces, prunes older unpruned ones", () => {
+    const out = versionsToPrune([v("a"), v("b", true), v("c"), v("d")], "c", "d");
+    expect(out.map((x) => x.sha256)).toEqual(["a"]);
+  });
+  it("first publish prunes nothing", () => {
+    expect(versionsToPrune([], null, "a")).toEqual([]);
+  });
+});
+
+describe("assetSha256", () => {
+  it("is the full hex digest and the etag is its prefix", () => {
+    const data = new TextEncoder().encode("x");
+    expect(assetSha256(data)).toHaveLength(64);
+    expect(assetSha256(data).startsWith(assetEtag(data))).toBe(true);
   });
 });

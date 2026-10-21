@@ -10,9 +10,29 @@ export interface AssetPart {
   bytes: number;
 }
 
+/** Full hex sha256: the version key in core.asset_versions (name, sha256). */
+export function assetSha256(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
 /** Etag format stored in core.published_assets: first 32 hex chars of sha256. */
 export function assetEtag(bytes: Uint8Array): string {
-  return createHash("sha256").update(bytes).digest("hex").slice(0, 32);
+  return assetSha256(bytes).slice(0, 32);
+}
+
+export interface AssetVersion {
+  sha256: string;
+  parts: AssetPart[];
+  pruned: boolean;
+}
+
+/**
+ * Versions whose Octo files may be deleted once `nextSha` is current: every
+ * unpruned version except the new current and the one it replaces (kept for
+ * rollback). History rows stay; only their files go.
+ */
+export function versionsToPrune(versions: AssetVersion[], currentSha: string | null | undefined, nextSha: string): AssetVersion[] {
+  return versions.filter((v) => !v.pruned && v.sha256 !== nextSha && v.sha256 !== currentSha);
 }
 
 /**
