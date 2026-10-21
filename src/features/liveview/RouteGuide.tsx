@@ -1,3 +1,4 @@
+import "./nav.css";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowUp, CornerUpLeft, CornerUpRight, Flag, LocateFixed, Navigation, Square, Undo2 } from "lucide-react";
 import type { Map as MapLibreMap } from "maplibre-gl";
