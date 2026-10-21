@@ -1,0 +1,157 @@
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { useMapState } from "@/lib/store/MapStateContext";
+
+/**
+ * The one map panel (left side panel on desktop, bottom sheet on mobile).
+ * Features never draw their own floating card: they push content here.
+ *
+ *   const { showPanel } = usePanel();
+ *   showPanel({ id: "station:123", title: "14 St", summary: <…/>, details: <…/> });
+ *
+ * Content replaces whatever was there (never stacks); the panel's back arrow
+ * calls `onBack` and then returns to the home view. A map selection
+ * (neighborhood / block) clears pushed content, and pushing content clears
+ * the selection, so only one thing is ever shown.
+ */
+export interface PanelContent {
+  /** Stable id, e.g. "restroom:42" or "station:R20". */
+  id: string;
+  title: string;
+  subtitle?: string;
+  /** Shown at the peek snap point: name + headline. */
+  summary?: ReactNode;
+  /** Shown when pulled up (mobile) / below the summary (desktop). */
+  details?: ReactNode;
+  onBack?: () => void;
+}
+
+/** A quick-filter chip under the search bar. Features register their own. */
+export interface PanelChip {
+  id: string;
+  label: string;
+  active: boolean;
+  onToggle: () => void;
+}
+
+/** One search hit; `onSelect` is the feature's own action (fly, select…). */
+export interface SearchHit {
+  id: string;
+  label: string;
+  /** Group label shown in the dropdown, e.g. "Station". */
+  kind: string;
+  onSelect: () => void;
+}
+
+/** A search source, e.g. transit stations. Return [] when it has nothing. */
+export type SearchProvider = (query: string) => SearchHit[];
+
+export type SheetSnap = "peek" | "half" | "full";
+
+interface PanelValue {
+  content: PanelContent | null;
+  showPanel: (content: PanelContent) => void;
+  closePanel: () => void;
+  chips: PanelChip[];
+  searchProviders: SearchProvider[];
+  /** Mobile sheet snap point. */
+  snap: SheetSnap;
+  setSnap: (snap: SheetSnap) => void;
+  /** Desktop side panel collapsed. */
+  collapsed: boolean;
+  setCollapsed: (collapsed: boolean) => void;
+  register: (kind: "chip", id: string, value: PanelChip | null) => void;
+  registerSearch: (id: string, provider: SearchProvider | null) => void;
+}
+
+const PanelContext = createContext<PanelValue | null>(null);
+
+export function PanelProvider({ children }: { children: ReactNode }) {
+  const { selectNta } = useMapState();
+  const [content, setContent] = useState<PanelContent | null>(null);
+  const [chipMap, setChipMap] = useState<Record<string, PanelChip>>({});
+  const [searchMap, setSearchMap] = useState<Record<string, SearchProvider>>({});
+  const [snap, setSnap] = useState<SheetSnap>("peek");
+  const [collapsed, setCollapsed] = useState(false);
+
+  const showPanel = useCallback(
+    (next: PanelContent) => {
+      selectNta(null);
+      setContent(next);
+      setCollapsed(false);
+      setSnap("peek");
+    },
+    [selectNta],
+  );
+  const closePanel = useCallback(() => setContent(null), []);
+  const register = useCallback((_kind: "chip", id: string, value: PanelChip | null) => {
+    setChipMap((prev) => {
+      const next = { ...prev };
+      if (value) next[id] = value;
+      else delete next[id];
+      return next;
+    });
+  }, []);
+  const registerSearch = useCallback((id: string, provider: SearchProvider | null) => {
+    setSearchMap((prev) => {
+      const next = { ...prev };
+      if (provider) next[id] = provider;
+      else delete next[id];
+      return next;
+    });
+  }, []);
+
+  const value = useMemo<PanelValue>(
+    () => ({
+      content,
+      showPanel,
+      closePanel,
+      chips: Object.values(chipMap),
+      searchProviders: Object.values(searchMap),
+      snap,
+      setSnap,
+      collapsed,
+      setCollapsed,
+      register,
+      registerSearch,
+    }),
+    [content, showPanel, closePanel, chipMap, searchMap, snap, collapsed, register, registerSearch],
+  );
+  return <PanelContext.Provider value={value}>{children}</PanelContext.Provider>;
+}
+
+export function usePanel() {
+  const ctx = useContext(PanelContext);
+  if (!ctx) throw new Error("usePanel must be used inside PanelProvider");
+  return ctx;
+}
+
+/** Register a quick-filter chip (e.g. "transit", "schools") while mounted. */
+export function usePanelChip(chip: PanelChip | null) {
+  const { register } = usePanel();
+  const id = chip?.id;
+  const label = chip?.label;
+  const active = chip?.active;
+  const onToggle = chip?.onToggle;
+  useEffect(() => {
+    if (!id || !label || !onToggle) return;
+    register("chip", id, { id, label, active: !!active, onToggle });
+    return () => register("chip", id, null);
+  }, [register, id, label, active, onToggle]);
+}
+
+/** Register a search source (e.g. transit stations) while mounted. */
+export function usePanelSearch(id: string, provider: SearchProvider | null) {
+  const { registerSearch } = usePanel();
+  useEffect(() => {
+    registerSearch(id, provider);
+    return () => registerSearch(id, null);
+  }, [registerSearch, id, provider]);
+}

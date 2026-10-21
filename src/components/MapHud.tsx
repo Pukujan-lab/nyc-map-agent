@@ -34,7 +34,7 @@ export function MapHud({ onOpenControls, onOpenSources }: MapHudProps) {
   } = useMapState();
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center p-3">
+    <div className="pointer-events-none absolute inset-x-0 bottom-[168px] z-30 flex justify-center p-3 lg:bottom-0 lg:left-[380px]">
       <div className="pointer-events-auto flex max-w-full items-center gap-1 rounded-full border border-border/70 bg-card/90 p-1 shadow-xl backdrop-blur-md">
         <ViewModeMenu compact onOpenSources={onOpenSources} />
 

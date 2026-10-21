@@ -7,6 +7,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { DataViewProvider } from "@/lib/store/DataViewContext";
 import { MapStateProvider } from "@/lib/store/MapStateContext";
+import { PanelProvider } from "@/lib/store/PanelContext";
 import "./index.css";
 
 const queryClient = new QueryClient({
@@ -27,10 +28,12 @@ ReactDOM.createRoot(root).render(
       <BrowserRouter>
         <MapStateProvider>
           <DataViewProvider>
-            <TooltipProvider delayDuration={200}>
-              <App />
-              <Toaster />
-            </TooltipProvider>
+            <PanelProvider>
+              <TooltipProvider delayDuration={200}>
+                <App />
+                <Toaster />
+              </TooltipProvider>
+            </PanelProvider>
           </DataViewProvider>
         </MapStateProvider>
       </BrowserRouter>

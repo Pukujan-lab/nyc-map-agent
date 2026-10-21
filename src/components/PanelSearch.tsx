@@ -1,0 +1,103 @@
+import { useCombobox } from "downshift";
+import { Search } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { useAddressSuggestions } from "@/lib/api/geosearch";
+import type { NtaBoundary } from "@/lib/api/nta";
+import { useMapState } from "@/lib/store/MapStateContext";
+import { usePanel, type SearchHit } from "@/lib/store/PanelContext";
+import { cn } from "@/lib/utils";
+
+/**
+ * One search bar for neighborhoods, addresses (NYC GeoSearch) and anything a
+ * feature registers with `usePanelSearch` (e.g. transit stations).
+ */
+export function PanelSearch({ boundaries }: { boundaries: NtaBoundary[] | null }) {
+  const { selectNta, flyTo } = useMapState();
+  const { searchProviders, closePanel } = usePanel();
+  const [text, setText] = useState("");
+  const [debounced, setDebounced] = useState("");
+  useEffect(() => {
+    const id = window.setTimeout(() => setDebounced(text), 250);
+    return () => window.clearTimeout(id);
+  }, [text]);
+  const { data: addresses } = useAddressSuggestions(debounced);
+
+  const items = useMemo<SearchHit[]>(() => {
+    const q = text.trim().toLowerCase();
+    if (q.length < 2) return [];
+    const hoods: SearchHit[] = (boundaries ?? [])
+      .filter((b) => b.ntaName.toLowerCase().includes(q))
+      .slice(0, 5)
+      .map((b) => ({
+        id: `nta:${b.ntaCode}`,
+        label: `${b.ntaName}, ${b.borough}`,
+        kind: "Neighborhood",
+        onSelect: () => {
+          selectNta(b.ntaCode);
+          flyTo({ lon: (b.bbox[0] + b.bbox[2]) / 2, lat: (b.bbox[1] + b.bbox[3]) / 2, zoom: 13.5 });
+        },
+      }));
+    const extra = searchProviders.flatMap((provider) => provider(q)).slice(0, 5);
+    const addr: SearchHit[] =
+      q.length >= 3
+        ? (addresses ?? []).slice(0, 5).map((a) => ({
+            id: `addr:${a.id}`,
+            label: a.label,
+            kind: "Address",
+            onSelect: () => {
+              closePanel();
+              flyTo({ lon: a.lon, lat: a.lat, zoom: 16.5 });
+            },
+          }))
+        : [];
+    return [...hoods, ...extra, ...addr];
+  }, [text, boundaries, searchProviders, addresses, selectNta, flyTo, closePanel]);
+
+  const { isOpen, getInputProps, getMenuProps, getItemProps, getLabelProps, highlightedIndex } =
+    useCombobox<SearchHit>({
+      items,
+      inputValue: text,
+      itemToString: (item) => item?.label ?? "",
+      onInputValueChange: ({ inputValue }) => setText(inputValue ?? ""),
+      onSelectedItemChange: ({ selectedItem }) => {
+        selectedItem?.onSelect();
+        setText("");
+      },
+    });
+
+  return (
+    <div className="relative">
+      <label {...getLabelProps()} className="sr-only">
+        Search neighborhoods, addresses and stations
+      </label>
+      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <input
+        {...getInputProps()}
+        placeholder="Search neighborhoods, addresses, stations"
+        className="h-10 w-full rounded-full border border-input bg-card pl-9 pr-3 text-sm shadow-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      />
+      <ul
+        {...getMenuProps()}
+        className={cn(
+          "absolute inset-x-0 top-11 z-50 max-h-72 overflow-auto rounded-lg border bg-popover p-1 text-xs shadow-lg",
+          !(isOpen && items.length) && "hidden",
+        )}
+      >
+        {isOpen &&
+          items.map((item, index) => (
+            <li
+              key={item.id}
+              {...getItemProps({ item, index })}
+              className={cn(
+                "flex cursor-pointer items-baseline justify-between gap-2 rounded px-2 py-1.5",
+                highlightedIndex === index && "bg-accent",
+              )}
+            >
+              <span className="truncate">{item.label}</span>
+              <span className="shrink-0 text-[10px] text-muted-foreground">{item.kind}</span>
+            </li>
+          ))}
+      </ul>
+    </div>
+  );
+}

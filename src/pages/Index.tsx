@@ -11,9 +11,10 @@ import { ChatPanel } from "@/components/ChatPanel";
 import { ControlDrawer } from "@/components/ControlDrawer";
 import { useAreas } from "@/lib/geo/useAreas";
 import { useFilters } from "@/lib/datasets/useFilters";
-import { DetailsSheet } from "@/components/DetailsSheet";
+import { PlaceDetails } from "@/components/PlaceDetails";
+import { MapPanel } from "@/components/MapPanel";
+import { usePanel } from "@/lib/store/PanelContext";
 import { MapHud } from "@/components/MapHud";
-import { MapPeek } from "@/components/MapPeek";
 import { MapStatusChip } from "@/components/MapStatusChip";
 import { MapView } from "@/components/MapView";
 import { StreetViewSheet } from "@/components/StreetViewSheet";
@@ -33,6 +34,7 @@ export default function Index() {
     selectedNtaCode,
     selectedBlockKey,
   } = useMapState();
+  const { snap, setSnap } = usePanel();
   const [controlsOpen, setControlsOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const { enabledSources, viewMode, routeStart, routeEnd } = useDataView();
@@ -218,22 +220,12 @@ export default function Index() {
         isDesktop={isDesktop}
       />
 
-      <MapPeek
-        boundary={selectedBoundary}
-        block={selectedBlock}
-        noise={
-          selectedNtaCode ? (noiseByCode.get(selectedNtaCode) ?? null) : null
-        }
-        crashes={
-          selectedNtaCode ? (crashByCode.get(selectedNtaCode) ?? null) : null
-        }
-        windowLabel={windowLabel}
+      <MapPanel
         isDesktop={isDesktop}
-        view={model.view}
-        viewValue={selectedBlock?.value ?? selectedDatum?.value}
-      />
-
-      <DetailsSheet
+        boundaries={data.boundaries}
+        place={selectedBoundary ? (
+      <PlaceDetails
+        onSummaryTap={() => setSnap(snap === "peek" ? "half" : snap === "half" ? "full" : "peek")}
         boundary={selectedBoundary}
         block={selectedBlock}
         noise={
@@ -251,6 +243,7 @@ export default function Index() {
         viewValue={selectedDatum?.value}
         breakdown={selectedBlock?.breakdown ?? selectedDatum?.breakdown}
         sourceTotals={sourceTotals}
+      />) : null}
       />
 
       <StreetViewSheet
