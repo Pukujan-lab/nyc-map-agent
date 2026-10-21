@@ -34,4 +34,10 @@ describe("API versioning", () => {
     expect(r.status).toBe(404);
     expect(await r.json()).toEqual({ error: "not_found" });
   });
+  it("routes path-parameter handlers the same on both prefixes", async () => {
+    const a = await app.request("/api/v1/transit");
+    const b = await app.request("/api/transit");
+    expect(a.status).toBe(b.status);
+    expect(await a.json()).toEqual(await b.json());
+  });
 });
