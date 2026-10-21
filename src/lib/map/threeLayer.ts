@@ -15,7 +15,7 @@ import * as THREE from "three";
 export const STOREFRONT_LAYER = "city3d-storefront-signs";
 export const SIGNS_MIN_ZOOM = 17;
 const RADIUS_M = 200;
-const MAX = 128; // atlas: 4 x 32 slots of 512 x 64
+const MAX = 64; // one 1024 x 1024 atlas: 2 x 32 slots of 512 x 32
 const PLATE_H = 0.8;
 const BASE_M = 3.2; // plate centre above the pavement on the ground floor
 const FLOOR_M = 3.5;
@@ -59,20 +59,20 @@ export function directoryAt(map: MapLibreMap, lng: number, lat: number): Storefr
 }
 
 function drawSlot(g: CanvasRenderingContext2D, i: number, s: StorefrontSign) {
-  const x = (i % 4) * 512, y = Math.floor(i / 4) * 64;
+  const x = (i % 2) * 512, y = Math.floor(i / 2) * 32;
   g.fillStyle = SIGN_COLORS[s.cat] ?? SIGN_COLORS.service;
-  g.fillRect(x, y, 512, 64);
+  g.fillRect(x, y, 512, 32);
   g.strokeStyle = "rgba(255,255,255,0.55)";
-  g.lineWidth = 3;
-  g.strokeRect(x + 4, y + 4, 504, 56);
+  g.lineWidth = 2;
+  g.strokeRect(x + 3, y + 3, 506, 26);
   g.fillStyle = "#fff";
   g.textAlign = "center";
   g.textBaseline = "middle";
   const text = s.main ? s.name.toUpperCase() : s.name;
-  let size = 40;
+  let size = 22;
   do g.font = `600 ${size}px "Helvetica Neue", Arial, sans-serif`;
-  while (g.measureText(text).width > 480 && (size -= 2) > 14);
-  g.fillText(text, x + 256, y + 34);
+  while (g.measureText(text).width > 480 && (size -= 1) > 10);
+  g.fillText(text, x + 256, y + 17);
 }
 
 export function createStorefrontLayer(): CustomLayerInterface {
@@ -81,21 +81,23 @@ export function createStorefrontLayer(): CustomLayerInterface {
   const scene = new THREE.Scene();
   const camera = new THREE.Camera();
   const canvas = document.createElement("canvas");
-  canvas.width = 2048;
-  canvas.height = 2048;
+  canvas.width = 1024;
+  canvas.height = 1024;
   const g = canvas.getContext("2d")!;
   const atlas = new THREE.CanvasTexture(canvas);
   atlas.encoding = THREE.sRGBEncoding;
-  atlas.anisotropy = 8;
+  // One upload per changed sign set; no mipmap chain to rebuild.
+  atlas.generateMipmaps = false;
+  atlas.minFilter = THREE.LinearFilter;
   const uv = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 2), 2);
   const geometry = new THREE.PlaneGeometry(1, 1);
   geometry.setAttribute("slot", uv);
   const material = new THREE.MeshBasicMaterial({ map: atlas, side: THREE.DoubleSide });
-  // Each instance samples its own 512 x 64 cell of the atlas.
+  // Each instance samples its own 512 x 32 cell of the atlas.
   material.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", "#include <common>\nattribute vec2 slot;")
-      .replace("#include <uv_vertex>", "#include <uv_vertex>\nvUv = vec2((slot.x + uv.x) * 0.25, 1.0 - (slot.y + 1.0 - uv.y) / 32.0);");
+      .replace("#include <uv_vertex>", "#include <uv_vertex>\nvUv = vec2((slot.x + uv.x) * 0.5, 1.0 - (slot.y + 1.0 - uv.y) / 32.0);");
   };
   const mesh = new THREE.InstancedMesh(geometry, material, MAX);
   mesh.frustumCulled = false;
@@ -126,7 +128,7 @@ export function createStorefrontLayer(): CustomLayerInterface {
     const m = new THREE.Matrix4();
     signs.forEach((s, i) => {
       drawSlot(g, i, s);
-      uv.setXY(i, i % 4, Math.floor(i / 4));
+      uv.setXY(i, i % 2, Math.floor(i / 2));
       const b = (s.brg * Math.PI) / 180;
       const n = new THREE.Vector3(Math.sin(b), Math.cos(b), 0);
       const t = new THREE.Vector3(-Math.cos(b), Math.sin(b), 0);
@@ -152,12 +154,12 @@ export function createStorefrontLayer(): CustomLayerInterface {
       renderer = new THREE.WebGLRenderer({ canvas: m.getCanvas(), context: gl, antialias: true });
       renderer.autoClear = false;
       map.on("moveend", refresh);
-      map.on("sourcedata", refresh);
+      map.on("idle", refresh);
       refresh();
     },
     onRemove() {
       map.off("moveend", refresh);
-      map.off("sourcedata", refresh);
+      map.off("idle", refresh);
       geometry.dispose();
       material.dispose();
       atlas.dispose();
