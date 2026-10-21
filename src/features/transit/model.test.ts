@@ -47,3 +47,18 @@ describe("raised track", () => {
     expect(r.piers.features.length).toBe(0);
   });
 });
+
+describe("viaductBays", () => {
+  it("stamps 15 m bays along elevated track, skipping bridges and flagging stations", async () => {
+    const { viaductBays } = await import("./model");
+    const c: Array<[number, number]> = [[-73.96, 40.70], [-73.96, 40.7018]]; // ~200 m due north
+    const sys = { system: "subway", routes: {}, lines: { type: "FeatureCollection", features: [] }, stopM: {},
+      stations: { type: "FeatureCollection", features: [{ type: "Feature", properties: { id: "s", name: "S", routes: "J" }, geometry: { type: "Point", coordinates: [-73.96, 40.7009] } }] },
+      shapes: { J: { c, m: [0, 200], g: ["elevated", "elevated"] } } } as never;
+    const bays = viaductBays(sys);
+    expect(bays.length).toBeGreaterThanOrEqual(13);
+    expect(bays.every((b) => b.top === 8 && Math.round(b.bearing) % 360 === 0)).toBe(true);
+    expect(bays.some((b) => b.station)).toBe(true);
+    expect(bays.some((b) => !b.station)).toBe(true);
+  });
+});
