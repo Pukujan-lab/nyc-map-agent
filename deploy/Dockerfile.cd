@@ -19,6 +19,9 @@ COPY deploy/cd ./deploy/cd
 # authenticate from the credential store compose mounts at $HOME/.git-credentials.
 RUN git config --system --add safe.directory /app \
  && git config --system credential.helper store
+COPY deploy/cd/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod 0755 /usr/local/bin/entrypoint.sh
 ENV PORT=8081 NODE_ENV=production
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 EXPOSE 8081
 CMD ["pnpm", "exec", "tsx", "deploy/cd/server.ts"]

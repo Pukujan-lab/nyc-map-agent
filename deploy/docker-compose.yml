@@ -64,9 +64,9 @@ services:
       - /srv/nyc-map-agent:/work
       - /var/run/docker.sock:/var/run/docker.sock
       # The repo is private, so the pipeline's `git fetch` needs the same
-      # credential the host clone uses. Mounted read-only; HOME is /tmp, so
-      # git finds it at the default path.
-      - ${CD_GIT_CREDENTIALS:-/home/yoav/.git-credentials}:/tmp/.git-credentials:ro
+      # credential the host clone uses. Mounted read-only; the entrypoint copies
+      # it to a writable path because git rewrites the store after each auth.
+      - ${CD_GIT_CREDENTIALS:-/home/yoav/.git-credentials}:/run/git-credentials:ro
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
