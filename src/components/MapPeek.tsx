@@ -1,6 +1,8 @@
 import { Camera, ChevronUp, Footprints, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
+import { DRAG_HANDLE, DraggablePanel } from "./DraggablePanel";
 import type { NtaBoundary } from "@/lib/api/nta";
 import { formatCount, formatPercent } from "@/lib/format";
 import type { CountPair, NtaAggregate } from "@/lib/geo/types";
@@ -142,12 +144,13 @@ export function MapPeek({
 
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-[4.25rem] z-30 flex justify-center px-3">
+      <DraggablePanel enabled={isDesktop}>
       <Card
         role="region"
         aria-label={`Quick look at ${title}`}
         className="pointer-events-auto w-full max-w-sm p-0 shadow-xl backdrop-blur"
       >
-        <div className="flex items-start justify-between gap-2 p-3 pb-2">
+        <div className={cn("flex items-start justify-between gap-2 p-3 pb-2", isDesktop && cn(DRAG_HANDLE, "cursor-move"))}>
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold">{title}</div>
             <div className="truncate text-[11px] text-muted-foreground">
@@ -229,6 +232,7 @@ export function MapPeek({
           ) : null}
         </div>
       </Card>
+      </DraggablePanel>
     </div>
   );
 }
