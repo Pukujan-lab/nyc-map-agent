@@ -50,24 +50,43 @@ export type TransitTrip = {
   stops: Array<[string, number]>;
   /** Vehicle-reported current stop, if any. */
   at?: string;
+  /** Vehicle current_status: 0 INCOMING_AT, 1 STOPPED_AT, 2 IN_TRANSIT_TO. */
+  st?: number;
+  /** Vehicle position timestamp (unix seconds). */
+  vt?: number;
+  /** Stops the feed marks schedule_relationship SKIPPED, in trip order. */
+  skipped?: string[];
 };
+
+const { TripDescriptor, TripUpdate } = GtfsRealtimeBindings.transit_realtime;
+const TRIP_CANCELED = TripDescriptor.ScheduleRelationship.CANCELED;
+const STOP_SKIPPED = TripUpdate.StopTimeUpdate.ScheduleRelationship.SKIPPED;
 
 async function loadTrips(system: string) {
   const feeds = await Promise.allSettled(FEEDS[system].map(decode));
+  if (feeds.every((f) => f.status === "rejected")) throw new Error(`all ${system} feeds failed`);
+  return slimTrips(feeds.flatMap((f) => (f.status === "fulfilled" ? [f.value] : [])), Date.now() / 1000);
+}
+
+/** Decoded GTFS-rt feeds → slim trips. Exported for fixture tests. */
+export function slimTrips(feeds: Array<ReturnType<typeof FeedMessage.decode>>, now: number) {
   const trips: TransitTrip[] = [];
-  const now = Date.now() / 1000;
-  for (const f of feeds) {
-    if (f.status !== "fulfilled") continue;
-    const at = new Map<string, string>();
-    for (const e of f.value.entity) {
+  for (const feed of feeds) {
+    const at = new Map<string, { stop: string; st?: number; vt: number }>();
+    for (const e of feed.entity) {
       const v = e.vehicle;
-      if (v?.trip?.tripId && v.stopId) at.set(v.trip.tripId, v.stopId);
+      if (v?.trip?.tripId && v.stopId) at.set(v.trip.tripId, { stop: v.stopId, st: v.currentStatus ?? undefined, vt: num(v.timestamp) });
     }
-    for (const e of f.value.entity) {
+    for (const e of feed.entity) {
       const tu = e.tripUpdate;
       if (!tu?.trip) continue;
+      // Cancelled trips leave the map.
+      if (tu.trip.scheduleRelationship === TRIP_CANCELED) continue;
       const stops: Array<[string, number]> = [];
+      const skipped: string[] = [];
+      // Feed order is the trip's real stop sequence (reroutes included), so keep it.
       for (const s of tu.stopTimeUpdate ?? []) {
+        if (s.scheduleRelationship === STOP_SKIPPED) { if (s.stopId) skipped.push(s.stopId); continue; }
         const t = num(s.arrival?.time) || num(s.departure?.time);
         if (s.stopId && t && t > now - 600) stops.push([s.stopId, t]);
       }
@@ -76,10 +95,10 @@ async function loadTrips(system: string) {
       // NYCT trip ids carry the direction (..N / ..S); rail uses direction_id.
       const m = /\.\.?([NS])/.exec(tripId);
       const dir = tu.trip.directionId ?? (m ? (m[1] === "N" ? 0 : 1) : null);
-      trips.push({ id: tripId, route: tu.trip.routeId ?? "", dir, stops, at: at.get(tripId) });
+      const v = at.get(tripId);
+      trips.push({ id: tripId, route: tu.trip.routeId ?? "", dir, stops, at: v?.stop, ...(v?.st != null ? { st: v.st } : {}), ...(v?.vt ? { vt: v.vt } : {}), ...(skipped.length ? { skipped } : {}) });
     }
   }
-  if (feeds.every((f) => f.status === "rejected")) throw new Error(`all ${system} feeds failed`);
   return { at: Math.round(now), trips };
 }
 
@@ -104,15 +123,57 @@ async function loadBuses(key: string) {
   return { at: Math.round(Date.now() / 1000), buses };
 }
 
-type MercuryAlert = {
+type Text = { translation?: Array<{ text: string; language: string }> };
+type Entity = { agency_id?: string; route_id?: string; stop_id?: string; direction_id?: number };
+export type MercuryAlert = {
   id: string;
   alert: {
     active_period?: Array<{ start?: number; end?: number }>;
-    informed_entity?: Array<{ agency_id?: string; route_id?: string; stop_id?: string }>;
-    header_text?: { translation?: Array<{ text: string; language: string }> };
-    "transit_realtime.mercury_alert"?: { alert_type?: string };
+    informed_entity?: Entity[];
+    header_text?: Text;
+    description_text?: Text;
+    "transit_realtime.mercury_alert"?: { alert_type?: string; human_readable_active_period?: Text; affected_stations?: Entity[]; station_alternative?: unknown };
   };
 };
+const en = (t?: Text) => (t?.translation?.find((x) => x.language === "en") ?? t?.translation?.[0])?.text ?? "";
+
+/** Mercury JSON alerts → active, slim alerts. Exported for fixture tests. */
+export function slimAlerts(entity: MercuryAlert[], now: number) {
+  const alerts = [];
+  for (const e of entity) {
+    const a = e.alert;
+    const periods = (a.active_period ?? []).map((p) => ({ start: p.start ?? 0, end: p.end ?? 0 }));
+    const active = periods.some((p) => p.start <= now && (!p.end || p.end >= now));
+    if (!active) continue;
+    const m = a["transit_realtime.mercury_alert"];
+    const type = m?.alert_type ?? "";
+    const text = en(a.header_text);
+    const description = en(a.description_text);
+    const planned = /^planned/i.test(type) || /maintenance|track work|repairs|construction/i.test(text);
+    const kind = planned ? "planned" : /delay|reduced/i.test(type) ? "delay" : "notice";
+    // Reroutes / skipped stops: the informed stops are the ones affected.
+    const reroute = /reroute|detour|skipped|express to local|local to express|suspend|part suspended|no scheduled/i.test(type) || /running via|skip|bypass/i.test(text);
+    const ents = a.informed_entity ?? [];
+    const cur = periods.find((p) => p.start <= now && (!p.end || p.end >= now));
+    alerts.push({
+      id: e.id,
+      kind,
+      type,
+      reroute,
+      text,
+      description,
+      period: en(m?.human_readable_active_period),
+      start: cur?.start ?? 0,
+      end: cur?.end ?? 0,
+      agency: ents[0]?.agency_id ?? "",
+      routes: [...new Set(ents.map((x) => x.route_id).filter(Boolean))] as string[],
+      stops: [...new Set(ents.map((x) => x.stop_id).filter(Boolean))] as string[],
+      /** Stop-level entities, kept per route and direction for drawing the exact segment. */
+      ents: ents.filter((x) => x.stop_id).map((x) => ({ route: x.route_id ?? "", stop: x.stop_id!, ...(x.direction_id != null ? { dir: x.direction_id } : {}) })),
+    });
+  }
+  return alerts;
+}
 
 async function loadAlerts() {
   const get = (path: string) => fetch(`${MTA}${path}`, { signal: AbortSignal.timeout(10_000) }).then((r) => r.json());
@@ -122,31 +183,7 @@ async function loadAlerts() {
     cached("equipment", () => get("nyct%2Fnyct_ene_equipments.json")),
   ]);
   const now = Date.now() / 1000;
-  const alerts = [];
-  if (alertsRes.status === "fulfilled") {
-    for (const e of (alertsRes.value as { entity: MercuryAlert[] }).entity ?? []) {
-      const a = e.alert;
-      const active = (a.active_period ?? []).some((p) => (p.start ?? 0) <= now && (!p.end || p.end >= now));
-      if (!active) continue;
-      const type = a["transit_realtime.mercury_alert"]?.alert_type ?? "";
-      const text = a.header_text?.translation?.find((t) => t.language === "en")?.text ?? "";
-      const planned = /^planned/i.test(type) || /maintenance|track work|repairs|construction/i.test(text);
-      const kind = planned ? "planned" : /delay|reduced/i.test(type) ? "delay" : "notice";
-      // Reroutes / skipped stops: the informed stops are the ones affected.
-      const reroute = /reroute|detour|skipped|express to local|local to express|suspend/i.test(type) || /running via|skip|bypass/i.test(text);
-      const ents = a.informed_entity ?? [];
-      alerts.push({
-        id: e.id,
-        kind,
-        type,
-        reroute,
-        text,
-        agency: ents[0]?.agency_id ?? "",
-        routes: [...new Set(ents.map((x) => x.route_id).filter(Boolean))],
-        stops: [...new Set(ents.map((x) => x.stop_id).filter(Boolean))],
-      });
-    }
-  }
+  const alerts = alertsRes.status === "fulfilled" ? slimAlerts((alertsRes.value as { entity?: MercuryAlert[] }).entity ?? [], now) : [];
   // Elevator / escalator outages, placed by the equipment list's GTFS stop ids.
   type Row = Record<string, string>;
   const equipment = new Map<string, Row>();

@@ -1,0 +1,2062 @@
+{
+ "header": {
+  "gtfs_realtime_version": "2.0",
+  "incrementality": "FULL_DATASET",
+  "timestamp": 1792616426,
+  "transit_realtime.mercury_feed_header": {
+   "mercury_version": "1.0"
+  }
+ },
+ "entity": [
+  {
+   "id": "lmm:alert:272878:26",
+   "alert": {
+    "active_period": [
+     {
+      "start": 1792615403
+     }
+    ],
+    "informed_entity": [
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "2",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:2:26"
+      }
+     },
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "5",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:5:26"
+      }
+     }
+    ],
+    "header_text": {
+     "translation": [
+      {
+       "text": "[2][5] trains are running with delays in both directions after we moved a train that had its brakes activated near Flatbush Av-Brooklyn College.",
+       "language": "en"
+      },
+      {
+       "text": "<p>[2][5] trains are running with delays in both directions after we moved a train that had its brakes activated near <strong>Flatbush Av-Brooklyn College</strong>.</p>",
+       "language": "en-html"
+      }
+     ]
+    },
+    "transit_realtime.mercury_alert": {
+     "created_at": 1792615403,
+     "updated_at": 1792616303,
+     "alert_type": "Delays",
+     "display_before_active": 0
+    }
+   }
+  },
+  {
+   "id": "lmm:alert:272881:26",
+   "alert": {
+    "active_period": [
+     {
+      "start": 1792616277
+     }
+    ],
+    "informed_entity": [
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "D",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:D:26"
+      }
+     },
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "N",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:N:26"
+      }
+     }
+    ],
+    "header_text": {
+     "translation": [
+      {
+       "text": "Uptown [D][N] trains are delayed while we address a door problem on a train at 36 St (BKLYN).",
+       "language": "en"
+      },
+      {
+       "text": "<p>Uptown [D][N] trains are delayed while we address a door problem on a train at <strong>36 St</strong> (BKLYN).</p>",
+       "language": "en-html"
+      }
+     ]
+    },
+    "transit_realtime.mercury_alert": {
+     "created_at": 1792616277,
+     "updated_at": 1792616277,
+     "alert_type": "Delays",
+     "display_before_active": 0
+    }
+   }
+  },
+  {
+   "id": "lmm:alert:272874:26",
+   "alert": {
+    "active_period": [
+     {
+      "start": 1792613946,
+      "end": 1792616700
+     }
+    ],
+    "informed_entity": [
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "M",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:M:26"
+      }
+     }
+    ],
+    "header_text": {
+     "translation": [
+      {
+       "text": "Middle Village-Metropolitan Av-bound [M] trains are running with delays after we addressed a signal problem at Myrtle-Wyckoff Avs.",
+       "language": "en"
+      },
+      {
+       "text": "<p><strong>Middle Village-Metropolitan Av</strong>-bound [M] trains are running with delays after we addressed a signal problem at <strong>Myrtle-Wyckoff Avs</strong>.</p>",
+       "language": "en-html"
+      }
+     ]
+    },
+    "transit_realtime.mercury_alert": {
+     "created_at": 1792613946,
+     "updated_at": 1792616086,
+     "alert_type": "Delays",
+     "display_before_active": 0
+    }
+   }
+  },
+  {
+   "id": "lmm:planned_work:35713",
+   "alert": {
+    "active_period": [
+     {
+      "start": 1792400400,
+      "end": 1792464300
+     },
+     {
+      "start": 1792486800,
+      "end": 1792550700
+     },
+     {
+      "start": 1792573200,
+      "end": 1792637100
+     },
+     {
+      "start": 1792659600,
+      "end": 1792723500
+     },
+     {
+      "start": 1792746000,
+      "end": 1793005200
+     }
+    ],
+    "informed_entity": [
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "G",
+      "stop_id": "F23",
+      "direction_id": 1,
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:G:16"
+      }
+     },
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "G",
+      "stop_id": "F25",
+      "direction_id": 1,
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:G:16"
+      }
+     }
+    ],
+    "header_text": {
+     "translation": [
+      {
+       "text": "In Brooklyn, some Church Av-bound [G] trains will skip 4 Av/9 St, 15 St-Prospect Park, and Fort Hamilton Pkwy",
+       "language": "en"
+      },
+      {
+       "text": "<p>In Brooklyn, some Church Av-bound [G] trains will skip <strong>4 Av/9 St</strong>, <strong>15 St-Prospect Park</strong>, and <strong>Fort Hamilton Pkwy</strong></p>",
+       "language": "en-html"
+      }
+     ]
+    },
+    "description_text": {
+     "translation": [
+      {
+       "text": "Coney Island-bound [F] trains and some Church Av-bound [G] trains will continue to serve these stops.\n\nListen to announcements to hear how your train will run.\n\nIf your stop is skipped, take a Court Sq-bound [G] train.\n\nNote: Coney Island-bound [F] and Church Av-bound [G] trains are also skipping these stops weeknights during this time.\n\nWhat's happening?\nTrack maintenance",
+       "language": "en"
+      },
+      {
+       "text": "<p>Coney Island-bound [F] trains and some Church Av-bound [G] trains will continue to serve these stops.</p><p style=\"min-height:10px\"></p><p>Listen to announcements to hear how your train will run.</p><p style=\"min-height:10px\"></p><p>If your stop is skipped, take a Court Sq-bound [G] train.</p><p style=\"min-height:10px\"></p><p><strong>Note:</strong> Coney Island-bound [F] and Church Av-bound [G] trains are also skipping these stops weeknights during this time.</p><p style=\"min-height:10px\"></p><p><strong>What's happening?</strong></p><p>Track maintenance</p>",
+       "language": "en-html"
+      }
+     ]
+    },
+    "transit_realtime.mercury_alert": {
+     "created_at": 1792075551,
+     "updated_at": 1792587515,
+     "alert_type": "Planned - Stops Skipped",
+     "display_before_active": 0,
+     "human_readable_active_period": {
+      "translation": [
+       {
+        "text": "Oct 19 - 26, Mon to Fri days and evenings, and all weekend",
+        "language": "en"
+       }
+      ]
+     },
+     "affected_stations": [
+      {
+       "agency_id": "MTASBWY",
+       "route_id": "G",
+       "stop_id": "F20",
+       "direction_id": 1,
+       "transit_realtime.mercury_entity_selector": {
+        "sort_order": "MTASBWY:G:16"
+       }
+      },
+      {
+       "agency_id": "MTASBWY",
+       "route_id": "G",
+       "stop_id": "F21",
+       "direction_id": 1,
+       "transit_realtime.mercury_entity_selector": {
+        "sort_order": "MTASBWY:G:16"
+       }
+      },
+      {
+       "agency_id": "MTASBWY",
+       "route_id": "G",
+       "stop_id": "F22",
+       "direction_id": 1,
+       "transit_realtime.mercury_entity_selector": {
+        "sort_order": "MTASBWY:G:16"
+       }
+      },
+      {
+       "agency_id": "MTASBWY",
+       "route_id": "G",
+       "stop_id": "F24",
+       "direction_id": 1,
+       "transit_realtime.mercury_entity_selector": {
+        "sort_order": "MTASBWY:G:16"
+       }
+      },
+      {
+       "agency_id": "MTASBWY",
+       "route_id": "G",
+       "stop_id": "F26",
+       "direction_id": 1,
+       "transit_realtime.mercury_entity_selector": {
+        "sort_order": "MTASBWY:G:16"
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "lmm:planned_work:35011",
+   "alert": {
+    "active_period": [
+     {
+      "start": 1790166600,
+      "end": 1808168425
+     }
+    ],
+    "informed_entity": [
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "SI",
+      "stop_id": "S22",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:SI:3"
+      }
+     }
+    ],
+    "header_text": {
+     "translation": [
+      {
+       "text": "[SIR] New Dorp Station - St George-bound - east end entrance is closed until further notice",
+       "language": "en"
+      },
+      {
+       "text": "<p>[SIR] <strong>New Dorp</strong><strong> </strong>Station - St George-bound - east end entrance is closed until further notice</p>",
+       "language": "en-html"
+      }
+     ]
+    },
+    "description_text": {
+     "translation": [
+      {
+       "text": "Note: The New Dorp Lane staircase and elevator can be used as an alternative. \n\nWhat's Happening?\nStation house repairs",
+       "language": "en"
+      },
+      {
+       "text": "<p><strong>Note:</strong> The New Dorp Lane staircase and elevator can be used as an alternative. </p><p></p><p><strong>What's Happening?</strong><br>Station house repairs</p>",
+       "language": "en-html"
+      }
+     ]
+    },
+    "transit_realtime.mercury_alert": {
+     "created_at": 1790178142,
+     "updated_at": 1790180432,
+     "alert_type": "Station Notice",
+     "display_before_active": 3600,
+     "human_readable_active_period": {
+      "translation": [
+       {
+        "text": "Ongoing",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "lmm:planned_work:34913",
+   "alert": {
+    "active_period": [
+     {
+      "start": 1792004400,
+      "end": 1792022400
+     },
+     {
+      "start": 1792054800,
+      "end": 1792072800
+     },
+     {
+      "start": 1792090800,
+      "end": 1792108800
+     },
+     {
+      "start": 1792141200,
+      "end": 1792159200
+     },
+     {
+      "start": 1792177200,
+      "end": 1792195200
+     },
+     {
+      "start": 1792400400,
+      "end": 1792418400
+     },
+     {
+      "start": 1792436400,
+      "end": 1792454400
+     },
+     {
+      "start": 1792486800,
+      "end": 1792504800
+     },
+     {
+      "start": 1792522800,
+      "end": 1792540800
+     },
+     {
+      "start": 1792573200,
+      "end": 1792591200
+     },
+     {
+      "start": 1792609200,
+      "end": 1792627200
+     },
+     {
+      "start": 1792659600,
+      "end": 1792677600
+     },
+     {
+      "start": 1792695600,
+      "end": 1792713600
+     },
+     {
+      "start": 1792746000,
+      "end": 1792764000
+     },
+     {
+      "start": 1792782000,
+      "end": 1792800000
+     },
+     {
+      "start": 1793005200,
+      "end": 1793023200
+     },
+     {
+      "start": 1793041200,
+      "end": 1793059200
+     },
+     {
+      "start": 1793091600,
+      "end": 1793109600
+     },
+     {
+      "start": 1793127600,
+      "end": 1793145600
+     },
+     {
+      "start": 1793178000,
+      "end": 1793196000
+     },
+     {
+      "start": 1793214000,
+      "end": 1793232000
+     },
+     {
+      "start": 1793264400,
+      "end": 1793282400
+     },
+     {
+      "start": 1793300400,
+      "end": 1793318400
+     },
+     {
+      "start": 1793350800,
+      "end": 1793368800
+     },
+     {
+      "start": 1793386800,
+      "end": 1793404800
+     },
+     {
+      "start": 1793613600,
+      "end": 1793631600
+     },
+     {
+      "start": 1793649600,
+      "end": 1793667600
+     },
+     {
+      "start": 1793700000,
+      "end": 1793718000
+     },
+     {
+      "start": 1793736000,
+      "end": 1793754000
+     },
+     {
+      "start": 1793786400,
+      "end": 1793804400
+     },
+     {
+      "start": 1793822400,
+      "end": 1793840400
+     },
+     {
+      "start": 1793872800,
+      "end": 1793890800
+     },
+     {
+      "start": 1793908800,
+      "end": 1793926800
+     },
+     {
+      "start": 1793959200,
+      "end": 1793977200
+     },
+     {
+      "start": 1793995200,
+      "end": 1794013200
+     },
+     {
+      "start": 1794218400,
+      "end": 1794236400
+     },
+     {
+      "start": 1794254400,
+      "end": 1794272400
+     },
+     {
+      "start": 1794304800,
+      "end": 1794322800
+     },
+     {
+      "start": 1794340800,
+      "end": 1794358800
+     },
+     {
+      "start": 1794391200,
+      "end": 1794409200
+     },
+     {
+      "start": 1794427200,
+      "end": 1794445200
+     },
+     {
+      "start": 1794477600,
+      "end": 1794495600
+     },
+     {
+      "start": 1794513600,
+      "end": 1794531600
+     },
+     {
+      "start": 1794564000,
+      "end": 1794582000
+     },
+     {
+      "start": 1794600000,
+      "end": 1794618000
+     },
+     {
+      "start": 1794823200,
+      "end": 1794841200
+     },
+     {
+      "start": 1794859200,
+      "end": 1794877200
+     },
+     {
+      "start": 1794909600,
+      "end": 1794927600
+     },
+     {
+      "start": 1794945600,
+      "end": 1794963600
+     },
+     {
+      "start": 1794996000,
+      "end": 1795014000
+     },
+     {
+      "start": 1795032000,
+      "end": 1795050000
+     },
+     {
+      "start": 1795082400,
+      "end": 1795100400
+     },
+     {
+      "start": 1795118400,
+      "end": 1795136400
+     },
+     {
+      "start": 1795168800,
+      "end": 1795186800
+     },
+     {
+      "start": 1795204800,
+      "end": 1795222800
+     },
+     {
+      "start": 1795428000,
+      "end": 1795446000
+     },
+     {
+      "start": 1795464000,
+      "end": 1795482000
+     },
+     {
+      "start": 1795514400,
+      "end": 1795532400
+     },
+     {
+      "start": 1795550400,
+      "end": 1795568400
+     },
+     {
+      "start": 1795600800,
+      "end": 1795618800
+     },
+     {
+      "start": 1795636800,
+      "end": 1795654800
+     },
+     {
+      "start": 1795687200,
+      "end": 1795705200
+     },
+     {
+      "start": 1795723200,
+      "end": 1795741200
+     },
+     {
+      "start": 1795773600,
+      "end": 1795791600
+     },
+     {
+      "start": 1795809600,
+      "end": 1795827600
+     },
+     {
+      "start": 1796032800,
+      "end": 1796050800
+     },
+     {
+      "start": 1796068800,
+      "end": 1796086800
+     },
+     {
+      "start": 1796119200,
+      "end": 1796137200
+     },
+     {
+      "start": 1796155200,
+      "end": 1796173200
+     },
+     {
+      "start": 1796205600,
+      "end": 1796223600
+     },
+     {
+      "start": 1796241600,
+      "end": 1796259600
+     },
+     {
+      "start": 1796292000,
+      "end": 1796310000
+     },
+     {
+      "start": 1796328000,
+      "end": 1796346000
+     },
+     {
+      "start": 1796378400,
+      "end": 1796396400
+     },
+     {
+      "start": 1796414400,
+      "end": 1796432400
+     },
+     {
+      "start": 1796637600,
+      "end": 1796655600
+     },
+     {
+      "start": 1796673600,
+      "end": 1796691600
+     },
+     {
+      "start": 1796724000,
+      "end": 1796742000
+     },
+     {
+      "start": 1796760000,
+      "end": 1796778000
+     },
+     {
+      "start": 1796810400,
+      "end": 1796828400
+     },
+     {
+      "start": 1796846400,
+      "end": 1796864400
+     },
+     {
+      "start": 1796896800,
+      "end": 1796914800
+     },
+     {
+      "start": 1796932800,
+      "end": 1796950800
+     },
+     {
+      "start": 1796983200,
+      "end": 1797001200
+     },
+     {
+      "start": 1797019200,
+      "end": 1797037200
+     },
+     {
+      "start": 1797242400,
+      "end": 1797260400
+     },
+     {
+      "start": 1797278400,
+      "end": 1797296400
+     }
+    ],
+    "informed_entity": [
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "SI",
+      "stop_id": "S31",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:SI:12"
+      }
+     },
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "SI",
+      "stop_id": "S30",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:SI:12"
+      }
+     },
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "SI",
+      "stop_id": "S29",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:SI:12"
+      }
+     },
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "SI",
+      "stop_id": "S28",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:SI:12"
+      }
+     },
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "SI",
+      "stop_id": "S27",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:SI:12"
+      }
+     },
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "SI",
+      "stop_id": "S26",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:SI:12"
+      }
+     },
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "SI",
+      "stop_id": "S25",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:SI:12"
+      }
+     },
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "SI",
+      "stop_id": "S24",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:SI:12"
+      }
+     },
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "SI",
+      "stop_id": "S23",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:SI:12"
+      }
+     },
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "SI",
+      "stop_id": "S22",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:SI:12"
+      }
+     },
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "SI",
+      "stop_id": "S21",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:SI:12"
+      }
+     },
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "SI",
+      "stop_id": "S20",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:SI:12"
+      }
+     },
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "SI",
+      "stop_id": "S19",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:SI:12"
+      }
+     },
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "SI",
+      "stop_id": "S18",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:SI:12"
+      }
+     },
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "SI",
+      "stop_id": "S17",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:SI:12"
+      }
+     },
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "SI",
+      "stop_id": "S16",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:SI:12"
+      }
+     },
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "SI",
+      "stop_id": "S15",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:SI:12"
+      }
+     },
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "SI",
+      "stop_id": "S14",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:SI:12"
+      }
+     },
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "SI",
+      "stop_id": "S13",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:SI:12"
+      }
+     },
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "SI",
+      "stop_id": "S11",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:SI:12"
+      }
+     },
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "SI",
+      "stop_id": "S09",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:SI:12"
+      }
+     }
+    ],
+    "header_text": {
+     "translation": [
+      {
+       "text": "Fallen leaves may slow [SIR] service",
+       "language": "en"
+      },
+      {
+       "text": "<p>Fallen leaves may slow [SIR] service</p>",
+       "language": "en-html"
+      }
+     ]
+    },
+    "description_text": {
+     "translation": [
+      {
+       "text": "When crushed by train wheels, fallen leaves leave a slippery residue on the rails. To ensure a safe operation, trains may run at a reduced speed or run slower than usual while entering or leaving stations, resulting in a longer ride; please allow additional travel time.",
+       "language": "en"
+      },
+      {
+       "text": "<p>When crushed by train wheels, fallen leaves leave a slippery residue on the rails. To ensure a safe operation, trains may run at a reduced speed or run slower than usual while entering or leaving stations, resulting in a longer ride; please allow additional travel time.</p><p></p>",
+       "language": "en-html"
+      }
+     ]
+    },
+    "transit_realtime.mercury_alert": {
+     "created_at": 1789758967,
+     "updated_at": 1790622087,
+     "alert_type": "Expect Delays",
+     "display_before_active": 3600,
+     "human_readable_active_period": {
+      "translation": [
+       {
+        "text": "Through mid-December",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "lmm:planned_work:33366",
+   "alert": {
+    "active_period": [
+     {
+      "start": 1776333600,
+      "end": 1808168425
+     }
+    ],
+    "informed_entity": [
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "E",
+      "stop_id": "F12",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:E:3"
+      }
+     },
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "F",
+      "stop_id": "F12",
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:F:3"
+      }
+     }
+    ],
+    "header_text": {
+     "translation": [
+      {
+       "text": "Enter 5 Av/53 St [E][F] Station at 5 Av only\nMadison Av entrance will be exit only",
+       "language": "en"
+      },
+      {
+       "text": "<p>Enter <strong>5 Av/53 St</strong> [E][F] Station at 5 Av only<br>Madison Av entrance will be exit only</p>",
+       "language": "en-html"
+      }
+     ]
+    },
+    "description_text": {
+     "translation": [
+      {
+       "text": "What's happening?\nWe're replacing escalators",
+       "language": "en"
+      },
+      {
+       "text": "<p><strong>What's happening?</strong></p><p>We're replacing escalators</p>",
+       "language": "en-html"
+      }
+     ]
+    },
+    "transit_realtime.mercury_alert": {
+     "created_at": 1784303199,
+     "updated_at": 1784303262,
+     "alert_type": "Station Notice",
+     "human_readable_active_period": {
+      "translation": [
+       {
+        "text": "Through 2026",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "lmm:planned_work:31871",
+   "alert": {
+    "active_period": [
+     {
+      "start": 1792004400,
+      "end": 1792029600
+     },
+     {
+      "start": 1792059300,
+      "end": 1792072800
+     },
+     {
+      "start": 1792090800,
+      "end": 1792116000
+     },
+     {
+      "start": 1792145700,
+      "end": 1792159200
+     },
+     {
+      "start": 1792177200,
+      "end": 1792202400
+     },
+     {
+      "start": 1792404900,
+      "end": 1792418400
+     },
+     {
+      "start": 1792436400,
+      "end": 1792461600
+     },
+     {
+      "start": 1792491300,
+      "end": 1792504800
+     },
+     {
+      "start": 1792522800,
+      "end": 1792548000
+     },
+     {
+      "start": 1792577700,
+      "end": 1792591200
+     },
+     {
+      "start": 1792609200,
+      "end": 1792634400
+     },
+     {
+      "start": 1792664100,
+      "end": 1792677600
+     },
+     {
+      "start": 1792695600,
+      "end": 1792720800
+     },
+     {
+      "start": 1792750500,
+      "end": 1792764000
+     },
+     {
+      "start": 1792782000,
+      "end": 1792807200
+     },
+     {
+      "start": 1793009700,
+      "end": 1793023200
+     },
+     {
+      "start": 1793041200,
+      "end": 1793066400
+     },
+     {
+      "start": 1793096100,
+      "end": 1793109600
+     },
+     {
+      "start": 1793127600,
+      "end": 1793152800
+     },
+     {
+      "start": 1793182500,
+      "end": 1793196000
+     },
+     {
+      "start": 1793214000,
+      "end": 1793239200
+     },
+     {
+      "start": 1793268900,
+      "end": 1793282400
+     },
+     {
+      "start": 1793300400,
+      "end": 1793325600
+     },
+     {
+      "start": 1793355300,
+      "end": 1793368800
+     },
+     {
+      "start": 1793386800,
+      "end": 1793412000
+     },
+     {
+      "start": 1793618100,
+      "end": 1793631600
+     },
+     {
+      "start": 1793649600,
+      "end": 1793674800
+     },
+     {
+      "start": 1793704500,
+      "end": 1793718000
+     },
+     {
+      "start": 1793736000,
+      "end": 1793761200
+     },
+     {
+      "start": 1793790900,
+      "end": 1793804400
+     },
+     {
+      "start": 1793822400,
+      "end": 1793847600
+     },
+     {
+      "start": 1793877300,
+      "end": 1793890800
+     },
+     {
+      "start": 1793908800,
+      "end": 1793934000
+     },
+     {
+      "start": 1793963700,
+      "end": 1793977200
+     },
+     {
+      "start": 1793995200,
+      "end": 1794020400
+     },
+     {
+      "start": 1794222900,
+      "end": 1794236400
+     },
+     {
+      "start": 1794254400,
+      "end": 1794279600
+     },
+     {
+      "start": 1794309300,
+      "end": 1794322800
+     },
+     {
+      "start": 1794340800,
+      "end": 1794366000
+     },
+     {
+      "start": 1794395700,
+      "end": 1794409200
+     },
+     {
+      "start": 1794427200,
+      "end": 1794452400
+     },
+     {
+      "start": 1794482100,
+      "end": 1794495600
+     },
+     {
+      "start": 1794513600,
+      "end": 1794538800
+     },
+     {
+      "start": 1794568500,
+      "end": 1794582000
+     },
+     {
+      "start": 1794600000,
+      "end": 1794625200
+     },
+     {
+      "start": 1794827700,
+      "end": 1794841200
+     },
+     {
+      "start": 1794859200,
+      "end": 1794884400
+     },
+     {
+      "start": 1794914100,
+      "end": 1794927600
+     },
+     {
+      "start": 1794945600,
+      "end": 1794970800
+     },
+     {
+      "start": 1795000500,
+      "end": 1795014000
+     },
+     {
+      "start": 1795032000,
+      "end": 1795057200
+     },
+     {
+      "start": 1795086900,
+      "end": 1795100400
+     },
+     {
+      "start": 1795118400,
+      "end": 1795143600
+     },
+     {
+      "start": 1795173300,
+      "end": 1795186800
+     },
+     {
+      "start": 1795204800,
+      "end": 1795230000
+     },
+     {
+      "start": 1795432500,
+      "end": 1795446000
+     },
+     {
+      "start": 1795464000,
+      "end": 1795489200
+     },
+     {
+      "start": 1795518900,
+      "end": 1795532400
+     },
+     {
+      "start": 1795550400,
+      "end": 1795575600
+     },
+     {
+      "start": 1795605300,
+      "end": 1795618800
+     },
+     {
+      "start": 1795636800,
+      "end": 1795662000
+     },
+     {
+      "start": 1795691700,
+      "end": 1795705200
+     },
+     {
+      "start": 1795723200,
+      "end": 1795748400
+     },
+     {
+      "start": 1795778100,
+      "end": 1795791600
+     },
+     {
+      "start": 1795809600,
+      "end": 1795834800
+     },
+     {
+      "start": 1796037300,
+      "end": 1796050800
+     },
+     {
+      "start": 1796068800,
+      "end": 1796094000
+     },
+     {
+      "start": 1796123700,
+      "end": 1796137200
+     },
+     {
+      "start": 1796155200,
+      "end": 1796180400
+     },
+     {
+      "start": 1796210100,
+      "end": 1796223600
+     },
+     {
+      "start": 1796241600,
+      "end": 1796266800
+     },
+     {
+      "start": 1796296500,
+      "end": 1796310000
+     },
+     {
+      "start": 1796328000,
+      "end": 1796353200
+     },
+     {
+      "start": 1796382900,
+      "end": 1796396400
+     },
+     {
+      "start": 1796414400,
+      "end": 1796439600
+     },
+     {
+      "start": 1796642100,
+      "end": 1796655600
+     },
+     {
+      "start": 1796673600,
+      "end": 1796698800
+     },
+     {
+      "start": 1796728500,
+      "end": 1796742000
+     },
+     {
+      "start": 1796760000,
+      "end": 1796785200
+     },
+     {
+      "start": 1796814900,
+      "end": 1796828400
+     },
+     {
+      "start": 1796846400,
+      "end": 1796871600
+     },
+     {
+      "start": 1796901300,
+      "end": 1796914800
+     },
+     {
+      "start": 1796932800,
+      "end": 1796958000
+     },
+     {
+      "start": 1796987700,
+      "end": 1797001200
+     },
+     {
+      "start": 1797019200,
+      "end": 1797044400
+     },
+     {
+      "start": 1797246900,
+      "end": 1797260400
+     },
+     {
+      "start": 1797278400,
+      "end": 1797303600
+     },
+     {
+      "start": 1797333300,
+      "end": 1797346800
+     },
+     {
+      "start": 1797364800,
+      "end": 1797390000
+     },
+     {
+      "start": 1797419700,
+      "end": 1797433200
+     },
+     {
+      "start": 1797451200,
+      "end": 1797476400
+     },
+     {
+      "start": 1797506100,
+      "end": 1797519600
+     },
+     {
+      "start": 1797537600,
+      "end": 1797562800
+     },
+     {
+      "start": 1797592500,
+      "end": 1797606000
+     },
+     {
+      "start": 1797624000,
+      "end": 1797649200
+     },
+     {
+      "start": 1797851700,
+      "end": 1797865200
+     },
+     {
+      "start": 1797883200,
+      "end": 1797908400
+     },
+     {
+      "start": 1797938100,
+      "end": 1797951600
+     },
+     {
+      "start": 1797969600,
+      "end": 1797994800
+     },
+     {
+      "start": 1798024500,
+      "end": 1798038000
+     },
+     {
+      "start": 1798056000,
+      "end": 1798081200
+     },
+     {
+      "start": 1798110900,
+      "end": 1798124400
+     },
+     {
+      "start": 1798142400,
+      "end": 1798167600
+     },
+     {
+      "start": 1798197300,
+      "end": 1798210800
+     },
+     {
+      "start": 1798228800,
+      "end": 1798254000
+     },
+     {
+      "start": 1798456500,
+      "end": 1798470000
+     },
+     {
+      "start": 1798488000,
+      "end": 1798513200
+     },
+     {
+      "start": 1798542900,
+      "end": 1798556400
+     },
+     {
+      "start": 1798574400,
+      "end": 1798599600
+     },
+     {
+      "start": 1798629300,
+      "end": 1798642800
+     },
+     {
+      "start": 1798660800,
+      "end": 1798686000
+     },
+     {
+      "start": 1798715700,
+      "end": 1798729200
+     },
+     {
+      "start": 1798747200,
+      "end": 1798772400
+     },
+     {
+      "start": 1798802100,
+      "end": 1798815600
+     },
+     {
+      "start": 1798833600,
+      "end": 1798858800
+     },
+     {
+      "start": 1799061300,
+      "end": 1799074800
+     },
+     {
+      "start": 1799092800,
+      "end": 1799118000
+     },
+     {
+      "start": 1799147700,
+      "end": 1799161200
+     },
+     {
+      "start": 1799179200,
+      "end": 1799204400
+     },
+     {
+      "start": 1799234100,
+      "end": 1799247600
+     },
+     {
+      "start": 1799265600,
+      "end": 1799290800
+     },
+     {
+      "start": 1799320500,
+      "end": 1799334000
+     },
+     {
+      "start": 1799352000,
+      "end": 1799377200
+     },
+     {
+      "start": 1799406900,
+      "end": 1799420400
+     },
+     {
+      "start": 1799438400,
+      "end": 1799463600
+     },
+     {
+      "start": 1799666100,
+      "end": 1799679600
+     },
+     {
+      "start": 1799697600,
+      "end": 1799722800
+     },
+     {
+      "start": 1799752500,
+      "end": 1799766000
+     },
+     {
+      "start": 1799784000,
+      "end": 1799809200
+     },
+     {
+      "start": 1799838900,
+      "end": 1799852400
+     },
+     {
+      "start": 1799870400,
+      "end": 1799895600
+     },
+     {
+      "start": 1799925300,
+      "end": 1799938800
+     },
+     {
+      "start": 1799956800,
+      "end": 1799982000
+     },
+     {
+      "start": 1800011700,
+      "end": 1800025200
+     },
+     {
+      "start": 1800043200,
+      "end": 1800068400
+     },
+     {
+      "start": 1800270900,
+      "end": 1800284400
+     },
+     {
+      "start": 1800302400,
+      "end": 1800327600
+     },
+     {
+      "start": 1800357300,
+      "end": 1800370800
+     },
+     {
+      "start": 1800388800,
+      "end": 1800414000
+     },
+     {
+      "start": 1800443700,
+      "end": 1800457200
+     },
+     {
+      "start": 1800475200,
+      "end": 1800500400
+     },
+     {
+      "start": 1800530100,
+      "end": 1800543600
+     },
+     {
+      "start": 1800561600,
+      "end": 1800586800
+     },
+     {
+      "start": 1800616500,
+      "end": 1800630000
+     },
+     {
+      "start": 1800648000,
+      "end": 1800673200
+     },
+     {
+      "start": 1800875700,
+      "end": 1800889200
+     },
+     {
+      "start": 1800907200,
+      "end": 1800932400
+     },
+     {
+      "start": 1800962100,
+      "end": 1800975600
+     },
+     {
+      "start": 1800993600,
+      "end": 1801018800
+     },
+     {
+      "start": 1801048500,
+      "end": 1801062000
+     },
+     {
+      "start": 1801080000,
+      "end": 1801105200
+     },
+     {
+      "start": 1801134900,
+      "end": 1801148400
+     },
+     {
+      "start": 1801166400,
+      "end": 1801191600
+     },
+     {
+      "start": 1801221300,
+      "end": 1801234800
+     },
+     {
+      "start": 1801252800,
+      "end": 1801278000
+     },
+     {
+      "start": 1801480500,
+      "end": 1801494000
+     },
+     {
+      "start": 1801512000,
+      "end": 1801537200
+     },
+     {
+      "start": 1801566900,
+      "end": 1801580400
+     },
+     {
+      "start": 1801598400,
+      "end": 1801623600
+     },
+     {
+      "start": 1801653300,
+      "end": 1801666800
+     },
+     {
+      "start": 1801684800,
+      "end": 1801710000
+     },
+     {
+      "start": 1801739700,
+      "end": 1801753200
+     },
+     {
+      "start": 1801771200,
+      "end": 1801796400
+     },
+     {
+      "start": 1801826100,
+      "end": 1801839600
+     },
+     {
+      "start": 1801857600,
+      "end": 1801882800
+     },
+     {
+      "start": 1802085300,
+      "end": 1802098800
+     },
+     {
+      "start": 1802116800,
+      "end": 1802142000
+     }
+    ],
+    "informed_entity": [
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "7",
+      "stop_id": "710",
+      "direction_id": 0,
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:7:14"
+      }
+     },
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "7X",
+      "stop_id": "710",
+      "direction_id": 0,
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:7X:14"
+      }
+     }
+    ],
+    "header_text": {
+     "translation": [
+      {
+       "text": "In Queens, all Manhattan-bound [7][7X] local/express trains stop at 74 St-Broadway",
+       "language": "en"
+      },
+      {
+       "text": "<p>In Queens, all Manhattan-bound ‌[7][7X] local/express trains stop at <strong>74 St-Broadway</strong></p>",
+       "language": "en-html"
+      }
+     ]
+    },
+    "description_text": {
+     "translation": [
+      {
+       "text": "Flushing-bound [7X] express trains skip 74 St-Broadway.\nFlushing-bound [7] local trains will continue to stop at 74 St-Broadway.\n\nFor service to 74 St-Broadway and/or transfer to Jackson Hts-Roosevelt Av [E][F][M][R], transfer at Woodside-61 St to a Flushing-bound [7] local.\n\nAdditional travel alternatives:\nFor service to this station, take the [7X] to Junction Blvd and transfer to a Manhattan-bound [7][7X].\n\nWhat's happening?\nWe're making structural improvements",
+       "language": "en"
+      },
+      {
+       "text": "<p>Flushing-bound [7X] express trains skip <strong>74 St-Broadway</strong>.</p><p>Flushing-bound [7] local trains will continue to stop at <strong>74 St-Broadway</strong>.</p><p style=\"min-height:10px\"></p><p>For service to <strong>74 St-Broadway</strong> and/or transfer to <strong>Jackson Hts-Roosevelt Av</strong> [E][F][M][R], transfer at ‌<strong>Woodside-61 St</strong> to a Flushing-bound [7] local.</p><p style=\"min-height:10px\"></p><p><strong>Additional travel alternatives:</strong></p><p>For service to this station, take the [7X] to <strong>Junction Blvd</strong> and transfer to a Manhattan-bound [7][7X].</p><p style=\"min-height:10px\"></p><p><strong>What's happening?</strong></p><p>We're making structural improvements</p>",
+       "language": "en-html"
+      }
+     ]
+    },
+    "transit_realtime.mercury_alert": {
+     "created_at": 1778601449,
+     "updated_at": 1790188032,
+     "alert_type": "Planned - Express to Local",
+     "display_before_active": 3600,
+     "human_readable_active_period": {
+      "translation": [
+       {
+        "text": "Through Spring 2027",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "lmm:planned_work:31498",
+   "alert": {
+    "active_period": [
+     {
+      "start": 1779719400,
+      "end": 1798779540
+     }
+    ],
+    "informed_entity": [
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "7",
+      "stop_id": "713",
+      "direction_id": 0,
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:7:16"
+      }
+     },
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "7",
+      "stop_id": "712",
+      "direction_id": 0,
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:7:16"
+      }
+     },
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "7",
+      "stop_id": "711",
+      "direction_id": 0,
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:7:16"
+      }
+     }
+    ],
+    "header_text": {
+     "translation": [
+      {
+       "text": "In Queens, Flushing-bound [7] skips 52 St and 69 St\nAll trains at Woodside-61 St board from the Manhattan-bound platform",
+       "language": "en"
+      },
+      {
+       "text": "<p>In Queens, Flushing-bound [7] skips <strong>52 St</strong> and <strong>69 St</strong></p><p>All trains at <strong>Woodside-61 St</strong> board from the Manhattan-bound platform</p>",
+       "language": "en-html"
+      }
+     ]
+    },
+    "description_text": {
+     "translation": [
+      {
+       "text": "Use nearby 46 St-Bliss St, Woodside-61 St or 74 St-Broadway stations.\n\nAdditional travel alternatives:\nFor service to these stations, take the [7] to Woodside-61 St or 74 St-Broadway and transfer to a Manhattan-bound [7].\n\nFor service from these stations, take the [7] to Woodside-61 St or 46 St-Bliss St and transfer to a Flushing-bound [7].\n\nNote: There will be temporary platforms on the Flushing-bound side at 33 St-Rawson St, 40 St-Lowery St and 46 St-Bliss St\n\nWhat's happening?\nWe're making structural improvements",
+       "language": "en"
+      },
+      {
+       "text": "<p>Use nearby <strong>46 St-Bliss St</strong>, <strong>Woodside-61 St</strong> or <strong>74 St-Broadway</strong> stations.</p><p style=\"min-height:10px\"></p><p><strong>Additional travel alternatives:</strong></p><p>For service to these stations, take the [7] to <strong>Woodside-61 St</strong> or <strong>74 St-Broadway</strong> and transfer to a Manhattan-bound [7].</p><p style=\"min-height:10px\"></p><p>For service from these stations, take the [7] to <strong>Woodside-61 St</strong> or <strong>46 St-Bliss St</strong> and transfer to a Flushing-bound [7].</p><p style=\"min-height:10px\"></p><p><strong>Note:</strong> There will be temporary platforms on the Flushing-bound side at <strong>33 St-Rawson St</strong>, <strong>40 St-Lowery St</strong> and <strong>46 St-Bliss St</strong></p><p style=\"min-height:10px\"></p><p><strong>What's happening?</strong></p><p>We're making structural improvements</p>",
+       "language": "en-html"
+      }
+     ]
+    },
+    "transit_realtime.mercury_alert": {
+     "created_at": 1777299535,
+     "updated_at": 1790188021,
+     "alert_type": "Planned - Stops Skipped",
+     "display_before_active": 0,
+     "human_readable_active_period": {
+      "translation": [
+       {
+        "text": "Through Spring 2027",
+        "language": "en"
+       }
+      ]
+     },
+     "affected_stations": [
+      {
+       "agency_id": "MTASBWY",
+       "route_id": "7",
+       "stop_id": "723",
+       "direction_id": 0,
+       "transit_realtime.mercury_entity_selector": {
+        "sort_order": "MTASBWY:7:16"
+       }
+      },
+      {
+       "agency_id": "MTASBWY",
+       "route_id": "7",
+       "stop_id": "724",
+       "direction_id": 0,
+       "transit_realtime.mercury_entity_selector": {
+        "sort_order": "MTASBWY:7:16"
+       }
+      },
+      {
+       "agency_id": "MTASBWY",
+       "route_id": "7",
+       "stop_id": "725",
+       "direction_id": 0,
+       "transit_realtime.mercury_entity_selector": {
+        "sort_order": "MTASBWY:7:16"
+       }
+      },
+      {
+       "agency_id": "MTASBWY",
+       "route_id": "7",
+       "stop_id": "726",
+       "direction_id": 0,
+       "transit_realtime.mercury_entity_selector": {
+        "sort_order": "MTASBWY:7:16"
+       }
+      },
+      {
+       "agency_id": "MTASBWY",
+       "route_id": "7",
+       "stop_id": "721",
+       "direction_id": 0,
+       "transit_realtime.mercury_entity_selector": {
+        "sort_order": "MTASBWY:7:16"
+       }
+      },
+      {
+       "agency_id": "MTASBWY",
+       "route_id": "7",
+       "stop_id": "720",
+       "direction_id": 0,
+       "transit_realtime.mercury_entity_selector": {
+        "sort_order": "MTASBWY:7:16"
+       }
+      },
+      {
+       "agency_id": "MTASBWY",
+       "route_id": "7",
+       "stop_id": "719",
+       "direction_id": 0,
+       "transit_realtime.mercury_entity_selector": {
+        "sort_order": "MTASBWY:7:16"
+       }
+      },
+      {
+       "agency_id": "MTASBWY",
+       "route_id": "7",
+       "stop_id": "718",
+       "direction_id": 0,
+       "transit_realtime.mercury_entity_selector": {
+        "sort_order": "MTASBWY:7:16"
+       }
+      },
+      {
+       "agency_id": "MTASBWY",
+       "route_id": "7",
+       "stop_id": "716",
+       "direction_id": 0,
+       "transit_realtime.mercury_entity_selector": {
+        "sort_order": "MTASBWY:7:16"
+       }
+      },
+      {
+       "agency_id": "MTASBWY",
+       "route_id": "7",
+       "stop_id": "715",
+       "direction_id": 0,
+       "transit_realtime.mercury_entity_selector": {
+        "sort_order": "MTASBWY:7:16"
+       }
+      },
+      {
+       "agency_id": "MTASBWY",
+       "route_id": "7",
+       "stop_id": "714",
+       "direction_id": 0,
+       "transit_realtime.mercury_entity_selector": {
+        "sort_order": "MTASBWY:7:16"
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "lmm:planned_work:29949",
+   "alert": {
+    "active_period": [
+     {
+      "start": 1787943600,
+      "end": 1792503900
+     },
+     {
+      "start": 1792522800,
+      "end": 1792590300
+     },
+     {
+      "start": 1792609200,
+      "end": 1792676700
+     },
+     {
+      "start": 1792695600,
+      "end": 1792763100
+     },
+     {
+      "start": 1792782000,
+      "end": 1793108700
+     },
+     {
+      "start": 1793127600,
+      "end": 1793281500
+     },
+     {
+      "start": 1793300400,
+      "end": 1793367900
+     },
+     {
+      "start": 1793386800,
+      "end": 1793432700
+     },
+     {
+      "start": 1793588400,
+      "end": 1793717100
+     },
+     {
+      "start": 1793736000,
+      "end": 1793803500
+     },
+     {
+      "start": 1793822400,
+      "end": 1793889900
+     },
+     {
+      "start": 1793908800,
+      "end": 1793976300
+     },
+     {
+      "start": 1793995200,
+      "end": 1794041100
+     },
+     {
+      "start": 1794193200,
+      "end": 1794321900
+     },
+     {
+      "start": 1794340800,
+      "end": 1794408300
+     },
+     {
+      "start": 1794427200,
+      "end": 1794494700
+     },
+     {
+      "start": 1794513600,
+      "end": 1794581100
+     },
+     {
+      "start": 1794600000,
+      "end": 1798779540
+     }
+    ],
+    "informed_entity": [
+     {
+      "agency_id": "MTASBWY",
+      "route_id": "4",
+      "stop_id": "409",
+      "direction_id": 0,
+      "transit_realtime.mercury_entity_selector": {
+       "sort_order": "MTASBWY:4:16"
+      }
+     }
+    ],
+    "header_text": {
+     "translation": [
+      {
+       "text": "In the Bronx, Woodlawn-bound [4] skips Burnside Av",
+       "language": "en"
+      },
+      {
+       "text": "<p>In the Bronx, Woodlawn-bound [4] skips <strong>Burnside Av</strong></p>",
+       "language": "en-html"
+      }
+     ]
+    },
+    "description_text": {
+     "translation": [
+      {
+       "text": "Use nearby 176 St or 183 St stations.\n\nAdditional travel alternatives:\nFor service to this station, take the [4] to 183 St and transfer to a Manhattan-bound train.\n\nFor service from this station, take the [4] to 176 St and transfer to a Woodlawn-bound train.\n\nWhat's happening?\nWe're making station improvements",
+       "language": "en"
+      },
+      {
+       "text": "<p>Use nearby <strong>176 St</strong> or <strong>183 St</strong> stations.</p><p style=\"min-height:10px\"></p><p><strong>Additional travel alternatives:</strong></p><p>For service to this station, take the [4] to <strong>183 St</strong> and transfer to a Manhattan-bound train.</p><p style=\"min-height:10px\"></p><p>For service from this station, take the [4] to <strong>176 St</strong> and transfer to a Woodlawn-bound train.</p><p style=\"min-height:10px\"></p><p><strong>What's happening?</strong></p><p>We're making station improvements</p>",
+       "language": "en-html"
+      }
+     ]
+    },
+    "transit_realtime.mercury_alert": {
+     "created_at": 1769784173,
+     "updated_at": 1791981399,
+     "alert_type": "Planned - Stops Skipped",
+     "human_readable_active_period": {
+      "translation": [
+       {
+        "text": "Through December 2026",
+        "language": "en"
+       }
+      ]
+     },
+     "affected_stations": [
+      {
+       "agency_id": "MTASBWY",
+       "route_id": "4",
+       "stop_id": "410",
+       "direction_id": 0,
+       "transit_realtime.mercury_entity_selector": {
+        "sort_order": "MTASBWY:4:16"
+       }
+      },
+      {
+       "agency_id": "MTASBWY",
+       "route_id": "4",
+       "stop_id": "411",
+       "direction_id": 0,
+       "transit_realtime.mercury_entity_selector": {
+        "sort_order": "MTASBWY:4:16"
+       }
+      },
+      {
+       "agency_id": "MTASBWY",
+       "route_id": "4",
+       "stop_id": "412",
+       "direction_id": 0,
+       "transit_realtime.mercury_entity_selector": {
+        "sort_order": "MTASBWY:4:16"
+       }
+      },
+      {
+       "agency_id": "MTASBWY",
+       "route_id": "4",
+       "stop_id": "413",
+       "direction_id": 0,
+       "transit_realtime.mercury_entity_selector": {
+        "sort_order": "MTASBWY:4:16"
+       }
+      },
+      {
+       "agency_id": "MTASBWY",
+       "route_id": "4",
+       "stop_id": "414",
+       "direction_id": 0,
+       "transit_realtime.mercury_entity_selector": {
+        "sort_order": "MTASBWY:4:16"
+       }
+      },
+      {
+       "agency_id": "MTASBWY",
+       "route_id": "4",
+       "stop_id": "415",
+       "direction_id": 0,
+       "transit_realtime.mercury_entity_selector": {
+        "sort_order": "MTASBWY:4:16"
+       }
+      },
+      {
+       "agency_id": "MTASBWY",
+       "route_id": "4",
+       "stop_id": "416",
+       "direction_id": 0,
+       "transit_realtime.mercury_entity_selector": {
+        "sort_order": "MTASBWY:4:16"
+       }
+      }
+     ]
+    }
+   }
+  }
+ ]
+}

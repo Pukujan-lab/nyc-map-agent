@@ -1,6 +1,7 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { useSearchParams } from "react-router-dom";
+import type { DisruptionAlert } from "./disruptions";
 import { RAIL_SYSTEMS, type Bus, type LiveSystem, type StaticSystem, type SystemId , type XrayStation } from "./model";
 
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
@@ -116,7 +117,7 @@ export function useBusRoute(route: string | undefined) {
 export function alertedRoutes(alerts: TransitAlert[] | undefined): Set<string> {
   return new Set((alerts ?? []).filter((a) => a.kind === "delay" || (a.reroute && a.kind !== "planned")).flatMap((a) => a.routes));
 }
-export type TransitAlert = { id: string; kind: "planned" | "delay" | "notice"; type: string; reroute: boolean; text: string; agency: string; routes: string[]; stops: string[] };
+export type TransitAlert = DisruptionAlert;
 export type Outage = { id: string; station: string; routes: string[]; stops: string[]; equipment: "Elevator" | "Escalator"; serving: string; reason: string; since: string; back: string; ada: "yes" | "no" | "not-ada"; alternative: string };
 export function useAlerts(enabled: boolean) {
   return useQuery({

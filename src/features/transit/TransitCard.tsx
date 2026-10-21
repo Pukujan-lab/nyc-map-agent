@@ -1,8 +1,9 @@
 import { useEffect } from "react";
-import { Accessibility, Crosshair, ScanEye, Star, Wrench } from "lucide-react";
+import { Accessibility, Crosshair, ScanEye, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { arrivalsAt, directionLabel, estimateTrain, minutesUntil, stationOf, type LiveSystem, type StaticSystem, type SystemId, type Vehicle } from "./model";
-import { useAlerts, useBusRoute, useBusTrip, useBuses, useNow, useStarred, useTransitData, type Outage } from "./hooks";
+import { useAlerts, useBusRoute, useBusTrip, useBuses, useNow, useStarred, useTransitData, type Outage, type TransitAlert } from "./hooks";
+import { alertStations, holdOf, stationName, summarizeAlert } from "./disruptions";
 import { setFollowed, useFollowed } from "./follow";
 import { useSharedLocation } from "@/lib/geo/sharedLocation";
 import { getXray, setXray, useXray } from "./xray";
@@ -39,7 +40,8 @@ export function StationDetails({ system, id }: { system: SystemId; id: string })
   const st = data[system]?.stat;
   const routes = [...new Set(String(st?.stations.features.find((f) => f.properties.id === id)?.properties.routes ?? "").split(/[\s,]+/).filter(Boolean))];
   const doors = system === "subway" ? (st?.entrances?.features ?? []).filter((f) => f.properties.id === id) : [];
-  const lineAlerts = (alerts?.alerts ?? []).filter((a) => a.kind === "delay" && a.routes.some((r) => routes.includes(r)));
+  // Alerts naming this station (stop entities or a resolved segment end), then route-only alerts for its lines.
+  const stationAlerts = (alerts?.alerts ?? []).filter((a) => (st && alertStations(st, a).includes(id)) || (!a.stops.length && a.routes.some((r) => routes.includes(r))));
   return (
     <div className="space-y-3 text-sm">
       {routes.length ? (
@@ -74,17 +76,12 @@ export function StationDetails({ system, id }: { system: SystemId; id: string })
       {system === "subway"
         ? alerts?.outages.filter((o) => o.stops.some((s) => stationOf("subway", s) === id)).map((o) => <OutageRow key={o.id} o={o} />)
         : null}
-      {alerts?.alerts
-        .filter((a) => (a.kind === "planned" || a.reroute) && a.stops.some((s) => stationOf(system, s) === id))
-        .map((a) => (
-          <div key={a.id} className="flex gap-2">
-            <Wrench className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-            <p><span className="text-xs text-muted-foreground">{a.type}</span> {a.text}</p>
-          </div>
-        ))}
-      {lineAlerts.map((a) => (
-        <div key={a.id} className="rounded-md border px-2 py-1.5 text-xs"><span className="mr-1 font-semibold">Delay</span>{a.text}</div>
-      ))}
+      {stationAlerts.length ? (
+        <div className="space-y-1.5" aria-label="Service notices">
+          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Service notices</div>
+          {stationAlerts.map((a) => <AlertCard key={a.id} a={a} stat={st} />)}
+        </div>
+      ) : null}
       {doors.length ? (
         <div>
           <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Entrances</div>
@@ -107,19 +104,35 @@ export function nearestStop<T extends { lon: number; lat: number }>(stops: T[], 
   return best;
 }
 
-function RouteAlerts({ route }: { route: string }) {
+const kindLabel = (a: TransitAlert) => (a.reroute ? "Detour" : a.kind === "delay" ? "Delay" : a.kind === "planned" ? "Planned work" : "Notice");
+const when = (t?: number) => (t ? new Date(t * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "");
+
+/** One alert: the plain-English summary first, the full MTA notice (header, description, active period) underneath. */
+export function AlertCard({ a, stat }: { a: TransitAlert; stat?: StaticSystem }) {
+  const summary = stat ? summarizeAlert(stat, a) : null;
+  const period = a.period || (a.start ? `${when(a.start)} – ${a.end ? when(a.end) : "until further notice"}` : "");
+  return (
+    <div className="rounded-md border px-2 py-1.5 text-xs">
+      <div><span className="mr-1 font-semibold">{kindLabel(a)}</span>{summary ?? a.text}</div>
+      {period ? <div className="text-muted-foreground">{period}</div> : null}
+      <details className="mt-1">
+        <summary className="cursor-pointer text-muted-foreground">Full MTA notice</summary>
+        <p className="mt-1 whitespace-pre-line font-medium">{a.text}</p>
+        {a.description ? <p className="mt-1 whitespace-pre-line">{a.description}</p> : null}
+        {a.type ? <p className="mt-1 text-muted-foreground">{a.type}</p> : null}
+      </details>
+    </div>
+  );
+}
+
+function RouteAlerts({ route, stat }: { route: string; stat?: StaticSystem }) {
   const alerts = useAlerts(true);
   const list = (alerts.data?.alerts ?? []).filter((a) => a.routes.includes(route));
   if (!list.length) return <p className="text-xs text-muted-foreground">No active alerts for the {route}.</p>;
   return (
     <div className="space-y-1.5">
       <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Alerts and detours</div>
-      {list.slice(0, 4).map((a) => (
-        <div key={a.id} className="rounded-md border px-2 py-1.5 text-xs">
-          <span className="mr-1 font-semibold">{a.reroute ? "Detour" : a.kind === "delay" ? "Delay" : a.kind === "planned" ? "Planned work" : "Notice"}</span>
-          {a.text}
-        </div>
-      ))}
+      {list.slice(0, 6).map((a) => <AlertCard key={a.id} a={a} stat={stat} />)}
     </div>
   );
 }
@@ -181,12 +194,17 @@ export function VehicleDetails({ vehicleKey }: { vehicleKey: string }) {
   const followed = useFollowed();
   let v: Vehicle | null | undefined;
   let upcoming: Array<{ id: string; name: string; eta: number | null }> = [];
+  let stat: StaticSystem | undefined, skipped: string[] = [], heldNear = "";
   if (system === "bus") {
     const b = buses.data?.buses.find((x) => x.id === tripId);
     if (b) v = { key: vehicleKey, system: "bus", route: b.route, label: b.route, color: "#0039A6", lon: b.lon, lat: b.lat, bearing: b.bearing ?? 0, grade: "grade", dir: b.dir, nextStop: b.next ?? undefined };
   } else {
-    const st = data[system as SystemId]?.stat, trip = data[system as SystemId]?.live?.trips.find((t) => t.id === tripId);
-    v = st && trip ? estimateTrain(st, trip, now) : undefined;
+    const st = data[system as SystemId]?.stat, lv = data[system as SystemId]?.live, trip = lv?.trips.find((t) => t.id === tripId);
+    const h = trip && lv && system === "subway" ? holdOf(vehicleKey, trip, lv.at) : undefined;
+    v = st && trip ? estimateTrain(st, trip, now, h?.held ? { held: h.held, heldSince: h.heldSince } : {}) : undefined;
+    stat = st;
+    skipped = st && trip?.skipped ? trip.skipped.map((s) => stationName(st, s) || s) : [];
+    heldNear = h?.held && st ? stationName(st, trip?.at ?? v?.nextStop ?? "") : "";
     if (trip) upcoming = trip.stops.filter(([, t]) => t >= now - 30).slice(1, 6).map(([id, t]) => ({ id, name: stopName(data, system as SystemId, id) ?? id, eta: t }));
   }
   const following = followed === vehicleKey;
@@ -201,11 +219,23 @@ export function VehicleDetails({ vehicleKey }: { vehicleKey: string }) {
               {v.eta ? <span className="tabular-nums text-muted-foreground"> · {minutesUntil(v.eta, now)} min</span> : null}
             </div>
           ) : null}
+          {v?.held ? (
+            <div className="rounded-md bg-red-50 px-2 py-1.5 text-red-800 dark:bg-red-950 dark:text-red-200">
+              <span className="font-semibold">{v.held}</span>{heldNear ? <> · Held near {heldNear}</> : null}
+            </div>
+          ) : null}
+          {v?.track ? <div className="text-xs">Running on the {v.track} line track</div> : null}
           <Upcoming rows={upcoming} now={now} />
-          {v ? <p className="text-xs text-muted-foreground">Position estimated from predicted arrival times.</p> : null}
+          {skipped.length ? (
+            <div className="text-xs" aria-label="Skipped stops">
+              <span className="text-muted-foreground">Skips </span>
+              {skipped.map((n, i) => <span key={i}><s>{n}</s>{i < skipped.length - 1 ? ", " : ""}</span>)}
+            </div>
+          ) : null}
+          {v ? <p className="text-xs text-muted-foreground">{v.held ? "Held at its last known position until the feed shows it moving." : "Position estimated from predicted arrival times."}</p> : null}
         </>
       )}
-      {v ? <RouteAlerts route={v.route} /> : null}
+      {v ? <RouteAlerts route={v.route} stat={stat} /> : null}
       <Button size="sm" variant={following ? "default" : "outline"} aria-pressed={following} disabled={!v}
         onClick={() => setFollowed(following ? null : vehicleKey)}>
         <Crosshair className="mr-1.5 h-4 w-4" />

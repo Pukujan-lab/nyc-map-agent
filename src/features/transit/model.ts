@@ -21,7 +21,8 @@ export type StaticSystem = {
   stopM: Record<string, Record<string, number>>;
   entrances?: GeoJSON.FeatureCollection<GeoJSON.Point, { id: string; name: string; kind: string }>;
 };
-export type LiveTrip = { id: string; route: string; dir: number | null; stops: Array<[string, number]>; at?: string };
+/** `st` is the vehicle current_status (0 INCOMING_AT, 1 STOPPED_AT, 2 IN_TRANSIT_TO); `skipped` are SKIPPED stops. */
+export type LiveTrip = { id: string; route: string; dir: number | null; stops: Array<[string, number]>; at?: string; st?: number; vt?: number; skipped?: string[] };
 export type LiveSystem = { at: number; trips: LiveTrip[] };
 export type Bus = { id: string; route: string; dir: number | null; lon: number; lat: number; bearing: number | null; next: string | null; t: number };
 
@@ -40,6 +41,10 @@ export type Vehicle = {
   dir: number | null;
   nextStop?: string;
   eta?: number;
+  /** Set when the train is held: badge text for the bullet. */
+  held?: "Delayed" | "Holding";
+  /** Route whose track the train is on now, when it differs from its own (reroutes). */
+  track?: string;
 };
 
 /** Subway platform ids are the station id plus N/S. */
@@ -72,40 +77,58 @@ function bearingOf(a: [number, number], b: [number, number]) {
 
 /**
  * Approximate where a train is now: between the last stop whose time has
- * passed and the next one, linearly in time, measured along the route shape.
- * Feeds drop passed stops, so with no passed stop we extrapolate back from the
- * first two upcoming ones (capped). Returns null when we cannot place it.
+ * passed and the next one, linearly in time, measured along the shape of the
+ * track that hop actually runs on (a rerouted F rides the A's shape). Feeds
+ * drop passed stops, so with no passed stop we extrapolate back from the first
+ * two upcoming ones (capped). The train never runs past the stop the vehicle
+ * still reports (the feed has not cleared it). A held train is frozen at
+ * `opts.heldSince`. Returns null when we cannot place it.
  */
-export function estimateTrain(sys: StaticSystem, trip: LiveTrip, now: number): Vehicle | null {
-  const shape = sys.shapes[trip.route];
-  const sm = sys.stopM[trip.route];
-  if (!shape || !sm) return null;
+export function estimateTrain(sys: StaticSystem, trip: LiveTrip, now: number, opts: { held?: "Delayed" | "Holding"; heldSince?: number } = {}): Vehicle | null {
+  if (!sys.shapes[trip.route] || !sys.stopM[trip.route]) return null;
+  const t0 = opts.held && opts.heldSince ? Math.min(now, opts.heldSince) : now;
+  // Served stops only (SKIPPED never reach here), placed on any line that has them.
   const pts = trip.stops
-    .map(([id, t]) => ({ id, t, m: sm[stationOf(sys.system, id)] }))
-    .filter((p): p is { id: string; t: number; m: number } => p.m !== undefined);
+    .map(([id, t]) => ({ id, t, s: stationOf(sys.system, id) }))
+    .filter((p) => Object.values(sys.stopM).some((sm) => sm[p.s] !== undefined));
   if (!pts.length) return null;
-  const k = pts.findIndex((p) => p.t > now);
+  let k = pts.findIndex((p) => p.t > t0);
+  // The vehicle's reported stop is not cleared yet: do not go past it.
+  const limit = trip.at ? pts.findIndex((p) => p.id === trip.at) : -1;
+  let parked = false;
+  if (limit >= 0 && (k === -1 || k > limit)) { k = limit; parked = true; }
   if (k === -1) return null; // finished
+  if (trip.st === 1 && limit >= 0 && k === limit) parked = true; // STOPPED_AT
   const next = pts[k];
-  if (next.t - now > 30 * 60) return null; // not running yet
+  if (!parked && next.t - t0 > 30 * 60) return null; // not running yet
+  const hopFrom = k > 0 ? pts[k - 1] : pts[1];
+  const track = (hopFrom && trackFor(sys, trip.route, hopFrom.id, next.id)) ?? (sys.stopM[trip.route][next.s] !== undefined ? trip.route : Object.keys(sys.stopM).find((r) => sys.stopM[r][next.s] !== undefined)!);
+  const shape = sys.shapes[track], sm = sys.stopM[track];
+  if (!shape || !sm) return null;
+  const nm = sm[next.s];
   let m: number;
   let forward: number;
-  if (k > 0) {
-    const prev = pts[k - 1];
-    const f = (now - prev.t) / Math.max(1, next.t - prev.t);
-    m = prev.m + (next.m - prev.m) * f;
-    forward = Math.sign(next.m - prev.m) || 1;
-  } else if (pts[1]) {
-    const speed = (pts[1].m - next.m) / Math.max(1, pts[1].t - next.t);
+  if (parked) {
+    m = nm;
+    const other = pts[k - 1] ?? pts[k + 1];
+    const om = other ? sm[other.s] : undefined;
+    forward = om === undefined ? 1 : (pts[k - 1] ? Math.sign(nm - om) : Math.sign(om - nm)) || 1;
+  } else if (k > 0 && sm[pts[k - 1].s] !== undefined) {
+    const prev = pts[k - 1], pm = sm[prev.s];
+    const f = Math.min(1, Math.max(0, (t0 - prev.t) / Math.max(1, next.t - prev.t)));
+    m = pm + (nm - pm) * f;
+    forward = Math.sign(nm - pm) || 1;
+  } else if (pts[k + 1] && sm[pts[k + 1].s] !== undefined) {
+    const speed = (sm[pts[k + 1].s] - nm) / Math.max(1, pts[k + 1].t - next.t);
     forward = Math.sign(speed) || 1;
-    const back = Math.min(Math.abs(speed * (next.t - now)), 1500);
-    m = next.m - forward * back;
+    const back = Math.min(Math.abs(speed * (next.t - t0)), 1500);
+    m = nm - forward * back;
   } else {
-    m = next.m;
+    m = nm;
     forward = 1;
   }
   const here = pointAt(shape, m);
-  const prof = trackHeightProfile(sys, trip.route);
+  const prof = trackHeightProfile(sys, track);
   const z = prof ? prof.h[here.lo] + (prof.h[here.hi] - prof.h[here.lo]) * here.f : 0;
   const grade = prof ? prof.grade[here.lo] : here.grade;
   const ahead = pointAt(shape, m + forward * 30);
@@ -124,7 +147,33 @@ export function estimateTrain(sys: StaticSystem, trip: LiveTrip, now: number): V
     dir: trip.dir,
     nextStop: next.id,
     eta: next.t,
+    ...(opts.held ? { held: opts.held } : {}),
+    ...(track !== trip.route ? { track } : {}),
   };
+}
+
+/**
+ * The route whose shape carries the hop between two stops. A trip stays on its
+ * own line when that line has both stops; otherwise (an F running via the A)
+ * we use the first line that serves both, so the train rides the track it is
+ * actually on. Null when no line has both (we then do not draw the hop).
+ */
+export function trackFor(sys: StaticSystem, route: string, a: string, b: string): string | null {
+  const sa = stationOf(sys.system, a), sb = stationOf(sys.system, b);
+  const has = (r: string) => sys.stopM[r]?.[sa] !== undefined && sys.stopM[r]?.[sb] !== undefined;
+  if (has(route)) return route;
+  return Object.keys(sys.stopM).find(has) ?? null;
+}
+
+/** Shape coordinates between two stations on one route, in travel order a → b. */
+export function sliceBetween(sys: StaticSystem, route: string, a: string, b: string): Array<[number, number]> | null {
+  const shape = sys.shapes[route], sm = sys.stopM[route];
+  const ma = sm?.[a], mb = sm?.[b];
+  if (!shape || ma === undefined || mb === undefined) return null;
+  const lo = Math.min(ma, mb), hi = Math.max(ma, mb);
+  const c = shape.c.filter((_, i) => shape.m[i] >= lo && shape.m[i] <= hi);
+  if (c.length < 2) return null;
+  return ma <= mb ? c : c.reverse();
 }
 
 export type Arrival = { route: string; direction: string; times: number[] };
