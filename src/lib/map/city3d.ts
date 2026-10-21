@@ -10,11 +10,12 @@ import type { ExpressionSpecification, Map as MapLibreMap } from "maplibre-gl";
  */
 /**
  * Citywide tiles (all five boroughs). PMTiles is range-requested, so a walker
- * only downloads the few z14-16 tiles around them. The file is too big for git:
- * build it with `pnpm build:city-tiles`, or point `VITE_CITY_TILES_URL` at a
- * CDN copy (absolute URL or same-origin path).
+ * only downloads the few z14-16 tiles around them. The file lives in R2 via
+ * Octo files (`pnpm publish:city-tiles`) and is served same-origin by
+ * /api/city-tiles. `VITE_CITY_TILES_URL` overrides it, e.g. `/tiles/nyc-city.pmtiles`
+ * for a local build from `pnpm build:city-tiles`.
  */
-export const CITY3D_TILES: string = import.meta.env.VITE_CITY_TILES_URL ?? "/tiles/nyc-city.pmtiles";
+export const CITY3D_TILES: string = import.meta.env.VITE_CITY_TILES_URL ?? "/api/city-tiles";
 
 function tilesUrl(): string {
   return /^https?:\/\//.test(CITY3D_TILES) ? CITY3D_TILES : `${window.location.origin}${CITY3D_TILES}`;
