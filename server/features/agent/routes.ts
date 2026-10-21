@@ -15,11 +15,18 @@ export const INFERHUB_BASE_URL = process.env.INFERHUB_BASE_URL ?? "https://api.i
 /** Cheap, fast, good at tool calls: ~$0.075 in / $0.30 out per M tokens (InferHub market max ask). */
 export const DEFAULT_MODEL = "deepseek/deepseek-v4.1-flash";
 
-export function systemPrompt(nowLocal: string, hasLocation: boolean, mode: "walk" | "transit" | "drive" = "transit"): string {
+/**
+ * The exact shared position goes to the model so "from here" directions start
+ * at the right corner. It is used for this request only: the server never
+ * logs it, writes it to Octo or R2, or keeps it after the response ends.
+ */
+export function systemPrompt(nowLocal: string, location: { lon: number; lat: number } | null, mode: "walk" | "transit" | "drive" = "transit"): string {
   return [
     "You are the NYC Map's trip assistant. Answers are spoken aloud: 2-4 short sentences, no markdown, no lists.",
     `Now is ${nowLocal} in New York. Resolve relative times ("tomorrow at 9am") to local New York time YYYY-MM-DDTHH:MM.`,
-    hasLocation ? 'The user shared their location; use "here" for it.' : 'The user\'s location is unknown; if they say "here", ask where they are starting.',
+    location
+      ? `The user shared their exact location: longitude ${location.lon}, latitude ${location.lat}. Use "here" for it in tools; do not repeat the coordinates back.`
+      : 'The user\'s location is unknown; if they say "here", ask where they are starting, or suggest tapping My location.',
     `The user's mode chip is ${mode}: use drive_plan for drive, route_walk for walk, transit_plan for transit, unless they ask otherwise.`,
     "For a drive: call drive_plan, then showRoute, openPanel, playFlythrough; answer with ETA, slow segments, closures, tolls and only the parking hints the tool returned.",
     "For a trip question: call transit_plan, then showRoute, openPanel and playFlythrough with its tripId (speed 10), then answer with: lines, ETA, weather at that time, any planned work, the recommended exit said plainly (e.g. \"Use the NE exit near E 42 St & Lexington Av\"), and elevator outages.",
@@ -47,7 +54,7 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
         const model = opts.model ?? defaultModel();
         const result = streamText({
           model,
-          system: systemPrompt(toNyLocal(now ? new Date(now) : new Date()), location !== null, mode),
+          system: systemPrompt(toNyLocal(now ? new Date(now) : new Date()), location, mode),
           messages,
           tools: makeTools({ location, emit: (command) => send({ type: "command", command }), deps: opts.deps, drive: resolveFlags({ env: process.env.VITE_FLAGS, advancedMode: false }).agentDrive }),
           stopWhen: stepCountIs(8),

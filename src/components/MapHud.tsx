@@ -13,6 +13,7 @@ import { useDataView } from "@/lib/store/DataViewContext";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { useFlags } from "@/lib/flags";
 import { cn } from "@/lib/utils";
+import { startSharing, stopSharing, useSharedLocation } from "@/lib/geo/sharedLocation";
 
 interface MapHudProps {
   onOpenControls: () => void;
@@ -88,6 +89,10 @@ export function MapHud({ onOpenControls, onOpenSources, isDesktop, follow }: Map
     return () => document.removeEventListener("fullscreenchange", sync);
   }, []);
   const directing = routePicking !== null || routeStart !== null;
+  const shared = useSharedLocation();
+  const { flyTo } = useMapState();
+  // The browser permission prompt appears only from this tap.
+  const locate = () => void startSharing().then((c) => { if (c) flyTo({ lon: c.lon, lat: c.lat, zoom: 16 }); });
 
   return (
     <div
@@ -124,6 +129,11 @@ export function MapHud({ onOpenControls, onOpenSources, isDesktop, follow }: Map
           {walking ? "Leave street view" : "Street view"}
         </TextButton>
       ) : null}
+      {shared.status === "on" ? (
+        <TextButton active onClick={() => stopSharing()}>Stop sharing location</TextButton>
+      ) : (
+        <TextButton onClick={locate}>{shared.status === "asking" ? "Finding you…" : "My location"}</TextButton>
+      )}
       <TextButton onClick={() => setChatOpen(true)}>Ask</TextButton>
 
       <DropdownMenu>
