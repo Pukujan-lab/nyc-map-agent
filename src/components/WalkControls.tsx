@@ -146,7 +146,7 @@ export function WalkControls({
       <div
         role="group"
         aria-label="Street-level camera controls"
-        className="absolute bottom-20 left-3 z-30 grid grid-cols-3 grid-rows-3 gap-1"
+        className="absolute bottom-32 left-3 z-30 grid sm:bottom-20 grid-cols-3 grid-rows-3 gap-1"
       >
         <span />
         {pad("Walk forward", ChevronUp, {
