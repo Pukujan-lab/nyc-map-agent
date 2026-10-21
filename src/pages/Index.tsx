@@ -16,7 +16,6 @@ import { useFilters } from "@/lib/datasets/useFilters";
 import { PlaceDetails } from "@/components/PlaceDetails";
 import { MapPanel } from "@/components/MapPanel";
 import { usePanel } from "@/lib/store/PanelContext";
-import { MapHud } from "@/components/MapHud";
 import { MapStatusChip } from "@/components/MapStatusChip";
 import { MapView } from "@/components/MapView";
 import { StreetViewSheet } from "@/components/StreetViewSheet";
@@ -187,11 +186,6 @@ export default function Index() {
         onRetry={data.retry}
       />
 
-      <MapHud
-        isDesktop={isDesktop}
-        onOpenControls={() => setControlsOpen(true)}
-        onOpenSources={() => setSourcesOpen(true)}
-      />
 
       <DataSourcesDrawer
         open={sourcesOpen}
@@ -231,6 +225,8 @@ export default function Index() {
 
       <MapPanel
         isDesktop={isDesktop}
+        onOpenControls={() => setControlsOpen(true)}
+        onOpenSources={() => setSourcesOpen(true)}
         boundaries={data.boundaries}
         status={
           <MapStatusChip
