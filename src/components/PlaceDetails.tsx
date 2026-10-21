@@ -1,4 +1,4 @@
-import { Camera, Footprints, MapPin, MessageSquarePlus, X } from "lucide-react";
+import { ArrowLeft, Camera, Footprints, MapPin, MessageSquarePlus, X } from "lucide-react";
 import {
   Accordion,
   AccordionContent,
@@ -6,13 +6,6 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { NtaBoundary } from "@/lib/api/nta";
 import { formatCount, formatPercent } from "@/lib/format";
@@ -27,12 +20,10 @@ import {
 } from "@/lib/layers";
 import { useDataView } from "@/lib/store/DataViewContext";
 import { useMapState } from "@/lib/store/MapStateContext";
-import { cn } from "@/lib/utils";
 import type { WindowId } from "@/lib/windows";
 import { HourOfDayChart } from "./HourOfDayChart";
 import { ShowQuery } from "./ShowQuery";
 import { StatCard } from "./StatCard";
-import { DRAG_HANDLE, DraggablePanel } from "./DraggablePanel";
 
 interface DetailsSheetProps {
   boundary: NtaBoundary | null;
@@ -149,6 +140,7 @@ function DetailsBody({
   onClose,
   onAsk,
   onWidenWindow,
+  onSummaryTap,
   isDesktop,
   view,
   viewValue,
@@ -158,6 +150,7 @@ function DetailsBody({
   onClose: () => void;
   onAsk: (text: string) => void;
   onWidenWindow: () => void;
+  onSummaryTap?: () => void;
 }) {
   const { layer, selectBlock, startWalk, setDetailsOpen, setStreetViewOpen } =
     useMapState();
@@ -204,8 +197,23 @@ function DetailsBody({
 
   return (
     <>
-      <div className={cn("flex items-start justify-between gap-2 border-b border-border/60 p-4 pb-3", isDesktop && cn(DRAG_HANDLE, "cursor-move"))}>
-        <div className="min-w-0">
+      <div className="flex items-start gap-2 border-b border-border/60 p-4 pb-3">
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          aria-label="Back"
+          className="-ml-2 h-7 w-7 shrink-0"
+          onClick={onClose}
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <button
+          type="button"
+          className="min-w-0 flex-1 text-left"
+          onClick={onSummaryTap}
+          aria-label={`Show details for ${boundary.ntaName}`}
+        >
           <div className="truncate text-sm font-semibold">
             {boundary.ntaName}
           </div>
@@ -220,19 +228,7 @@ function DetailsBody({
               {headlineLabel}
             </span>
           </div>
-        </div>
-        {isDesktop ? (
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            aria-label="Close details"
-            className="h-7 w-7 shrink-0"
-            onClick={onClose}
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        ) : null}
+        </button>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4 pt-3">
@@ -522,75 +518,25 @@ function DetailsBody({
   );
 }
 
-export function DetailsSheet(props: DetailsSheetProps) {
-  const {
-    selectedNtaCode,
-    seedChat,
-    setWindow,
-    detailsOpen,
-    detailsExpanded,
-    setDetailsExpanded,
-    setDetailsOpen,
-  } = useMapState();
+/**
+ * The selected neighborhood / block, rendered inside the one map panel
+ * (`MapPanel`). The header is the peek summary; the rest is the details.
+ */
+export function PlaceDetails(
+  props: DetailsSheetProps & { onSummaryTap?: () => void },
+) {
+  const { selectedNtaCode, seedChat, setWindow, selectNta } = useMapState();
   const { boundary, windowId } = props;
-
-  // A map click opens the small card (`MapPeek`); this sheet is the second,
-  // deliberate tap.
-  if (!selectedNtaCode || !boundary || !detailsOpen || !detailsExpanded) {
-    return null;
-  }
-
-  // Closing the sheet goes back to the small card rather than dropping the
-  // selection: the map keeps its rim, and the sheet is one tap away again.
-  const close = () => setDetailsExpanded(false);
-  const ask = (text: string) => {
-    seedChat(text);
-    // On mobile the chat is a bottom sheet too — close the details first.
-    if (!props.isDesktop) setDetailsOpen(false);
-  };
+  if (!selectedNtaCode || !boundary) return null;
   const widen = () => {
     if (windowId !== "12mo") setWindow("12mo");
   };
-
-  const body = (
+  return (
     <DetailsBody
       {...props}
-      onClose={close}
-      onAsk={ask}
+      onClose={() => selectNta(null)}
+      onAsk={seedChat}
       onWidenWindow={widen}
     />
-  );
-
-  if (props.isDesktop) {
-    return (
-      <DraggablePanel enabled>
-      <Card
-        className={cn(
-          // Sits above the dock, which owns the bottom of the screen.
-          "absolute right-4 top-4 z-30 flex max-h-[calc(100%-7rem)] w-[380px] flex-col overflow-hidden p-0",
-        )}
-      >
-        {body}
-      </Card>
-      </DraggablePanel>
-    );
-  }
-
-  return (
-    <Sheet open onOpenChange={(open) => (open ? undefined : close())}>
-      <SheetContent
-        side="bottom"
-        className="flex max-h-[85vh] flex-col overflow-hidden p-0"
-      >
-        <SheetTitle className="sr-only">
-          Neighborhood details for {boundary.ntaName}
-        </SheetTitle>
-        <SheetDescription className="sr-only">
-          Noise, crash, and hour-of-day details for {boundary.ntaName}
-          {props.block ? " and the selected block" : ""}.
-        </SheetDescription>
-        {body}
-      </SheetContent>
-    </Sheet>
   );
 }

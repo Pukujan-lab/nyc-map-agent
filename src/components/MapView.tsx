@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { RestroomCard } from "@/components/RestroomCard";
-import type { RestroomInfo } from "@/lib/map/restrooms";
+import { RestroomDetails } from "@/components/RestroomCard";
+import { usePanel } from "@/lib/store/PanelContext";
 import MapLibreMap, {
   type MapLayerMouseEvent,
   type MapRef,
@@ -192,7 +192,7 @@ export function MapView({
     name: string;
     detail: string;
   } | null>(null);
-  const [restroom, setRestroom] = useState<RestroomInfo | null>(null);
+  const { showPanel } = usePanel();
   const restroomsMod = useRef<typeof import("@/lib/map/restrooms") | null>(null);
   /** So leaving walk mode can restore the overhead camera exactly once. */
   const wasWalking = useRef(false);
@@ -488,7 +488,12 @@ export function MapView({
       }
       const hit = restroomsMod.current?.restroomAt(event.target, event.point.x, event.point.y);
       if (hit) {
-        setRestroom(hit);
+        showPanel({
+          id: `restroom:${hit.name}`,
+          title: hit.name,
+          subtitle: "Public restroom",
+          details: <RestroomDetails restroom={hit} />,
+        });
         return;
       }
       // Clicks stay live at street level: picking the block underfoot opens
@@ -501,7 +506,7 @@ export function MapView({
         selectNta(picked.datum.ntaCode);
       }
     },
-    [pickAt, selectBlock, selectNta, routePicking, setRoutePoint],
+    [pickAt, selectBlock, selectNta, routePicking, setRoutePoint, showPanel],
   );
 
   const handleMoveEnd = useCallback(() => {
@@ -651,7 +656,6 @@ export function MapView({
     if (!ready) return;
     const map = mapRef.current?.getMap();
     if (!map) return;
-    if (!restrooms) setRestroom(null);
     import("@/lib/map/restrooms")
       .then((mod) => {
         restroomsMod.current = mod;
@@ -1082,7 +1086,6 @@ export function MapView({
         style={{ position: "absolute", inset: 0 }}
       />
 
-      {restroom ? <RestroomCard restroom={restroom} onClose={() => setRestroom(null)} /> : null}
 
       {walking ? (
         <WalkControls
