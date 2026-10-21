@@ -25,7 +25,7 @@ export const FACADES = ["rowhouse", "walkup", "prewar", "modern", "tower", "stor
 const SOURCE = "city3d";
 const STOREFRONT_M = 4.5;
 
-export const CITY3D_LAYERS = ["city3d-storefront", "city3d-walls", "city3d-roofs", "city3d-props"] as const;
+export const CITY3D_LAYERS = ["city3d-storefront", "city3d-walls", "city3d-roofs", "city3d-props", "city3d-signs"] as const;
 
 let protocolAdded = false;
 /** Loaded on first use so neither pmtiles nor a second maplibre import lands in the main chunk. */
@@ -138,6 +138,12 @@ export async function installCity3d(map: MapLibreMap): Promise<void> {
     },
     beforeId,
   );
+  // Corner street-name signs (three.js custom layer in this canvas); its own chunk.
+  const { createStreetSignsLayer } = await import("./streetSigns");
+  if (!map.getLayer("city3d-signs")) {
+    map.addLayer(createStreetSignsLayer(), beforeId);
+    map.setLayoutProperty("city3d-signs", "visibility", "none");
+  }
 }
 
 /** True when the textured city actually has buildings loaded for the current view. */
