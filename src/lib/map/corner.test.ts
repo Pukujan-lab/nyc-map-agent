@@ -1,0 +1,26 @@
+import { describe, expect, it } from "vitest";
+import { cornerLabel, distanceFade, nearestCorner, titleStreet } from "./corner";
+
+describe("corner label", () => {
+  it("title-cases sign names", () => {
+    expect(titleStreet("W 44 ST")).toBe("W 44 St");
+    expect(titleStreet("8 AV")).toBe("8 Av");
+  });
+  it("puts the avenue second", () => {
+    expect(cornerLabel("8 AV", "W 44 ST")).toBe("W 44 St at 8 Av");
+    expect(cornerLabel("W 44 ST", "8 AV")).toBe("W 44 St at 8 Av");
+  });
+  it("picks the nearest sign within range", () => {
+    const signs = [
+      { lng: -73.9885, lat: 40.7593, a: "8 AV", b: "W 44 ST" },
+      { lng: -73.9870, lat: 40.7600, a: "8 AV", b: "W 45 ST" },
+    ];
+    expect(nearestCorner(signs, -73.9886, 40.7594)).toBe("W 44 St at 8 Av");
+    expect(nearestCorner(signs, -73.9, 40.7)).toBeNull();
+  });
+  it("fades by distance", () => {
+    expect(distanceFade(10)).toBe(1);
+    expect(distanceFade(160)).toBeCloseTo(0.5);
+    expect(distanceFade(400)).toBe(0);
+  });
+});
