@@ -15,7 +15,7 @@ function devApi(env: Record<string, string>): Plugin {
     name: "dev-api",
     apply: "serve",
     configureServer(server: ViteDevServer) {
-      for (const [k, v] of Object.entries(env)) if (k.startsWith("OCTO_") || k === "MTA_BUSTIME_KEY") process.env[k] ??= v;
+      for (const [k, v] of Object.entries(env)) if (k.startsWith("OCTO_") || k.startsWith("INFERHUB_") || k === "MTA_BUSTIME_KEY") process.env[k] ??= v;
       server.middlewares.use(async (req, res, next) => {
         if (!req.url?.startsWith("/api/")) return next();
         try {
@@ -24,12 +24,22 @@ function devApi(env: Record<string, string>): Plugin {
           };
           const headers = new Headers();
           for (const [k, v] of Object.entries(req.headers)) if (typeof v === "string") headers.set(k, v);
+          const chunks: Buffer[] = [];
+          if (req.method !== "GET" && req.method !== "HEAD") for await (const c of req) chunks.push(c as Buffer);
           const response = await app.fetch(
-            new Request(new URL(req.url, "http://localhost"), { method: req.method, headers }),
+            new Request(new URL(req.url, "http://localhost"), {
+              method: req.method,
+              headers,
+              body: chunks.length ? Buffer.concat(chunks) : undefined,
+            }),
           );
           res.statusCode = response.status;
           response.headers.forEach((value, key) => res.setHeader(key, value));
-          res.end(Buffer.from(await response.arrayBuffer()));
+          // Stream (the agent route is NDJSON); other routes are one chunk anyway.
+          if (!response.body) return res.end();
+          const reader = response.body.getReader();
+          for (let r = await reader.read(); !r.done; r = await reader.read()) res.write(r.value);
+          res.end();
         } catch (err) {
           res.statusCode = 500;
           res.end(JSON.stringify({ error: String(err) }));

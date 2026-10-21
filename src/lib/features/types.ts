@@ -24,6 +24,11 @@ export interface FeatureModule {
   search?: string[];
   /** Flag ids that gate it (first is its own). */
   flags: FlagId[];
+  /**
+   * Lazy UI mounted once on the map page while the flag is on (own JS chunk).
+   * `replacesChat` hands the rail's Ask button (MapState.chatOpen) to it.
+   */
+  overlay?: { load: () => Promise<{ default: ComponentType }>; replacesChat?: boolean };
   /** Hono route paths in server/features/<name>/. */
   routes?: string[];
 }

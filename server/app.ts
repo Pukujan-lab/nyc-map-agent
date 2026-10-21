@@ -7,7 +7,7 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import type { Context } from "hono";
 import { compress } from "hono/compress";
-import { ROUTES } from "./openapi";
+import { AGENT_ROUTE, ROUTES } from "./openapi";
 import * as aggregate from "../api/aggregate";
 import * as area from "../api/area/[block]";
 import * as areas from "../api/areas";
@@ -17,6 +17,7 @@ import * as cityTiles from "../api/city-tiles";
 import * as restrooms from "../api/restrooms";
 import * as sources from "../api/sources";
 import * as street from "../api/street";
+import * as agent from "./features/agent/routes";
 import * as transit from "./features/transit/routes";
 
 type Handler = { GET: (request: Request) => Promise<Response> };
@@ -50,7 +51,7 @@ export const app = new OpenAPIHono({
 // Rollups and boundaries are 0.2-2 MB of JSON; gzip cuts them ~5x.
 app.use("/api/*", async (c, next) => {
   // Tile ranges are already-compressed binary; gzip would break Content-Range.
-  if (c.req.path === "/api/city-tiles" || c.req.path === "/api/block-tiles") return next();
+  if (c.req.path === "/api/city-tiles" || c.req.path === "/api/block-tiles" || c.req.path === "/api/agent") return next();
   return compress()(c, next);
 });
 for (const [path, handler] of routes) {
@@ -65,6 +66,10 @@ for (const [path, handler] of routes) {
 
 /** Every mounted path; scripts/openapi.ts fails if one has no spec in server/openapi.ts. */
 export const MOUNTED_PATHS = routes.map(([path]) => path);
+
+// Smart-mode agent (POST, NDJSON stream; body validated by zod in the handler). Skips gzip above.
+// The handler validates the body itself (zod) so it can stream; the route adds docs.
+app.openapi(AGENT_ROUTE, ((c: Context) => agent.POST(c.req.raw)) as never);
 
 app.doc31("/api/openapi.json", { openapi: "3.1.0", info: { title: "NYC Map Agent API", version: "1" } });
 app.all("/api/*", (c) => c.json({ error: "not_found" }, 404));

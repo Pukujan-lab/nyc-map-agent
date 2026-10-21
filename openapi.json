@@ -26,6 +26,67 @@
         "required": [
           "error"
         ]
+      },
+      "AgentRequest": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "role": {
+                  "type": "string",
+                  "enum": [
+                    "user",
+                    "assistant"
+                  ]
+                },
+                "content": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "role",
+                "content"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 30
+          },
+          "location": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "lon": {
+                "type": "number"
+              },
+              "lat": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "lon",
+              "lat"
+            ]
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "walk",
+              "transit",
+              "drive"
+            ]
+          },
+          "now": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "messages"
+        ]
       }
     },
     "parameters": {}
@@ -630,6 +691,43 @@
           },
           "502": {
             "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent": {
+      "post": {
+        "summary": "Smart-mode trip agent (NDJSON stream of text, tool and map-command events)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "One JSON StreamEvent per line",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid body",
             "content": {
               "application/json": {
                 "schema": {
