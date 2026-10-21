@@ -42,6 +42,30 @@ def tile(name, wall, window, frame=None, cols=2, rows=2, win=(6, 9), sill=None, 
 tile("rowhouse", "#7a4a3a", "#2b3440", frame="#d8cfc0", sill="#c9bba6", win=(6, 10))
 tile("walkup", "#9a4f3c", "#27313d", frame="#e2d9cc", cols=3, win=(5, 9), band="#874233")
 tile("prewar", "#cdbb9c", "#34404d", frame="#efe6d6", cols=3, win=(5, 9), band="#b9a585", sill="#e8dcc7")
+tile("brownstone", "#6b4636", "#252c35", frame="#4f3226", sill="#8a6450", win=(6, 11), band="#5a3a2c")
+tile("limestone", "#d9cfbd", "#3a4652", frame="#c4b79f", cols=3, win=(5, 10), band="#c8bba3", sill="#ece4d4")
+# Cast iron (SoHo/Tribeca): tall arched bays between painted columns.
+im = Image.new("RGBA", (S, S), "#c9c2b3")
+d = ImageDraw.Draw(im)
+for r in range(2):
+    y = r * 16
+    d.rectangle([0, y, S, y + 1], fill="#9d9483")
+    for c in range(3):
+        x0 = 2 + c * 10
+        d.rectangle([x0, y + 4, x0 + 6, y + 15], fill="#2f3943")
+        d.pieslice([x0, y + 1, x0 + 6, y + 7], 180, 360, fill="#2f3943")
+    for c in range(4):
+        d.rectangle([c * 10, y, c * 10 + 1, y + 16], fill="#e6e0d3")
+im.resize((OUT_PX, OUT_PX), Image.NEAREST).save(OUT / "facade-castiron.png")
+# Dark reflective glass for post-1960 supertalls (one floor bands, dense mullions).
+im = Image.new("RGBA", (S, S), "#3f5f78")
+d = ImageDraw.Draw(im)
+for i in range(0, S, 4):
+    d.line([(i, 0), (i, S)], fill="#6f8ea6")
+for j in range(0, S, 16):
+    d.rectangle([0, j, S, j + 1], fill="#26394a")
+d.polygon([(0, 20), (20, 0), (28, 0), (0, 28)], fill="#5a7d99")
+im.resize((OUT_PX, OUT_PX), Image.NEAREST).save(OUT / "facade-glass.png")
 tile("modern", "#9aa3ab", "#3d5366", cols=1, rows=2, win=(28, 7))
 # Glass curtain wall: thin mullions over blue glass.
 im = Image.new("RGBA", (S, S), "#5d86a8")

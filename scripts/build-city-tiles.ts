@@ -61,10 +61,19 @@ const latLonBox = (lat = "latitude", lon = "longitude") =>
 const inBox = (lat: number, lon: number) =>
   lat >= PILOT_BBOX.south && lat <= PILOT_BBOX.north && lon >= PILOT_BBOX.west && lon <= PILOT_BBOX.east;
 
-export type Facade = "rowhouse" | "walkup" | "prewar" | "modern" | "tower" | "school";
+export type Facade =
+  | "rowhouse" | "brownstone" | "walkup" | "prewar" | "limestone" | "castiron" | "modern" | "tower" | "glass" | "school";
+
+/** SoHo / Tribeca cast-iron districts (rough box). */
+export const CAST_IRON_BBOX = { west: -74.0125, south: 40.714, east: -73.996, north: 40.7275 };
+const inCastIron = (lon?: number, lat?: number) =>
+  lon !== undefined && lat !== undefined &&
+  lon >= CAST_IRON_BBOX.west && lon <= CAST_IRON_BBOX.east && lat >= CAST_IRON_BBOX.south && lat <= CAST_IRON_BBOX.north;
 
 /** Picks a facade from PLUTO building class, floors, height and year. */
-export function classify(p: { bldgclass?: string; floors: number; heightM: number; year?: number; school?: boolean }): {
+export function classify(p: {
+  bldgclass?: string; floors: number; heightM: number; year?: number; school?: boolean; lon?: number; lat?: number;
+}): {
   facade: Facade;
   storefront: boolean;
 } {
@@ -73,11 +82,16 @@ export function classify(p: { bldgclass?: string; floors: number; heightM: numbe
   const storefront = /^(S|K)/.test(cls) || ["C7", "D6", "D7", "O8", "RR"].includes(cls);
   let facade: Facade;
   // A DOE school point on the footprint, or PLUTO class W* (educational).
+  const year = p.year ?? 1900;
   if (p.school || k === "W") facade = "school";
+  // Post-1960 supertalls read as glass curtain walls; prewar towers as limestone.
+  else if (p.heightM > 100 && year >= 1960) facade = "glass";
+  else if (p.heightM > 40 && year < 1950) facade = "limestone";
   else if (p.heightM > 70 || (k === "O" && p.floors > 15) || k === "H" && p.floors > 15) facade = "tower";
-  else if ((k === "A" || k === "B" || k === "S") && p.floors <= 4) facade = "rowhouse";
-  else if (k === "C" || (p.floors <= 6 && (p.year ?? 1900) < 1940)) facade = "walkup";
-  else if ((p.year ?? 1900) < 1950) facade = "prewar";
+  else if (inCastIron(p.lon, p.lat) && year < 1915 && p.floors >= 3 && p.floors <= 8 && k !== "A" && k !== "B") facade = "castiron";
+  else if ((k === "A" || k === "B" || k === "S") && p.floors <= 4) facade = year < 1910 ? "brownstone" : "rowhouse";
+  else if (k === "C" || (p.floors <= 6 && year < 1940)) facade = "walkup";
+  else if (year < 1950) facade = "prewar";
   else facade = "modern";
   return { facade, storefront };
 }
@@ -187,6 +201,85 @@ export function schoolFootprints(footprints: Row[], schools: Row[]): Map<number,
   }));
 }
 
+/** Parsed OSM height in metres ("120", "120 m", "394'"), or undefined. */
+export function osmHeight(v: unknown): number | undefined {
+  if (typeof v !== "string") return undefined;
+  const m = v.trim().match(/^(-?[\d.]+)\s*(m|ft|')?$/);
+  if (!m) return undefined;
+  const n = Number(m[1]) * (m[2] === "ft" || m[2] === "'" ? FT : 1);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+interface Part { i: number; base: number; h: number; geom: unknown }
+
+/**
+ * OSM building:part massing (setbacks, spires, podiums): DuckDB spatial puts
+ * each part on the footprint holding its centre; footprints with 2+ tagged
+ * parts are drawn as those parts instead of one box. Parts come from the
+ * Geofabrik New York extract (ODbL): `osmium tags-filter new-york-latest.osm.pbf
+ * w/building:part r/building:part -o /tmp/nyc-parts.pbf`. Without it, boxes stay.
+ */
+export function buildingParts(footprints: Row[]): Map<number, Part[]> {
+  const pbf = process.env.OSM_PARTS_PBF ?? "/tmp/nyc-parts.pbf";
+  const out = new Map<number, Part[]>();
+  if (!existsSync(pbf)) {
+    console.warn(`no OSM parts at ${pbf}: footprints stay single boxes`);
+    return out;
+  }
+  const seq = `/tmp/${AREA}-parts.geojsonseq`, pp = `/tmp/${AREA}-parts.ndjson`, fp = `/tmp/${AREA}-footprints.ndjson`, res = `/tmp/${AREA}-parts-on.csv`;
+  execFileSync("osmium", ["export", pbf, "-f", "geojsonseq", "-o", seq, "--overwrite"], { stdio: ["ignore", "ignore", "inherit"] });
+  const parts: Array<{ base: number; h: number; geom: unknown }> = [];
+  for (const line of readFileSync(seq, "utf8").split("\n")) {
+    const t = line.split(String.fromCharCode(30)).join("").trim();
+    if (!t) continue;
+    const f = JSON.parse(t) as { geometry: { type: string }; properties: Record<string, unknown> };
+    const pr = f.properties;
+    if (!pr["building:part"] || !/Polygon/.test(f.geometry.type)) continue;
+    const lv = Number(pr["building:levels"]), minLv = Number(pr["building:min_level"]);
+    const h = osmHeight(pr.height) ?? (lv > 0 ? lv * 3.3 : undefined);
+    if (!h || h < 2) continue;
+    const base = osmHeight(pr.min_height) ?? (minLv > 0 ? minLv * 3.3 : 0);
+    if (base >= h) continue;
+    parts.push({ base, h, geom: f.geometry });
+  }
+  writeLines(pp, parts.map((q, j) => JSON.stringify({ j, g: JSON.stringify(q.geom) })));
+  if (!existsSync(fp)) writeLines(fp, (function* () {
+    for (let i = 0; i < footprints.length; i++) if (footprints[i].the_geom) yield JSON.stringify({ i, g: JSON.stringify(footprints[i].the_geom) });
+  })());
+  const sql = `INSTALL spatial; LOAD spatial;
+    CREATE TABLE f AS SELECT i, ST_GeomFromGeoJSON(g) AS geom FROM read_json('${fp}', format = 'newline_delimited', columns = {i: 'INTEGER', g: 'VARCHAR'});
+    CREATE TABLE p AS SELECT j, ST_PointOnSurface(ST_GeomFromGeoJSON(g)) AS c FROM read_json('${pp}', format = 'newline_delimited', columns = {j: 'INTEGER', g: 'VARCHAR'});
+    COPY (SELECT f.i, p.j FROM p JOIN f ON ST_Contains(f.geom, p.c)) TO '${res}' (HEADER false);`;
+  execFileSync("duckdb", ["-c", sql], { stdio: ["ignore", "ignore", "inherit"] });
+  for (const l of readFileSync(res, "utf8").split("\n").filter(Boolean)) {
+    const [i, j] = l.split(",").map(Number);
+    const list = out.get(i) ?? [];
+    list.push({ i, ...parts[j] });
+    out.set(i, list);
+  }
+  for (const [i, list] of out) if (list.length < 2) out.delete(i);
+  return out;
+}
+
+/** Rough ring centre (vertex mean) of a footprint, or undefined. */
+function centre(geom: unknown): [number, number] | undefined {
+  const g = geom as { type?: string; coordinates?: unknown } | undefined;
+  const ring = (g?.type === "Polygon" ? (g.coordinates as number[][][])[0]
+    : g?.type === "MultiPolygon" ? (g.coordinates as number[][][][])[0]?.[0] : undefined);
+  if (!ring?.length) return undefined;
+  let x = 0, y = 0;
+  const n = ring.length - 1 || 1;
+  for (let k = 0; k < n; k++) { x += ring[k][0]; y += ring[k][1]; }
+  return [x / n, y / n];
+}
+
+/** Manhattan (and nearby) prewar mid-rises get the classic rooftop wooden water tank. */
+export function wantsWaterTower(p: { facade: Facade; floors: number; year?: number; i: number }): boolean {
+  if (!["walkup", "prewar", "limestone", "castiron"].includes(p.facade)) return false;
+  if (p.floors < 6 || p.floors > 22 || (p.year ?? 1900) >= 1960) return false;
+  return p.i % 3 === 0; // about one roof in three, deterministic
+}
+
 async function main() {
   const t0 = Date.now();
   const [footprints, pluto, trees, hydrants, benches, poles, schools] = await Promise.all([
@@ -202,6 +295,7 @@ async function main() {
     soqlAll("a3nt-yts4", { $select: "the_geom,loc_name", $where: box("the_geom") }),
   ]);
   const schoolIdx = schoolFootprints(footprints, schools);
+  const partsOf = buildingParts(footprints);
   const plutoByBbl = new Map(pluto.map((p) => [String(Number(p.bbl)), p]));
   const lines: string[] = [];
   const counts: Record<string, number> = {};
@@ -216,22 +310,46 @@ async function main() {
     const p = plutoByBbl.get(String(Number(f.base_bbl)));
     const floors = Number(p?.numfloors ?? 0) || Math.max(1, Math.round(heightM / 3.3));
     const year = Number(p?.yearbuilt ?? f.construction_year ?? 0) || undefined;
+    const c = centre(f.the_geom);
     const { facade, storefront } = classify({
-      bldgclass: p?.bldgclass as string | undefined, floors, heightM, year, school: schoolIdx.has(i),
-
+      bldgclass: p?.bldgclass as string | undefined, floors, heightM, year, school: schoolIdx.has(i), lon: c?.[0], lat: c?.[1],
     });
-    add(
-      {
+    const school = schoolIdx.has(i) ? { school: schoolIdx.get(i) } : {};
+    const parts = partsOf.get(i);
+    if (parts) {
+      for (const pt of parts) add({
         type: "Feature",
         tippecanoe: { layer: "buildings", minzoom: 14 },
         properties: {
-          h: Math.round(heightM * 10) / 10, facade, store: storefront ? 1 : 0,
-          ...(schoolIdx.has(i) ? { school: schoolIdx.get(i) } : {}),
+          h: Math.round(pt.h * 10) / 10, base: Math.round(pt.base * 10) / 10, facade,
+          store: storefront && pt.base === 0 ? 1 : 0, ...school,
         },
-        geometry: f.the_geom,
-      },
-      `building:${facade}`,
-    );
+        geometry: pt.geom,
+      }, "building-part");
+      counts[`building:${facade}`] = (counts[`building:${facade}`] ?? 0) + 1;
+    } else {
+      add(
+        {
+          type: "Feature",
+          tippecanoe: { layer: "buildings", minzoom: 14 },
+          properties: { h: Math.round(heightM * 10) / 10, facade, store: storefront ? 1 : 0, ...school },
+          geometry: f.the_geom,
+        },
+        `building:${facade}`,
+      );
+    }
+    // Rooftop water tank: legs, a wooden barrel and a conical cap (props layer, z16).
+    if (c && !parts && wantsWaterTower({ facade, floors, year, i })) {
+      const [lon, lat] = c, top = heightM;
+      for (const a of [0, 1, 2, 3]) {
+        const rot = (a * Math.PI) / 2 + Math.PI / 4;
+        const lx = lon + (Math.cos(rot) * 1.3) / (111_320 * Math.cos((lat * Math.PI) / 180)), ly = lat + (Math.sin(rot) * 1.3) / 111_320;
+        lines.push(JSON.stringify(prop("tankleg", lx, ly, 0.15, 4, top, top + 2.5)));
+      }
+      add(prop("tank", lon, lat, 1.9, 10, top + 2.5, top + 7), "watertower");
+      lines.push(JSON.stringify(prop("tankroof", lon, lat, 2.05, 10, top + 7, top + 7.4)));
+      lines.push(JSON.stringify(prop("tankroof", lon, lat, 1.2, 10, top + 7.4, top + 8.2)));
+    }
   }
   // Small school icons (optional chip): the DOE point itself, with its name.
   for (const sc of schools) {
