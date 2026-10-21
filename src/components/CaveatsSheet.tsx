@@ -118,6 +118,13 @@ export function CaveatsSheet({ boundaries, noise, crashes }: CaveatsSheetProps) 
               Closures are DOT construction closures for today.
             </li>
             <li>
+              <span className="font-medium text-foreground">
+                Parking shows places and rules, not free spaces.
+              </span>{" "}
+              Licensed garages and lots (NYC DCWP), OpenStreetMap parking, and NYC DOT parking signs
+              and meters. No open feed reports live occupancy.
+            </li>
+            <li>
               <span className="font-medium text-foreground">Weather and alerts.</span>{" "}
               Open-Meteo (National Weather Service as fallback), NWS active alerts and FloodNet NYC
               street flood sensors, refreshed every 5–10 minutes.
