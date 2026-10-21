@@ -8,6 +8,7 @@ import { useFeatureToggles } from "@/lib/featureToggles";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { applyReadable } from "@/lib/map/readable";
 import { applyPlaces, usePlaces } from "@/lib/map/places";
+import { hideBasemapStations } from "@/lib/map/basemapStations";
 import { useMapOptions } from "@/lib/map/mapOptions";
 import { applyBuildings } from "@/lib/map/buildings";
 import { THEMES, applyMapTheme, useTheme } from "@/lib/theme";
@@ -442,6 +443,8 @@ export function MapView({
         map.setPaintProperty(l.id, "text-opacity", busFade as never);
       }
     }
+    // The basemap's faint station names duplicate our bold ones: hide them while ours are on.
+    hideBasemapStations(map, opts.stationNames);
     applyPlaces(map, places);
     applyBuildings(map, flatBuildings, t.building);
   }, [ready, styleEpoch, transitFocus, places, opts, theme, flatBuildings]);

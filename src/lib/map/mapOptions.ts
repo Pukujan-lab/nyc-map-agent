@@ -13,9 +13,11 @@ export interface MapOptions {
   /** Subway routes picked in Transit lines; empty = all lines, muted. */
   routes: string[];
   stationsOnly: boolean;
+  /** Our own bold station names with route bullets; hides the basemap's faint ones. On by default. */
+  stationNames: boolean;
 }
 export const OPTIONS_KEY = "nma.mapOptions";
-export const DEFAULT_OPTIONS: MapOptions = { streets: "simple", streetNames: true, buildings: "flat", routes: [], stationsOnly: false };
+export const DEFAULT_OPTIONS: MapOptions = { streets: "simple", streetNames: true, buildings: "flat", routes: [], stationsOnly: false, stationNames: true };
 
 export function readOptions(storage: Pick<Storage, "getItem"> | undefined = globalThis.localStorage): MapOptions {
   try {
@@ -26,6 +28,7 @@ export function readOptions(storage: Pick<Storage, "getItem"> | undefined = glob
       buildings: raw.buildings === "3d" ? "3d" : "flat",
       routes: Array.isArray(raw.routes) ? raw.routes.filter((r): r is string => typeof r === "string") : [],
       stationsOnly: raw.stationsOnly === true,
+      stationNames: raw.stationNames !== false,
     };
   } catch {
     return DEFAULT_OPTIONS;

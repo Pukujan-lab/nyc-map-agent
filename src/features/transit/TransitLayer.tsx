@@ -28,6 +28,7 @@ import { TransitStatusDetails } from "./TransitStatus";
 import { lineOpacity, useMapOptions } from "@/lib/map/mapOptions";
 import { NOTCH_ICON, addBulletImage, bulletId, busBadgeId, busPrefix } from "./bullets";
 import { THEMES, useTheme } from "@/lib/theme";
+import { ALL_MINZOOM, MAJOR_MINZOOM, stationLabelColors, stationLabels } from "./stationLabels";
 import { FOCUS_OPACITY, FOCUS_VEIL_ID, WORLD, useTransitFocus } from "@/lib/map/transitFocus";
 
 /** Layers a click on the map should hand to transit instead of the area pick. */
@@ -288,7 +289,16 @@ export default function TransitLayer() {
     const id = window.setInterval(() => setHitFc({ type: "FeatureCollection", features: [...display.current.values()].map((v) => ({ type: "Feature", properties: { key: v.key, label: v.label }, geometry: { type: "Point", coordinates: [v.lon, v.lat] } })) }), 1000);
     return () => window.clearInterval(id);
   }, [three]);
-  const theme = THEMES[useTheme()];
+  const themeId = useTheme();
+  const theme = THEMES[themeId];
+  const labelInk = stationLabelColors(themeId);
+  const labelFc = useMemo(() => {
+    const sub = statics.find((s) => s.system === "subway");
+    if (!sub) return EMPTY;
+    const colors = Object.fromEntries(Object.entries(sub.routes).map(([r, info]) => [r, info.color]));
+    return stationLabels(sub.stations.features, colors);
+  }, [staticKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const alerted = useMemo(() => alertedRoutes(alerts.data?.alerts), [alerts.data]);
   const vehicleFc = useMemo<GeoJSON.FeatureCollection>(() => ({
     type: "FeatureCollection",
@@ -474,6 +484,31 @@ export default function TransitLayer() {
       <Source id="transit-stations" type="geojson" data={stations}>
         <Layer id="transit-station" type="circle" minzoom={11}
           paint={{ "circle-color": "#ffffff", "circle-stroke-color": "#6b6a66", "circle-stroke-width": 1, "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 1.5, 16, 4] }} />
+      </Source>
+      <Source id="transit-station-labels" type="geojson" data={opts.stationNames ? labelFc : EMPTY}>
+        {/* Bold ink name right of the dot, route bullets beneath; drawn above streets and places, so it wins label collisions. */}
+        <Layer id="transit-station-label" type="symbol" minzoom={MAJOR_MINZOOM}
+          filter={["any", ["get", "major"], [">=", ["zoom"], ALL_MINZOOM]]}
+          layout={{
+            "text-field": ["get", "name"],
+            "text-font": ["Noto Sans Bold"],
+            "text-size": ["interpolate", ["linear"], ["zoom"], 14, 12, 17, 15],
+            "text-anchor": "bottom-left",
+            "text-offset": [0.7, 0.1],
+            "text-max-width": 9,
+            "text-justify": "left",
+            "icon-image": ["get", "bullets"],
+            "icon-anchor": "top-left",
+            "icon-offset": [6, 1],
+            "icon-size": ["interpolate", ["linear"], ["zoom"], 14, 0.8, 16, 1, 18, 1.2],
+            // Placed even next to live train bullets (which sit above and would otherwise always win);
+            // it still claims its space, so street and place names below give way to it.
+            "text-allow-overlap": true,
+            "icon-allow-overlap": true,
+            "symbol-sort-key": ["case", ["get", "major"], 0, 1],
+            "symbol-z-order": "source",
+          }}
+          paint={{ "text-color": labelInk.ink, "text-halo-color": labelInk.halo, "text-halo-width": 2, "text-halo-blur": 0.5 }} />
       </Source>
       <Source id="transit-entrances" type="geojson" data={entrances}>
         {/* Overhead: a small green dot. Street level: the 3D kit draws it; this stays as an invisible tap target. */}

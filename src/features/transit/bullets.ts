@@ -118,10 +118,30 @@ function notch(): ImageData | null {
   return ctx.getImageData(0, 0, 24, 24);
 }
 
+/** A row of route bullets under a station name: "2:EE352E,3:EE352E,...". */
+function drawStrip(spec: string): ImageData | null {
+  const items = spec.split(",").filter(Boolean).map((x) => x.split(":"));
+  const ctx = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+  if (!ctx || !items.length) return null;
+  const d = 30, gap = 3;
+  ctx.canvas.width = items.length * (d + gap) + gap;
+  ctx.canvas.height = d + gap * 2;
+  items.forEach(([route, hex], i) => {
+    const one = draw(route, `#${hex || "808183"}`, false);
+    if (!one) return;
+    const tmp = document.createElement("canvas");
+    tmp.width = tmp.height = SIZE;
+    tmp.getContext("2d")?.putImageData(one, 0, 0);
+    ctx.drawImage(tmp, gap + i * (d + gap), gap, d, d);
+  });
+  return ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height);
+}
+
 /** styleimagemissing handler: draws bullets on demand and the notch once. */
 export function addBulletImage(map: MaplibreMap, id: string): void {
   if (map.hasImage(id)) return;
   if (id === NOTCH_ICON) { const n = notch(); if (n) map.addImage(id, n, { pixelRatio: 2 }); return; }
+  if (id.startsWith("stnbullets|")) { const img = drawStrip(id.slice("stnbullets|".length)); if (img) map.addImage(id, img, { pixelRatio: 2 }); return; }
   const [kind, text = "", hex = "808080", alert] = id.split("|");
   const img = kind === "busbadge" ? drawBus(text, `#${hex}`, alert === "1") : kind === "bullet" ? draw(text, `#${hex}`, alert === "1") : null;
   if (img) map.addImage(id, img, { pixelRatio: 2 });

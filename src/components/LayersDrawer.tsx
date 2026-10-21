@@ -248,13 +248,14 @@ export function LayersDrawer({
           ))}
         </Section>
 
-        <Section title="Transit lines" note={opts.routes.length ? `${opts.routes.length} picked` : "all, muted"} hidden={!routeItems.length && !match("stations only")}>
+        <Section title="Transit lines" note={opts.routes.length ? `${opts.routes.length} picked` : "all, muted"} hidden={!routeItems.length && !match("stations only") && !match("station names")}>
           <div className="flex flex-wrap gap-1.5">
             {routeItems.map((r) => (
               <Pill key={r} on={opts.routes.includes(r)} onClick={() => toggleRoute(r)} className="h-9 w-11 px-0">{r}</Pill>
             ))}
           </div>
           <div className="flex flex-wrap gap-2">
+            <Pill on={opts.stationNames} onClick={() => setOptions({ stationNames: !opts.stationNames })}>Station names</Pill>
             <Pill on={opts.stationsOnly} onClick={() => setOptions({ stationsOnly: !opts.stationsOnly })}>Stations only (hide vehicles)</Pill>
             {opts.routes.length ? <Pill onClick={() => setOptions({ routes: [] })}>Show all lines</Pill> : null}
           </div>

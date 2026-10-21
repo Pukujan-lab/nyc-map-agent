@@ -16,3 +16,10 @@ describe("map options", () => {
     expect(lineOpacity(["L"], false)).toEqual(["case", ["in", ["get", "route"], ["literal", ["L"]]], 1, 0.12]);
   });
 });
+
+describe("station names option", () => {
+  it("is on by default and remembers off", () => {
+    expect(readOptions({ getItem: () => null }).stationNames).toBe(true);
+    expect(readOptions({ getItem: () => JSON.stringify({ stationNames: false }) }).stationNames).toBe(false);
+  });
+});
