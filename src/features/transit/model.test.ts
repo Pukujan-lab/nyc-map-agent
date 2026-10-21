@@ -22,3 +22,16 @@ describe("transit model", () => {
     expect(a.map((x) => x.direction)).toEqual(["Downtown", "Uptown"]);
   });
 });
+
+import { trackHeightProfile } from "./model";
+describe("track height profile", () => {
+  it("ramps up to the Manhattan Bridge deck and back down", () => {
+    const c: Array<[number, number]> = [[-74.0, 40.718], [-73.9944, 40.7136], [-73.9906, 40.7075], [-73.9862, 40.7032], [-73.98, 40.69]];
+    const m = [0, 700, 1440, 2040, 3500];
+    const s = { ...sys, shapes: { B: { c, m, g: ["underground", "underground", "underground", "underground", "underground"] as const } } } as unknown as StaticSystem;
+    const p = trackHeightProfile(s, "B")!;
+    expect(p.h[2]).toBe(40);
+    expect(p.h[0]).toBeLessThan(40);
+    expect(p.grade[2]).toBe("elevated");
+  });
+});

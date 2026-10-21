@@ -36,7 +36,8 @@ Keep each move its own PR; rebase on main right before merging.
 | restrooms | moved (`src/features/restrooms`, `server/features/restrooms`, `ingest/restrooms`), shims at old paths | not under active edit |
 | directions | not moved | `src/lib/api/routing.ts` exports `LngLat`, used by core (`DataViewContext`, `geosearch`); first lift `LngLat` into `src/lib/geo`. `RoutePanel`/`AddressCombobox` are under active edit (#49) |
 | street signs | stays core | `streetSigns.ts` is the one shared three.js custom layer, not a feature; `build:sign-tiles` is part of the city-tiles pipeline |
-| transit (#56), places/schools/storefronts (#55, #67), real blocks (#50, #59), camera (#47), mobile panel (#66) | build new code directly in `src/features/<name>/` | in flight by other workers |
+| transit | built in `src/features/transit`, `server/features/transit`; vehicles in shared `src/lib/map/threeLayer.ts` | — |
+| places/schools/storefronts (#55, #67), real blocks (#50, #59), camera (#47), mobile panel (#66) | build new code directly in `src/features/<name>/` | in flight by other workers |
 | noise / crashes / data registry, city3d, street level, chat | not moved | core of `MapView` (1100+ lines, edited constantly); move layer installers out one at a time later |
 
 ## Performance budget (CI: `pnpm build:size && pnpm size`)

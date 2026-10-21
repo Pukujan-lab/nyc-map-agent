@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { flushSync } from "react-dom";
+import { createRoot } from "react-dom/client";
 import { Layer, Source, useMap } from "react-map-gl/maplibre";
 import type { Map as MaplibreMap, MapLayerMouseEvent } from "maplibre-gl";
 import { Accessibility, Navigation2, Wrench } from "lucide-react";
@@ -7,29 +8,27 @@ import { toast } from "sonner";
 import {
   estimateTrain,
   stationOf,
+  structureAt,
   viaductPiers,
   viaductPolygons,
-  VIADUCT_TOP,
   type StaticSystem,
   type SystemId,
   type Vehicle,
-} from "@/lib/transit/model";
-import { useAlerts, useBuses, useStarred, useTransitData, useTransitMeta, useTransitToggles } from "@/lib/transit/hooks";
+} from "./model";
+import { useAlerts, useBuses, useStarred, useTransitData, useTransitMeta, useTransitToggles } from "./hooks";
 import { useMapState } from "@/lib/store/MapStateContext";
+import { useFlag } from "@/lib/flags";
 import { usePanel, usePanelChip, usePanelSearch, type SearchProvider } from "@/lib/store/PanelContext";
-import { setFollowed, useFollowed } from "@/lib/transit/follow";
-import { SYSTEM_LABELS } from "@/lib/transit/model";
+import { setFollowed, useFollowed } from "./follow";
+import { SYSTEM_LABELS } from "./model";
 import { StationDetails, VehicleDetails } from "./TransitCard";
 import { TransitStatusDetails } from "./TransitStatus";
 
 /** Layers a click on the map should hand to transit instead of the area pick. */
-export const TRANSIT_CLICK_LAYERS = ["transit-vehicle-2d", "transit-vehicle-hit", "transit-access", "transit-entrance", "transit-station"];
-export function hitsTransit(map: MaplibreMap, point: { x: number; y: number }): boolean {
-  const layers = TRANSIT_CLICK_LAYERS.filter((id) => map.getLayer(id));
-  return layers.length > 0 && map.queryRenderedFeatures([point.x, point.y], { layers }).length > 0;
-}
+const TRANSIT_CLICK_LAYERS = ["transit-vehicle-2d", "transit-vehicle-hit", "transit-access", "transit-entrance", "transit-station"];
 
 const MAX_VEHICLES = 400;
+const midpoint = (c: GeoJSON.Position[]) => c[Math.floor(c.length / 2)] as [number, number];
 const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 const ICONS: Record<string, { node: JSX.Element; sdf: boolean }> = {
   "transit-arrow": { node: <Navigation2 fill="#fff" color="#fff" strokeWidth={1.5} size={48} />, sdf: true },
@@ -42,7 +41,13 @@ function addIcon(map: MaplibreMap, id: string) {
   if (!def || map.hasImage(id)) return;
   const img = new Image(48, 48);
   img.onload = () => { if (!map.hasImage(id)) map.addImage(id, img, { sdf: def.sdf, pixelRatio: 2 }); };
-  img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(renderToStaticMarkup(def.node))}`;
+  // Render the lucide icon once to SVG markup (no server renderer in the bundle).
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  flushSync(() => root.render(def.node));
+  const svg = host.innerHTML;
+  root.unmount();
+  img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
 /** Slice of a route shape between two stops, for marking planned work on the exact segment. */
@@ -64,7 +69,8 @@ const AGENCY: Record<string, SystemId> = { MTASBWY: "subway", LI: "lirr", MNR: "
  * street level, planned-work wrenches, and vehicles — oriented arrows in 2D,
  * extruded bodies in 3D (on the viaduct when elevated, x-ray when underground).
  */
-export function TransitLayer() {
+export default function TransitLayer() {
+  const enabled = useFlag("transit");
   const { current } = useMap();
   const map = current?.getMap();
   const { tilted, walking } = useMapState();
@@ -117,7 +123,7 @@ export function TransitLayer() {
   const lines = useMemo<GeoJSON.FeatureCollection>(() => ({
     type: "FeatureCollection",
     // Commuter rail is drawn at grade; only the subway gets viaducts and tunnels.
-    features: statics.flatMap((s) => s.lines.features.map((f) => ({ ...f, properties: { ...f.properties, system: s.system, grade: s.system === "subway" ? f.properties.grade : "grade" } }))),
+    features: statics.flatMap((s) => s.lines.features.map((f) => ({ ...f, properties: { ...f.properties, system: s.system, grade: s.system !== "subway" ? "grade" : structureAt(midpoint(f.geometry.coordinates)) ? "elevated" : f.properties.grade } }))),
   }), [staticKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const stations = useMemo<GeoJSON.FeatureCollection>(() => ({
     type: "FeatureCollection",
@@ -256,7 +262,7 @@ export function TransitLayer() {
     features: vehicles.map((v) => ({ type: "Feature", properties: { key: v.key, color: v.color, bearing: v.bearing, grade: v.grade, label: v.label }, geometry: { type: "Point", coordinates: [v.lon, v.lat] } })),
   }), [vehicles]);
   // 3D: one three.js custom layer in the map's canvas, loaded on first tilt.
-  const v3d = useRef<ReturnType<typeof import("@/lib/map/vehicles3d").createVehicleLayer> | null>(null);
+  const v3d = useRef<ReturnType<typeof import("@/lib/map/threeLayer").createVehicleLayer> | null>(null);
   useEffect(() => {
     if (!map || !three) return;
     let cancelled = false;
@@ -264,7 +270,7 @@ export function TransitLayer() {
       if (cancelled || !v3d.current || map.getLayer(v3d.current.layer.id)) return;
       try { map.addLayer(v3d.current.layer); } catch { /* style mid-swap; retried on the next styledata */ }
     };
-    import("@/lib/map/vehicles3d").then(({ createVehicleLayer }) => {
+    import("@/lib/map/threeLayer").then(({ createVehicleLayer }) => {
       v3d.current ??= createVehicleLayer();
       ensure();
     });
@@ -275,7 +281,14 @@ export function TransitLayer() {
       if (v3d.current && map.getLayer(v3d.current.layer.id)) map.removeLayer(v3d.current.layer.id);
     };
   }, [map, three]);
-  useEffect(() => { if (three) v3d.current?.update(vehicles, walking); }, [vehicles, three, walking]);
+  useEffect(() => {
+    if (!three) return;
+    v3d.current?.update(
+      vehicles
+        .filter((v) => !(walking && v.grade === "underground")) // street level shows entrances instead
+        .map((v) => ({ lon: v.lon, lat: v.lat, bearing: v.bearing, z: v.z ?? 0, color: v.system === "bus" ? "#f8fafc" : v.color, kind: v.system === "bus" ? "bus" : "train", ghost: v.grade === "underground" })),
+    );
+  }, [vehicles, three, walking]);
 
   // Follow mode: ease the camera onto the tweened vehicle; drag or Esc exits.
   const followed = following ? vehicles.find((v) => v.key === selectedKey) : undefined;
@@ -329,7 +342,7 @@ export function TransitLayer() {
     }
   }, [alerts.data, stars]);
 
-  if (!rail.length && !busOn) return null;
+  if (!enabled || (!rail.length && !busOn)) return null;
 
   const hide2d = three;
   return (
@@ -346,11 +359,11 @@ export function TransitLayer() {
       </Source>
       <Source id="transit-viaduct" type="geojson" data={three ? viaduct : EMPTY}>
         <Layer id="transit-viaduct" type="fill-extrusion" minzoom={13}
-          paint={{ "fill-extrusion-color": ["get", "color"], "fill-extrusion-base": VIADUCT_TOP - 1.2, "fill-extrusion-height": VIADUCT_TOP, "fill-extrusion-opacity": 0.9 }} />
+          paint={{ "fill-extrusion-color": ["get", "color"], "fill-extrusion-base": ["-", ["get", "top"], 1.2], "fill-extrusion-height": ["get", "top"], "fill-extrusion-opacity": 0.9 }} />
       </Source>
       <Source id="transit-piers" type="geojson" data={three ? piers : EMPTY}>
         <Layer id="transit-pier" type="fill-extrusion" minzoom={14}
-          paint={{ "fill-extrusion-color": "#6b7280", "fill-extrusion-base": 0, "fill-extrusion-height": VIADUCT_TOP - 1.2, "fill-extrusion-opacity": 0.9 }} />
+          paint={{ "fill-extrusion-color": "#6b7280", "fill-extrusion-base": 0, "fill-extrusion-height": ["-", ["get", "top"], 1.2], "fill-extrusion-opacity": 0.9 }} />
       </Source>
       <Source id="transit-stations" type="geojson" data={stations}>
         <Layer id="transit-station" type="circle" minzoom={11}

@@ -1,5 +1,6 @@
 /**
- * Live transit vehicles as real 3D meshes: ONE MapLibre custom layer drawing
+ * Shared three.js custom layer (the only place besides streetSigns.ts that may
+ * import three). Today it draws moving vehicles as real 3D meshes: ONE MapLibre custom layer drawing
  * three.js into the map's own canvas and depth buffer (no second canvas, no
  * deck.gl). Low-poly procedural bodies (a tapered car / bus box), instanced so
  * the whole fleet is two draw calls, tinted per line. Underground trains are
@@ -8,9 +9,19 @@
  */
 import * as THREE from "three";
 import { MercatorCoordinate, type CustomLayerInterface, type Map as MaplibreMap } from "maplibre-gl";
-import { VIADUCT_TOP, type Vehicle } from "@/lib/transit/model";
 
-export const VEHICLES_3D_LAYER = "transit-vehicles-3d";
+/** One moving body. `z` is metres above ground; `ghost` draws it translucent through the ground. */
+export interface VehicleInstance {
+  lon: number;
+  lat: number;
+  bearing: number;
+  z: number;
+  color: string;
+  kind: "train" | "bus";
+  ghost: boolean;
+}
+
+export const VEHICLES_3D_LAYER = "three-vehicles";
 const CAP = 400;
 
 function bodyGeometry(length: number, width: number, height: number): THREE.BufferGeometry {
@@ -74,19 +85,18 @@ export function createVehicleLayer() {
   };
 
   /** Push the tweened vehicles (already culled and capped by the caller). */
-  function update(vehicles: Vehicle[], walking: boolean) {
+  function update(vehicles: VehicleInstance[]) {
     let t = 0, b = 0, g = 0;
     for (const v of vehicles) {
-      const ghost = v.grade === "underground";
-      if (ghost && walking) continue; // street level shows entrances instead
-      const mesh = v.system === "bus" ? buses : ghost ? ghosts : trains;
-      const i = v.system === "bus" ? b++ : ghost ? g++ : t++;
+      const ghost = v.ghost;
+      const mesh = v.kind === "bus" ? buses : ghost ? ghosts : trains;
+      const i = v.kind === "bus" ? b++ : ghost ? g++ : t++;
       if (i >= CAP) continue;
       const mc = MercatorCoordinate.fromLngLat([v.lon, v.lat], 0);
-      p.set((mc.x - origin.x) / s, -(mc.y - origin.y) / s, v.grade === "elevated" ? VIADUCT_TOP : 0);
+      p.set((mc.x - origin.x) / s, -(mc.y - origin.y) / s, v.z);
       q.setFromAxisAngle(zAxis, (-v.bearing * Math.PI) / 180);
       mesh.setMatrixAt(i, m4.compose(p, q, one));
-      mesh.setColorAt(i, color.set(v.system === "bus" ? "#f8fafc" : v.color));
+      mesh.setColorAt(i, color.set(v.color));
     }
     for (const [mesh, n] of [[trains, t], [buses, b], [ghosts, g]] as const) {
       mesh.count = Math.min(n, CAP);

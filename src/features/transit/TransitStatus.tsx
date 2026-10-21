@@ -2,8 +2,8 @@ import { Accessibility, Bell, Star, Wrench } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { arrivalsAt, minutesUntil, SYSTEM_LABELS, RAIL_SYSTEMS, type SystemId } from "@/lib/transit/model";
-import { useAlerts, useNow, useStarred, useTransitData } from "@/lib/transit/hooks";
+import { arrivalsAt, minutesUntil, SYSTEM_LABELS, RAIL_SYSTEMS, type SystemId } from "./model";
+import { useAlerts, useNow, useStarred, useTransitData } from "./hooks";
 import { OutageRow, RouteBullet } from "./TransitCard";
 
 const AGENCY: Record<string, SystemId> = { MTASBWY: "subway", LI: "lirr", MNR: "mnr" };

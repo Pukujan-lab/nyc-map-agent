@@ -1,8 +1,8 @@
 import { Accessibility, Crosshair, Star, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { arrivalsAt, directionLabel, estimateTrain, minutesUntil, stationOf, type LiveSystem, type StaticSystem, type SystemId, type Vehicle } from "@/lib/transit/model";
-import { useAlerts, useBuses, useNow, useStarred, useTransitData, type Outage } from "@/lib/transit/hooks";
-import { setFollowed, useFollowed } from "@/lib/transit/follow";
+import { arrivalsAt, directionLabel, estimateTrain, minutesUntil, stationOf, type LiveSystem, type StaticSystem, type SystemId, type Vehicle } from "./model";
+import { useAlerts, useBuses, useNow, useStarred, useTransitData, type Outage } from "./hooks";
+import { setFollowed, useFollowed } from "./follow";
 
 type Data = Partial<Record<SystemId, { stat?: StaticSystem; live?: LiveSystem }>>;
 

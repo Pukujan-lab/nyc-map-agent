@@ -35,6 +35,8 @@ export type Vehicle = {
   lat: number;
   bearing: number;
   grade: Grade;
+  /** Metres above ground (track height profile); 0 for buses. */
+  z?: number;
   dir: number | null;
   nextStop?: string;
   eta?: number;
@@ -60,7 +62,7 @@ function pointAt(shape: StaticSystem["shapes"][string], m: number) {
   const a = c[lo], b = c[hi];
   const f = ms[hi] === ms[lo] ? 0 : Math.min(1, Math.max(0, (m - ms[lo]) / (ms[hi] - ms[lo])));
   const lon = a[0] + (b[0] - a[0]) * f, lat = a[1] + (b[1] - a[1]) * f;
-  return { lon, lat, grade: g[lo], ax: a, bx: b };
+  return { lon, lat, grade: g[lo], lo, hi, f };
 }
 
 function bearingOf(a: [number, number], b: [number, number]) {
@@ -103,6 +105,9 @@ export function estimateTrain(sys: StaticSystem, trip: LiveTrip, now: number): V
     forward = 1;
   }
   const here = pointAt(shape, m);
+  const prof = trackHeightProfile(sys, trip.route);
+  const z = prof ? prof.h[here.lo] + (prof.h[here.hi] - prof.h[here.lo]) * here.f : 0;
+  const grade = prof ? prof.grade[here.lo] : here.grade;
   const ahead = pointAt(shape, m + forward * 30);
   const route = sys.routes[trip.route];
   return {
@@ -114,7 +119,8 @@ export function estimateTrain(sys: StaticSystem, trip: LiveTrip, now: number): V
     lon: here.lon,
     lat: here.lat,
     bearing: bearingOf([here.lon, here.lat], [ahead.lon, ahead.lat]),
-    grade: here.grade,
+    grade,
+    z,
     dir: trip.dir,
     nextStop: next.id,
     eta: next.t,
@@ -165,11 +171,12 @@ export function viaductPolygons(lines: StaticSystem["lines"]): GeoJSON.FeatureCo
     for (let i = 1; i < c.length; i++) {
       const [a, b] = [c[i - 1], c[i]];
       const mid: [number, number] = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      if (structureAt(mid, 120)?.kind === "bridge") continue; // the bridge model carries the track
       const dx = (b[0] - a[0]) * 111_320 * Math.cos((a[1] * Math.PI) / 180), dy = (b[1] - a[1]) * 111_320;
       const len = Math.hypot(dx, dy);
       if (len < 1) continue;
       const brg = ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
-      features.push({ type: "Feature", properties: { color: f.properties.color }, geometry: bodyPolygonFlat(mid[0], mid[1], brg, len + 1, 7) });
+      features.push({ type: "Feature", properties: { color: f.properties.color, top: structureAt(mid)?.deck ?? VIADUCT_TOP }, geometry: bodyPolygonFlat(mid[0], mid[1], brg, len + 1, 7) });
     }
   }
   return { type: "FeatureCollection", features };
@@ -185,14 +192,73 @@ export function viaductPiers(lines: StaticSystem["lines"]): GeoJSON.FeatureColle
   for (const f of lines.features) {
     if (f.properties.grade !== "elevated") continue;
     let acc = 0;
+    if (structureAt(f.geometry.coordinates[0] as [number, number], 120)?.kind === "bridge") continue;
     const c = f.geometry.coordinates;
     for (let i = 1; i < c.length; i++) {
       const dx = (c[i][0] - c[i - 1][0]) * 111_320 * Math.cos((c[i][1] * Math.PI) / 180), dy = (c[i][1] - c[i - 1][1]) * 111_320;
       acc += Math.hypot(dx, dy);
       if (acc < 40) continue;
       acc = 0;
-      features.push({ type: "Feature", properties: {}, geometry: bodyPolygonFlat(c[i][0], c[i][1], 0, 1.2, 1.2) });
+      features.push({ type: "Feature", properties: { top: structureAt(c[i] as [number, number])?.deck ?? VIADUCT_TOP }, geometry: bodyPolygonFlat(c[i][0], c[i][1], 0, 1.2, 1.2) });
     }
   }
   return { type: "FeatureCollection", features };
+}
+
+/**
+ * Hand-placed rail structures the OSM grade match gets wrong or that need a
+ * real deck height. Bridges are drawn by the bridges work in the shared
+ * threeLayer, so we draw no viaduct there; trains just ride at `deck`.
+ */
+export type Structure = { id: string; kind: "bridge" | "viaduct"; deck: number; line: Array<[number, number]> };
+export const STRUCTURES: Structure[] = [
+  // Subway tracks on the Manhattan Bridge (B D N Q), lower level ~40 m over the river.
+  { id: "manhattan-bridge", kind: "bridge", deck: 40, line: [[-73.9944, 40.7136], [-73.9906, 40.7075], [-73.9862, 40.7032]] },
+  // J M Z on the Williamsburg Bridge, centre tracks ~38 m.
+  { id: "williamsburg-bridge", kind: "bridge", deck: 38, line: [[-73.9807, 40.7166], [-73.9712, 40.7135], [-73.9617, 40.7104]] },
+  // 1 train's Manhattan Valley Viaduct over 125 St, ~16 m.
+  { id: "manhattan-valley-viaduct", kind: "viaduct", deck: 16, line: [[-73.9620, 40.8105], [-73.9585, 40.8158], [-73.9561, 40.8205]] },
+];
+
+function metresToSegment(p: [number, number], a: [number, number], b: [number, number]): number {
+  const k = Math.cos((p[1] * Math.PI) / 180) * 111_320;
+  const ax = (a[0] - p[0]) * k, ay = (a[1] - p[1]) * 111_320, bx = (b[0] - p[0]) * k, by = (b[1] - p[1]) * 111_320;
+  const dx = bx - ax, dy = by - ay;
+  const t = Math.max(0, Math.min(1, -(ax * dx + ay * dy) / (dx * dx + dy * dy || 1)));
+  return Math.hypot(ax + dx * t, ay + dy * t);
+}
+export function structureAt(p: [number, number], within = 60): Structure | undefined {
+  return STRUCTURES.find((s) => s.line.some((a, i) => i > 0 && metresToSegment(p, s.line[i - 1], a) < within));
+}
+
+const MAX_GRADE = 0.035; // 3.5 % ramps from portals / up to decks
+const profiles = new WeakMap<object, { h: Float32Array; grade: Grade[] }>();
+/**
+ * Track height (metres above ground) for every vertex of a route's shape:
+ * underground 0 (drawn as ghosts), at grade 0, elevated VIADUCT_TOP, bridges
+ * and hand-placed viaducts at their deck, with ramps no steeper than 3.5 %
+ * so trains climb out of the tunnel portal, hold the deck, and descend.
+ * Bridge models can call this to align their track decks.
+ */
+export function trackHeightProfile(sys: StaticSystem, route: string): { m: number[]; h: Float32Array; grade: Grade[] } | null {
+  const shape = sys.shapes[route];
+  if (!shape) return null;
+  let p = profiles.get(shape);
+  if (!p) {
+    const n = shape.c.length, h = new Float32Array(n), grade = shape.g.slice();
+    for (let i = 0; i < n; i++) {
+      const s = sys.system === "subway" ? structureAt(shape.c[i]) : undefined;
+      if (s) { grade[i] = "elevated"; h[i] = s.deck; }
+      else if (sys.system !== "subway") grade[i] = "grade";
+      else h[i] = grade[i] === "elevated" ? VIADUCT_TOP : 0;
+    }
+    // Ramps: a forward and a backward max-plus pass.
+    for (let i = 1; i < n; i++) h[i] = Math.max(h[i], h[i - 1] - MAX_GRADE * (shape.m[i] - shape.m[i - 1]));
+    for (let i = n - 2; i >= 0; i--) h[i] = Math.max(h[i], h[i + 1] - MAX_GRADE * (shape.m[i + 1] - shape.m[i]));
+    // A ramp out of a tunnel is above ground: treat it as elevated, not a ghost.
+    for (let i = 0; i < n; i++) if (h[i] > 1 && grade[i] === "underground") grade[i] = "elevated";
+    p = { h, grade };
+    profiles.set(shape, p);
+  }
+  return { m: shape.m, ...p };
 }

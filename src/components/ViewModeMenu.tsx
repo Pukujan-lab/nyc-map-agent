@@ -17,6 +17,7 @@ import { LAYER_IDS, LAYER_LABELS, LAYER_SHORT_LABELS } from "@/lib/layers";
 import { useDataView } from "@/lib/store/DataViewContext";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { useFlags } from "@/lib/flags";
+import { FEATURES } from "@/features";
 import { cn } from "@/lib/utils";
 
 /**
@@ -134,6 +135,7 @@ export function ViewModeMenu({
             </>
           ) : null}
         </DropdownMenuRadioGroup>
+        {FEATURES.map((f) => (f.LayersMenu ? <f.LayersMenu key={f.id} /> : null))}
         <DropdownMenuSeparator />
         {flags.city3d ? (
         <DropdownMenuCheckboxItem checked={city3d} onCheckedChange={(on) => setCity3d(on === true)}>

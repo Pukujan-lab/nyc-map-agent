@@ -9,7 +9,7 @@
  *   /api/transit/alerts   → MTA service alerts + elevator/escalator outages
  */
 import GtfsRealtimeBindings from "gtfs-realtime-bindings";
-import { json } from "./_lib/http";
+import { json } from "../../../api/_lib/http";
 
 const { FeedMessage } = GtfsRealtimeBindings.transit_realtime;
 const MTA = "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/";
