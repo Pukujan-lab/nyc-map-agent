@@ -2,7 +2,7 @@ import { z } from "zod";
 import { octoQuery } from "./_lib/octo";
 import { fail, json, parseQuery } from "./_lib/http";
 
-const Query = z.object({ level: z.enum(["nta", "cd"]).default("nta") });
+export const Query = z.object({ level: z.enum(["nta", "cd"]).default("nta") });
 
 /**
  * GET /api/areas?level=nta|cd: simplified boundary GeoJSON from Octo

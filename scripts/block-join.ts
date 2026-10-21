@@ -31,6 +31,8 @@ export interface BlockJoin {
 const TOP = 3;
 /** Street-bed points snap to a block face this close (degrees; ~40 m). */
 const NEAR_DEG = 0.0004;
+/** A second block within 1.5x the nearest distance plus this (~8 m) faces the same street. */
+const FACING_SLACK_DEG = 0.00008;
 
 /**
  * @param blocksGeoJson path of nyc-blocks.geojson (id, boro, block, label)
@@ -40,12 +42,12 @@ export async function blockJoin(blocksGeoJson: string, ntaGeoJson: string): Prom
   const con: DuckDBConnection = await spatialDuck();
   await con.run(`
     CREATE TABLE blocks AS
-      SELECT id::int AS id, label, geom FROM ST_Read(${sqlString(blocksGeoJson)});
+      SELECT id::int AS id, label, coalesce(no_snap, 0)::int AS no_snap, coalesce(area_m2, 0)::int AS area_m2, geom FROM ST_Read(${sqlString(blocksGeoJson)});
     CREATE INDEX blocks_rtree ON blocks USING RTREE (geom);
     CREATE TABLE nta AS SELECT nta2020, geom FROM ST_Read(${sqlString(ntaGeoJson)});
     -- A block's neighborhood is the one holding a point inside it.
     CREATE TABLE block_meta AS
-      SELECT b.id, b.label, ST_XMin(b.geom) AS w, ST_YMin(b.geom) AS s, ST_XMax(b.geom) AS e, ST_YMax(b.geom) AS n,
+      SELECT b.id, b.label, b.area_m2, ST_XMin(b.geom) AS w, ST_YMin(b.geom) AS s, ST_XMax(b.geom) AS e, ST_YMax(b.geom) AS n,
              any_value(n.nta2020) AS nta2020
       FROM blocks b LEFT JOIN nta n ON ST_Contains(n.geom, ST_PointOnSurface(b.geom))
       GROUP BY ALL;
@@ -62,33 +64,41 @@ export async function blockJoin(blocksGeoJson: string, ntaGeoJson: string): Prom
       );
       const reader = await con.runAndReadAll(`
         WITH pts AS (
-          SELECT *, ST_Point(lon, lat) AS pt FROM read_csv(${sqlString(csv)}, header = true, quote = '"', escape = '"',
+          SELECT row_number() OVER () AS rid, *, ST_Point(lon, lat) AS pt FROM read_csv(${sqlString(csv)}, header = true, quote = '"', escape = '"',
             columns = {'lat': 'DOUBLE', 'lon': 'DOUBLE', 'hour': 'INT', 'place': 'VARCHAR',
                        'injured': 'INT', 'killed': 'INT', 'cyclists': 'INT'})
         ), inside AS (
-          SELECT b.id, p.* FROM pts p JOIN blocks b ON ST_Contains(b.geom, p.pt)
+          -- Strictly inside counts for every block, parks included (transverse
+          -- road crashes, noise in the park).
+          SELECT p.rid, b.id, 1.0 AS w FROM pts p JOIN blocks b ON ST_Contains(b.geom, p.pt)
+        ), cand AS (
+          -- Street-bed points: the eligible blocks (no open space, no giant
+          -- blocks) within ${NEAR_DEG}° (~40 m), nearest first.
+          SELECT rid, id, d,
+                 row_number() OVER (PARTITION BY rid ORDER BY d, id) AS k,
+                 min(d) OVER (PARTITION BY rid) AS d1
+          FROM (SELECT p.rid, b.id, ST_Distance(b.geom, p.pt) AS d
+                FROM (SELECT * FROM pts p0 WHERE NOT EXISTS (SELECT 1 FROM inside i WHERE i.rid = p0.rid)) p
+                JOIN blocks b ON ST_DWithin(b.geom, p.pt, ${NEAR_DEG}) WHERE b.no_snap = 0)
         ), street AS (
-          -- 311 and NYPD geocode most points onto the street bed, between blocks:
-          -- those go to the nearest block face within ${NEAR_DEG}° (~40 m).
-          SELECT arg_min(b.id, ST_Distance(b.geom, p.pt)) AS id, p.lat, p.lon, p.hour, p.place, p.injured, p.killed, p.cyclists
-          FROM (SELECT row_number() OVER () AS rid, * FROM pts WHERE NOT EXISTS (
-                  SELECT 1 FROM blocks b WHERE ST_Contains(b.geom, pts.pt))) p
-          JOIN blocks b ON ST_DWithin(b.geom, p.pt, ${NEAR_DEG})
-          GROUP BY p.rid, p.lat, p.lon, p.hour, p.place, p.injured, p.killed, p.cyclists
+          -- Split across the facing blocks: the nearest plus the next one when it
+          -- is about as close (the block across the street), half each.
+          SELECT rid, id, 1.0 / count(*) OVER (PARTITION BY rid) AS w
+          FROM cand WHERE k = 1 OR (k = 2 AND d <= d1 * 1.5 + ${FACING_SLACK_DEG})
         ), j AS (
-          SELECT id, lat, lon, hour, place, injured, killed, cyclists FROM inside
-          UNION ALL SELECT * FROM street
+          SELECT a.id, a.w, p.hour, p.place, p.injured, p.killed, p.cyclists
+          FROM (SELECT * FROM inside UNION ALL SELECT * FROM street) a JOIN pts p USING (rid)
         ), places AS (
           SELECT id, list([place, n::VARCHAR] ORDER BY n DESC, place) AS top
-          FROM (SELECT id, place, count(*) AS n,
-                       row_number() OVER (PARTITION BY id ORDER BY count(*) DESC, place) AS k
+          FROM (SELECT id, place, round(sum(w), 1) AS n,
+                       row_number() OVER (PARTITION BY id ORDER BY sum(w) DESC, place) AS k
                 FROM j WHERE place <> '' GROUP BY 1, 2)
           WHERE k <= ${TOP} GROUP BY 1
         )
-        SELECT j.id, m.label, m.w, m.s, m.e, m.n AS north, coalesce(m.nta2020, '') AS nta2020,
-               count(*)::INT AS count, count(*) FILTER (WHERE hour >= 22 OR hour < 4)::INT AS night,
-               sum(injured)::INT AS injured, sum(killed)::INT AS killed, sum(cyclists)::INT AS cyclists,
-               any_value(pl.top) AS top
+        SELECT j.id, m.label, m.w, m.s, m.e, m.n AS north, coalesce(m.nta2020, '') AS nta2020, m.area_m2,
+               round(sum(j.w), 1) AS count, round(sum(j.w) FILTER (WHERE hour >= 22 OR hour < 4), 1) AS night,
+               round(sum(j.w * injured), 1) AS injured, round(sum(j.w * killed), 1) AS killed,
+               round(sum(j.w * cyclists), 1) AS cyclists, any_value(pl.top) AS top
         FROM j JOIN block_meta m USING (id) LEFT JOIN places pl USING (id)
         GROUP BY ALL`);
       return reader.getRowObjectsJson().map((r): BlockCell => {
@@ -102,7 +112,8 @@ export async function blockJoin(blocksGeoJson: string, ntaGeoJson: string): Prom
           label: String(r.label),
           ntaCode: String(r.nta2020),
           count: Number(r.count),
-          nightCount: Number(r.night),
+          nightCount: Number(r.night ?? 0),
+          areaM2: Number(r.area_m2),
           injured: Number(r.injured),
           killed: Number(r.killed),
           cyclists: Number(r.cyclists),

@@ -11,6 +11,7 @@ import {
 import { useMapState } from "@/lib/store/MapStateContext";
 import { windowBounds } from "@/lib/windows";
 import { USE_BLOCK_TILES } from "@/lib/map/blockTiles";
+import { useFlag } from "@/lib/flags";
 
 interface LegendProps {
   layer: LayerId;
@@ -53,6 +54,7 @@ export function LegendContent({
 }: LegendProps) {
   const { window: windowId, setCaveatsOpen, mapStyle } = useMapState();
   const { shortLabel } = windowBounds(windowId);
+  const blockDensity = useFlag("blockDensity");
 
   return (
     <div>
@@ -133,6 +135,11 @@ export function LegendContent({
             className="border-slate-500/50"
             label={USE_BLOCK_TILES ? "Tax block (DCP MapPLUTO)" : "~300 m block square"}
           />
+        ) : null}
+        {scale === "blocks" && USE_BLOCK_TILES && blockDensity ? (
+          <li className="text-[11px] text-muted-foreground">
+            Shaded per hectare, so big blocks and parks don&apos;t dominate. Parks only count points inside them.
+          </li>
         ) : null}
         <LineKey
           className="border-slate-700/60"

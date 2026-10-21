@@ -378,3 +378,18 @@ allowBuilds:
 packages:
   - .
 minimumReleaseAge: 1440
+# Baselined advisories (CI: pnpm audit --audit-level high). Each needs a major
+# upgrade tracked in its own issue; remove the id once fixed. Do not add new ids
+# without an issue.
+auditConfig:
+  ignoreGhsas:
+    - GHSA-9crc-q9x8-hgqq # vitest <2.1.9 (dev) -> vitest 3
+    - GHSA-5xrq-8626-4rwp # vitest <3.2.6 (dev)
+    - GHSA-5gmw-xhrv-c9v3 # tinypool via vitest (dev)
+    - GHSA-85c8-ppgw-ccpr # tinypool via vitest (dev)
+    - GHSA-fx2h-pf6j-xcff # vite <=6.4.2 (dev server) -> vite 6
+    - GHSA-587h-7wmj-h5pm # vite <=6.4.3 (dev server)
+    - GHSA-6g55-p6wh-862q # postcss via vite
+    - GHSA-r28c-9q8g-f849 # postcss via vite
+    - GHSA-vfj7-8cjw-p6xm # braces via tailwindcss>chokidar (dev)
+    - GHSA-jrc7-96c5-q579 # maplibre-gl <=6.4.0 -> maplibre 6 (pinned 5.24 in AI_RULES; needs review)

@@ -65,7 +65,7 @@ async function download(url: string, to: string) {
 type OsmWay = { tags: Record<string, string>; geometry: { lat: number; lon: number }[] };
 async function loadOsm(): Promise<OsmWay[]> {
   const cached = process.env.OSM_JSON;
-  if (cached && existsSync(cached)) return JSON.parse(readFileSync(cached, "utf8")).elements;
+  if (cached && existsSync(cached)) return (JSON.parse(readFileSync(cached, "utf8")) as { elements: OsmWay[] }).elements;
   const query =
     '[out:json][timeout:180];way["railway"~"^(subway|light_rail|rail)$"](40.49,-74.27,41.30,-72.70);out tags geom;';
   const res = await fetch("https://overpass-api.de/api/interpreter", {
@@ -74,7 +74,7 @@ async function loadOsm(): Promise<OsmWay[]> {
     body: new URLSearchParams({ data: query }),
   });
   if (!res.ok) { console.warn(`Overpass ${res.status}: every segment will be at-grade`); return []; }
-  return (await res.json()).elements;
+  return ((await res.json()) as { elements: OsmWay[] }).elements;
 }
 
 function wayGrade(tags: Record<string, string>): Grade {
@@ -249,7 +249,7 @@ async function build(id: SystemId, osm: OsmWay[], work: string) {
 
   const out = { system: id, builtAt: new Date().toISOString(), routes, lines: { type: "FeatureCollection", features: lineFeatures }, stations, shapes, stopM, entrances };
   writeFileSync(join("public/transit", `${id}.json`), JSON.stringify(out));
-  const counts = lineFeatures.reduce<Record<string, number>>((a, f) => ((a[f.properties!.grade] = (a[f.properties!.grade] ?? 0) + 1), a), {});
+  const counts = lineFeatures.reduce<Record<string, number>>((a, f) => { const g = String((f.properties as { grade: Grade }).grade); a[g] = (a[g] ?? 0) + 1; return a; }, {});
   console.log(`${id}: ${Object.keys(routes).length} routes, ${stations.features.length} stations, segments ${JSON.stringify(counts)}`);
 }
 
@@ -257,3 +257,4 @@ const work = mkdtempSync(join(tmpdir(), "gtfs-"));
 const osm = await loadOsm();
 console.log(`OSM rail ways: ${osm.length}`);
 for (const id of Object.keys(SYSTEMS) as SystemId[]) await build(id, osm, work);
+

@@ -115,9 +115,9 @@ function subscribe(fn: () => void) {
 export function useStarred() {
   const raw = useSyncExternalStore(subscribe, readStars);
   const notifyRaw = useSyncExternalStore(subscribe, () => localStorage.getItem(NOTIFY_KEY) ?? "0");
-  const starred: string[] = JSON.parse(raw);
+  const starred = JSON.parse(raw) as string[];
   const toggle = useCallback((key: string) => {
-    const cur: string[] = JSON.parse(readStars());
+    const cur = JSON.parse(readStars()) as string[];
     localStorage.setItem(STAR_KEY, JSON.stringify(cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key]));
     listeners.forEach((l) => l());
   }, []);

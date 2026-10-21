@@ -22,6 +22,9 @@ const RAW = `${OUT_DIR}/nyc-blocks.raw.geojson`;
 const GEOJSON = `${OUT_DIR}/nyc-blocks.geojson`;
 const PMTILES = `${OUT_DIR}/nyc-blocks.pmtiles`;
 /** mapshaper Visvalingam retention; tax blocks are mostly 4-12 corners. */
+/** Blocks bigger than this never receive snapped street points (a long Manhattan block is ~20k m²). */
+const MAX_SNAP_AREA_M2 = Number(process.env.MAX_SNAP_AREA_M2 ?? 120_000);
+const MAX_SNAP_PERIM_M = Number(process.env.MAX_SNAP_PERIM_M ?? 1_800);
 const SIMPLIFY = process.env.BLOCK_SIMPLIFY ?? "12%";
 
 async function main() {
@@ -33,7 +36,8 @@ async function main() {
   // street names (house numbers stripped): "Brooklyn block 585 · Court St / Union St".
   await con.run(`
     CREATE TABLE lots AS
-    SELECT BoroCode::int AS boro, Block::int AS block, geom,
+    SELECT BoroCode::int AS boro, Block::int AS block, geom, ST_Area(geom) AS lot_ft2,
+           (LandUse = '09' OR BldgClass LIKE 'Q%' OR BldgClass = 'Z8') AS open_lot,
            nullif(trim(regexp_replace(upper(coalesce(Address, '')), '^[0-9][0-9A-Z/-]*\\s+', '')), '') AS street
     FROM ST_Read(${sqlString(SHP)})
     WHERE BoroCode BETWEEN 1 AND 5 AND Block > 0;
@@ -46,11 +50,19 @@ async function main() {
     CREATE TABLE blocks AS
     SELECT b.boro * 100000 + b.block AS id, b.boro, b.block,
            ['Manhattan', 'Bronx', 'Brooklyn', 'Queens', 'Staten Island'][b.boro] || ' block ' || b.block
-             || coalesce(' · ' || s.streets, '') AS label,
+             || CASE WHEN coalesce(b.open_share, 0) > 0.5 THEN ' · park / open space' ELSE coalesce(' · ' || s.streets, '') END AS label,
+           round(ST_Area(b.geom) * 0.09290304)::int AS area_m2,
+           round(ST_Perimeter(b.geom) * 0.3048)::int AS perim_m,
+           -- Open space (MapPLUTO LandUse 09, Q* parks, Z8 cemeteries) or a giant
+           -- block only takes points strictly inside it, never snapped street points.
+           (coalesce(b.open_share, 0) > 0.5 OR ST_Area(b.geom) * 0.09290304 > ${MAX_SNAP_AREA_M2}
+             OR ST_Perimeter(b.geom) * 0.3048 > ${MAX_SNAP_PERIM_M})::int AS no_snap,
            ST_Transform(b.geom, 'EPSG:2263', 'EPSG:4326', always_xy := true) AS geom
-    FROM (SELECT boro, block, ST_MakeValid(ST_Union_Agg(ST_MakeValid(geom))) AS geom FROM lots GROUP BY 1, 2) b
+    FROM (SELECT boro, block, ST_MakeValid(ST_Union_Agg(ST_MakeValid(geom))) AS geom,
+                 sum(lot_ft2) FILTER (WHERE open_lot) / nullif(sum(lot_ft2), 0) AS open_share
+          FROM lots GROUP BY 1, 2) b
     LEFT JOIN streets s USING (boro, block);
-    COPY (SELECT id, boro, block, label, geom FROM blocks WHERE NOT ST_IsEmpty(geom))
+    COPY (SELECT id, boro, block, label, area_m2, perim_m, no_snap, geom FROM blocks WHERE NOT ST_IsEmpty(geom))
       TO ${sqlString(RAW)} WITH (FORMAT GDAL, DRIVER 'GeoJSON');
   `);
   const n = (await con.runAndReadAll("SELECT count(*)::int AS n FROM blocks")).getRowObjectsJson()[0].n;

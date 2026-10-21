@@ -15,8 +15,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
-      - name: Module boundaries (dependency-cruiser)
+      - name: Module boundaries, orphans, cycles (dependency-cruiser)
         run: pnpm lint:boundaries
+      - name: Dead code (knip)
+        run: pnpm knip
   size:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -29,3 +31,48 @@ jobs:
       - run: pnpm build:size
       - name: Performance budget (size-limit, brotli per chunk)
         run: pnpm size
+  deps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - name: Lockfile in sync
+        run: pnpm install --frozen-lockfile
+      - name: Audit (high+, baseline in pnpm-workspace.yaml)
+        run: pnpm audit --audit-level high
+      - name: Licence allowlist
+        run: pnpm licenses:check
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: ESLint (type-aware; baseline in eslint-suppressions.json)
+        run: pnpm lint
+  api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: openapi.json is up to date (every route has a spec)
+        run: pnpm openapi:check
+      - name: Breaking changes vs main (oasdiff)
+        if: github.event_name == 'pull_request'
+        run: |
+          if ! git show origin/${{ github.base_ref }}:openapi.json > /tmp/base.json 2>/dev/null; then
+            echo "no openapi.json on base yet; skipping"; exit 0
+          fi
+          curl -fsSL https://github.com/oasdiff/oasdiff/releases/download/v1.34.0/oasdiff_1.34.0_linux_amd64.tar.gz | tar xz -C /tmp oasdiff
+          /tmp/oasdiff breaking /tmp/base.json openapi.json --fail-on ERR --format githubactions

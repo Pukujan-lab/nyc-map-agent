@@ -73,6 +73,6 @@ export function restroomAt(map: MapLibreMap, x: number, y: number): RestroomInfo
   const f = map.queryRenderedFeatures([[x - 8, y - 8], [x + 8, y + 8]], { layers: [RESTROOMS_LAYER] })[0];
   if (!f) return null;
   const p = f.properties as Record<string, unknown>;
-  const s = (k: string) => (typeof p[k] === "string" && p[k] ? (p[k] as string) : null);
+  const s = (k: string) => (typeof p[k] === "string" && p[k] ? (p[k]) : null);
   return { name: s("name") ?? "Public restroom", status: s("status"), hours: s("hours"), accessibility: s("accessibility"), operator: s("operator") };
 }

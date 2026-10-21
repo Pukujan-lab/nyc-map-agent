@@ -270,7 +270,7 @@ export default function TransitLayer() {
       if (cancelled || !v3d.current || map.getLayer(v3d.current.layer.id)) return;
       try { map.addLayer(v3d.current.layer); } catch { /* style mid-swap; retried on the next styledata */ }
     };
-    import("@/lib/map/threeLayer").then(({ createVehicleLayer }) => {
+    void import("@/lib/map/threeLayer").then(({ createVehicleLayer }) => {
       v3d.current ??= createVehicleLayer();
       ensure();
     });

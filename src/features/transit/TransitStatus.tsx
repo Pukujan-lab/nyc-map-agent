@@ -31,7 +31,7 @@ export function TransitStatusDetails() {
           <TabsContent value="starred" className="min-h-0 flex-1 space-y-3 overflow-y-auto text-sm">
             <div className="flex items-center justify-between rounded-md border p-2">
               <Label htmlFor="transit-notify" className="flex items-center gap-1.5"><Bell className="h-4 w-4" />Browser notifications</Label>
-              <Switch id="transit-notify" checked={notify} onCheckedChange={enableNotify} />
+              <Switch id="transit-notify" checked={notify} onCheckedChange={(on) => void enableNotify(on)} />
             </div>
             {stations.length === 0 ? <p className="text-muted-foreground">Star a station from its card to see countdowns here.</p> : null}
             {stations.map(([sys, , id]) => {
