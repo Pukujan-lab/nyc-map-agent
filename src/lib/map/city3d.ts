@@ -139,4 +139,17 @@ export function setCity3dVisible(map: MapLibreMap, on: boolean): void {
     if (!("source-layer" in layer) || layer["source-layer"] !== "building") continue;
     map.setLayerZoomRange(layer.id, layer.minzoom ?? 0, on ? CITY3D_MIN_ZOOM : 24);
   }
+  // Shop/POI labels pile up on the textured storefronts at street level; transit stays.
+  for (const layer of map.getStyle().layers ?? []) {
+    if (!isPoiLabelLayer(layer)) continue;
+    const min = layer.minzoom ?? 0;
+    map.setLayerZoomRange(layer.id, min, on ? Math.max(min, POI_LABEL_MAX_ZOOM) : 24);
+  }
+}
+
+/** Basemap POI labels end at this zoom while the 3D city is on. */
+export const POI_LABEL_MAX_ZOOM = 16;
+
+export function isPoiLabelLayer(layer: { id: string; type: string; "source-layer"?: string }): boolean {
+  return layer.type === "symbol" && layer["source-layer"] === "poi" && !/transit/.test(layer.id);
 }
