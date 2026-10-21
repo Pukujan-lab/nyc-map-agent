@@ -5,18 +5,10 @@ import react from "@vitejs/plugin-react";
 // (e.g. "Application Support") would otherwise resolve to a missing directory.
 const srcDir = decodeURIComponent(new URL("./src", import.meta.url).pathname);
 
-/** Maps /api/<path> to the Vercel function file in api/, as Vercel does. */
-function routeFile(pathname: string): string | null {
-  const parts = pathname.replace(/^\/api\//, "").split("/").filter(Boolean);
-  if (parts.length === 1 && /^[a-z-]+$/.test(parts[0])) return `/api/${parts[0]}.ts`;
-  if (parts.length === 2 && parts[0] === "area") return "/api/area/[block].ts";
-  return null;
-}
-
 /**
- * Dev only: serves the same api/*.ts handlers Vercel deploys, inside the Vite
- * dev server, so `pnpm dev` needs no second process. Set API_PROXY_TARGET to
- * proxy /api to `vercel dev` or a deployment instead.
+ * Dev only: serves the same Hono API (server/app.ts) that `pnpm start` runs,
+ * inside the Vite dev server, so `pnpm dev` needs no second process. Set
+ * API_PROXY_TARGET to proxy /api to another running instance instead.
  */
 function devApi(env: Record<string, string>): Plugin {
   return {
@@ -26,16 +18,15 @@ function devApi(env: Record<string, string>): Plugin {
       for (const [k, v] of Object.entries(env)) if (k.startsWith("OCTO_")) process.env[k] ??= v;
       server.middlewares.use(async (req, res, next) => {
         if (!req.url?.startsWith("/api/")) return next();
-        const url = new URL(req.url, "http://localhost");
-        const file = routeFile(url.pathname);
-        if (!file) return next();
         try {
-          const mod = (await server.ssrLoadModule(file)) as { GET?: (r: Request) => Promise<Response> };
-          if (!mod.GET || req.method !== "GET") {
-            res.statusCode = 405;
-            return res.end();
-          }
-          const response = await mod.GET(new Request(url));
+          const { app } = (await server.ssrLoadModule("/server/app.ts")) as {
+            app: { fetch: (r: Request) => Response | Promise<Response> };
+          };
+          const headers = new Headers();
+          for (const [k, v] of Object.entries(req.headers)) if (typeof v === "string") headers.set(k, v);
+          const response = await app.fetch(
+            new Request(new URL(req.url, "http://localhost"), { method: req.method, headers }),
+          );
           res.statusCode = response.status;
           response.headers.forEach((value, key) => res.setHeader(key, value));
           res.end(Buffer.from(await response.arrayBuffer()));
