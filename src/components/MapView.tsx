@@ -6,6 +6,11 @@ import { setAmbient } from "@/lib/ambient";
 import { useFlags } from "@/lib/flags";
 import { useFeatureToggles } from "@/lib/featureToggles";
 import { useMediaQuery } from "@/lib/useMediaQuery";
+import { applyReadable } from "@/lib/map/readable";
+import { applyPlaces, usePlaces } from "@/lib/map/places";
+import { useMapOptions } from "@/lib/map/mapOptions";
+import { THEMES, applyMapTheme, useTheme } from "@/lib/theme";
+import { useTransitFocus } from "@/lib/map/transitFocus";
 import { useFlag } from "@/lib/flags";
 import MapLibreMap, {
   type MapLayerMouseEvent,
@@ -413,6 +418,27 @@ export function MapView({
     [],
   );
 
+  // Layout A (#171): simple pale streets by default (and always in Transit
+  // Focus), the chosen theme's land/water/park colours, places only when chosen.
+  const [transitFocus] = useTransitFocus();
+  const places = usePlaces();
+  const opts = useMapOptions();
+  const theme = useTheme();
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map || !ready) return;
+    const t = THEMES[theme];
+    applyMapTheme(map, theme);
+    applyReadable(map, opts.streets === "simple" || transitFocus, { street: t.street, major: t.major, label: t.label_ });
+    for (const l of map.getStyle()?.layers ?? []) {
+      if (/^highway-name-major$/.test(l.id)) map.setLayoutProperty(l.id, "visibility", opts.streetNames ? "visible" : "none");
+      if (l.type === "fill-extrusion" && !l.id.startsWith("transit-") && !l.id.startsWith("neighborhood") && !l.id.startsWith("block")) {
+        map.setLayoutProperty(l.id, "visibility", opts.buildings ? "visible" : "none");
+      }
+    }
+    applyPlaces(map, places);
+  }, [ready, styleEpoch, transitFocus, places, opts, theme]);
+
   const handleLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
     if (!map) return;
@@ -440,9 +466,14 @@ export function MapView({
    * blank, so fall back once to the bundled raster style. Tile errors are
    * survivable; only an unloaded style is not.
    */
-  const handleError = useCallback(() => {
+  const handleError = useCallback((e: object) => {
     const map = mapRef.current?.getMap();
     if (!map || fellBack.current || map.isStyleLoaded()) return;
+    // A tile or data-source error while the style is still loading (a slow
+    // phone, one 404 tile, the areas API) is survivable; only a style that
+    // never arrived needs the raster fallback. Before this check one such
+    // error swapped the whole map to raster, which no style rule can restyle.
+    if ("sourceId" in e && e.sourceId) return;
     fellBack.current = true;
     map.setStyle(buildFallbackStyle());
   }, []);

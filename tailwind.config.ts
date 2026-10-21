@@ -4,6 +4,8 @@ import animate from "tailwindcss-animate";
 export default {
   darkMode: ["class"],
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
+  // Theme classes are set at runtime (`theme-${id}`), so keep their token blocks.
+  safelist: ["theme-ivory", "theme-ink", "theme-mta", "theme-neon"],
   theme: {
     container: {
       center: true,
@@ -11,6 +13,7 @@ export default {
       screens: { "2xl": "1400px" },
     },
     extend: {
+      fontFamily: { serif: ["var(--serif)"] },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -40,6 +43,10 @@ export default {
         popover: {
           DEFAULT: "hsl(var(--popover))",
           foreground: "hsl(var(--popover-foreground))",
+        },
+        acc: {
+          DEFAULT: "hsl(var(--acc))",
+          foreground: "hsl(var(--acc-foreground))",
         },
         card: {
           DEFAULT: "hsl(var(--card))",

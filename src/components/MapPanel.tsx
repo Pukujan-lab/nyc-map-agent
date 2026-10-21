@@ -1,17 +1,15 @@
-import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
-import { isFlagId, useFlags } from "@/lib/flags";
-import { Suspense, useEffect, type ReactNode } from "react";
+import { ArrowLeft } from "lucide-react";
+import { useFlags } from "@/lib/flags";
+import { useEffect, useState, type ReactNode } from "react";
 import { Drawer } from "vaul";
 import { Button } from "@/components/ui/button";
 import type { NtaBoundary } from "@/lib/api/nta";
-import { useDataView } from "@/lib/store/DataViewContext";
 import { useMapState } from "@/lib/store/MapStateContext";
-import { usePanel, type PanelChip, type SheetSnap } from "@/lib/store/PanelContext";
+import { usePanel, type SheetSnap } from "@/lib/store/PanelContext";
 import { cn } from "@/lib/utils";
 import { PanelSearch } from "./PanelSearch";
-import { ViewModeMenu } from "./ViewModeMenu";
 import { FEATURES } from "@/features";
-import { useFeatureToggles } from "@/lib/featureToggles";
+import { LayersDrawer } from "./LayersDrawer";
 
 /** Mobile snap points: peek shows the summary only. */
 /** One row (title + number) plus the grab handle. */
@@ -37,75 +35,38 @@ function FeatureTopBar() {
   );
 }
 
-/** Always-visible chips; everything else is one level down in "More layers". */
-const PRIMARY = ["transit", "transitFocus", "restrooms", "weather"];
-
-function Chips() {
-  const { restrooms, setRestrooms } = useMapState();
+/**
+ * Layout A (#171) top bar: "Where to?" search with Ask, one labelled
+ * "Layers & filters" button and a small Transit on / off pill. Everything else
+ * is in the LayersDrawer.
+ */
+function TopBar({ boundaries, status, onLayers }: { boundaries: NtaBoundary[] | null; status?: ReactNode; onLayers: () => void }) {
+  const { setChatOpen } = useMapState();
   const { chips } = usePanel();
-  const flags = useFlags();
-  const builtIn: PanelChip[] = [
-    { id: "restrooms", label: "Restrooms", active: restrooms, onToggle: () => setRestrooms(!restrooms) },
-  ];
-  const [toggledOn, toggle] = useFeatureToggles();
-  const featureChips: PanelChip[] = FEATURES.filter((f) => f.chip && flags[f.id]).map((f) => ({
-    id: f.chip!.id,
-    label: f.chip!.label,
-    active: toggledOn.has(f.chip!.id),
-    onToggle: () => toggle(f.chip!.id),
-  }));
-  // Registered chips (Transit, Schools) win over built-ins; flags gate them all.
-  const byId = new Map<string, PanelChip>();
-  for (const chip of [...builtIn, ...featureChips, ...chips]) {
-    if (!isFlagId(chip.id) || flags[chip.id]) byId.set(chip.id, chip);
-  }
-  const primary = PRIMARY.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []));
-  const secondary = [...byId.values()].filter((c) => !PRIMARY.includes(c.id));
+  const transit = chips.find((c) => c.id === "transit");
   return (
-    <div className="-mx-3 flex snap-x snap-mandatory scroll-px-3 gap-1.5 overflow-x-auto px-3 pb-0.5 [mask-image:linear-gradient(to_right,transparent,black_12px,black_calc(100%-24px),transparent)] [scrollbar-width:none]">
-      {primary.map((chip) => (
-        <button
-          key={chip.id}
-          type="button"
-          aria-pressed={chip.active}
-          onClick={chip.onToggle}
-          className={cn(
-            "h-7 shrink-0 snap-start rounded-full border px-2.5 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            chip.active
-              ? "border-primary bg-primary text-primary-foreground"
-              : "border-border bg-card text-foreground hover:bg-accent",
-          )}
-        >
-          {chip.label}
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 rounded-full border border-border bg-card p-1 pl-1 shadow-lg">
+        <div className="relative min-w-0 flex-1">
+          <PanelSearch boundaries={boundaries} />
+          {status}
+        </div>
+        <button type="button" onClick={() => setChatOpen(true)} className="h-9 shrink-0 rounded-full bg-primary px-4 text-[14px] font-semibold text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          Ask
         </button>
-      ))}
-      <ViewModeMenu chip toggles={secondary} />
-    </div>
-  );
-}
-
-function Home() {
-  const flags = useFlags();
-  const { routeStart, setRoutePicking } = useDataView();
-  return (
-    <div className="space-y-3 overflow-y-auto px-4 py-3">
-      {flags.directions ? (
-        <Button
-          type="button"
-          className="h-11 w-full justify-start rounded-xl text-sm"
-          onClick={() => setRoutePicking(routeStart ? "end" : "start")}
-        >
-          Where to?
-        </Button>
-      ) : null}
-      {FEATURES.filter((f) => f.HomeSection && flags[f.id]).map((f) => {
-        const Section = f.HomeSection!;
-        return (
-          <Suspense key={f.id} fallback={null}>
-            <Section />
-          </Suspense>
-        );
-      })}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" onClick={onLayers} className="h-9 rounded-full border border-border bg-card px-4 text-[13px] font-semibold shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          Layers &amp; filters
+        </button>
+        {transit ? (
+          <button type="button" aria-pressed={transit.active} onClick={transit.onToggle} className="flex h-8 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-[12px] font-medium shadow-md">
+            <span aria-hidden className={cn("h-2 w-2 rounded-full", transit.active ? "bg-[#00933C]" : "bg-muted-foreground/50")} />
+            {transit.active ? "Transit on" : "Transit off"}
+          </button>
+        ) : null}
+      </div>
+      <FeatureTopBar />
     </div>
   );
 }
@@ -120,6 +81,8 @@ export function MapPanel({
   boundaries,
   place,
   status,
+  onOpenControls,
+  onOpenSources,
 }: {
   isDesktop: boolean;
   boundaries: NtaBoundary[] | null;
@@ -127,9 +90,12 @@ export function MapPanel({
   place: ReactNode;
   /** Thin loading line drawn under the search bar. */
   status?: ReactNode;
+  onOpenControls: () => void;
+  onOpenSources: () => void;
 }) {
+  const [layersOpen, setLayersOpen] = useState(false);
   const { walking, selectedNtaCode, selectedBlockKey } = useMapState();
-  const { content, closePanel, snap, setSnap, collapsed, setCollapsed } = usePanel();
+  const { content, closePanel, snap, setSnap, setCollapsed } = usePanel();
 
   // A map pick replaces pushed content; it never stacks on it.
   useEffect(() => {
@@ -168,54 +134,32 @@ export function MapPanel({
       {content.details ? <div className="min-h-0 flex-1 overflow-y-auto p-4 pt-3">{content.details}</div> : null}
     </>
   ) : (
-    (place ?? <Home />)
+    place
   );
+  const drawer = (
+    <LayersDrawer open={layersOpen} onOpenChange={setLayersOpen} isDesktop={isDesktop} boundaries={boundaries} onOpenControls={onOpenControls} onOpenSources={onOpenSources} />
+  );
+  const top = <TopBar boundaries={boundaries} status={status} onLayers={() => setLayersOpen((o) => !o)} />;
 
   if (isDesktop) {
     return (
       <>
-        <div
-          className={cn(
-            "absolute left-0 top-0 z-30 flex h-full w-[380px] flex-col border-r border-border bg-card shadow-xl transition-transform",
-            collapsed && "-translate-x-full",
-          )}
-        >
-          <div className="space-y-2 p-3 pb-2">
-            <div className="relative">
-              <PanelSearch boundaries={boundaries} />
-              {status}
-            </div>
-            <FeatureTopBar />
-        <Chips />
+        <div className="absolute left-4 top-4 z-40 w-[360px]">{top}</div>
+        {drawer}
+        {body && !layersOpen ? (
+          <div className="absolute left-4 top-[7.25rem] z-30 flex max-h-[calc(100%-8.5rem)] w-[360px] flex-col overflow-hidden rounded-[22px] border border-border bg-card shadow-2xl">
+            {body}
           </div>
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-border/60">{body}</div>
-        </div>
-        <button
-          type="button"
-          aria-label={collapsed ? "Show panel" : "Hide panel"}
-          onClick={() => setCollapsed(!collapsed)}
-          className={cn(
-            "absolute top-1/2 z-30 flex h-12 w-5 -translate-y-1/2 items-center justify-center rounded-r-md border border-l-0 border-border bg-card shadow-md transition-[left] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            collapsed ? "left-0" : "left-[380px]",
-          )}
-        >
-          {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-        </button>
+        ) : null}
       </>
     );
   }
 
   return (
     <>
-      <div className="absolute inset-x-3 top-[calc(env(safe-area-inset-top)+0.75rem)] z-30 space-y-2">
-        <div className="relative">
-          <PanelSearch boundaries={boundaries} />
-          {status}
-        </div>
-        <FeatureTopBar />
-        <Chips />
-      </div>
-      <Drawer.Root
+      <div className="absolute inset-x-3 top-[calc(env(safe-area-inset-top)+0.75rem)] z-30">{top}</div>
+      {drawer}
+      {body ? <Drawer.Root
         open
         modal={false}
         dismissible={false}
@@ -237,7 +181,7 @@ export function MapPanel({
             </div>
           </Drawer.Content>
         </Drawer.Portal>
-      </Drawer.Root>
+      </Drawer.Root> : null}
     </>
   );
 }

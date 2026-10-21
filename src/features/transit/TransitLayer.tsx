@@ -25,7 +25,8 @@ import { setFollowed, useFollowed } from "./follow";
 import { SYSTEM_LABELS } from "./model";
 import { StationDetails, VehicleDetails } from "./TransitCard";
 import { TransitStatusDetails } from "./TransitStatus";
-import { FOCUS_OPACITY, FOCUS_VEIL_ID, WORLD, useTransitFocus } from "./focus";
+import { lineOpacity, useMapOptions } from "@/lib/map/mapOptions";
+import { FOCUS_OPACITY, FOCUS_VEIL_ID, WORLD, useTransitFocus } from "@/lib/map/transitFocus";
 
 /** Layers a click on the map should hand to transit instead of the area pick. */
 /** CC BY 4.0 credits for the 3D vehicle models (public/models/LICENSE.md), shown while they can be on screen. */
@@ -121,6 +122,12 @@ export default function TransitLayer() {
     if (!focus && !anyOn) { set("subway", true); set("bus", true); }
     setFocus(!focus);
   }, [focus, anyOn, set, setFocus]);
+  const opts = useMapOptions();
+  const lineAlpha = lineOpacity(opts.routes, focus) as number;
+  const toggleTrains = useCallback(() => set("subway", !on.has("subway")), [on, set]);
+  const toggleBuses = useCallback(() => set("bus", !on.has("bus")), [on, set]);
+  usePanelChip({ id: "liveTrains", label: "Live trains", active: on.has("subway"), onToggle: toggleTrains });
+  usePanelChip(meta.data?.bus === true ? { id: "liveBuses", label: "Live buses", active: on.has("bus"), onToggle: toggleBuses } : null);
   usePanelChip({ id: "transitFocus", label: "Transit Focus", active: focus && anyOn, onToggle: toggleFocus });
 
   // Icons, including after a style swap.
@@ -420,7 +427,7 @@ export default function TransitLayer() {
           paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 16, 2.5], "line-opacity": 0.45, "line-dasharray": [2, 2] }} />
         <Layer id="transit-line" type="line" filter={three ? ["==", ["get", "grade"], "grade"] : ["!=", ["get", "grade"], "underground"]}
           layout={{ "line-cap": "round", "line-join": "round" }}
-          paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1.5, 16, 4] }} />
+          paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1.5, 16, 4], "line-opacity": lineAlpha }} />
       </Source>
       {focus ? (
         <Source id={FOCUS_VEIL_ID} type="geojson" data={WORLD}>
@@ -463,7 +470,7 @@ export default function TransitLayer() {
       <Source id="transit-vehicle-hits" type="geojson" data={hide2d ? hitFc : EMPTY}>
         <Layer id="transit-vehicle-hit" type="circle" paint={{ "circle-radius": 14, "circle-opacity": 0, "circle-pitch-alignment": "map" }} />
       </Source>
-      <Source id="transit-vehicles" type="geojson" data={hide2d ? EMPTY : vehicleFc}>
+      <Source id="transit-vehicles" type="geojson" data={hide2d || opts.stationsOnly ? EMPTY : vehicleFc}>
         <Layer id="transit-vehicle-2d" type="symbol"
           layout={{ "icon-image": "transit-arrow", "icon-rotate": ["get", "bearing"], "icon-rotation-alignment": "map", "icon-allow-overlap": true, "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.45, 16, 0.9] }}
           paint={{ "icon-color": ["get", "color"], "icon-halo-color": "#111827", "icon-halo-width": 1, "icon-opacity": ["case", ["==", ["get", "grade"], "underground"], 0.55, 1] }} />
