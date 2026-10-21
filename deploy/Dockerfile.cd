@@ -14,6 +14,11 @@ RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY deploy/cd ./deploy/cd
+# The checkout is owned by the host user, so git refuses it as "dubious
+# ownership" unless the path is trusted. The remote is private, so fetches
+# authenticate from the credential store compose mounts at $HOME/.git-credentials.
+RUN git config --system --add safe.directory /app \
+ && git config --system credential.helper store
 ENV PORT=8081 NODE_ENV=production
 EXPOSE 8081
 CMD ["pnpm", "exec", "tsx", "deploy/cd/server.ts"]
