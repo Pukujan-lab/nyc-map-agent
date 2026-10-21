@@ -1,5 +1,5 @@
 /**
- * The ONLY file that imports three.js. Every three.js custom layer lives here
+ * The ONLY file that imports three.js (pinned 0.186.1). Every three.js custom layer lives here
  * (3D vehicles and elevated structure, hydrants, corner street-name signs, storefront signboards) and they all
  * draw through ONE WebGLRenderer per MapLibre GL context (sharedRenderer):
  * several renderers on one context each kept their own GL state cache, and
@@ -7,7 +7,7 @@
  * was lost (#98). Layers only repaint when their content changes.
  */
 import * as THREE from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { distanceFade } from "./corner";
 import { LANDMARKS } from "./landmarks";
 import maplibregl, { type CustomLayerInterface, type CustomRenderMethodInput, type Map as MaplibreMap } from "maplibre-gl";
@@ -15,6 +15,13 @@ import maplibregl, { type CustomLayerInterface, type CustomRenderMethodInput, ty
 const { MercatorCoordinate } = maplibregl;
 type MapLibreMap = MaplibreMap;
 
+
+// three r152+ converts hex/CSS colours from sRGB to linear before lighting; 0.134 used them as-is.
+// Every colour and light here was tuned against 0.134, so keep the legacy colour workflow
+// (output is still sRGB-encoded, as with 0.134's outputEncoding = sRGBEncoding).
+THREE.ColorManagement.enabled = false;
+/** three r155+ lights are physically correct (no implicit x PI); multiply to keep the 0.134 (legacy) brightness. */
+const LEGACY = Math.PI;
 
 const renderers = new WeakMap<WebGLRenderingContext | WebGL2RenderingContext, THREE.WebGLRenderer>();
 
@@ -24,7 +31,7 @@ export function sharedRenderer(map: MaplibreMap, gl: WebGLRenderingContext | Web
   if (!r) {
     r = new THREE.WebGLRenderer({ canvas: map.getCanvas(), context: gl, antialias: true });
     r.autoClear = false;
-    r.outputEncoding = THREE.sRGBEncoding;
+    r.outputColorSpace = THREE.SRGBColorSpace;
     renderers.set(gl, r);
   }
   return r;
@@ -67,13 +74,12 @@ function dequantize(g: THREE.BufferGeometry): THREE.BufferGeometry {
     if (!a) continue;
     const raw = "isInterleavedBufferAttribute" in a ? a.data.array : a.array;
     if (raw instanceof Float32Array && !a.normalized) continue;
-    // Normalized ints map to [-1, 1] (signed) or [0, 1] (unsigned); three 0.134's getX does not do this.
-    const k = !a.normalized ? 1 : raw instanceof Int8Array ? 1 / 127 : raw instanceof Int16Array ? 1 / 32767 : raw instanceof Uint8Array ? 1 / 255 : raw instanceof Uint16Array ? 1 / 65535 : 1;
+    // getX/getY/getZ already map normalized ints to [-1, 1] / [0, 1] (three r1xx+).
     const out = new Float32Array(a.count * 3);
     for (let i = 0; i < a.count; i++) {
-      out[i * 3] = a.getX(i) * k;
-      out[i * 3 + 1] = a.getY(i) * k;
-      out[i * 3 + 2] = a.getZ(i) * k;
+      out[i * 3] = a.getX(i);
+      out[i * 3 + 1] = a.getY(i);
+      out[i * 3 + 2] = a.getZ(i);
     }
     g.setAttribute(name, new THREE.BufferAttribute(out, 3));
   }
@@ -228,8 +234,8 @@ export function createVehicleLayer() {
   let renderer: THREE.WebGLRenderer | null = null;
   const scene = new THREE.Scene();
   const camera = new THREE.Camera();
-  scene.add(new THREE.AmbientLight(0xffffff, 1.6));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.4);
+  scene.add(new THREE.AmbientLight(0xffffff, 1.6 * LEGACY));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.4 * LEGACY);
   sun.position.set(0.4, -0.6, 1);
   scene.add(sun);
   const origin = MercatorCoordinate.fromLngLat([-73.97, 40.73], 0);
@@ -256,7 +262,7 @@ export function createVehicleLayer() {
   let last: VehicleInstance[] = [];
   function loadModels() {
     // The meshopt decoder is only needed for these models: keep it out of the shared 3D chunk.
-    void import("three/examples/jsm/libs/meshopt_decoder.module.js").then(({ MeshoptDecoder }) => {
+    void import("three/addons/libs/meshopt_decoder.module.js").then(({ MeshoptDecoder }) => {
     const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
     for (const mode of Object.keys(VEHICLE_MODELS) as VehicleMode[]) {
       loader.load(VEHICLE_MODELS[mode].url, (gltf) => {
@@ -553,8 +559,8 @@ export function createHydrantLayer(): CustomLayerInterface {
   let renderer: THREE.WebGLRenderer | null = null;
   const scene = new THREE.Scene();
   const camera = new THREE.Camera();
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x6b6b6b, 1.2));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.1);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x6b6b6b, 1.2 * LEGACY));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.1 * LEGACY);
   sun.position.set(0.4, -0.6, 1);
   scene.add(sun);
   const origin = MercatorCoordinate.fromLngLat([-73.97, 40.73], 0);
@@ -686,7 +692,7 @@ function bladeTexture(name: string): THREE.CanvasTexture {
   while (g.measureText(name).width > c.width - 48 && (size -= 4) > 24);
   g.fillText(name, c.width / 2, c.height / 2 + 3);
   const t = new THREE.CanvasTexture(c);
-  t.encoding = THREE.sRGBEncoding;
+  t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 4;
   return t;
 }
@@ -710,7 +716,7 @@ function roadTexture(name: string): THREE.CanvasTexture {
   g.setTransform(1, 0, 0, 2.5, 0, 0);
   g.fillText(name, c.width / 2, c.height / 5);
   const t = new THREE.CanvasTexture(c);
-  t.encoding = THREE.sRGBEncoding;
+  t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 8;
   return t;
 }
@@ -855,8 +861,8 @@ export function createStreetSignsLayer(): CustomLayerInterface {
     onAdd(m, gl) {
       map = m;
       renderer = sharedRenderer(m, gl);
-      scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a8a, 1.1));
-      const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a8a, 1.1 * LEGACY));
+      const sun = new THREE.DirectionalLight(0xffffff, 0.9 * LEGACY);
       sun.position.set(0.4, 1, 0.6);
       scene.add(sun, group);
       new GLTFLoader().load("/models/street-name-sign.glb", (gltf) => {
@@ -978,7 +984,7 @@ export function createStorefrontLayer(): CustomLayerInterface {
   canvas.height = 1024;
   const g = canvas.getContext("2d")!;
   const atlas = new THREE.CanvasTexture(canvas);
-  atlas.encoding = THREE.sRGBEncoding;
+  atlas.colorSpace = THREE.SRGBColorSpace;
   // One upload per changed sign set; no mipmap chain to rebuild.
   atlas.generateMipmaps = false;
   atlas.minFilter = THREE.LinearFilter;
@@ -990,7 +996,7 @@ export function createStorefrontLayer(): CustomLayerInterface {
   material.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", "#include <common>\nattribute vec2 slot;")
-      .replace("#include <uv_vertex>", "#include <uv_vertex>\nvUv = vec2((slot.x + uv.x) * 0.5, 1.0 - (slot.y + 1.0 - uv.y) / 32.0);");
+      .replace("#include <uv_vertex>", "#include <uv_vertex>\nvMapUv = vec2((slot.x + uv.x) * 0.5, 1.0 - (slot.y + 1.0 - uv.y) / 32.0);");
   };
   const mesh = new THREE.InstancedMesh(geometry, material, MAX);
   mesh.frustumCulled = false;
@@ -1103,8 +1109,8 @@ export function createLandmarksLayer(): CustomLayerInterface {
   let renderer: THREE.WebGLRenderer | null = null;
   const scene = new THREE.Scene();
   const camera = new THREE.Camera();
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x7a7a7a, 1.15));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x7a7a7a, 1.15 * LEGACY));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.2 * LEGACY);
   sun.position.set(0.4, -0.6, 1);
   scene.add(sun);
   const origin = MercatorCoordinate.fromLngLat([-73.99, 40.73], 0);
@@ -1224,13 +1230,13 @@ const LANDMARK_MODELS: Record<string, () => THREE.Group> = {
 
 /** GLB bytes for every hero landmark model (Node build step; the exporter is loaded on demand). */
 export async function landmarkGlbs(): Promise<Record<string, ArrayBuffer>> {
-  const { GLTFExporter } = await import("three/examples/jsm/exporters/GLTFExporter.js");
+  const { GLTFExporter } = await import("three/addons/exporters/GLTFExporter.js");
   const exporter = new GLTFExporter();
   const out: Record<string, ArrayBuffer> = {};
   for (const [id, make] of Object.entries(LANDMARK_MODELS)) {
     const scene = new THREE.Scene();
     scene.add(make());
-    out[id] = await new Promise<ArrayBuffer>((res) => exporter.parse(scene, (r) => res(r as ArrayBuffer), { binary: true }));
+    out[id] = await new Promise<ArrayBuffer>((res, rej) => exporter.parse(scene, (r) => res(r as ArrayBuffer), rej, { binary: true }));
   }
   return out;
 }

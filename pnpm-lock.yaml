@@ -144,8 +144,8 @@ importers:
         specifier: 1.0.7
         version: 1.0.7(tailwindcss@3.4.14)
       three:
-        specifier: 0.134.0
-        version: 0.134.0
+        specifier: 0.186.1
+        version: 0.186.1
       typescript:
         specifier: 5.6.3
         version: 5.6.3
@@ -178,8 +178,8 @@ importers:
         specifier: 22.10.2
         version: 22.10.2
       '@types/three':
-        specifier: 0.134.0
-        version: 0.134.0
+        specifier: 0.186.0
+        version: 0.186.0
       dependency-cruiser:
         specifier: 16.10.4
         version: 16.10.4
@@ -333,6 +333,9 @@ packages:
 
   '@bokuweb/zstd-wasm@0.0.27':
     resolution: {integrity: sha512-GDm2uOTK3ESjnYmSeLQifJnBsRCWajKLvN32D2ZcQaaCIJI/Hse9s74f7APXjHit95S10UImsRGkTsbwHmrtmg==}
+
+  '@dimforge/rapier3d-compat@0.12.0':
+    resolution: {integrity: sha512-uekIGetywIgopfD97oDL5PfeezkFpNhwlzlaEYNOA0N6ghdsOvh/HYjSMek5Q2O1PYvRSDFcqFVJl4r4ZBwOow==}
 
   '@duckdb/node-api@1.5.6-r.1':
     resolution: {integrity: sha512-yIPol6P4EQmsAUsb27donJf7iADrM31Ei/WkvhkZpSscjhEErYsuF19lsJ/qz5mUWxsKFQpLdjvrlhPQnMTBqw==}
@@ -1817,6 +1820,9 @@ packages:
   '@turf/rhumb-distance@6.5.0':
     resolution: {integrity: sha512-oKp8KFE8E4huC2Z1a1KNcFwjVOqa99isxNOwfo4g3SUABQ6NezjKDDrnvC4yI5YZ3/huDjULLBvhed45xdCrzg==}
 
+  '@tweenjs/tween.js@23.1.3':
+    resolution: {integrity: sha512-vJmvvwFxYuGnF2axRtPYocag6Clbb5YS7kLL+SO/TeVFzHqDIWrNKYtcsPMibjDx9O+bu+psAy9NKfWklassUA==}
+
   '@tybys/wasm-util@0.10.4':
     resolution: {integrity: sha512-W3c4gRigFS0T/Ma4qIYF3GDAc5AQdHb1yL5znJT1Zv1YaD9Kitx656wBjvr19qbiosmZT8lWDM5BEMynUqX65A==}
 
@@ -1919,14 +1925,23 @@ packages:
   '@types/react@18.3.12':
     resolution: {integrity: sha512-D2wOSq/d6Agt28q7rSI3jhU7G6aiuzljDGZ2hTZHIkrTLUI+AF3WMeKkEZ9nN2fkBAlcktT6vcZjDFiIhMYEQw==}
 
+  '@types/stats.js@0.17.4':
+    resolution: {integrity: sha512-jIBvWWShCvlBqBNIZt0KAshWpvSjhkwkEu4ZUcASoAvhmrgAUI2t1dXrjSL4xXVLB4FznPrIsX3nKXFl/Dt4vA==}
+
   '@types/suncalc@1.9.2':
     resolution: {integrity: sha512-ATAGBHHfA1TlE2tjfidLyTcysjoT2JHHEAmWRULh73SU9UTn++j5fqHEW16X6Y/2Li87jEQXzgu4R/OOdlDqzw==}
 
   '@types/three@0.134.0':
     resolution: {integrity: sha512-4YB+99Rgqq27EjiYTItEoZtdjLnTh8W9LxowgpC9eWsjaQJIL4Kn/ZcUKAnW3gB/jS4hqGN8iqmid+RcUZDzpA==}
 
+  '@types/three@0.186.0':
+    resolution: {integrity: sha512-mxYSBpDC+D0pLfSP6sW4WZTcT+nrtmZcimMqnVmy36Hte3XpeYSrvgg4TRdaM1GemGog1AWzI5qL2VoIfMXbJQ==}
+
   '@types/virtual-dom@2.1.4':
     resolution: {integrity: sha512-Y7L/frVydXRd16MevczslJZQu+QWsrqZlj6ytk7mST3xen0fkx7Ollw31By/89A8Wq+nfNWm/IoTR1ac/0fRhA==}
+
+  '@types/webxr@0.5.24':
+    resolution: {integrity: sha512-h8fgEd/DpoS9CBrjEQXR+dIDraopAEfu4wYVNY2tEPwk60stPWhvZMf4Foo5FakuQ7HFZoa8WceaWFervK2Ovg==}
 
   '@typescript-eslint/eslint-plugin@8.46.4':
     resolution: {integrity: sha512-R48VhmTJqplNyDxCyqqVkFSZIx1qX6PzwqgcXn1olLrzxcSBDlOsbtcnQuQhNtnNiJ4Xe5gREI1foajYaYU2Vg==}
@@ -3450,6 +3465,9 @@ packages:
     resolution: {integrity: sha512-8q7VEgMJW4J8tcfVPy8g09NcQwZdbwFEqhe/WZkoIzjn/3TGDwtOCYtXGxA3O8tPzpczCCDgv+P2P5y00ZJOOg==}
     engines: {node: '>= 8'}
 
+  meshoptimizer@1.1.1:
+    resolution: {integrity: sha512-oRFNWJRDA/WTrVj7NWvqa5HqE1t9MYDj2VaWirQCzCCrAd2GHrqR/sQezCxiWATPNlKTcRaPRHPJwIRoPBAp5g==}
+
   mgrs@1.0.0:
     resolution: {integrity: sha512-awNbTOqCxK1DBGjalK3xqWIstBZgN6fxsMSiXLs9/spqWkF2pAhb2rrYCFSsr1/tT7PhcDGjZndG8SWYn0byYA==}
 
@@ -4290,6 +4308,9 @@ packages:
   three@0.134.0:
     resolution: {integrity: sha512-LbBerg7GaSPjYtTOnu41AMp7tV6efUNR3p4Wk5NzkSsNTBuA5mDGOfwwZL1jhhVMLx9V20HolIUo0+U3AXehbg==}
 
+  three@0.186.1:
+    resolution: {integrity: sha512-blFeqb49wRCSGUGj7gtpfnSGHy2lwDk94RhUmS1c/hTby70kvChbWpkJ4Pm1390LqzzvTmzgXKHPEafJwCb8jA==}
+
   through@2.3.8:
     resolution: {integrity: sha512-w89qg7PI8wAdvX60bMDP+bFoD5Dvhm9oLheFp5O4a2QF0cSBGsBX4qZmadPMvVqlLJBBci+WqGGOAPvcDeNSVg==}
 
@@ -4804,6 +4825,8 @@ snapshots:
       '@babel/helper-validator-identifier': 7.29.7
 
   '@bokuweb/zstd-wasm@0.0.27': {}
+
+  '@dimforge/rapier3d-compat@0.12.0': {}
 
   '@duckdb/node-api@1.5.6-r.1':
     dependencies:
@@ -6103,6 +6126,8 @@ snapshots:
       '@turf/helpers': 6.5.0
       '@turf/invariant': 6.5.0
 
+  '@tweenjs/tween.js@23.1.3': {}
+
   '@tybys/wasm-util@0.10.4':
     dependencies:
       tslib: 2.8.1
@@ -6204,11 +6229,24 @@ snapshots:
       '@types/prop-types': 15.7.15
       csstype: 3.2.3
 
+  '@types/stats.js@0.17.4': {}
+
   '@types/suncalc@1.9.2': {}
 
   '@types/three@0.134.0': {}
 
+  '@types/three@0.186.0':
+    dependencies:
+      '@dimforge/rapier3d-compat': 0.12.0
+      '@tweenjs/tween.js': 23.1.3
+      '@types/stats.js': 0.17.4
+      '@types/webxr': 0.5.24
+      fflate: 0.8.3
+      meshoptimizer: 1.1.1
+
   '@types/virtual-dom@2.1.4': {}
+
+  '@types/webxr@0.5.24': {}
 
   '@typescript-eslint/eslint-plugin@8.46.4(@typescript-eslint/parser@8.46.4(eslint@9.39.1(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)(typescript@5.6.3))(eslint@9.39.1(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)(typescript@5.6.3)':
     dependencies:
@@ -8009,6 +8047,8 @@ snapshots:
 
   merge2@1.4.1: {}
 
+  meshoptimizer@1.1.1: {}
+
   mgrs@1.0.0: {}
 
   micromatch@4.0.8:
@@ -8988,6 +9028,8 @@ snapshots:
       any-promise: 1.3.0
 
   three@0.134.0: {}
+
+  three@0.186.1: {}
 
   through@2.3.8: {}
 
