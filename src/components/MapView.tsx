@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { RestroomCard } from "@/components/RestroomCard";
+import type { RestroomInfo } from "@/lib/map/restrooms";
 import MapLibreMap, {
   type MapLayerMouseEvent,
   type MapRef,
@@ -190,6 +192,8 @@ export function MapView({
     name: string;
     detail: string;
   } | null>(null);
+  const [restroom, setRestroom] = useState<RestroomInfo | null>(null);
+  const restroomsMod = useRef<typeof import("@/lib/map/restrooms") | null>(null);
   /** So leaving walk mode can restore the overhead camera exactly once. */
   const wasWalking = useRef(false);
   /** The walker's eye pose; the camera is derived from it every frame. */
@@ -200,6 +204,7 @@ export function MapView({
     scale,
     mapStyle,
     city3d,
+    restrooms,
     tilted,
     setTilted,
     walking,
@@ -481,6 +486,11 @@ export function MapView({
         setRoutePoint(routePicking, { lon: event.lngLat.lng, lat: event.lngLat.lat });
         return;
       }
+      const hit = restroomsMod.current?.restroomAt(event.target, event.point.x, event.point.y);
+      if (hit) {
+        setRestroom(hit);
+        return;
+      }
       // Clicks stay live at street level: picking the block underfoot opens
       // its details like it does overhead.
       const picked = pickAt(event.point.x, event.point.y, event.lngLat);
@@ -635,6 +645,21 @@ export function MapView({
     mapStyle,
     walking,
   ]);
+
+  // Public restrooms: lazily installed icon layer, toggled from the Layers dropdown.
+  useEffect(() => {
+    if (!ready) return;
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    if (!restrooms) setRestroom(null);
+    import("@/lib/map/restrooms")
+      .then((mod) => {
+        restroomsMod.current = mod;
+        if (restrooms) mod.installRestrooms(map);
+        mod.setRestroomsVisible(map, restrooms);
+      })
+      .catch((err) => console.warn("restrooms failed to load", err));
+  }, [ready, styleEpoch, restrooms]);
 
   // Textured 3D city: installed lazily the first time it is switched on.
   useEffect(() => {
@@ -1056,6 +1081,8 @@ export function MapView({
         onMoveEnd={handleMoveEnd}
         style={{ position: "absolute", inset: 0 }}
       />
+
+      {restroom ? <RestroomCard restroom={restroom} onClose={() => setRestroom(null)} /> : null}
 
       {walking ? (
         <WalkControls

@@ -11,6 +11,7 @@ import * as area from "../api/area/[block]";
 import * as areas from "../api/areas";
 import * as blocks from "../api/blocks";
 import * as cityTiles from "../api/city-tiles";
+import * as restrooms from "../api/restrooms";
 import * as sources from "../api/sources";
 import * as street from "../api/street";
 
@@ -22,6 +23,7 @@ const routes: Array<[string, Handler]> = [
   ["/api/areas", areas],
   ["/api/blocks", blocks],
   ["/api/city-tiles", cityTiles],
+  ["/api/restrooms", restrooms],
   ["/api/sources", sources],
   ["/api/street", street],
 ];
