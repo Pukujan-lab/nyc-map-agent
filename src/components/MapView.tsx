@@ -20,6 +20,7 @@ import {
 } from "@/lib/layers";
 import {
   applyAtmosphere,
+  applyStreetPalette,
   BASEMAP_STYLE_URL,
   installDataLayers,
 } from "@/lib/map/basemap";
@@ -715,6 +716,7 @@ export function MapView({
     const map = mapRef.current?.getMap();
     if (!map) return;
     applyAtmosphere(map, walking);
+    applyStreetPalette(map, walking);
     // At eye level basemap labels stand on the horizon and float in the sky,
     // so they step aside while walking; our own route markers stay.
     const own = new Set(Object.keys(SOURCE_IDS).map((k) => SOURCE_IDS[k as keyof typeof SOURCE_IDS] as string));
