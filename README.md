@@ -4,7 +4,7 @@ Ask anything about how loud or how dangerous a NYC street is, and watch the answ
 
 Two datasets are joined to 2020 Neighborhood Tabulation Areas in the browser and drawn as colored columns: **311 noise complaints** (`erm2-nwe9`) and **motor vehicle crashes** (`h9gi-nx95`). A chat panel answers in plain language, and every answer moves or highlights the map.
 
-The map opens flat and north-up over a vector basemap with real extruded buildings. Switch between **Neighborhoods** and **Blocks** (~300 m squares), read the value off four colors — blue, green, yellow, red — whose ranges are printed in the legend, then press the box button to tilt the camera down to 62° and compare column heights. Both encodings come from the same number: color is the bucket, height is a square-root scale of the value.
+The map opens flat and north-up over a vector basemap with real extruded buildings. Pick a unit from one dropdown — **Block** (~300 m squares), **Neighborhood** (NTA 2020), **Community district** or **Borough** — and a style: **Filled areas** (default), **3D columns** or **Heatmap**, read the value off four colors — blue, green, yellow, red — whose ranges are printed in the legend, then press the box button to tilt the camera down to 62° and compare column heights. Both encodings come from the same number: color is the bucket, height is a square-root scale of the value.
 
 The screen is one dock. Legend, layer switch, tilt, settings and chat sit in a single pill at the bottom; the time window, scale, neighborhood jump, zoom and data caveats live in the settings drawer, and chat and details open as sheets.
 
@@ -34,7 +34,31 @@ Copy `.env.example` to `.env` and fill in what you need.
 | `VITE_MAPILLARY_TOKEN` or `MAPILLARY_TOKEN` | browser | Optional Mapillary **client** token for street-level photos. Either name works (`vite.config.ts` sets `envPrefix: ["VITE_", "MAPILLARY_"]`). Client tokens ship in the bundle by design. |
 | `VITE_OSRM_URL` | browser | Optional OSRM base URL for walking directions. Defaults to the public FOSSGIS foot instance `https://routing.openstreetmap.de/routed-foot`. |
 | `VITE_AGENT_MODE` | browser | `mock` (default) or `http`. See below. |
+| `VITE_DATA_BACKEND` | browser | `socrata` (default) queries NYC Open Data from the browser. `octo` reads the nightly Octo marts through `/api` and turns on borough, complaint-type and severity filters. |
+| `VITE_API_BASE` | browser | Optional origin for `/api` when it is not same-origin. |
+| `OCTO_API_KEY`, `OCTO_WORKSPACE_ID` | **server only** | Octo workspace key and id for `/api/*` and `scripts/*.ts`. |
+| `SOCRATA_KEY_ID`, `SOCRATA_KEY_SECRET`, `SOCRATA_APP_TOKEN` | **server only** | Optional Socrata credentials for ingestion. |
 | `INFERHUB_API_KEY` | **server only** | Never `VITE_`-prefixed, never in the bundle. Used by your `/api/chat` handler. |
+
+## Data layer (Octo)
+
+With `VITE_DATA_BACKEND=octo` the map reads pre-aggregated counts from Postgres in Octo instead of paging Socrata in the browser.
+
+```bash
+pnpm db:migrate   # apply db/migrations (dbmate format) through Octo's SQL endpoint
+pnpm ingest       # pull new rows for every registry source, then refresh the marts
+pnpm db:refresh   # refresh the materialized views only
+pnpm dev          # /api/* handlers run inside the Vite dev server
+```
+
+| Endpoint | What it returns |
+| --- | --- |
+| `GET /api/sources` | Registry metadata, guides, filter options (top categories, severities), last ingest |
+| `GET /api/blocks?source=&window=90d\|12mo&level=block\|nta\|cd\|borough&categories=&severity=&borough=&nta=` | One row per area with count and citywide percentile |
+| `GET /api/area/:row:col` | Every source's 90-day and 12-month count and percentile for one block, plus top categories |
+| `GET /api/street?name=&borough=` | Per-street noise and crash counts with green/yellow/orange/red levels |
+
+A GitHub Actions workflow (`.github/workflows/ingest.yml`) runs the ingest nightly and on demand. Set the repository secrets `OCTO_API_KEY`, `OCTO_WORKSPACE_ID` and, optionally, `SOCRATA_KEY_ID`, `SOCRATA_KEY_SECRET`, `SOCRATA_APP_TOKEN`. The schema, lineage and how to add a dataset are in [docs/DATA_MODEL.md](docs/DATA_MODEL.md).
 
 ## Data sources
 

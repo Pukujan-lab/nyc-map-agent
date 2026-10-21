@@ -28,6 +28,8 @@ export const SOURCE_IDS = {
   emphasis: "emphasis",
   blockSelection: "block-selection",
   route: "walk-route",
+  areas: "areas",
+  blockPoints: "block-points",
 } as const;
 
 export const LAYER_IDS = {
@@ -44,7 +46,31 @@ export const LAYER_IDS = {
   routeCasing: "walk-route-casing",
   routeLine: "walk-route-line",
   routeEnds: "walk-route-ends",
+  areaFill: "area-fill",
+  areaColumns: "area-columns",
+  areaOutline: "area-outline",
+  heat: "block-heat",
 } as const;
+
+/**
+ * Sequential ramp for the filled-areas view (ColorBrewer YlOrRd, colour-blind
+ * safe). Input `t` is sqrt(value / peak), so one extreme area does not wash
+ * everything else out.
+ */
+export const CHOROPLETH_RAMP: Array<[number, string]> = [
+  [0, "#ffffcc"],
+  [0.25, "#fed976"],
+  [0.5, "#fd8d3c"],
+  [0.75, "#e31a1c"],
+  [1, "#800026"],
+];
+
+const rampExpression = [
+  "interpolate",
+  ["linear"],
+  ["get", "t"],
+  ...CHOROPLETH_RAMP.flat(),
+] as unknown as string;
 
 /** The single glass hue every data volume is painted with. */
 const GLASS = "#64748b";
@@ -60,9 +86,48 @@ export const DATA_SOURCES: Record<string, SourceSpecification> = {
   emphasis: { type: "geojson", data: emptyCollection() },
   "block-selection": { type: "geojson", data: emptyCollection() },
   "walk-route": { type: "geojson", data: emptyCollection() },
+  areas: { type: "geojson", data: emptyCollection() },
+  "block-points": { type: "geojson", data: emptyCollection() },
 };
 
 export const DATA_LAYERS: LayerSpecification[] = [
+  {
+    id: LAYER_IDS.areaFill,
+    type: "fill",
+    source: SOURCE_IDS.areas,
+    layout: { visibility: "none" },
+    paint: { "fill-color": rampExpression, "fill-opacity": 0.62 },
+  },
+  {
+    id: LAYER_IDS.areaColumns,
+    type: "fill-extrusion",
+    source: SOURCE_IDS.areas,
+    layout: { visibility: "none" },
+    paint: {
+      "fill-extrusion-color": GLASS,
+      "fill-extrusion-height": ["get", "height"],
+      "fill-extrusion-opacity": 0.35,
+    },
+  },
+  {
+    id: LAYER_IDS.areaOutline,
+    type: "line",
+    source: SOURCE_IDS.areas,
+    layout: { visibility: "none", "line-join": "round" },
+    paint: { "line-color": "rgba(30, 41, 59, 0.45)", "line-width": 0.6 },
+  },
+  {
+    id: LAYER_IDS.heat,
+    type: "heatmap",
+    source: SOURCE_IDS.blockPoints,
+    layout: { visibility: "none" },
+    paint: {
+      "heatmap-weight": ["get", "w"],
+      "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 10, 6, 14, 22, 17, 48],
+      "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 10, 0.8, 16, 2],
+      "heatmap-opacity": 0.75,
+    },
+  },
   {
     id: LAYER_IDS.neighborhoods,
     type: "fill-extrusion",

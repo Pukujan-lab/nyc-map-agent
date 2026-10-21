@@ -7,7 +7,14 @@ import {
   type ReactNode,
 } from "react";
 import { useSearchParams } from "react-router-dom";
-import { parseLayerId, parseMapScale, type LayerId, type MapScale } from "@/lib/layers";
+import {
+  parseLayerId,
+  parseMapScale,
+  parseMapStyle,
+  type LayerId,
+  type MapScale,
+  type MapStyleId,
+} from "@/lib/layers";
 import { parseWindowId, type WindowId } from "@/lib/windows";
 
 export interface CameraTarget {
@@ -43,6 +50,8 @@ interface MapState {
   layer: LayerId;
   window: WindowId;
   scale: MapScale;
+  /** How areas are drawn: filled polygons, 3D columns, or a heatmap. */
+  mapStyle: MapStyleId;
   /** True while the camera is pitched; drives the "3D" toggle's pressed state. */
   tilted: boolean;
   /** True while the camera is driven first-person from the keyboard. */
@@ -76,6 +85,7 @@ interface MapStateActions {
   setLayer: (layer: LayerId) => void;
   setWindow: (window: WindowId) => void;
   setScale: (scale: MapScale) => void;
+  setMapStyle: (style: MapStyleId) => void;
   setTilted: (tilted: boolean) => void;
   /** Enter walk mode, optionally framing a point first. */
   startWalk: (target?: { lon: number; lat: number } | null) => void;
@@ -104,6 +114,7 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
   const layer = parseLayerId(searchParams.get("layer"));
   const windowId = parseWindowId(searchParams.get("window"));
   const scale = parseMapScale(searchParams.get("scale"));
+  const mapStyle = parseMapStyle(searchParams.get("style"));
 
   const [tilted, setTilted] = useState(false);
   const [walking, setWalking] = useState(false);
@@ -128,7 +139,7 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateSearch = useCallback(
-    (key: "layer" | "window" | "scale", value: string) => {
+    (key: "layer" | "window" | "scale" | "style", value: string) => {
       setSearchParams(
         (previous) => {
           const next = new URLSearchParams(previous);
@@ -153,6 +164,11 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
 
   const setScale = useCallback(
     (next: MapScale) => updateSearch("scale", next),
+    [updateSearch],
+  );
+
+  const setMapStyle = useCallback(
+    (next: MapStyleId) => updateSearch("style", next),
     [updateSearch],
   );
 
@@ -222,6 +238,8 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
       layer,
       window: windowId,
       scale,
+      mapStyle,
+      setMapStyle,
       tilted,
       walking,
       walkRequest,
@@ -259,6 +277,8 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
       layer,
       windowId,
       scale,
+      mapStyle,
+      setMapStyle,
       tilted,
       walking,
       walkRequest,

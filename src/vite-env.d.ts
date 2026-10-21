@@ -8,6 +8,10 @@ interface ImportMetaEnv {
   /** Same token, unprefixed; exposed via `envPrefix` in vite.config.ts. */
   readonly MAPILLARY_TOKEN?: string;
   readonly VITE_OSRM_URL?: string;
+  /** `octo` reads the Octo marts through /api; anything else queries Socrata directly. */
+  readonly VITE_DATA_BACKEND?: "octo" | "socrata";
+  /** Base URL for /api when it is not same-origin. */
+  readonly VITE_API_BASE?: string;
 }
 
 interface ImportMeta {

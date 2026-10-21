@@ -9,6 +9,8 @@ import { applyView } from "@/lib/datasets/view";
 import { useDataView } from "@/lib/store/DataViewContext";
 import { ChatPanel } from "@/components/ChatPanel";
 import { ControlDrawer } from "@/components/ControlDrawer";
+import { useAreas } from "@/lib/geo/useAreas";
+import { useFilters } from "@/lib/datasets/useFilters";
 import { DetailsSheet } from "@/components/DetailsSheet";
 import { MapHud } from "@/components/MapHud";
 import { MapPeek } from "@/components/MapPeek";
@@ -41,12 +43,14 @@ export default function Index() {
     ? windowBounds(data.crashes.windowId).label
     : windowBounds("12mo").label;
 
+  const { filters } = useFilters();
   const sourceState = useSourceCounts({
     enabled: enabledSources,
     windowId,
     boundaries: data.boundaries,
     noise: data.noise,
     crashes: data.crashes,
+    filters,
   });
 
   const routeQuery = useWalkingRoute(routeStart, routeEnd);
@@ -64,6 +68,8 @@ export default function Index() {
     });
     return applyView(base, viewMode, sourceState.counts);
   }, [data.boundaries, data.noise, data.crashes, layer, scale, viewMode, sourceState.counts]);
+
+  const areas = useAreas(model, data.boundaries, scale);
 
   const selectedDatum = useMemo(
     () => model.neighborhoods.find((d) => d.ntaCode === selectedNtaCode) ?? null,
@@ -157,7 +163,7 @@ export default function Index() {
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-background">
-      <MapView model={model} boundaries={data.boundaries} route={route} />
+      <MapView model={model} boundaries={data.boundaries} areas={areas} route={route} />
 
       <RoutePanel
         route={route}
@@ -198,6 +204,7 @@ export default function Index() {
         maxValue={model.maxValue}
         areasWithData={model.areasWithData}
         view={model.view}
+        areas={areas}
         onOpenSources={() => {
           setControlsOpen(false);
           setSourcesOpen(true);

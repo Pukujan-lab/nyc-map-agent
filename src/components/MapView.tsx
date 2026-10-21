@@ -10,6 +10,7 @@ import { formatCount, formatPercent } from "@/lib/format";
 import { blockKey } from "@/lib/geo/blocks";
 import { boroughOutlinesToGeoJson } from "@/lib/geo/boroughs";
 import { NtaIndex } from "@/lib/geo/ntaIndex";
+import { areasToGeoJson, blockPointsToGeoJson, type AreaDatum } from "@/lib/geo/areas";
 import {
   HOME_VIEW,
   LAYER_METRICS,
@@ -103,10 +104,13 @@ function detailForBlock(datum: BlockDatum, layer: MapModel["layer"]): string {
 export function MapView({
   model,
   boundaries,
+  areas,
   route = null,
 }: {
   model: MapModel;
   boundaries: NtaBoundary[] | null;
+  /** The model rolled up to the chosen unit (filled-areas view). */
+  areas: AreaDatum[];
   /** Walking directions to draw (and optionally follow), if any. */
   route?: WalkingRoute | null;
 }) {
@@ -143,6 +147,7 @@ export function MapView({
   const {
     layer,
     scale,
+    mapStyle,
     tilted,
     setTilted,
     walking,
@@ -175,6 +180,9 @@ export function MapView({
     () => neighborhoodsToGeoJson(model.neighborhoods),
     [model.neighborhoods],
   );
+
+  const areaGeoJson = useMemo(() => areasToGeoJson(areas), [areas]);
+  const blockPointGeoJson = useMemo(() => blockPointsToGeoJson(model.blocks), [model.blocks]);
 
   const blockGeoJson = useMemo(
     () => blocksToGeoJson(model.blocks),
@@ -536,13 +544,41 @@ export function MapView({
         showBlocks ? "visible" : "none",
       );
     }
+
+    // Unit + style: the classic glass columns cover blocks and neighborhoods;
+    // everything else (filled areas, district/borough columns, heatmap) reads
+    // from the areas / block-points sources.
+    (map.getSource(SOURCE_IDS.areas) as GeoJSONSource | undefined)?.setData(areaGeoJson);
+    (map.getSource(SOURCE_IDS.blockPoints) as GeoJSONSource | undefined)?.setData(blockPointGeoJson);
+    const coarse = scale === "districts" || scale === "boroughs";
+    const classic = walking || (mapStyle === "columns" && !coarse);
+    const vis = (on: boolean) => (on ? "visible" : "none");
+    map.setLayoutProperty(LAYER_IDS.areaFill, "visibility", vis(!walking && mapStyle === "fill"));
+    map.setLayoutProperty(LAYER_IDS.areaColumns, "visibility", vis(!walking && mapStyle === "columns" && coarse));
+    map.setLayoutProperty(LAYER_IDS.areaOutline, "visibility", vis(!walking && mapStyle !== "heat" && (mapStyle === "fill" || coarse)));
+    map.setLayoutProperty(LAYER_IDS.heat, "visibility", vis(!walking && mapStyle === "heat"));
+    if (!classic) {
+      for (const id of [
+        LAYER_IDS.neighborhoods,
+        LAYER_IDS.blocks,
+        LAYER_IDS.blockOutline,
+        LAYER_IDS.neighborhoodOutline,
+        LAYER_IDS.blockSelection,
+        LAYER_IDS.blockSelectionEdge,
+      ]) {
+        map.setLayoutProperty(id, "visibility", "none");
+      }
+    }
   }, [
     ready,
     styleEpoch,
     neighborhoodGeoJson,
     blockGeoJson,
     boroughGeoJson,
+    areaGeoJson,
+    blockPointGeoJson,
     scale,
+    mapStyle,
     walking,
   ]);
 

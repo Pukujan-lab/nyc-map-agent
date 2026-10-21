@@ -17,7 +17,11 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useState } from "react";
+import { FiltersPanel } from "./FiltersPanel";
 import type { SourceCounts } from "@/lib/datasets/fetchSource";
+import { DATA_BACKEND } from "@/lib/datasets/backend";
 import {
   datasetUrl,
   POLARITY_LABELS,
@@ -29,6 +33,8 @@ import type { SourceStatus } from "@/lib/datasets/useSourceCounts";
 import { formatCount } from "@/lib/format";
 import { useDataView } from "@/lib/store/DataViewContext";
 import { useMediaQuery } from "@/lib/useMediaQuery";
+
+const GUIDE_KEY = "nyc-map-guide-seen";
 
 interface DataSourcesDrawerProps {
   open: boolean;
@@ -43,6 +49,20 @@ interface DataSourcesDrawerProps {
  */
 export function DataSourcesDrawer({ open, onOpenChange, counts, status }: DataSourcesDrawerProps) {
   const isDesktop = useMediaQuery("(min-width: 1024px)");
+  const [firstRun] = useState(() => {
+    try {
+      return localStorage.getItem(GUIDE_KEY) !== "1";
+    } catch {
+      return false;
+    }
+  });
+  const markGuideSeen = () => {
+    try {
+      localStorage.setItem(GUIDE_KEY, "1");
+    } catch {
+      /* private mode: show the guide again next time */
+    }
+  };
   const {
     enabledSources,
     averageSources,
@@ -62,12 +82,38 @@ export function DataSourcesDrawer({ open, onOpenChange, counts, status }: DataSo
         <SheetHeader>
           <SheetTitle>Data sources</SheetTitle>
           <SheetDescription>
-            NYC Open Data, queried live from your browser. Switch a source on to
+            {DATA_BACKEND === "octo" ? "NYC Open Data, loaded nightly into our data layer." : "NYC Open Data, queried live from your browser."} Switch a source on to
             load it; tick “in average” to include it in the Average view.
           </SheetDescription>
         </SheetHeader>
 
-        <Accordion type="multiple" defaultValue={[...SOURCE_CATEGORIES]} className="mt-3">
+        <Accordion
+          type="multiple"
+          defaultValue={firstRun ? ["guide", ...SOURCE_CATEGORIES] : [...SOURCE_CATEGORIES]}
+          className="mt-3"
+          onValueChange={(v) => {
+            if (!v.includes("guide")) markGuideSeen();
+          }}
+        >
+          <AccordionItem value="guide">
+            <AccordionTrigger className="py-2.5 text-xs uppercase tracking-wide">
+              How to read this map
+            </AccordionTrigger>
+            <AccordionContent className="space-y-1.5 text-[11px] leading-snug text-muted-foreground">
+              <p>1. Switch on the sources you care about below. Each one says what a record is and what to watch out for.</p>
+              <p>2. Pick a unit (block, neighborhood, community district, borough) and a style in the main menu.</p>
+              <p>3. Darker areas have more records. Under the Average view, darker means more concern across your sources.</p>
+              <p>4. Tap any area for its numbers. Counts are reports, not measurements, so compare like with like.</p>
+            </AccordionContent>
+          </AccordionItem>
+          <AccordionItem value="filters">
+            <AccordionTrigger className="py-2.5 text-xs uppercase tracking-wide">
+              Filters
+            </AccordionTrigger>
+            <AccordionContent>
+              <FiltersPanel enabledSources={enabledSources} />
+            </AccordionContent>
+          </AccordionItem>
           {SOURCE_CATEGORIES.map((category) => (
             <AccordionItem key={category} value={category}>
               <AccordionTrigger className="py-2.5 text-xs uppercase tracking-wide">
@@ -88,6 +134,16 @@ export function DataSourcesDrawer({ open, onOpenChange, counts, status }: DataSo
                           <p className="text-[11px] leading-snug text-muted-foreground">
                             {source.description}
                           </p>
+                          <Collapsible className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                            <CollapsibleTrigger className="text-foreground/80 underline-offset-2 hover:underline">About this source</CollapsibleTrigger>
+                            <CollapsibleContent>
+                            <dl className="mt-1 space-y-0.5">
+                              <div><dt className="inline font-medium text-foreground">What: </dt><dd className="inline">{source.guide.what}</dd></div>
+                              <div><dt className="inline font-medium text-foreground">Watch out: </dt><dd className="inline">{source.guide.caveats}</dd></div>
+                              <div><dt className="inline font-medium text-foreground">Updated: </dt><dd className="inline">{source.guide.cadence}</dd></div>
+                            </dl>
+                            </CollapsibleContent>
+                          </Collapsible>
                         </div>
                         <Switch
                           id={`src-${source.id}`}
