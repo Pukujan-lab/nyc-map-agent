@@ -75,3 +75,17 @@ describe("entranceInstances", () => {
     expect(Math.round(e[0].bearing)).toBe(0);
   });
 });
+
+describe("x-ray", () => {
+  it("parses OSM levels and builds stacked primitives, red elevators when out", async () => {
+    const { parseLevel } = await import("./model");
+    const { xrayPrims } = await import("./xray");
+    expect(parseLevel("-2")).toEqual([-2, -2]);
+    expect(parseLevel("-1;0")).toEqual([-1, 0]);
+    expect(parseLevel(undefined, -1)).toEqual([-1, -1]);
+    const p = xrayPrims({ ways: [{ k: "platform", c: [[0, 0], [0, 1]], from: -2, to: -2 }, { k: "steps", c: [[0, 0], [1, 0]], from: -2, to: -1 }], elevators: [{ lon: 0, lat: 0, from: -2 }] }, [[0, 0]], true);
+    expect(p[0].pts[0][2]).toBe(-10);
+    expect(p[1].pts.map((q) => q[2])).toEqual([-10, -5]);
+    expect(p.find((q) => q.kind === "shaft" && q.width > 1)?.color).toBe("#ef4444");
+  });
+});

@@ -1,8 +1,10 @@
-import { Accessibility, Crosshair, Star, Wrench } from "lucide-react";
+import { useEffect } from "react";
+import { Accessibility, Crosshair, ScanEye, Star, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { arrivalsAt, directionLabel, estimateTrain, minutesUntil, stationOf, type LiveSystem, type StaticSystem, type SystemId, type Vehicle } from "./model";
 import { useAlerts, useBuses, useNow, useStarred, useTransitData, type Outage } from "./hooks";
 import { setFollowed, useFollowed } from "./follow";
+import { getXray, setXray, useXray } from "./xray";
 
 type Data = Partial<Record<SystemId, { stat?: StaticSystem; live?: LiveSystem }>>;
 
@@ -30,12 +32,21 @@ export function StationDetails({ system, id }: { system: SystemId; id: string })
   const { isStarred, toggle } = useStarred();
   const rows = arrivalsAt(system, data[system]?.live, id, now);
   const starKey = `${system}:station:${id}`;
+  const xray = useXray();
+  // Leaving the station panel turns x-ray off.
+  useEffect(() => () => { if (getXray() === id) setXray(null); }, [id]);
   return (
     <div className="space-y-3 text-sm">
       <Button size="sm" variant="outline" aria-pressed={isStarred(starKey)} onClick={() => toggle(starKey)}>
         <Star className="mr-1.5 h-4 w-4" fill={isStarred(starKey) ? "currentColor" : "none"} />
         {isStarred(starKey) ? "Starred" : "Star station"}
       </Button>
+      {system === "subway" ? (
+        <Button size="sm" variant="outline" className="ml-2" aria-pressed={xray === id} onClick={() => setXray(xray === id ? null : id)}>
+          <ScanEye className="mr-1.5 h-4 w-4" />
+          X-ray
+        </Button>
+      ) : null}
       <ul className="space-y-2">
         {rows.map((a) => (
           <li key={`${a.route}|${a.direction}`} className="flex items-center gap-2">

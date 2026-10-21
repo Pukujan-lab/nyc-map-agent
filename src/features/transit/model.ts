@@ -350,3 +350,14 @@ export function entranceInstances(sys: StaticSystem, outStations: Set<string>, c
   }
   return out;
 }
+
+/** OSM `level` like "-2", "-1;0", "-2--1" → [min, max]. */
+export function parseLevel(v: string | undefined, fallback = 0): [number, number] {
+  const n = (v ?? "").match(/-?\d+(\.\d+)?/g)?.map(Number) ?? [];
+  return n.length ? [Math.min(...n), Math.max(...n)] : [fallback, fallback];
+}
+/** One station's insides for the x-ray view (public/transit/xray.json, keyed by GTFS station id). */
+export type XrayWay = { k: "platform" | "steps" | "corridor"; c: Array<[number, number]>; from: number; to: number };
+export type XrayStation = { ways: XrayWay[]; elevators: Array<{ lon: number; lat: number; from: number }> };
+/** Metres per OSM level. */
+export const LEVEL_M = 5;
