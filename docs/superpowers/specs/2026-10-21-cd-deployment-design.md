@@ -201,8 +201,10 @@ Three secrets, all server-side only, all in `/work/.env` (mode 600):
   then `429`. The dashboard itself is static and public; every byte of data behind
   it is behind this auth.
 - **CI:** `Authorization: Bearer <CD_DEPLOY_TOKEN>`, compared with
-  `timingSafeEqual` after length check. Accepted on the deploy and rollback routes
-  only.
+  `timingSafeEqual` after length check. Accepted on the deploy, rollback and
+  single-run routes. The single-run route has to accept it: CI starts a deploy
+  with the token, holds no session cookie, and must poll that run to completion.
+  Status and the log stream stay session-only.
 - **Session check:** signature verified and `exp` checked on every dashboard API
   call. A missing, tampered, or expired cookie returns `401`, which the dashboard
   renders as the login card.
@@ -218,7 +220,7 @@ All under `/deploy/api`, all JSON.
 | POST | `/login` | password | set session cookie |
 | POST | `/logout` | session | clear cookie |
 | GET | `/status` | session | live SHA, image, container health, last 20 runs |
-| GET | `/deploys/:id` | session | one run, including step list |
+| GET | `/deploys/:id` | session or bearer | one run, including step list |
 | GET | `/deploys/:id/log` | session | SSE stream of the run log; replays from the start |
 | POST | `/deploy` | session or bearer | start a deploy; body `{"sha"?: string}` |
 | POST | `/rollback` | session or bearer | redeploy `previousImage` |

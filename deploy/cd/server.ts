@@ -77,6 +77,12 @@ export function createApp(config: ServerConfig, deps: { runner: Runner }): Hono 
   const authed = (c: { req: { header: (k: string) => string | undefined } }) =>
     verifySession(config.sessionSecret, readCookie(c.req.header("cookie"), SESSION_COOKIE), now().getTime());
 
+  // CI starts a deploy with a bearer token, then has no cookie to poll with, so
+  // reading a single run accepts either credential. Status and logs stay
+  // session-only.
+  const authedOrBearer = (c: { req: { header: (k: string) => string | undefined } }) =>
+    authed(c) || checkBearer(c.req.header("authorization"), config.deployToken);
+
   const unauthorized = (c: { json: (b: unknown, s: 401) => Response }) => c.json({ error: "unauthorized" }, 401);
 
   app.post("/deploy/api/login", async (c) => {
@@ -121,7 +127,7 @@ export function createApp(config: ServerConfig, deps: { runner: Runner }): Hono 
   });
 
   app.get("/deploy/api/deploys/:id", (c) => {
-    if (!authed(c)) return unauthorized(c);
+    if (!authedOrBearer(c)) return unauthorized(c);
     const run = readRuns(config.stateFile, Number.MAX_SAFE_INTEGER).find((r) => r.id === c.req.param("id"));
     return run ? c.json(run) : c.json({ error: "not_found" }, 404);
   });

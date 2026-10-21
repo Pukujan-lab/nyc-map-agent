@@ -93,3 +93,49 @@ jobs:
       - run: pnpm build:e2e
       - name: Smoke e2e (Playwright, fixture API, offline)
         run: pnpm e2e
+  deploy:
+    needs: [check, size, deps, lint, api, e2e]
+    # Rollout guard: Task 13 removes this line once the stack is bootstrapped.
+    if: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: deploy-main
+      cancel-in-progress: false
+    steps:
+      - name: Trigger deploy
+        id: trigger
+        env:
+          TOKEN: ${{ secrets.NYC_DEPLOY_TOKEN }}
+        run: |
+          set -euo pipefail
+          response=$(curl -fsS -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"sha\":\"${{ github.sha }}\"}" \
+            https://nyc.design-bakery.com/deploy/api/deploy)
+          id=$(printf '%s' "$response" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          echo "started run $id"
+      - name: Wait for the run
+        env:
+          TOKEN: ${{ secrets.NYC_DEPLOY_TOKEN }}
+          RUN_ID: ${{ steps.trigger.outputs.id }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 120); do
+            body=$(curl -fsS -H "Authorization: Bearer $TOKEN" \
+              "https://nyc.design-bakery.com/deploy/api/deploys/$RUN_ID" || true)
+            status=$(printf '%s' "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("status",""))' 2>/dev/null || echo "")
+            echo "run $RUN_ID: ${status:-pending}"
+            case "$status" in
+              succeeded|rolled-back) exit 0 ;;
+              failed|interrupted)
+                echo "deploy $status"
+                curl -fsS -H "Authorization: Bearer $TOKEN" \
+                  "https://nyc.design-bakery.com/deploy/api/deploys/$RUN_ID" | python3 -m json.tool
+                exit 1 ;;
+            esac
+            sleep 10
+          done
+          echo "timed out waiting for the deploy"; exit 1

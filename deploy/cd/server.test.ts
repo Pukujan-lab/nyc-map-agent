@@ -112,6 +112,29 @@ describe("deploy API", () => {
     const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0];
     expect((await call(app, "/deploy/api/deploys/nope", { headers: { cookie } })).status).toBe(404);
   });
+
+  it("lets the CI bearer token poll a run it started", async () => {
+    const app = createApp(config, { runner: healthyRunner });
+    const started = await call(app, "/deploy/api/deploy", {
+      method: "POST",
+      headers: { authorization: `Bearer ${config.deployToken}` },
+      body: JSON.stringify({ sha: SHA }),
+    });
+    const { id } = (await started.json()) as { id: string };
+    const res = await call(app, `/deploy/api/deploys/${id}`, {
+      headers: { authorization: `Bearer ${config.deployToken}` },
+    });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { id: string }).id).toBe(id);
+  });
+
+  it("rejects a bearer token on the log stream", async () => {
+    const app = createApp(config, { runner: healthyRunner });
+    const res = await call(app, "/deploy/api/deploys/anything/log", {
+      headers: { authorization: `Bearer ${config.deployToken}` },
+    });
+    expect(res.status).toBe(401);
+  });
 });
 
 describe("log store", () => {

@@ -1617,6 +1617,29 @@ describe("deploy API", () => {
     const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0];
     expect((await call(app, "/deploy/api/deploys/nope", { headers: { cookie } })).status).toBe(404);
   });
+
+  it("lets the CI bearer token poll a run it started", async () => {
+    const app = createApp(config, { runner: healthyRunner });
+    const started = await call(app, "/deploy/api/deploy", {
+      method: "POST",
+      headers: { authorization: `Bearer ${config.deployToken}` },
+      body: JSON.stringify({ sha: SHA }),
+    });
+    const { id } = (await started.json()) as { id: string };
+    const res = await call(app, `/deploy/api/deploys/${id}`, {
+      headers: { authorization: `Bearer ${config.deployToken}` },
+    });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { id: string }).id).toBe(id);
+  });
+
+  it("rejects a bearer token on the log stream", async () => {
+    const app = createApp(config, { runner: healthyRunner });
+    const res = await call(app, "/deploy/api/deploys/anything/log", {
+      headers: { authorization: `Bearer ${config.deployToken}` },
+    });
+    expect(res.status).toBe(401);
+  });
 });
 
 describe("log store", () => {
@@ -1727,6 +1750,12 @@ export function createApp(config: ServerConfig, deps: { runner: Runner }): Hono 
   const authed = (c: { req: { header: (k: string) => string | undefined } }) =>
     verifySession(config.sessionSecret, readCookie(c.req.header("cookie"), SESSION_COOKIE), now().getTime());
 
+  // CI starts a deploy with a bearer token, then has no cookie to poll with, so
+  // reading a single run accepts either credential. Status and logs stay
+  // session-only.
+  const authedOrBearer = (c: { req: { header: (k: string) => string | undefined } }) =>
+    authed(c) || checkBearer(c.req.header("authorization"), config.deployToken);
+
   const unauthorized = (c: { json: (b: unknown, s: 401) => Response }) => c.json({ error: "unauthorized" }, 401);
 
   app.post("/deploy/api/login", async (c) => {
@@ -1771,7 +1800,7 @@ export function createApp(config: ServerConfig, deps: { runner: Runner }): Hono 
   });
 
   app.get("/deploy/api/deploys/:id", (c) => {
-    if (!authed(c)) return unauthorized(c);
+    if (!authedOrBearer(c)) return unauthorized(c);
     const run = readRuns(config.stateFile, Number.MAX_SAFE_INTEGER).find((r) => r.id === c.req.param("id"));
     return run ? c.json(run) : c.json({ error: "not_found" }, 404);
   });
