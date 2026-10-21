@@ -3,3 +3,4 @@
 !.env.example
 node_modules/
 .dyad/
+public/tiles/nyc-city.pmtiles

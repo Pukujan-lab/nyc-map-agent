@@ -118,10 +118,13 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
   const windowId = parseWindowId(searchParams.get("window"));
   const scale = parseMapScale(searchParams.get("scale"));
   const mapStyle = parseMapStyle(searchParams.get("style"));
-  const city3d = searchParams.get("city3d") === "1";
+  const city3dParam = searchParams.get("city3d");
 
   const [tilted, setTilted] = useState(false);
   const [walking, setWalking] = useState(false);
+  // Street level defaults to the textured city; an explicit choice in the
+  // Layers dropdown (city3d=0/1 in the URL) always wins.
+  const city3d = city3dParam === "1" || (city3dParam === null && walking);
   const [walkRequest, setWalkRequest] = useState<WalkRequest | null>(null);
   const [selectedNtaCode, setSelectedNtaCode] = useState<string | null>(null);
   const [selectedBlockKey, setSelectedBlockKey] = useState<string | null>(null);

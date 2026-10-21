@@ -12,7 +12,8 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "db:status": "tsx scripts/migrate.ts status",
     "db:refresh": "tsx scripts/refresh-marts.ts",
-    "ingest": "tsx scripts/ingest.ts && tsx scripts/refresh-marts.ts"
+    "ingest": "tsx scripts/ingest.ts && tsx scripts/refresh-marts.ts",
+    "build:city-tiles": "tsx scripts/build-city-tiles.ts"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "1.2.1",
@@ -41,12 +42,12 @@
     "date-fns": "3.6.0",
     "lucide-react": "0.454.0",
     "mapillary-js": "^4.1.2",
-    "maplibre-gl": "4.7.1",
+    "maplibre-gl": "5.24.0",
     "pmtiles": "4.3.0",
     "postcss": "8.4.47",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "react-map-gl": "7.1.9",
+    "react-map-gl": "8.1.3",
     "react-router-dom": "6.30.1",
     "recharts": "2.13.3",
     "sonner": "1.7.0",

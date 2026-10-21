@@ -8,7 +8,17 @@ import type { ExpressionSpecification, Map as MapLibreMap } from "maplibre-gl";
  * Textures and props only draw from zoom 16 (LOD); tiles stop at z16, which
  * caps how many props a view can hold.
  */
-export const CITY3D_TILES = "/tiles/nyc-city-pilot.pmtiles";
+/**
+ * Citywide tiles (all five boroughs). PMTiles is range-requested, so a walker
+ * only downloads the few z14-16 tiles around them. The file is too big for git:
+ * build it with `pnpm build:city-tiles`, or point `VITE_CITY_TILES_URL` at a
+ * CDN copy (absolute URL or same-origin path).
+ */
+export const CITY3D_TILES: string = import.meta.env.VITE_CITY_TILES_URL ?? "/tiles/nyc-city.pmtiles";
+
+function tilesUrl(): string {
+  return /^https?:\/\//.test(CITY3D_TILES) ? CITY3D_TILES : `${window.location.origin}${CITY3D_TILES}`;
+}
 export const CITY3D_MIN_ZOOM = 16;
 export const FACADES = ["rowhouse", "walkup", "prewar", "modern", "tower", "storefront"] as const;
 const SOURCE = "city3d";
@@ -61,7 +71,7 @@ export async function installCity3d(map: MapLibreMap): Promise<void> {
   if (!map.getSource(SOURCE)) {
     map.addSource(SOURCE, {
       type: "vector",
-      url: `pmtiles://${window.location.origin}${CITY3D_TILES}`,
+      url: `pmtiles://${tilesUrl()}`,
       attribution: "NYC Open Data (footprints, PLUTO, trees, hydrants, benches)",
     });
   }
@@ -129,15 +139,35 @@ export async function installCity3d(map: MapLibreMap): Promise<void> {
   );
 }
 
-/** Basemap 3D buildings stop where the textured ones start, so they never z-fight. */
-export function setCity3dVisible(map: MapLibreMap, on: boolean): void {
+/** True when the textured city actually has buildings loaded for the current view. */
+export function city3dCoversView(map: MapLibreMap): boolean {
+  if (!map.getSource(SOURCE) || map.getZoom() < CITY3D_MIN_ZOOM) return false;
+  // Only buildings around the map centre count: a pitched camera also loads
+  // tiles towards the horizon, and textured towers 4 km away do not cover this
+  // street. ~200 m either way of the centre is "here".
+  const { lng, lat } = map.getCenter();
+  const near = (c: number[]) => Math.abs(c[0] - lng) < 0.0025 && Math.abs(c[1] - lat) < 0.0018;
+  return map.querySourceFeatures(SOURCE, { sourceLayer: "buildings" }).some((f) => {
+    const g = f.geometry;
+    const ring = g.type === "Polygon" ? g.coordinates[0] : g.type === "MultiPolygon" ? g.coordinates[0]?.[0] : undefined;
+    return ring?.[0] ? near(ring[0]) : false;
+  });
+}
+
+/**
+ * Basemap 3D buildings stop where the textured ones start, so they never
+ * z-fight, but only while the textured tiles really cover the view. Outside
+ * coverage (or before the tile file is deployed) the basemap keeps its
+ * extrusions, so turning the city on never blanks the street.
+ */
+export function setCity3dVisible(map: MapLibreMap, on: boolean, covered = on): void {
   for (const id of CITY3D_LAYERS) {
     if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", on ? "visible" : "none");
   }
   for (const layer of map.getStyle().layers ?? []) {
     if (layer.type !== "fill-extrusion" || layer.id.startsWith("city3d-")) continue;
     if (!("source-layer" in layer) || layer["source-layer"] !== "building") continue;
-    map.setLayerZoomRange(layer.id, layer.minzoom ?? 0, on ? CITY3D_MIN_ZOOM : 24);
+    map.setLayerZoomRange(layer.id, layer.minzoom ?? 0, on && covered ? CITY3D_MIN_ZOOM : 24);
   }
   // Shop/POI labels pile up on the textured storefronts at street level; transit stays.
   for (const layer of map.getStyle().layers ?? []) {

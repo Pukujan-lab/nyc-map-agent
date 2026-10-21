@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
-  clampWalkZoom,
+  approachBearing,
+  clampLookPitch,
+  EYE_HEIGHT_M,
+  WALK_PITCH,
   normalizeBearing,
   poseAlongRoute,
   routeLength,
-  WALK_MAX_ZOOM,
-  WALK_ZOOM,
   resolveWalkInput,
   stepPose,
   WALK_IDLE,
@@ -117,10 +118,20 @@ describe("resolveWalkInput", () => {
 });
 
 describe("walk camera limits", () => {
-  it("keeps the walking zoom at or below 19 so tiles stay sharp", () => {
-    expect(WALK_ZOOM).toBeLessThanOrEqual(19);
-    expect(clampWalkZoom(21)).toBe(WALK_MAX_ZOOM);
-    expect(clampWalkZoom(10)).toBeGreaterThan(16);
+  it("puts the eye at pedestrian height, looking along the street", () => {
+    expect(EYE_HEIGHT_M).toBeCloseTo(1.7);
+    expect(WALK_PITCH).toBeGreaterThan(80);
+    expect(WALK_PITCH).toBeLessThan(90);
+  });
+  it("clamps drag-to-look between the kerb and the rooftops", () => {
+    expect(clampLookPitch(10)).toBe(55);
+    expect(clampLookPitch(170)).toBe(115);
+    expect(clampLookPitch(90)).toBe(90);
+  });
+  it("turns corners the short way round", () => {
+    const b = approachBearing(350, 10, 0.1);
+    expect(b > 350 || b < 10).toBe(true);
+    expect(approachBearing(0, 90, 10)).toBeCloseTo(90);
   });
 });
 

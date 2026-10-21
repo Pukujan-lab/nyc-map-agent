@@ -7,13 +7,21 @@
  * fill-extrusion draws them: no second renderer. tippecanoe packs everything into one
  * PMTiles file served statically from public/tiles/.
  *
- *   pnpm exec tsx scripts/build-city-tiles.ts   (needs tippecanoe >= 2.17 on PATH)
+ *   pnpm build:city-tiles                       full city -> public/tiles/nyc-city.pmtiles (gitignored)
+ *   CITY3D_AREA=pilot pnpm build:city-tiles     small pilot -> public/tiles/nyc-city-pilot.pmtiles
+ * Needs tippecanoe >= 2.17 on PATH.
  */
 import { execFileSync } from "node:child_process";
-import { mkdirSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, statSync, writeSync } from "node:fs";
 
-/** Pilot bbox: Lower Manhattan, DUMBO, Brooklyn Heights, Downtown Brooklyn, Park Slope. */
-export const PILOT_BBOX = { west: -74.02, south: 40.665, east: -73.97, north: 40.74 };
+/** Original pilot bbox: Lower Manhattan, DUMBO, Brooklyn Heights, Downtown Brooklyn, Park Slope. */
+export const PILOT_ONLY_BBOX = { west: -74.02, south: 40.665, east: -73.97, north: 40.74 };
+/** All five boroughs. Buildings are NYC data only, so the NJ corner of the box stays empty. */
+export const NYC_BBOX = { west: -74.26, south: 40.49, east: -73.69, north: 40.92 };
+/** `CITY3D_AREA=pilot` rebuilds the small pilot; the default covers the whole city. */
+const AREA = process.env.CITY3D_AREA === "pilot" ? "pilot" : "nyc";
+export const PILOT_BBOX = AREA === "pilot" ? PILOT_ONLY_BBOX : NYC_BBOX;
+const OUT = AREA === "pilot" ? "public/tiles/nyc-city-pilot.pmtiles" : "public/tiles/nyc-city.pmtiles";
 const SOCRATA = "https://data.cityofnewyork.us/resource";
 const FT = 0.3048;
 
@@ -142,9 +150,12 @@ async function main() {
   }
 
   mkdirSync("public/tiles", { recursive: true });
-  const seq = "/tmp/nyc-city-pilot.geojsonseq";
-  writeFileSync(seq, lines.join("\n"));
-  const out = "public/tiles/nyc-city-pilot.pmtiles";
+  const seq = `/tmp/${AREA}-city.geojsonseq`;
+  // Streamed: the citywide feature list is larger than one JS string can hold.
+  const fd = openSync(seq, "w");
+  for (const line of lines) writeSync(fd, line + "\n");
+  closeSync(fd);
+  const out = OUT;
   execFileSync("tippecanoe", [
     "-o", out, "--force", "-Z14", "-z16", "--read-parallel", "-P",
     "--no-tile-size-limit", "--no-feature-limit", "--detect-shared-borders",
