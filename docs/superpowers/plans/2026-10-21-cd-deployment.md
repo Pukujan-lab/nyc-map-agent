@@ -574,8 +574,7 @@ export function createRateLimiter(opts: { max?: number; windowMs?: number } = {}
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `pnpm vitest run deploy/cd/auth.test.ts`
-Expected: PASS (9 tests).
-
+Expected: PASS (10 tests).
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -1878,8 +1877,8 @@ CMD ["pnpm", "exec", "tsx", "deploy/cd/server.ts"]
 FROM node:22-slim AS dashboard
 WORKDIR /dash
 RUN corepack enable
-COPY deploy/dashboard/package.json deploy/dashboard/pnpm-lock.yaml* ./
-RUN pnpm install --no-frozen-lockfile
+COPY deploy/dashboard/package.json deploy/dashboard/pnpm-lock.yaml deploy/dashboard/pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
 COPY deploy/dashboard ./
 RUN pnpm run build
 
@@ -1887,6 +1886,12 @@ FROM caddy:2-alpine
 COPY deploy/Caddyfile /etc/caddy/Caddyfile
 COPY --from=dashboard /dash/dist /srv/dashboard
 ```
+
+The dashboard carries its own `pnpm-workspace.yaml` (an ABA scaffold artifact
+that pins build scripts and release age), so the install stage copies it too —
+without it pnpm resolves a different tree than the lockfile was made for. Task 10
+runs the same install locally, so the committed lockfile matches the
+`--frozen-lockfile` here.
 
 - [ ] **Step 3: Write `deploy/Caddyfile`**
 
