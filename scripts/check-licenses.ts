@@ -15,6 +15,7 @@ const EXCEPTIONS: Record<string, string> = {
   mapshaper: "MPL-2.0, dev-only CLI (scripts/load-areas.ts), file-level copyleft, unmodified",
   "@resvg/resvg-wasm": "MPL-2.0, transitive dev dependency, unmodified",
   "caniuse-lite": "CC-BY-4.0 browser-support data used by the build only",
+  "axe-core": "MPL-2.0, dev-only via eslint-plugin-jsx-a11y, unmodified",
 };
 
 function allowed(expr: string): boolean {
