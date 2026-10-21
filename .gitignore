@@ -4,3 +4,4 @@
 node_modules/
 .dyad/
 public/tiles/nyc-city.pmtiles
+public/tiles/nyc-blocks.*

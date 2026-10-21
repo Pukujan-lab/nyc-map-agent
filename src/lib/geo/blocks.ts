@@ -43,3 +43,8 @@ export function blockPolygon(lon: number, lat: number): PolygonRings {
     ],
   ];
 }
+
+/** Closed rectangle for [west, south, east, north] bounds (a real block's frame). */
+export function bboxPolygon([w, s, e, n]: [number, number, number, number]): PolygonRings {
+  return [[[w, s], [e, s], [e, n], [w, n], [w, s]]];
+}

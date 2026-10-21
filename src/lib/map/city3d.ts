@@ -1,4 +1,5 @@
 import type { ExpressionSpecification, Map as MapLibreMap } from "maplibre-gl";
+import { ensurePmtilesProtocol } from "./pmtilesProtocol";
 
 /**
  * Textured 3D city (pilot area): NYC footprints with facade patterns picked by
@@ -26,15 +27,6 @@ const SOURCE = "city3d";
 const STOREFRONT_M = 4.5;
 
 export const CITY3D_LAYERS = ["city3d-storefront", "city3d-walls", "city3d-roofs", "city3d-props", "city3d-signs"] as const;
-
-let protocolAdded = false;
-/** Loaded on first use so neither pmtiles nor a second maplibre import lands in the main chunk. */
-async function ensureProtocol() {
-  if (protocolAdded) return;
-  const [{ default: maplibregl }, { Protocol }] = await Promise.all([import("maplibre-gl"), import("pmtiles")]);
-  maplibregl.addProtocol("pmtiles", new Protocol().tile);
-  protocolAdded = true;
-}
 
 async function loadFacades(map: MapLibreMap): Promise<void> {
   await Promise.all(
@@ -68,7 +60,7 @@ const PROP_COLOR: ExpressionSpecification = [
 
 /** Adds the source, images and layers (hidden). Safe to call after every style load. */
 export async function installCity3d(map: MapLibreMap): Promise<void> {
-  await ensureProtocol();
+  await ensurePmtilesProtocol();
   if (!map.getSource(SOURCE)) {
     map.addSource(SOURCE, {
       type: "vector",

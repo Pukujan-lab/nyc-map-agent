@@ -9,6 +9,7 @@ import { compress } from "hono/compress";
 import * as aggregate from "../api/aggregate";
 import * as area from "../api/area/[block]";
 import * as areas from "../api/areas";
+import * as blockTiles from "../api/block-tiles";
 import * as blocks from "../api/blocks";
 import * as cityTiles from "../api/city-tiles";
 import * as restrooms from "../api/restrooms";
@@ -21,6 +22,7 @@ const routes: Array<[string, Handler]> = [
   ["/api/aggregate", aggregate],
   ["/api/area/:block", area],
   ["/api/areas", areas],
+  ["/api/block-tiles", blockTiles],
   ["/api/blocks", blocks],
   ["/api/city-tiles", cityTiles],
   ["/api/restrooms", restrooms],
@@ -32,7 +34,7 @@ export const app = new Hono();
 // Rollups and boundaries are 0.2-2 MB of JSON; gzip cuts them ~5x.
 app.use("/api/*", async (c, next) => {
   // Tile ranges are already-compressed binary; gzip would break Content-Range.
-  if (c.req.path === "/api/city-tiles") return next();
+  if (c.req.path === "/api/city-tiles" || c.req.path === "/api/block-tiles") return next();
   return compress()(c, next);
 });
 for (const [path, handler] of routes) app.get(path, (c) => handler.GET(c.req.raw));

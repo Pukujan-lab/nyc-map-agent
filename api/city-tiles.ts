@@ -17,18 +17,20 @@ interface Asset {
   parts: Part[];
 }
 
-let cached: { asset: Asset; at: number } | null = null;
+const cached = new Map<string, { asset: Asset; at: number }>();
 const MANIFEST_TTL_MS = 10 * 60 * 1000;
 
-async function manifest(): Promise<Asset | null> {
-  if (cached && Date.now() - cached.at < MANIFEST_TTL_MS) return cached.asset;
+async function manifest(name: string): Promise<Asset | null> {
+  const hit = cached.get(name);
+  if (hit && Date.now() - hit.at < MANIFEST_TTL_MS) return hit.asset;
   const { rows } = await octoQuery<{ total_bytes: string; etag: string; parts: unknown }>(
-    "SELECT total_bytes, etag, parts FROM core.published_assets WHERE name = 'nyc-city.pmtiles'",
+    "SELECT total_bytes, etag, parts FROM core.published_assets WHERE name = $1",
+    [name],
   );
   if (!rows[0]) return null;
   const parts = (typeof rows[0].parts === "string" ? JSON.parse(rows[0].parts) : rows[0].parts) as Part[];
   const asset = { total: Number(rows[0].total_bytes), etag: rows[0].etag, parts };
-  cached = { asset, at: Date.now() };
+  cached.set(name, { asset, at: Date.now() });
   return asset;
 }
 
@@ -56,9 +58,16 @@ export function partSlices(parts: Part[], start: number, end: number): Array<{ u
   return out;
 }
 
-export async function GET(request: Request): Promise<Response> {
-  const asset = await manifest().catch(() => null);
-  if (!asset) return new Response("city tiles not published", { status: 404 });
+/** A same-origin Range endpoint for one published PMTiles asset (also /api/block-tiles). */
+export function pmtilesProxy(name: string): (request: Request) => Promise<Response> {
+  return (request) => serve(name, request);
+}
+
+export const GET = pmtilesProxy("nyc-city.pmtiles");
+
+async function serve(name: string, request: Request): Promise<Response> {
+  const asset = await manifest(name).catch(() => null);
+  if (!asset) return new Response(`${name} not published`, { status: 404 });
   const common = {
     "accept-ranges": "bytes",
     etag: `"${asset.etag}"`,

@@ -1,4 +1,5 @@
 import type {
+  ExpressionSpecification,
   LayerSpecification,
   SourceSpecification,
   StyleSpecification,
@@ -19,6 +20,14 @@ import type { FeatureCollection } from "geojson";
 const TILE_URL =
   import.meta.env.VITE_TILE_URL ??
   "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+
+/**
+ * Block column height: a GeoJSON property for the Socrata grid squares, a
+ * feature-state for real tax blocks drawn from PMTiles (src/lib/map/blockTiles.ts).
+ */
+export const BLOCK_HEIGHT: ExpressionSpecification = [
+  "coalesce", ["feature-state", "height"], ["get", "height"], 0,
+];
 
 export const SOURCE_IDS = {
   basemap: "osm",
@@ -148,7 +157,7 @@ export const DATA_LAYERS: LayerSpecification[] = [
     layout: { visibility: "none" },
     paint: {
       "fill-extrusion-color": GLASS,
-      "fill-extrusion-height": ["get", "height"],
+      "fill-extrusion-height": BLOCK_HEIGHT,
       "fill-extrusion-base": 0,
       "fill-extrusion-opacity": 0.42,
     },

@@ -19,6 +19,7 @@ import {
   type BlockDatum,
   type MapModel,
   type NeighborhoodDatum,
+  blockName,
 } from "@/lib/layers";
 import {
   applyAtmosphere,
@@ -32,7 +33,8 @@ import {
   emphasisToGeoJson,
   neighborhoodsToGeoJson,
 } from "@/lib/map/geojson";
-import { LAYER_IDS, SOURCE_IDS, buildFallbackStyle } from "@/lib/map/style";
+import { BLOCK_HEIGHT, LAYER_IDS, SOURCE_IDS, buildFallbackStyle } from "@/lib/map/style";
+import { BLOCK_FILL_LAYER, installBlockTiles, pushBlocks, setBlockFillVisible } from "@/lib/map/blockTiles";
 import { fetchNearestStreet, type WalkingRoute } from "@/lib/api/routing";
 import { useDataView } from "@/lib/store/DataViewContext";
 import type { CameraOptions, Map as MaplibreMapInstance } from "maplibre-gl";
@@ -389,6 +391,9 @@ export function MapView({
     applyAtmosphere(map);
     setStyleEpoch((epoch) => epoch + 1);
     setReady(true);
+    const blockTiles = () =>
+      void installBlockTiles(map).then((swapped) => swapped && setStyleEpoch((epoch) => epoch + 1));
+    blockTiles();
     // Dev-only handle for headless QA (camera placement, fps sampling).
     if (import.meta.env.DEV) (window as unknown as { __map?: unknown }).__map = map;
     // A style swap (the raster fallback) replaces every source, so the data
@@ -396,6 +401,7 @@ export function MapView({
     map.on("style.load", () => {
       installDataLayers(map);
       setStyleEpoch((epoch) => epoch + 1);
+      blockTiles();
     });
   }, []);
 
@@ -430,7 +436,9 @@ export function MapView({
       // querying would throw.
       const feature =
         map && map.getLayer(pickLayer)
-          ? map.queryRenderedFeatures([x, y], { layers: [pickLayer] })[0]
+          ? map.queryRenderedFeatures([x, y], {
+              layers: [pickLayer, BLOCK_FILL_LAYER].filter((l) => scale === "blocks" || l === pickLayer).filter((l) => map.getLayer(l)),
+            })[0]
           : undefined;
       const id = feature?.id;
 
@@ -529,9 +537,7 @@ export function MapView({
 
     (map.getSource(SOURCE_IDS.neighborhoods) as GeoJSONSource | undefined)
       ?.setData(neighborhoodGeoJson);
-    (map.getSource(SOURCE_IDS.blocks) as GeoJSONSource | undefined)?.setData(
-      blockGeoJson,
-    );
+    pushBlocks(map, model.blocks, blockGeoJson);
     (map.getSource(SOURCE_IDS.boroughs) as GeoJSONSource | undefined)?.setData(
       boroughGeoJson,
     );
@@ -550,7 +556,7 @@ export function MapView({
     map.setPaintProperty(
       LAYER_IDS.blocks,
       "fill-extrusion-height",
-      walking ? 0.5 : ["get", "height"],
+      walking ? 0.5 : BLOCK_HEIGHT,
     );
     map.setPaintProperty(
       LAYER_IDS.blocks,
@@ -627,6 +633,7 @@ export function MapView({
     map.setLayoutProperty(LAYER_IDS.areaColumns, "visibility", vis(!walking && mapStyle === "columns" && coarse));
     map.setLayoutProperty(LAYER_IDS.areaOutline, "visibility", vis(!walking && mapStyle !== "heat" && (mapStyle === "fill" || coarse)));
     map.setLayoutProperty(LAYER_IDS.heat, "visibility", vis(!walking && mapStyle === "heat"));
+    setBlockFillVisible(map, !walking && mapStyle === "fill" && scale === "blocks");
     if (!classic) {
       for (const id of [
         LAYER_IDS.neighborhoods,
@@ -1121,7 +1128,7 @@ export function MapView({
                 {hoverNtaName ?? "Block"}
               </div>
               <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                ~300 m block
+                {blockName(hover.datum)}
               </div>
             </>
           )}
