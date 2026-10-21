@@ -865,7 +865,7 @@ git commit -m "feat(cd): process runner with line streaming"
 - Produces:
   - `interface PipelineConfig { repoDir: string; deployDir: string; stateFile: string; lockDir: string; envFile: string; buildArgs: Record<string, string>; healthTimeoutMs?: number; healthPollMs?: number }`
   - `interface PipelineDeps { runner: Runner; now?: () => Date; onLog?: (runId: string, line: string) => void; onUpdate?: (run: Run) => void; sleep?: (ms: number) => Promise<void> }`
-  - `startDeploy(deps, config, request): Promise<Run>` — appends the run record to `config.stateFile` and calls `onUpdate` on **every** state change (start, each step transition, finish), so a running deploy is visible in `/status` and resolvable by id while it runs.
+  - `startDeploy(deps, config, request): Promise<Run>` — appends the run record to `config.stateFile` and calls `onUpdate` on **every** state change (start, each step transition, finish), so a running deploy is visible in `/status` and resolvable by id while it runs. While the run's sha is still the zero placeholder the record is not persisted; once the sha is known (CI supplies it, or the fetch step resolves it) every transition is appended.
   - `runId(date: Date, sha: string): string`
   - Throws `BusyError` when the lock is held.
 
