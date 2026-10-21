@@ -16,28 +16,39 @@ describe("deploy lock", () => {
   it("acquires an unheld lock and records the owner", () => {
     expect(acquireLock(dir, { nowMs: NOW })).toBe(true);
     expect(lockOwner(dir)?.at).toBe(NOW);
+    expect(lockOwner(dir)?.pid).toBe(process.pid);
   });
 
   it("refuses a second acquire while held", () => {
     expect(acquireLock(dir, { nowMs: NOW })).toBe(true);
     expect(acquireLock(dir, { nowMs: NOW + 1000 })).toBe(false);
+    expect(lockOwner(dir)?.at).toBe(NOW);
   });
 
   it("reclaims a stale lock", () => {
     expect(acquireLock(dir, { nowMs: NOW })).toBe(true);
     expect(acquireLock(dir, { nowMs: NOW + 31 * 60 * 1000, staleMs: 30 * 60 * 1000 })).toBe(true);
+    expect(lockOwner(dir)?.at).toBe(NOW + 31 * 60 * 1000);
   });
 
   it("releases so the next caller can acquire", () => {
     expect(acquireLock(dir, { nowMs: NOW })).toBe(true);
     releaseLock(dir);
+    expect(lockOwner(dir)).toBeNull();
     expect(acquireLock(dir, { nowMs: NOW })).toBe(true);
   });
 
-  it("reclaims a lock directory with no owner file", () => {
+  it("leaves a lock owned by another process alone", () => {
+    writeFileSync(dir, JSON.stringify({ pid: process.pid + 1, at: NOW }));
+    releaseLock(dir);
+    expect(lockOwner(dir)?.pid).toBe(process.pid + 1);
+    expect(acquireLock(dir, { nowMs: NOW + 1000 })).toBe(false);
+  });
+
+  it("reclaims a lock file whose content is unreadable", () => {
+    writeFileSync(dir, "not json");
     expect(acquireLock(dir, { nowMs: NOW })).toBe(true);
-    rmSync(join(dir, "owner"), { force: true });
-    expect(acquireLock(dir, { nowMs: NOW + 31 * 60 * 1000, staleMs: 30 * 60 * 1000 })).toBe(true);
+    expect(lockOwner(dir)?.pid).toBe(process.pid);
   });
 
   it("creates the state directory when it does not exist yet", () => {

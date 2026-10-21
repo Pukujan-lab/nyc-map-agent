@@ -15,6 +15,11 @@ export interface Runner {
   run(cmd: string, args: string[], opts?: RunOptions): Promise<RunResult>;
 }
 
+interface LineSplitter {
+  push(text: string): void;
+  flush(): void;
+}
+
 /** The only place the deploy code shells out. Tests inject a fake Runner. */
 export function createRunner(): Runner {
   return {
@@ -26,20 +31,42 @@ export function createRunner(): Runner {
           shell: false,
         });
         let output = "";
-        let pending = "";
-        const onData = (chunk: Buffer) => {
-          const text = chunk.toString();
-          output += text;
-          pending += text;
-          const lines = pending.split("\n");
-          pending = lines.pop() ?? "";
-          for (const line of lines) opts.onLine?.(line);
+
+        // Each stream needs its own partial line: a stdout fragment followed by
+        // a stderr line must not be glued into one fabricated line.
+        const splitter = (): LineSplitter => {
+          let pending = "";
+          const emit = (line: string) => opts.onLine?.(line.endsWith("\r") ? line.slice(0, -1) : line);
+          return {
+            push(text) {
+              pending += text;
+              const lines = pending.split("\n");
+              pending = lines.pop() ?? "";
+              for (const line of lines) emit(line);
+            },
+            flush() {
+              if (pending) emit(pending);
+              pending = "";
+            },
+          };
         };
-        child.stdout.on("data", onData);
-        child.stderr.on("data", onData);
+        const out = splitter();
+        const err = splitter();
+
+        child.stdout.setEncoding("utf8");
+        child.stderr.setEncoding("utf8");
+        child.stdout.on("data", (text: string) => {
+          output += text;
+          out.push(text);
+        });
+        child.stderr.on("data", (text: string) => {
+          output += text;
+          err.push(text);
+        });
         child.on("error", reject);
         child.on("close", (code) => {
-          if (pending) opts.onLine?.(pending);
+          out.flush();
+          err.flush();
           resolve({ code: code ?? -1, output });
         });
       });
