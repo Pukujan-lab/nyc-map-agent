@@ -29,3 +29,17 @@ jobs:
       - run: pnpm build:size
       - name: Performance budget (size-limit, brotli per chunk)
         run: pnpm size
+  deps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - name: Lockfile in sync
+        run: pnpm install --frozen-lockfile
+      - name: Audit (high+, baseline in pnpm-workspace.yaml)
+        run: pnpm audit --audit-level high
+      - name: Licence allowlist
+        run: pnpm licenses:check
