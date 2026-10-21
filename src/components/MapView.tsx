@@ -6,6 +6,7 @@ import { setAmbient } from "@/lib/ambient";
 import { useFlags } from "@/lib/flags";
 import { useFeatureToggles } from "@/lib/featureToggles";
 import { useMediaQuery } from "@/lib/useMediaQuery";
+import { useFlag } from "@/lib/flags";
 import MapLibreMap, {
   type MapLayerMouseEvent,
   type MapRef,
@@ -210,7 +211,8 @@ export function MapView({
   const city3dMod = useRef<typeof import("@/lib/map/city3d") | null>(null);
   const [schoolIcons, setSchoolIcons] = useState(false);
   const toggleSchools = useCallback(() => setSchoolIcons((on) => !on), []);
-  usePanelChip({ id: "schools", label: "Schools", active: schoolIcons, onToggle: toggleSchools });
+  const schoolsOn = useFlag("schools");
+  usePanelChip(schoolsOn ? { id: "schools", label: "Schools", active: schoolIcons, onToggle: toggleSchools } : null);
   const restroomsMod = useRef<typeof import("@/lib/map/restrooms") | null>(null);
   /** So leaving walk mode can restore the overhead camera exactly once. */
   const wasWalking = useRef(false);
