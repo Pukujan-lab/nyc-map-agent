@@ -126,6 +126,8 @@ describe("deploy pipeline", () => {
     expect(swaps.length).toBe(2);
     expect(swaps[0]).toContain("NYC_MAP_IMAGE=nyc-map-agent:aaaaaaaaaaaa");
     expect(swaps[1]).toContain("NYC_MAP_IMAGE=nyc-map-agent:live");
+    // The swap-back is live, so the record must not keep naming the failed image.
+    expect(run.image).toBe("nyc-map-agent:live");
   });
 
   it("rollback redeploys the image the last good deploy replaced", async () => {

@@ -218,6 +218,9 @@ export async function startDeploy(deps: PipelineDeps, config: PipelineConfig, re
       if (run.previousImage && run.previousImage !== targetImage) {
         await swap(config, runner, run.previousImage, log);
         await waitHealthy(config, runner, sleep, log);
+        // The swap-back is what is live now; a failed run that still names the
+        // image it failed to keep would misreport the host's actual state.
+        publish({ ...run, image: run.previousImage });
       }
       return finish("failed", "the new container never became healthy");
     }
