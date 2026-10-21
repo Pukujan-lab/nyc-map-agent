@@ -9,7 +9,7 @@ const transit: FeatureModule = {
   MapLayer: lazy(() => import("./layers")),
   LayersMenu: TransitMenu,
   HomeSection: lazy(() => import("./Nearby")),
-  clickLayers: ["transit-vehicle-2d", "transit-vehicle-hit", "transit-access", "transit-entrance", "transit-station"],
+  clickLayers: ["transit-bullet", "transit-bus-badge", "transit-bus-badge-full", "transit-bus-badge-selected", "transit-vehicle-2d", "transit-vehicle-hit", "transit-access", "transit-entrance", "transit-station"],
   panel: { idPrefix: "transit:" },
   chips: ["transit"],
   search: ["transit-stations"],

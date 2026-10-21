@@ -265,7 +265,8 @@ export function LayersDrawer({
             <Pill on={opts.streets === "simple"} onClick={() => setOptions({ streets: "simple" })}>Simple streets</Pill>
             <Pill on={opts.streets === "full"} onClick={() => setOptions({ streets: "full" })}>Detailed streets</Pill>
             <Pill on={opts.streetNames} onClick={() => setOptions({ streetNames: !opts.streetNames })}>Street names</Pill>
-            <Pill on={opts.buildings} onClick={() => setOptions({ buildings: !opts.buildings })}>Buildings</Pill>
+            <Pill on={opts.buildings === "flat"} onClick={() => setOptions({ buildings: "flat" })}>Flat buildings</Pill>
+            <Pill on={opts.buildings === "3d"} onClick={() => setOptions({ buildings: "3d" })}>3D buildings</Pill>
           </div>
           <div className="text-[13px] text-muted-foreground">Theme</div>
           <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Theme">

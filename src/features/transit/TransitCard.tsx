@@ -2,8 +2,9 @@ import { useEffect } from "react";
 import { Accessibility, Crosshair, ScanEye, Star, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { arrivalsAt, directionLabel, estimateTrain, minutesUntil, stationOf, type LiveSystem, type StaticSystem, type SystemId, type Vehicle } from "./model";
-import { useAlerts, useBuses, useNow, useStarred, useTransitData, type Outage } from "./hooks";
+import { useAlerts, useBusRoute, useBusTrip, useBuses, useNow, useStarred, useTransitData, type Outage } from "./hooks";
 import { setFollowed, useFollowed } from "./follow";
+import { useSharedLocation } from "@/lib/geo/sharedLocation";
 import { getXray, setXray, useXray } from "./xray";
 
 type Data = Partial<Record<SystemId, { stat?: StaticSystem; live?: LiveSystem }>>;
@@ -77,6 +78,81 @@ export function StationDetails({ system, id }: { system: SystemId; id: string })
 }
 
 /** Panel body for a vehicle: next stop, ETA and the Follow toggle. */
+/** Nearest of a route's stops to a point, by equirectangular metres. Pure; runs only in the browser. */
+export function nearestStop<T extends { lon: number; lat: number }>(stops: T[], at: { lon: number; lat: number }): T | undefined {
+  const k = Math.cos((at.lat * Math.PI) / 180);
+  let best: T | undefined, bd = Infinity;
+  for (const st of stops) {
+    const d = ((st.lon - at.lon) * k) ** 2 + (st.lat - at.lat) ** 2;
+    if (d < bd) { bd = d; best = st; }
+  }
+  return best;
+}
+
+function RouteAlerts({ route }: { route: string }) {
+  const alerts = useAlerts(true);
+  const list = (alerts.data?.alerts ?? []).filter((a) => a.routes.includes(route));
+  if (!list.length) return <p className="text-xs text-muted-foreground">No active alerts for the {route}.</p>;
+  return (
+    <div className="space-y-1.5">
+      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Alerts and detours</div>
+      {list.slice(0, 4).map((a) => (
+        <div key={a.id} className="rounded-md border px-2 py-1.5 text-xs">
+          <span className="mr-1 font-semibold">{a.reroute ? "Detour" : a.kind === "delay" ? "Delay" : a.kind === "planned" ? "Planned work" : "Notice"}</span>
+          {a.text}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Upcoming({ rows, now }: { rows: Array<{ id: string; name: string; eta: number | null }>; now: number }) {
+  if (!rows.length) return null;
+  return (
+    <div>
+      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Next stops</div>
+      <ol className="mt-1 space-y-0.5">
+        {rows.map((r) => (
+          <li key={r.id} className="flex justify-between gap-2">
+            <span className="truncate">{r.name}</span>
+            <span className="shrink-0 tabular-nums text-muted-foreground">{r.eta ? `${minutesUntil(r.eta, now)} min` : ""}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+function BusDetails({ id, route }: { id: string; route: string }) {
+  const trip = useBusTrip(id);
+  const shape = useBusRoute(route || undefined);
+  const now = useNow();
+  const me = useSharedLocation();
+  const calls = trip.data?.calls ?? [];
+  // Your stop is worked out here in the browser from the route's stop list; your location never leaves the device for this.
+  const mine = me.coords && shape.data ? nearestStop(shape.data.stops, me.coords) : undefined;
+  const myCall = mine ? calls.find((c) => c.id === mine.id) : undefined;
+  if (trip.isLoading) return <p className="text-muted-foreground">Loading this bus…</p>;
+  if (!trip.data?.found) return <p className="text-muted-foreground">No longer in the live feed.</p>;
+  return (
+    <>
+      <div><span className="font-semibold">{trip.data.route}</span> <span className="text-muted-foreground">to</span> <span className="font-medium">{trip.data.destination}</span></div>
+      {calls[0] ? (
+        <div>Next stop <span className="font-medium">{calls[0].name}</span>
+          {calls[0].eta ? <span className="tabular-nums text-muted-foreground"> · {minutesUntil(calls[0].eta, now)} min</span> : calls[0].away ? <span className="text-muted-foreground"> · {calls[0].away}</span> : null}
+        </div>
+      ) : null}
+      {mine ? (
+        <div className="rounded-md bg-muted px-2 py-1.5">
+          Near you: <span className="font-medium">{mine.name}</span>
+          {myCall?.eta ? <span className="tabular-nums"> · {minutesUntil(myCall.eta, now)} min</span> : <span className="text-muted-foreground"> · not on this bus&apos;s way</span>}
+        </div>
+      ) : null}
+      <Upcoming rows={calls.slice(1, 6)} now={now} />
+    </>
+  );
+}
+
 export function VehicleDetails({ vehicleKey }: { vehicleKey: string }) {
   const [system, ...rest] = vehicleKey.split(":");
   const tripId = rest.join(":");
@@ -86,24 +162,32 @@ export function VehicleDetails({ vehicleKey }: { vehicleKey: string }) {
   const now = useNow();
   const followed = useFollowed();
   let v: Vehicle | null | undefined;
+  let upcoming: Array<{ id: string; name: string; eta: number | null }> = [];
   if (system === "bus") {
     const b = buses.data?.buses.find((x) => x.id === tripId);
     if (b) v = { key: vehicleKey, system: "bus", route: b.route, label: b.route, color: "#0039A6", lon: b.lon, lat: b.lat, bearing: b.bearing ?? 0, grade: "grade", dir: b.dir, nextStop: b.next ?? undefined };
   } else {
     const st = data[system as SystemId]?.stat, trip = data[system as SystemId]?.live?.trips.find((t) => t.id === tripId);
     v = st && trip ? estimateTrain(st, trip, now) : undefined;
+    if (trip) upcoming = trip.stops.filter(([, t]) => t >= now - 30).slice(1, 6).map(([id, t]) => ({ id, name: stopName(data, system as SystemId, id) ?? id, eta: t }));
   }
   const following = followed === vehicleKey;
   return (
     <div className="space-y-3 text-sm">
-      {v ? <div className="text-muted-foreground">{directionLabel(v.system, v.nextStop ?? "", v.dir)}</div> : <div className="text-muted-foreground">No longer in the live feed.</div>}
-      {v?.nextStop ? (
-        <div>
-          Next stop <span className="font-medium">{stopName(data, v.system, v.nextStop)}</span>
-          {v.eta ? <span className="tabular-nums text-muted-foreground"> · {minutesUntil(v.eta, now)} min</span> : null}
-        </div>
-      ) : null}
-      {v && v.system !== "bus" ? <p className="text-xs text-muted-foreground">Position estimated from predicted arrival times.</p> : null}
+      {system === "bus" ? <BusDetails id={tripId} route={v?.route ?? ""} /> : (
+        <>
+          {v ? <div className="text-muted-foreground">{directionLabel(v.system, v.nextStop ?? "", v.dir)}</div> : <div className="text-muted-foreground">No longer in the live feed.</div>}
+          {v?.nextStop ? (
+            <div>
+              Next stop <span className="font-medium">{stopName(data, v.system, v.nextStop)}</span>
+              {v.eta ? <span className="tabular-nums text-muted-foreground"> · {minutesUntil(v.eta, now)} min</span> : null}
+            </div>
+          ) : null}
+          <Upcoming rows={upcoming} now={now} />
+          {v ? <p className="text-xs text-muted-foreground">Position estimated from predicted arrival times.</p> : null}
+        </>
+      )}
+      {v ? <RouteAlerts route={v.route} /> : null}
       <Button size="sm" variant={following ? "default" : "outline"} aria-pressed={following} disabled={!v}
         onClick={() => setFollowed(following ? null : vehicleKey)}>
         <Crosshair className="mr-1.5 h-4 w-4" />

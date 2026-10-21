@@ -8,10 +8,10 @@ import type { Map as MapLibreMap } from "maplibre-gl";
  * repaint the basemap's own background, water and park layers to match.
  */
 export const THEMES = {
-  ivory: { label: "Ivory", land: "#F2F1ED", water: "#CFE0EE", park: "#DCEFE3", street: "#FFFFFF", major: "#FBFBF9", label_: "#8a8f98", dark: false },
-  ink: { label: "Ink", land: "#141414", water: "#1D2523", park: "#1C2620", street: "#2A2A29", major: "#333331", label_: "#8a8883", dark: true },
-  mta: { label: "MTA muted", land: "#F4F4F2", water: "#D9ECE4", park: "#D9EAD2", street: "#FFFFFF", major: "#FAFAFA", label_: "#7d7d7d", dark: false },
-  neon: { label: "Neon", land: "#0B0919", water: "#111A2C", park: "#10241E", street: "#1F1A3A", major: "#2A2350", label_: "#A49CC9", dark: true },
+  ivory: { label: "Ivory", land: "#F2F1ED", water: "#CFE0EE", park: "#DCEFE3", street: "#FFFFFF", major: "#FBFBF9", label_: "#8a8f98", building: "#EAE8E2", bus: "#5F6B7A", busExpress: "#7A6A5C", dark: false },
+  ink: { label: "Ink", land: "#141414", water: "#1D2523", park: "#1C2620", street: "#2A2A29", major: "#333331", label_: "#8a8883", building: "#1B1B1A", bus: "#8C96A3", busExpress: "#A3927F", dark: true },
+  mta: { label: "MTA muted", land: "#F4F4F2", water: "#D9ECE4", park: "#D9EAD2", street: "#FFFFFF", major: "#FAFAFA", label_: "#7d7d7d", building: "#ECECE9", bus: "#4E6E91", busExpress: "#7C6A8E", dark: false },
+  neon: { label: "Neon", land: "#0B0919", water: "#111A2C", park: "#10241E", street: "#1F1A3A", major: "#2A2350", label_: "#A49CC9", building: "#13102A", bus: "#8B7FD1", busExpress: "#C46FA8", dark: true },
 } as const;
 export type ThemeId = keyof typeof THEMES;
 export const THEME_KEY = "nma.theme";

@@ -97,8 +97,8 @@ export const ROUTES = {
   "/api/transit": jsonRoute("/api/transit", "Live transit capabilities ({ bus })"),
   "/api/transit/:system": jsonRoute(
     "/api/transit/{system}",
-    "Live MTA GTFS-rt (subway / lirr / mnr trips, bus positions, alerts + elevator outages), cached ~15 s",
-    undefined,
-    z.object({ system: z.enum(["subway", "lirr", "mnr", "bus", "alerts"]).openapi({ param: { name: "system", in: "path" }, example: "subway" }) }),
+    "Live MTA GTFS-rt (subway / lirr / mnr trips, bus positions, alerts + elevator outages), cached ~15 s; bus-trip?vehicle= (one bus's headsign + upcoming stops) and bus-route?route= (route shape + stops)",
+    z.object({ vehicle: z.string().max(40).optional(), route: z.string().max(8).optional() }),
+    z.object({ system: z.enum(["subway", "lirr", "mnr", "bus", "alerts", "bus-trip", "bus-route"]).openapi({ param: { name: "system", in: "path" }, example: "subway" }) }),
   ),
 } as const;

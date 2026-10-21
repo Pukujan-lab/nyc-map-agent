@@ -8,13 +8,14 @@ export interface MapOptions {
   /** "simple" = pale streets without casings or minor names (the default). */
   streets: "simple" | "full";
   streetNames: boolean;
-  buildings: boolean;
+  /** "flat" = pale 2D footprints, no extrusion (the default); "3d" = extruded and textured. */
+  buildings: "flat" | "3d";
   /** Subway routes picked in Transit lines; empty = all lines, muted. */
   routes: string[];
   stationsOnly: boolean;
 }
 export const OPTIONS_KEY = "nma.mapOptions";
-export const DEFAULT_OPTIONS: MapOptions = { streets: "simple", streetNames: true, buildings: true, routes: [], stationsOnly: false };
+export const DEFAULT_OPTIONS: MapOptions = { streets: "simple", streetNames: true, buildings: "flat", routes: [], stationsOnly: false };
 
 export function readOptions(storage: Pick<Storage, "getItem"> | undefined = globalThis.localStorage): MapOptions {
   try {
@@ -22,7 +23,7 @@ export function readOptions(storage: Pick<Storage, "getItem"> | undefined = glob
     return {
       streets: raw.streets === "full" ? "full" : "simple",
       streetNames: raw.streetNames !== false,
-      buildings: raw.buildings !== false,
+      buildings: raw.buildings === "3d" ? "3d" : "flat",
       routes: Array.isArray(raw.routes) ? raw.routes.filter((r): r is string => typeof r === "string") : [],
       stationsOnly: raw.stationsOnly === true,
     };

@@ -1077,7 +1077,7 @@
     },
     "/api/transit/{system}": {
       "get": {
-        "summary": "Live MTA GTFS-rt (subway / lirr / mnr trips, bus positions, alerts + elevator outages), cached ~15 s",
+        "summary": "Live MTA GTFS-rt (subway / lirr / mnr trips, bus positions, alerts + elevator outages), cached ~15 s; bus-trip?vehicle= (one bus's headsign + upcoming stops) and bus-route?route= (route shape + stops)",
         "parameters": [
           {
             "schema": {
@@ -1087,13 +1087,33 @@
                 "lirr",
                 "mnr",
                 "bus",
-                "alerts"
+                "alerts",
+                "bus-trip",
+                "bus-route"
               ],
               "example": "subway"
             },
             "required": true,
             "name": "system",
             "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 40
+            },
+            "required": false,
+            "name": "vehicle",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 8
+            },
+            "required": false,
+            "name": "route",
+            "in": "query"
           }
         ],
         "responses": {
