@@ -1,3 +1,4 @@
+import { windowBounds } from "@/lib/windows";
 import { ArrowLeft, Camera, Footprints, MapPin, MessageSquarePlus, X } from "lucide-react";
 import {
   Accordion,
@@ -184,7 +185,9 @@ function DetailsBody({
 
   const noiseCount = noise?.count ?? 0;
   const crashCount = crashes?.count ?? 0;
-  const headline = view
+  const headline = block
+    ? block.value
+    : view
     ? (viewValue ?? 0)
     : layer === "noise"
       ? noiseCount
@@ -217,10 +220,11 @@ function DetailsBody({
           type="button"
           className="flex min-w-0 flex-1 items-baseline justify-between gap-3 text-left"
           onClick={onSummaryTap}
-          aria-label={`Show details for ${boundary.ntaName}`}
+          aria-label={`Show details for ${block ? blockName(block) : boundary.ntaName}`}
         >
-          <span className="truncate text-base font-semibold">
-            {boundary.ntaName}
+          {/* A picked block titles the panel itself; its neighborhood is the line below. */}
+          <span className="truncate text-base font-semibold" title={block ? blockName(block) : undefined}>
+            {block ? blockName(block) : boundary.ntaName}
           </span>
           {loading ? (
             <Skeleton aria-label="Loading" className="h-5 w-14 shrink-0" />
@@ -239,7 +243,7 @@ function DetailsBody({
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4 pt-3">
         <div className="mb-3 text-[11px] text-muted-foreground">
-          {boundary.borough} · {windowLabel}
+          {block ? `Block in ${boundary.ntaName} · ` : ""}{boundary.borough} · {layer === "crashes" && !view ? windowBounds("12mo").label : windowLabel}
         </div>
         {block ? (
           <div className="mb-3 rounded-md border border-primary/40 bg-primary/5 p-2.5">

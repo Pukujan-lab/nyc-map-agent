@@ -149,6 +149,12 @@ export interface BlockDatum {
   key: string;
   /** Real block identity (Octo tax blocks): "Brooklyn block 585 · COURT STREET / …". */
   label?: string;
+  /**
+   * What the column height and fill encode on real blocks: `value` per hectare
+   * (blockDensity flag), so a 340 ha park does not out-shout a city block.
+   * Absent when shading by raw count.
+   */
+  shade?: number;
   ntaCode: string;
   polygon: PolygonRings;
   /** Centre of the square — where "walk this block" puts the camera. */
@@ -236,7 +242,11 @@ interface BlockAcc {
   streets: CountPair[];
   label?: string;
   bbox?: [number, number, number, number];
+  areaM2?: number;
 }
+
+/** Density floor: a sliver block (a few hundred m²) would otherwise top the scale. */
+const MIN_SHADE_AREA_M2 = 2_500;
 
 /** Two address lists, merged by label and capped — the square stays small. */
 const BLOCK_ADDRESS_LIMIT = 3;
@@ -270,6 +280,7 @@ function mergeBlocks(
           ntaCode: cell.ntaCode,
           label: cell.label,
           bbox: cell.bbox,
+          areaM2: cell.areaM2,
           noiseCount: 0,
           crashCount: 0,
           nightCount: 0,
@@ -316,8 +327,10 @@ export function buildMapModel(params: {
   crashes: AggregateResult | null;
   layer: LayerId;
   scale: MapScale;
+  /** Shade real tax blocks by count per hectare instead of raw count. */
+  blockDensity?: boolean;
 }): MapModel {
-  const { boundaries, noise, crashes, layer, scale } = params;
+  const { boundaries, noise, crashes, layer, scale, blockDensity = false } = params;
   if (!boundaries || (!noise && !crashes)) {
     return {
       layer,
@@ -384,8 +397,10 @@ export function buildMapModel(params: {
     blockRows.push({ key, entry, value });
   }
 
-  const blockMax = blockValues.reduce(
-    (max, value) => (value > max ? value : max),
+  const shadeFor = (entry: BlockAcc, value: number): number | undefined =>
+    blockDensity && entry.areaM2 ? (value / Math.max(entry.areaM2, MIN_SHADE_AREA_M2)) * 10_000 : undefined;
+  const blockMax = blockRows.reduce(
+    (max, { entry, value }) => Math.max(max, shadeFor(entry, value) ?? value),
     0,
   );
   const blocks: BlockDatum[] = blockRows.map(({ key, entry, value }) => ({
@@ -399,7 +414,8 @@ export function buildMapModel(params: {
       : { lon: entry.lon + BLOCK_GRID_DEG / 2, lat: entry.lat + BLOCK_GRID_DEG / 2 },
     ...(entry.label ? { label: entry.label } : {}),
     value,
-    height: heightFor(value, blockMax),
+    ...(shadeFor(entry, value) !== undefined ? { shade: shadeFor(entry, value) } : {}),
+    height: heightFor(shadeFor(entry, value) ?? value, blockMax),
     nightCount: entry.nightCount,
     noiseCount: entry.noiseCount,
     crashCount: entry.crashCount,

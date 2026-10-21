@@ -1,3 +1,4 @@
+import { useFlag } from "@/lib/flags";
 import { useMemo, useState } from "react";
 import { CaveatsSheet } from "@/components/CaveatsSheet";
 import { DataSourcesDrawer } from "@/components/DataSourcesDrawer";
@@ -58,6 +59,7 @@ export default function Index() {
   const routeQuery = useWalkingRoute(routeStart, routeEnd);
   const route = routeQuery.data ?? null;
 
+  const blockDensity = useFlag("blockDensity");
   const model = useMemo(() => {
     // Non-classic views re-score a combined model, so every populated block
     // (noise or crash) exists to carry its detail through.
@@ -67,9 +69,10 @@ export default function Index() {
       crashes: data.crashes,
       layer: viewMode.kind === "legacy" ? layer : "combined",
       scale,
+      blockDensity,
     });
     return applyView(base, viewMode, sourceState.counts);
-  }, [data.boundaries, data.noise, data.crashes, layer, scale, viewMode, sourceState.counts]);
+  }, [data.boundaries, data.noise, data.crashes, layer, scale, viewMode, sourceState.counts, blockDensity]);
 
   const areas = useAreas(model, data.boundaries, scale);
 
