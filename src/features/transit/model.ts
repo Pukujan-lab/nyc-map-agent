@@ -286,3 +286,50 @@ export function splitRaised(lines: GeoJSON.Feature<GeoJSON.LineString>[], raised
   }
   return out;
 }
+
+/** One 15 m viaduct bay (columns + girders + rails) centred at lon/lat; `station` bays get a platform and canopy. */
+export type Bay = { lon: number; lat: number; bearing: number; top: number; len: number; station: boolean };
+const BAY = 15;
+const BRIDGE_BOX = STRUCTURES.filter((s) => s.kind === "bridge").map((s) => {
+  const xs = s.line.map((p) => p[0]), ys = s.line.map((p) => p[1]);
+  return [Math.min(...xs) - 0.002, Math.min(...ys) - 0.002, Math.max(...xs) + 0.002, Math.max(...ys) + 0.002];
+});
+
+/**
+ * Bays along elevated subway shapes (not bridges, which have their own model; not portal ramps under 5 m).
+ * Several routes share one structure, so bays are de-duplicated on a ~10 m grid by heading.
+ */
+export function viaductBays(sys: StaticSystem): Bay[] {
+  if (sys.system !== "subway") return [];
+  const seen = new Set<string>(), bays: Bay[] = [];
+  // ~45 m cells around each station (3x3 neighbourhood ≈ an 8-car platform either side).
+  const stationCells = new Set<string>();
+  for (const f of sys.stations.features) {
+    const [x, y] = f.geometry.coordinates;
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) stationCells.add(`${Math.round(x * 2400) + dx},${Math.round(y * 2400) + dy}`);
+  }
+  const nearBridge = (p: [number, number], route: string) => BRIDGE_BOX.some((b) => p[0] > b[0] && p[0] < b[2] && p[1] > b[1] && p[1] < b[3]) && structureAt(p, 80, route)?.kind === "bridge";
+  for (const route of Object.keys(sys.shapes)) {
+    const shape = sys.shapes[route], prof = trackHeightProfile(sys, route);
+    if (!prof) continue;
+    let carry = 0;
+    for (let i = 1; i < shape.c.length; i++) {
+      const [a, b] = [shape.c[i - 1], shape.c[i]];
+      const ha = prof.h[i - 1], hb = prof.h[i], seg = shape.m[i] - shape.m[i - 1];
+      if (Math.min(ha, hb) < 5 || seg <= 0) { carry = 0; continue; }
+      const kx = 111_320 * Math.cos((a[1] * Math.PI) / 180);
+      const brg = ((Math.atan2((b[0] - a[0]) * kx, (b[1] - a[1]) * 111_320) * 180) / Math.PI + 360) % 360;
+      for (let d = carry; d < seg; d += BAY) {
+        const t = d / seg, lon = a[0] + (b[0] - a[0]) * t, lat = a[1] + (b[1] - a[1]) * t;
+        if (nearBridge([lon, lat], route)) continue;
+        const key = `${Math.round(lon * 9000)},${Math.round(lat * 9000)},${Math.round((brg % 180) / 20)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const station = stationCells.has(cellKey([lon, lat]));
+        bays.push({ lon, lat, bearing: brg, top: ha + (hb - ha) * t, len: BAY, station });
+      }
+      carry = (carry + Math.ceil((seg - carry) / BAY) * BAY) - seg;
+    }
+  }
+  return bays;
+}

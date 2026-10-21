@@ -9,6 +9,7 @@ import {
   estimateTrain,
   stationOf,
   raisedTrack,
+  viaductBays,
   splitRaised,
   type StaticSystem,
   type SystemId,
@@ -268,6 +269,12 @@ export default function TransitLayer() {
     features: vehicles.map((v) => ({ type: "Feature", properties: { key: v.key, color: v.color, bearing: v.bearing, grade: v.grade, label: v.label }, geometry: { type: "Point", coordinates: [v.lon, v.lat] } })),
   }), [vehicles]);
   // 3D: one three.js custom layer in the map's canvas, loaded on first tilt.
+  const bays = useRef<ReturnType<typeof viaductBays>>([]);
+  useEffect(() => {
+    const sub = statics.find((s) => s.system === "subway");
+    bays.current = sub ? viaductBays(sub) : [];
+    v3d.current?.setStructure(bays.current);
+  }, [staticKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const v3d = useRef<ReturnType<typeof import("@/lib/map/threeLayer").createVehicleLayer> | null>(null);
   useEffect(() => {
     if (!map || !three) return;
@@ -278,6 +285,7 @@ export default function TransitLayer() {
     };
     void import("@/lib/map/threeLayer").then(({ createVehicleLayer }) => {
       v3d.current ??= createVehicleLayer();
+      v3d.current.setStructure(bays.current);
       ensure();
     });
     map.on("styledata", ensure);
@@ -364,11 +372,11 @@ export default function TransitLayer() {
         <Layer id="transit-work-line" type="line" paint={{ "line-color": "#f59e0b", "line-width": ["interpolate", ["linear"], ["zoom"], 10, 2, 16, 6], "line-dasharray": [1, 1.5], "line-opacity": 0.85 }} />
       </Source>
       <Source id="transit-viaduct" type="geojson" data={three ? viaduct : EMPTY}>
-        <Layer id="transit-viaduct" type="fill-extrusion" minzoom={13}
+        <Layer id="transit-viaduct" type="fill-extrusion" minzoom={13} filter={["any", ["get", "bridge"], ["<", ["zoom"], 15]]}
           paint={{ "fill-extrusion-color": ["get", "color"], "fill-extrusion-base": ["-", ["get", "top"], 1.2], "fill-extrusion-height": ["get", "top"], "fill-extrusion-opacity": 0.9 }} />
       </Source>
       <Source id="transit-piers" type="geojson" data={three ? piers : EMPTY}>
-        <Layer id="transit-pier" type="fill-extrusion" minzoom={14}
+        <Layer id="transit-pier" type="fill-extrusion" minzoom={14} maxzoom={15}
           paint={{ "fill-extrusion-color": "#6b7280", "fill-extrusion-base": 0, "fill-extrusion-height": ["-", ["get", "top"], 1.2], "fill-extrusion-opacity": 0.9 }} />
       </Source>
       <Source id="transit-stations" type="geojson" data={stations}>
