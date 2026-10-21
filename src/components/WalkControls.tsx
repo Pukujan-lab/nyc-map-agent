@@ -9,6 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { setSeeThrough, useSeeThrough } from "@/lib/map/seeThrough";
 import { WALK_IDLE, type WalkInput } from "@/lib/map/walk";
 
 interface WalkControlsProps {
@@ -128,6 +129,7 @@ export function WalkControls({
             </span>
             <span className="sm:hidden">Use the pad</span>
           </div>
+          <SeeThroughToggle />
         </div>
       </div>
 
@@ -169,5 +171,17 @@ export function WalkControls({
         <span />
       </div>
     </>
+  );
+}
+
+/** Opt-in: buildings fade when you look up (off keeps them solid). */
+function SeeThroughToggle() {
+  const on = useSeeThrough();
+  return (
+    <Button type="button" size="sm" variant={on ? "default" : "outline"} aria-pressed={on}
+      className="pointer-events-auto h-7 self-start rounded-full px-2.5 text-[11px]"
+      onClick={() => setSeeThrough(!on)}>
+      See through buildings{on ? ": on" : ""}
+    </Button>
   );
 }

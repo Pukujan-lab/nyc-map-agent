@@ -1,72 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useMap } from "react-map-gl/maplibre";
-import { LngLat, type Map as MaplibreMap } from "maplibre-gl";
+import { LngLat } from "maplibre-gl";
 import { Button } from "@/components/ui/button";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { useNow, useTransitData } from "./hooks";
 import { minutesUntil, stationOf, trainProgress, type SystemId } from "./model";
 import { setFollowed } from "./follow";
 import { ease, followPose, undergroundShare } from "./followCam";
-import { WORLD } from "./focus";
-
-const VEIL = "follow-xray-veil";
-const TUNNEL = "follow-xray-tunnel";
-const STATIONS = "follow-xray-stations";
-/** Building opacity while the followed train is underground (the x-ray look). */
-const XRAY_BUILDINGS = 0.12;
-
-/** The theme's foreground colour as an HSL string, so the ground veil follows the theme. */
-function themeInk(): string {
-  const v = getComputedStyle(document.documentElement).getPropertyValue("--foreground").trim();
-  const [h, s, l] = v.split(/\s+/);
-  return h && s && l ? `hsl(${h}, ${s}, ${l})` : "#111827";
-}
-
-/** X-ray dressing: veil over the ground, buildings faded, the followed line's tunnel and stations lit. */
-function useXrayDressing(map: MaplibreMap | undefined, route: string | undefined, color: string, on: boolean, u: number) {
-  const saved = useRef(new Map<string, unknown>());
-  useEffect(() => {
-    if (!map || !route) return;
-    const before = map.getLayer("transit-line-under") ? "transit-line-under" : undefined;
-    if (!map.getSource(VEIL)) map.addSource(VEIL, { type: "geojson", data: WORLD });
-    if (!map.getLayer(VEIL)) map.addLayer({ id: VEIL, type: "fill", source: VEIL, paint: { "fill-color": themeInk(), "fill-opacity": 0, "fill-opacity-transition": { duration: 0 } } }, before);
-    if (map.getSource("transit-lines") && !map.getLayer(TUNNEL))
-      map.addLayer({ id: TUNNEL, type: "line", source: "transit-lines", filter: ["all", ["==", ["get", "route"], route], ["==", ["get", "grade"], "underground"]], layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": color, "line-width": 7, "line-opacity": 0 } });
-    if (map.getSource("transit-stations") && !map.getLayer(STATIONS))
-      map.addLayer({ id: STATIONS, type: "circle", source: "transit-stations", filter: ["in", route, ["to-string", ["get", "routes"]]], paint: { "circle-radius": 9, "circle-color": "#ffffff", "circle-stroke-color": color, "circle-stroke-width": 3, "circle-opacity": 0, "circle-stroke-opacity": 0 } });
-    return () => {
-      for (const id of [STATIONS, TUNNEL, VEIL]) if (map.getLayer(id)) map.removeLayer(id);
-      if (map.getSource(VEIL)) map.removeSource(VEIL);
-    };
-  }, [map, route, color]);
-  // Continuous parts follow the blend every frame-ish.
-  useEffect(() => {
-    if (!map) return;
-    if (map.getLayer(VEIL)) map.setPaintProperty(VEIL, "fill-opacity", 0.62 * u);
-    if (map.getLayer(TUNNEL)) map.setPaintProperty(TUNNEL, "line-opacity", u);
-    if (map.getLayer(STATIONS)) { map.setPaintProperty(STATIONS, "circle-opacity", u); map.setPaintProperty(STATIONS, "circle-stroke-opacity", u); }
-  }, [map, u]);
-  // Buildings fade with MapLibre's own paint transition, not a pop.
-  useEffect(() => {
-    if (!map) return;
-    const ids = (map.getStyle()?.layers ?? []).filter((l) => l.type === "fill-extrusion" && !l.id.startsWith("transit-")).map((l) => l.id);
-    for (const id of ids) {
-      map.setPaintProperty(id, "fill-extrusion-opacity-transition", { duration: 900, delay: 0 });
-      if (on) {
-        if (!saved.current.has(id)) saved.current.set(id, map.getPaintProperty(id, "fill-extrusion-opacity") ?? 1);
-        map.setPaintProperty(id, "fill-extrusion-opacity", XRAY_BUILDINGS);
-      } else if (saved.current.has(id)) {
-        map.setPaintProperty(id, "fill-extrusion-opacity", saved.current.get(id));
-        saved.current.delete(id);
-      }
-    }
-  }, [map, on]);
-  useEffect(() => () => {
-    if (!map) return;
-    for (const [id, v] of saved.current) if (map.getLayer(id)) map.setPaintProperty(id, "fill-extrusion-opacity", v);
-    saved.current.clear();
-  }, [map]);
-}
+import { useXrayDressing } from "./xrayDressing";
+import { setXrayAuto, useViewState } from "@/lib/map/viewMode";
 
 /**
  * Follow-train camera. Rides the train's route shape: just behind and above
@@ -118,10 +60,15 @@ export default function FollowTrain({ vehicleKey }: { vehicleKey: string }) {
   const route = trip ? data?.stat?.routes[trip.route] : undefined;
   const prog = data?.stat && trip ? trainProgress(data.stat, trip, now) : null;
   const station = prog && data?.stat ? data.stat.stations.features.find((f) => String(f.properties.id) === stationOf(system as SystemId, prog.next.id))?.properties.name : undefined;
-  useXrayDressing(map, trip?.route, route?.color ?? "#808183", u > 0.5, u);
+  // Underground turns X-ray on by itself; the toggle beside the view chips forces it on everywhere.
+  const { xray } = useViewState();
+  useEffect(() => { setXrayAuto(u > 0.5); }, [u]);
+  useEffect(() => () => setXrayAuto(false), []);
+  const shown = xray ? 1 : u;
+  useXrayDressing(map, trip?.route, route?.color ?? "#808183", shown > 0.5, shown);
 
   return (
-    <div className="pointer-events-auto absolute left-1/2 bottom-28 z-20 md:bottom-auto md:top-3 flex max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-3 rounded-full border bg-background/95 px-3 py-1.5 text-sm text-foreground shadow-md" data-testid="follow-train">
+    <div className="pointer-events-auto absolute left-1/2 top-16 z-20 md:top-3 flex max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-3 rounded-full border bg-background/95 px-3 py-1.5 text-sm text-foreground shadow-md" data-testid="follow-train">
       {route ? (
         <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold" style={{ background: route.color, color: route.text ? `#${route.text.replace("#", "")}` : "#fff" }}>{route.short}</span>
       ) : null}

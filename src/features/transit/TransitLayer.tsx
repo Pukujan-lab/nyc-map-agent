@@ -23,6 +23,9 @@ import { useFlag } from "@/lib/flags";
 import { usePanel, usePanelChip, usePanelSearch, type SearchProvider } from "@/lib/store/PanelContext";
 import { setFollowed, useFollowed } from "./follow";
 import FollowTrain from "./FollowTrain";
+import { XrayView } from "./xrayDressing";
+import StreetMiniMap from "./StreetMiniMap";
+import { useViewState } from "@/lib/map/viewMode";
 import { SYSTEM_LABELS } from "./model";
 import { StationDetails, VehicleDetails } from "./TransitCard";
 import { TransitStatusDetails } from "./TransitStatus";
@@ -99,6 +102,7 @@ export default function TransitLayer() {
   const followedKey = useFollowed();
   const following = followedKey !== null && followedKey === selectedKey;
   useEffect(() => { if (followedKey && followedKey !== selectedKey) setFollowed(null); }, [followedKey, selectedKey]);
+  const xrayOn = useViewState().xray;
   const display = useRef(new Map<string, Vehicle>());
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
 
@@ -423,7 +427,8 @@ export default function TransitLayer() {
   const hide2d = three;
   return (
     <>
-      {following && followedKey && !followedKey.startsWith("bus:") ? <FollowTrain vehicleKey={followedKey} /> : null}
+      {following && followedKey && !followedKey.startsWith("bus:") ? <FollowTrain vehicleKey={followedKey} /> : xrayOn ? <XrayView map={map} /> : null}
+      {walking ? <StreetMiniMap /> : null}
       <Source id="transit-lines" type="geojson" data={lines}>
         <Layer id="transit-line-under" type="line" filter={["==", ["get", "grade"], "underground"]}
           paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 16, 2.5], "line-opacity": 0.45, "line-dasharray": [2, 2] }} />

@@ -1,3 +1,5 @@
+import { setTallTileCover } from "@/lib/map/tallTileCover";
+import { useSeeThroughBuildings } from "@/lib/map/seeThrough";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { setMapInstance } from "@/lib/map/mapInstance";
 import { RestroomDetails } from "@/components/RestroomCard";
@@ -116,6 +118,8 @@ function eyeCamera(map: MaplibreMapInstance, eye: Eye): CameraOptions {
 import { useMapState } from "@/lib/store/MapStateContext";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 import { WalkControls } from "./WalkControls";
+import { ViewSwitcher } from "./ViewSwitcher";
+import { ELEVATED_HEIGHT_M, elevatedEye, setElevated } from "@/lib/map/viewMode";
 import { nearestCorner, type CornerSign } from "@/lib/map/corner";
 import { MAX_HEIGHT_M, pitchForHeight, STREET_LEVEL_M } from "@/lib/map/cameraHeight";
 import { FEATURES } from "@/features";
@@ -254,6 +258,8 @@ export function MapView({
     selectNta,
     selectBlock,
   } = useMapState();
+  // Opt-in: fade buildings when looking up at street level.
+  useSeeThroughBuildings(ready ? mapRef.current?.getMap() : undefined, walking);
   const reducedMotion = usePrefersReducedMotion();
   /** Held d-pad buttons. A ref, because it changes without needing a render. */
   const walkPad = useRef<WalkInput>(WALK_IDLE);
@@ -963,6 +969,8 @@ export function MapView({
     // Looking up puts the map centre in the air along the look ray; overhead
     // it stays pinned to the ground as usual.
     map.setCenterClampedToGround(!walking);
+    // Tiles stay loaded while looking up at towers (see tallTileCover.ts).
+    setTallTileCover(map, walking);
     applyStreetPalette(map, walking);
     // After the street palette, so time-of-day lighting re-tints on top of it.
     setAmbient({ walking });
@@ -1294,6 +1302,31 @@ export function MapView({
       } else apply();
       return;
     }
+    if (navCommand.type === "elevated") {
+      // About 60 m up, tilted 55°, looking at the current centre.
+      const apply = () => {
+        const center = map.getCenter();
+        const eye = elevatedEye(center, map.getBearing());
+        const cam = map.calculateCameraOptionsFromTo(new LngLat(eye.lng, eye.lat), ELEVATED_HEIGHT_M, center, 0);
+        if (reducedMotion) map.jumpTo(cam);
+        else map.easeTo({ ...cam, duration: 900 });
+        // No setTilted here: the tilt effect would ease to its own 62°. The
+        // move-end handler marks the map tilted once the camera lands.
+        setElevated(true);
+      };
+      if (walking) {
+        stopWalk();
+        window.setTimeout(apply, reducedMotion ? 0 : 750);
+      } else apply();
+      return;
+    }
+    if (navCommand.type === "map") {
+      setElevated(false);
+      setTilted(false);
+      if (walking) stopWalk();
+      else map.easeTo({ pitch: 0, zoom: Math.min(map.getZoom(), 16.5), duration: reducedMotion ? 0 : 700 });
+      return;
+    }
     if (navCommand.type === "zoom-in") {
       map.zoomIn({ duration });
       return;
@@ -1303,6 +1336,7 @@ export function MapView({
       return;
     }
     if (navCommand.type === "north") {
+      setElevated(false);
       map.easeTo({ bearing: 0, pitch: 0, duration });
       setTilted(false);
       return;
@@ -1314,6 +1348,7 @@ export function MapView({
       bearing: 0,
     });
     setTilted(false);
+    setElevated(false);
     // "Reset view" means the city, not the street you were standing on.
     stopWalk();
     // `walking` is read, not a trigger: only a new command moves the camera.
@@ -1382,6 +1417,10 @@ export function MapView({
         </Suspense>
       </MapLibreMap>
 
+
+      <div className="pointer-events-none absolute right-3 top-[calc(env(safe-area-inset-top)+4.5rem)] z-30 flex justify-end md:left-1/2 md:right-auto md:top-auto md:bottom-8 md:-translate-x-1/2">
+        <ViewSwitcher streetLevel={analyticsFlags.streetLevel} />
+      </div>
 
       {walking ? (
         <WalkControls

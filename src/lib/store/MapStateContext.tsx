@@ -27,7 +27,7 @@ export interface CameraTarget {
   nonce: number;
 }
 
-export type NavCommandType = "zoom-in" | "zoom-out" | "reset" | "north" | "height";
+export type NavCommandType = "zoom-in" | "zoom-out" | "reset" | "north" | "height" | "map" | "elevated";
 
 export interface NavCommand {
   type: NavCommandType;
