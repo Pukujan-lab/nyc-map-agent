@@ -15,9 +15,9 @@
     "limit": "2 kB"
   },
   {
-    "name": "features: daylight + weather + hazards layers (lazy, layers-*.js)",
+    "name": "features: daylight + weather + hazards + traffic + parking layers (lazy, layers-*.js; each loads only when its flag/chip is on)",
     "path": ".size-build/assets/layers-*.js",
-    "limit": "7.5 kB"
+    "limit": "9.5 kB"
   },
   {
     "name": "shared 3D layer: streetSigns + three (lazy)",
