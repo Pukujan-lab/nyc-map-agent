@@ -237,6 +237,22 @@ async function ingest(s: SourceConfig): Promise<number> {
   return ingestCells(s);
 }
 
+/** Public restrooms (i7jb-7jku): a small inventory, replaced whole into raw.restrooms. */
+async function ingestRestrooms(): Promise<number> {
+  const rows = await soqlAll<Row>("i7jb-7jku", { $where: "latitude IS NOT NULL", $order: "facility_name" });
+  const byName = new Map(rows.filter((r) => r.facility_name).map((r) => [r.facility_name, r]));
+  await octoQuery("DELETE FROM raw.restrooms");
+  await insertJson(
+    "raw.restrooms",
+    { facility_name: "text", row: "jsonb" },
+    [...byName.values()].map((r) => {
+      const { location_1: _geom, ...rest } = r;
+      return { facility_name: r.facility_name, row: rest };
+    }),
+  );
+  return byName.size;
+}
+
 async function main() {
   loadEnv();
   const only = process.argv.slice(2);
@@ -261,6 +277,20 @@ async function main() {
         "INSERT INTO core.ingest_runs (source_id, started_at, finished_at, status, detail) VALUES ($1, $2, now(), 'error', $3)",
         [s.id, started, msg.slice(0, 1000)],
       );
+    }
+  }
+  if (!only.length || only.includes("restrooms")) {
+    const started = new Date().toISOString();
+    try {
+      const n = await ingestRestrooms();
+      console.log(`restrooms: ${n} rows`);
+      await octoQuery(
+        "INSERT INTO core.ingest_runs (source_id, started_at, finished_at, rows, status) VALUES ('restrooms', $1, now(), $2, 'ok')",
+        [started, n],
+      );
+    } catch (err) {
+      failed++;
+      console.error(`restrooms: FAILED ${err instanceof Error ? err.message : String(err)}`);
     }
   }
   if (failed) process.exit(1);

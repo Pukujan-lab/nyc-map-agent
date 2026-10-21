@@ -28,7 +28,7 @@ export function ViewModeMenu({
   compact?: boolean;
   onOpenSources?: () => void;
 }) {
-  const { layer, setLayer, city3d, setCity3d } = useMapState();
+  const { layer, setLayer, city3d, setCity3d, restrooms, setRestrooms } = useMapState();
   const { viewMode, setViewMode, enabledSources, averageSources } = useDataView();
 
   const value =
@@ -104,6 +104,9 @@ export function ViewModeMenu({
         <DropdownMenuSeparator />
         <DropdownMenuCheckboxItem checked={city3d} onCheckedChange={(on) => setCity3d(on === true)}>
           Textured 3D city (Lower Manhattan + Brownstone Brooklyn, zoom in)
+        </DropdownMenuCheckboxItem>
+        <DropdownMenuCheckboxItem checked={restrooms} onCheckedChange={(on) => setRestrooms(on === true)}>
+          Public restrooms
         </DropdownMenuCheckboxItem>
         {onOpenSources ? (
           <>

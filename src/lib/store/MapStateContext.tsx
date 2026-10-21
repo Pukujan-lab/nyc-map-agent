@@ -54,6 +54,9 @@ interface MapState {
   mapStyle: MapStyleId;
   /** Textured 3D buildings and street props (pilot area, zoom 16+). */
   city3d: boolean;
+  /** Public restrooms icon layer (restrooms=1 in the URL). */
+  restrooms: boolean;
+  setRestrooms: (on: boolean) => void;
   /** True while the camera is pitched; drives the "3D" toggle's pressed state. */
   tilted: boolean;
   /** True while the camera is driven first-person from the keyboard. */
@@ -125,6 +128,7 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
   // Street level defaults to the textured city; an explicit choice in the
   // Layers dropdown (city3d=0/1 in the URL) always wins.
   const city3d = city3dParam === "1" || (city3dParam === null && walking);
+  const restrooms = searchParams.get("restrooms") === "1";
   const [walkRequest, setWalkRequest] = useState<WalkRequest | null>(null);
   const [selectedNtaCode, setSelectedNtaCode] = useState<string | null>(null);
   const [selectedBlockKey, setSelectedBlockKey] = useState<string | null>(null);
@@ -146,7 +150,7 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateSearch = useCallback(
-    (key: "layer" | "window" | "scale" | "style" | "city3d", value: string) => {
+    (key: "layer" | "window" | "scale" | "style" | "city3d" | "restrooms", value: string) => {
       setSearchParams(
         (previous) => {
           const next = new URLSearchParams(previous);
@@ -181,6 +185,11 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
 
   const setCity3d = useCallback(
     (on: boolean) => updateSearch("city3d", on ? "1" : "0"),
+    [updateSearch],
+  );
+
+  const setRestrooms = useCallback(
+    (on: boolean) => updateSearch("restrooms", on ? "1" : "0"),
     [updateSearch],
   );
 
@@ -254,6 +263,8 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
       setMapStyle,
       city3d,
       setCity3d,
+      restrooms,
+      setRestrooms,
       tilted,
       walking,
       walkRequest,
@@ -295,6 +306,8 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
       setMapStyle,
       city3d,
       setCity3d,
+      restrooms,
+      setRestrooms,
       tilted,
       walking,
       walkRequest,
