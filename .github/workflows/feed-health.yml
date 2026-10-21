@@ -1,0 +1,23 @@
+name: feed-health
+on:
+  schedule:
+    - cron: "17 * * * *" # hourly
+  workflow_dispatch:
+concurrency: { group: feed-health, cancel-in-progress: true }
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      OCTO_API_KEY: ${{ secrets.OCTO_API_KEY }}
+      OCTO_WORKSPACE_ID: ${{ secrets.OCTO_WORKSPACE_ID }}
+      # Set the repo variable to probe a deployed instance instead of the in-process app.
+      FEED_HEALTH_BASE_URL: ${{ vars.FEED_HEALTH_BASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Ping every upstream through our proxy
+        run: pnpm feeds:health
