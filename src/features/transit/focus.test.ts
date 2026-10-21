@@ -8,8 +8,8 @@ describe("transit focus", () => {
     expect(readFocus({ getItem: () => { throw new Error("blocked"); } })).toBe(false);
   });
   it("veils the whole map", () => {
-    const g = WORLD.features[0]!.geometry as GeoJSON.Polygon;
+    const g = WORLD.features[0].geometry as GeoJSON.Polygon;
     expect(g.coordinates[0]).toHaveLength(5);
-    expect(g.coordinates[0]![0]).toEqual([-180, -85]);
+    expect(g.coordinates[0][0]).toEqual([-180, -85]);
   });
 });
