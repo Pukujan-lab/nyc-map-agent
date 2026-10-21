@@ -27,10 +27,12 @@ export interface CameraTarget {
   nonce: number;
 }
 
-export type NavCommandType = "zoom-in" | "zoom-out" | "reset" | "north";
+export type NavCommandType = "zoom-in" | "zoom-out" | "reset" | "north" | "height";
 
 export interface NavCommand {
   type: NavCommandType;
+  /** For "height": the camera height above the street, in metres. */
+  heightM?: number;
   nonce: number;
 }
 
@@ -104,6 +106,11 @@ interface MapStateActions {
   setHighlights: (ntaCodes: string[]) => void;
   flyTo: (target: Omit<CameraTarget, "nonce">) => void;
   navigate: (type: NavCommandType) => void;
+  /** Moves the camera to this height (metres), from eye level to overhead. */
+  setCameraHeight: (heightM: number) => void;
+  /** The camera's current height above the street, reported by the map. */
+  cameraHeightM: number;
+  reportCameraHeight: (heightM: number) => void;
   seedChat: (text: string) => void;
   clearSeed: () => void;
   setChatOpen: (open: boolean) => void;
@@ -140,6 +147,7 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
   const [highlightedNtaCodes, setHighlighted] = useState<string[]>([]);
   const [cameraTarget, setCameraTarget] = useState<CameraTarget | null>(null);
   const [navCommand, setNavCommand] = useState<NavCommand | null>(null);
+  const [cameraHeightM, setCameraHeightM] = useState(3000);
   const [chatSeed, setChatSeed] = useState<ChatSeed | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [caveatsOpen, setCaveatsOpen] = useState(false);
@@ -256,6 +264,16 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
     setNavCommand({ type, nonce: Date.now() });
   }, []);
 
+  const setCameraHeight = useCallback((heightM: number) => {
+    setNavCommand({ type: "height", heightM, nonce: Date.now() });
+  }, []);
+
+  const reportCameraHeight = useCallback((heightM: number) => {
+    // Rounded to 2 significant figures so a pan doesn't re-render the drawer.
+    const rounded = Number(heightM.toPrecision(2));
+    setCameraHeightM((current) => (current === rounded ? current : rounded));
+  }, []);
+
   const seedChat = useCallback((text: string) => {
     setChatSeed({ id: crypto.randomUUID(), text });
     setChatOpen(true);
@@ -284,6 +302,7 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
       highlightedNtaCodes,
       cameraTarget,
       navCommand,
+      cameraHeightM,
       chatSeed,
       chatOpen,
       caveatsOpen,
@@ -300,6 +319,8 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
       setHighlights,
       flyTo,
       navigate,
+      setCameraHeight,
+      reportCameraHeight,
       seedChat,
       clearSeed,
       setChatOpen,
@@ -329,6 +350,7 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
       highlightedNtaCodes,
       cameraTarget,
       navCommand,
+      cameraHeightM,
       chatSeed,
       chatOpen,
       caveatsOpen,
@@ -344,6 +366,8 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
       setHighlights,
       flyTo,
       navigate,
+      setCameraHeight,
+      reportCameraHeight,
       seedChat,
       clearSeed,
       setDetailsOpen,
