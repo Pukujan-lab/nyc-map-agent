@@ -1495,7 +1495,8 @@ git commit -m "feat(cd): deploy pipeline with health check and automatic rollbac
 - Produces:
   - `interface ServerConfig { password: string; sessionSecret: string; deployToken: string; stateFile: string; pipeline: PipelineConfig; now?: () => Date }`
   - `createApp(config: ServerConfig, deps: { runner: Runner }): Hono`
-  - `interface RunLogs { append(runId: string, line: string): void; lines(runId: string): string[]; waiters(runId: string): Set<(line: string) => void> }`
+  - `interface LogStore { append(runId: string, line: string): void; lines(runId: string): string[]; waiters(runId: string): Set<(line: string) => void>; done(runId: string): void; isDone(runId: string): boolean }`
+  - `createLogStore(cap?: number): LogStore` — `done`/`isDone` let the SSE route end the stream when the pipeline finishes instead of polling forever.
 
 - [ ] **Step 1: Write the failing test**
 
