@@ -111,10 +111,10 @@ export function WalkControls({
             </Button>
           </div>
           <div className="flex items-center gap-1.5 pr-1 text-[11px] text-muted-foreground">
-            {place ? (
+            {place?.detail ? (
               <span className="tabular-nums">{place.detail}</span>
             ) : null}
-            {place ? (
+            {place?.detail ? (
               <span aria-hidden="true" className="hidden sm:inline">
                 ·
               </span>

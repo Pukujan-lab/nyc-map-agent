@@ -2,7 +2,8 @@
  * Builds the static tiles for the textured 3D city (pilot area) from NYC Open Data:
  *   buildings  Building Footprints (5zhs-2jue) heights + PLUTO (64uk-42ks) class/floors/year
  *   props      street trees (uvpi-gqnh), hydrants (5bgh-vtsn), benches (kuxa-tauh),
- *              street-light poles reserved for small cells (tbgj-tdd6)
+ *              street-light poles reserved for small cells (tbgj-tdd6), pushed off the
+ *              roadway to the kerb with DCP LION widths (scripts/props-clearance.sql)
  * Props become tiny low-poly polygons (canopy octagon, trunk, pole, box) so MapLibre's own
  * fill-extrusion draws them: no second renderer. tippecanoe packs everything into one
  * PMTiles file served statically from public/tiles/.
@@ -12,7 +13,7 @@
  * Needs tippecanoe >= 2.17 on PATH.
  */
 import { execFileSync } from "node:child_process";
-import { closeSync, mkdirSync, openSync, statSync, writeSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync, writeFileSync, writeSync } from "node:fs";
 
 /** Original pilot bbox: Lower Manhattan, DUMBO, Brooklyn Heights, Downtown Brooklyn, Park Slope. */
 export const PILOT_ONLY_BBOX = { west: -74.02, south: 40.665, east: -73.97, north: 40.74 };
@@ -34,9 +35,18 @@ async function soqlAll(dataset: string, params: Record<string, string>): Promise
   if (id && secret) headers.authorization = `Basic ${Buffer.from(`${id}:${secret}`).toString("base64")}`;
   for (let offset = 0; ; offset += 50_000) {
     const q = new URLSearchParams({ ...params, $limit: "50000", $offset: String(offset), $order: ":id" });
-    const res = await fetch(`${SOCRATA}/${dataset}.json?${q}`, { headers });
-    if (!res.ok) throw new Error(`${dataset} ${res.status}: ${(await res.text()).slice(0, 200)}`);
-    const rows = (await res.json()) as Row[];
+    // A citywide pull is hundreds of pages; one dropped socket must not sink it.
+    let rows: Row[] | null = null;
+    for (let attempt = 1; !rows; attempt++) {
+      try {
+        const res = await fetch(`${SOCRATA}/${dataset}.json?${q}`, { headers });
+        if (!res.ok) throw new Error(`${dataset} ${res.status}: ${(await res.text()).slice(0, 200)}`);
+        rows = (await res.json()) as Row[];
+      } catch (err) {
+        if (attempt >= 4) throw err;
+        await new Promise((r) => setTimeout(r, 2000 * attempt));
+      }
+    }
     out.push(...rows);
     if (rows.length < 50_000) return out;
   }
@@ -77,6 +87,60 @@ function ring(lon: number, lat: number, radiusM: number, sides: number, rot = 0)
     pts.push([+(lon + Math.cos(a) * radiusM * mLon).toFixed(7), +(lat + Math.sin(a) * radiusM * mLat).toFixed(7)]);
   }
   return pts;
+}
+
+/** A box `lenM` x `widthM` turned to `bearing` (degrees from north), for benches. */
+function rect(lon: number, lat: number, lenM: number, widthM: number, bearing: number, offsetM = 0): number[][] {
+  const mLat = 1 / 111_320;
+  const mLon = 1 / (111_320 * Math.cos((lat * Math.PI) / 180));
+  const b = (bearing * Math.PI) / 180;
+  const along = [Math.sin(b), Math.cos(b)];
+  const across = [Math.cos(b), -Math.sin(b)];
+  const pt = (u: number, v: number) => {
+    const e = along[0] * u + across[0] * (v + offsetM);
+    const n = along[1] * u + across[1] * (v + offsetM);
+    return [+(lon + e * mLon).toFixed(7), +(lat + n * mLat).toFixed(7)];
+  };
+  const l = lenM / 2, w = widthM / 2;
+  return [pt(-l, -w), pt(l, -w), pt(l, w), pt(-l, w), pt(-l, -w)];
+}
+
+function slab(kind: string, coords: number[][], base: number, height: number) {
+  return {
+    type: "Feature",
+    tippecanoe: { layer: "props", minzoom: 16 },
+    properties: { kind, base, height },
+    geometry: { type: "Polygon", coordinates: [coords] },
+  };
+}
+
+interface Placed { lon: number; lat: number; brg: number; pushed: boolean }
+
+/**
+ * Pushes props that sit on the carriageway out to the kerb (and drops any on the
+ * centreline) using DCP LION street widths; see scripts/props-clearance.sql.
+ * Without LION on disk (`pnpm build:sign-tiles` downloads it) props pass through.
+ */
+function clearOfRoads(points: Array<{ kind: string; lon: number; lat: number }>): Map<number, Placed> | null {
+  const gdb = process.env.LION_GDB ?? "/tmp/nyc-lion/lion/lion.gdb";
+  if (!existsSync(gdb)) {
+    console.warn(`no LION at ${gdb}: props are not checked against the roadway`);
+    return null;
+  }
+  const dir = "/tmp/nyc-props";
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(`${dir}/in.csv`, "id,kind,lon,lat\n" + points.map((q, i) => `${i},${q.kind},${q.lon},${q.lat}`).join("\n"));
+  writeFileSync(`${dir}/clear.sql`, readFileSync("scripts/props-clearance.sql", "utf8").replace("PROPS_OUT_PLACEHOLDER", `${dir}/out.csv`));
+  execFileSync("duckdb", ["-c", `.read ${dir}/clear.sql`], {
+    stdio: "inherit",
+    env: { ...process.env, LION_GDB: gdb, PROPS_IN: `${dir}/in.csv` },
+  });
+  const out = new Map<number, Placed>();
+  for (const line of readFileSync(`${dir}/out.csv`, "utf8").trim().split("\n").slice(1)) {
+    const [id, lon, lat, brg, pushed] = line.split(",");
+    out.set(Number(id), { lon: Number(lon), lat: Number(lat), brg: Number(brg), pushed: pushed === "true" });
+  }
+  return out;
 }
 
 function prop(kind: string, lon: number, lat: number, r: number, sides: number, base: number, height: number) {
@@ -126,34 +190,60 @@ async function main() {
       `building:${facade}`,
     );
   }
+  // Street props, checked against the roadway first so none stands in the street.
+  const pts: Array<{ kind: string; lon: number; lat: number; dbh?: number }> = [];
   for (const t of trees) {
     const lat = Number(t.latitude), lon = Number(t.longitude);
-    if (!inBox(lat, lon)) continue;
-    const dbh = Math.min(40, Math.max(3, Number(t.tree_dbh) || 8));
-    const canopy = 1.4 + dbh * 0.09;
-    add(prop("trunk", lon, lat, 0.15, 6, 0, 2.8), "tree");
-    // Three stacked, narrowing octagonal tiers read as a crown, not a cube.
-    const top = 2.4 + canopy * 2.2;
-    const tiers: Array<[number, number, number]> = [[0.75, 2.4, 0.45], [1, 0.45, 0.8], [0.55, 0.8, 1]];
-    for (const [scale, from, to] of tiers) {
-      const base = from > 1 ? from : 2.4 + (top - 2.4) * from;
-      lines.push(JSON.stringify(prop("canopy", lon, lat, canopy * scale, 8, base, 2.4 + (top - 2.4) * to)));
-    }
+    if (inBox(lat, lon)) pts.push({ kind: "tree", lon, lat, dbh: Number(t.tree_dbh) });
   }
   for (const h of hydrants) {
     const lat = Number(h.latitude), lon = Number(h.longitude);
-    if (inBox(lat, lon)) add(prop("hydrant", lon, lat, 0.22, 6, 0, 0.8), "hydrant");
+    if (inBox(lat, lon)) pts.push({ kind: "hydrant", lon, lat });
   }
   for (const b of benches) {
     const c = (b.the_geom as { coordinates?: number[] } | undefined)?.coordinates;
-    if (c && inBox(c[1], c[0])) add(prop("bench", c[0], c[1], 0.9, 4, 0.35, 0.8), "bench");
+    if (c && inBox(c[1], c[0])) pts.push({ kind: "bench", lon: c[0], lat: c[1] });
   }
   for (const s of poles) {
     const lat = Number(s.latitude), lon = Number(s.longitude);
-    if (!inBox(lat, lon)) continue;
-    add(prop("pole", lon, lat, 0.12, 4, 0, 8), "streetlight");
-    lines.push(JSON.stringify(prop("lamp", lon, lat, 0.45, 4, 7.6, 8.1)));
+    if (inBox(lat, lon)) pts.push({ kind: "streetlight", lon, lat });
   }
+  const placed = clearOfRoads(pts);
+  let pushed = 0, dropped = 0;
+  pts.forEach((q, i) => {
+    const at = placed ? placed.get(i) : { lon: q.lon, lat: q.lat, brg: 0, pushed: false };
+    if (!at) return void dropped++;
+    if (at.pushed) pushed++;
+    const { lon, lat } = at;
+    if (q.kind === "tree") {
+      const dbh = Math.min(40, Math.max(3, q.dbh || 8));
+      const canopy = 1.4 + dbh * 0.09;
+      add(prop("trunk", lon, lat, 0.15, 6, 0, 2.8), "tree");
+      // Three stacked, narrowing tiers read as a crown, not a cube.
+      const top = 2.4 + canopy * 2.2;
+      const tiers: Array<[number, number, number]> = [[0.75, 2.4, 0.45], [1, 0.45, 0.8], [0.55, 0.8, 1]];
+      for (const [scale, from, to] of tiers) {
+        const base = from > 1 ? from : 2.4 + (top - 2.4) * from;
+        lines.push(JSON.stringify(prop("canopy", lon, lat, canopy * scale, 10, base, 2.4 + (top - 2.4) * to)));
+      }
+    } else if (q.kind === "hydrant") {
+      add(prop("hydrant", lon, lat, 0.22, 6, 0, 0.8), "hydrant");
+    } else if (q.kind === "bench") {
+      // Along the kerb: a seat on two legs and a backrest, not a 2 m crate.
+      add(slab("bench", rect(lon, lat, 1.8, 0.45, at.brg), 0.42, 0.48), "bench");
+      lines.push(JSON.stringify(slab("bench", rect(lon, lat, 1.8, 0.06, at.brg, 0.2), 0.48, 0.9)));
+      for (const u of [-0.75, 0.75]) {
+        const e = Math.sin((at.brg * Math.PI) / 180) * u, n = Math.cos((at.brg * Math.PI) / 180) * u;
+        const c = [lon + e / (111_320 * Math.cos((lat * Math.PI) / 180)), lat + n / 111_320];
+        lines.push(JSON.stringify(slab("pole", rect(c[0], c[1], 0.08, 0.4, at.brg), 0, 0.42)));
+      }
+    } else {
+      add(prop("pole", lon, lat, 0.12, 4, 0, 8), "streetlight");
+      lines.push(JSON.stringify(prop("lamp", lon, lat, 0.45, 4, 7.6, 8.1)));
+    }
+  });
+  counts["props:pushed-to-kerb"] = pushed;
+  counts["props:dropped-on-centreline"] = dropped;
 
   mkdirSync("public/tiles", { recursive: true });
   const seq = `/tmp/${AREA}-city.geojsonseq`;

@@ -36,6 +36,8 @@
     "vite.config.ts",
     "api",
     "server",
-    "scripts"
+    "scripts",
+    "e2e",
+    "playwright.config.ts"
   ]
 }

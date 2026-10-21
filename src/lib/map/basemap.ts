@@ -103,11 +103,14 @@ export function applyAtmosphere(map: MapLibreMap, street = false): void {
  */
 const ROAD_WIDTH_M: Array<[RegExp, number]> = [
   [/motorway(?!_link)/, 22],
-  [/trunk_primary/, 18],
-  [/secondary_tertiary/, 14],
-  [/link/, 9],
-  [/minor/, 10],
-  [/^bridge_street/, 10],
+  // Kerb-to-kerb, matched to where the tree census puts street trees (the
+  // kerb line): a typical side street measures ~8 m, avenues ~15 m. Wider
+  // carriageways painted asphalt under the trees and kerbside buildings.
+  [/trunk_primary/, 15],
+  [/secondary_tertiary/, 12],
+  [/link/, 8],
+  [/minor/, 8],
+  [/^bridge_street/, 8],
   [/service_track/, 6],
   [/path_pedestrian/, 3],
 ];

@@ -334,12 +334,14 @@ export function MapView({
       if (!name) return null;
       return {
         name,
-        detail: block
-          ? `${formatCount(block.value)} ${LAYER_METRICS[layer].unit} in this block`
-          : "No records in this block",
+        // Quiet blocks say nothing rather than "No records" at every step.
+        detail:
+          block && block.value > 0
+            ? `${formatCount(block.value)} ${model.view?.unit ?? LAYER_METRICS[layer].unit} in this block`
+            : "",
       };
     },
-    [blockByKey, ntaIndex, nameByCode, layer],
+    [blockByKey, ntaIndex, nameByCode, layer, model.view],
   );
 
   /**

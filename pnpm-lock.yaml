@@ -153,6 +153,9 @@ importers:
       '@eslint/js':
         specifier: 9.39.1
         version: 9.39.1
+      '@playwright/test':
+        specifier: 1.56.1
+        version: 1.56.1
       '@size-limit/file':
         specifier: 11.2.0
         version: 11.2.0(size-limit@11.2.0)
@@ -1089,6 +1092,11 @@ packages:
 
   '@placemarkio/tokml@0.3.9':
     resolution: {integrity: sha512-LjD/rzPWF/0gY2tCoS4IPLQZ3/DqxzCmI3/V+dmXdWuZmyi3UIhHgxVfJ//bopxSjWHuGwY/qu4iyuNM+xluug==}
+
+  '@playwright/test@1.56.1':
+    resolution: {integrity: sha512-vSMYtL/zOcFpvJCW71Q/OEGQb7KYBPAdKh35WNSkaZA75JlAO8ED8UN6GUNTm3drWomcbcqRPFqQbLae8yBTdg==}
+    engines: {node: '>=18'}
+    hasBin: true
 
   '@protobufjs/aspromise@1.1.2':
     resolution: {integrity: sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ==}
@@ -2764,6 +2772,11 @@ packages:
   fs.realpath@1.0.0:
     resolution: {integrity: sha512-OO0pH2lK6a0hZnAdau5ItzHPI6pUlvI7jMVnxUQRtw4owF2wk8lOSabtGDCTP4Ggrg2MbGnWO9X8K1t4+fGMDw==}
 
+  fsevents@2.3.2:
+    resolution: {integrity: sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==}
+    engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
+    os: [darwin]
+
   fsevents@2.3.3:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
@@ -3607,6 +3620,16 @@ packages:
   pirates@4.0.7:
     resolution: {integrity: sha512-TfySrs/5nm8fQJDcBDuUng3VOUKsd7S+zqvbOTiGXHfxX4wK31ard+hoNuvkicM/2YFzlpDgABOevKSsB4G/FA==}
     engines: {node: '>= 6'}
+
+  playwright-core@1.56.1:
+    resolution: {integrity: sha512-hutraynyn31F+Bifme+Ps9Vq59hKuUCz7H1kDOcBs+2oGguKkWTU50bBWrtz34OUWmIwpBTWDxaRPXrIXkgvmQ==}
+    engines: {node: '>=18'}
+    hasBin: true
+
+  playwright@1.56.1:
+    resolution: {integrity: sha512-aFi5B0WovBHTEvpM3DzXTUaeN6eN0qWnTkKx4NQaH4Wvcmc153PdaY2UBdSYKaGYw+UyWXSVyxDUg5DoPEttjw==}
+    engines: {node: '>=18'}
+    hasBin: true
 
   pmtiles@4.3.0:
     resolution: {integrity: sha512-wnzQeSiYT/MyO63o7AVxwt7+uKqU0QUy2lHrivM7GvecNy0m1A4voVyGey7bujnEW5Hn+ZzLdvHPoFaqrOzbPA==}
@@ -5314,6 +5337,10 @@ snapshots:
   '@petamoriken/float16@3.9.3': {}
 
   '@placemarkio/tokml@0.3.9': {}
+
+  '@playwright/test@1.56.1':
+    dependencies:
+      playwright: 1.56.1
 
   '@protobufjs/aspromise@1.1.2': {}
 
@@ -7179,6 +7206,9 @@ snapshots:
 
   fs.realpath@1.0.0: {}
 
+  fsevents@2.3.2:
+    optional: true
+
   fsevents@2.3.3:
     optional: true
 
@@ -8118,6 +8148,14 @@ snapshots:
   picomatch@4.0.7: {}
 
   pirates@4.0.7: {}
+
+  playwright-core@1.56.1: {}
+
+  playwright@1.56.1:
+    dependencies:
+      playwright-core: 1.56.1
+    optionalDependencies:
+      fsevents: 2.3.2
 
   pmtiles@4.3.0:
     dependencies:
