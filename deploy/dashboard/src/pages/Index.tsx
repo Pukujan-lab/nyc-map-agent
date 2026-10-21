@@ -86,7 +86,10 @@ const Index = () => {
         setStatus(next);
         setLastGoodAt(Date.now());
         setStatusError(null);
-        setAuth((previous) => (previous === "login" ? previous : "authed"));
+        // A successful status is proof of a live session, including the refresh
+        // that follows sign-in — leaving "login" here would strand the operator
+        // on the password screen with a valid cookie.
+        setAuth("authed");
         return next;
       } catch (error) {
         if (error instanceof ApiError && error.kind === "unauthorized") {
