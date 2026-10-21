@@ -27,6 +27,8 @@ import type { WindowId } from "@/lib/windows";
 import { HourOfDayChart } from "./HourOfDayChart";
 import { ShowQuery } from "./ShowQuery";
 import { StatCard } from "./StatCard";
+import { FEATURES } from "@/features";
+import { useFlags } from "@/lib/flags";
 
 interface DetailsSheetProps {
   boundary: NtaBoundary | null;
@@ -161,6 +163,8 @@ function DetailsBody({
   const { layer, selectBlock, startWalk, setDetailsOpen, setStreetViewOpen } =
     useMapState();
   const { setRoutePoint, setRoutePicking, routeStart, routeEnd } = useDataView();
+  const flags = useFlags();
+  const sections = FEATURES.filter((f) => f.PlaceSection && flags[f.id]);
   if (!boundary) return null;
 
   const here = block
@@ -468,6 +472,18 @@ function DetailsBody({
               </ul>
             </AccordionContent>
           </AccordionItem>
+
+          {sections.map((f) => {
+            const { label, Component } = f.PlaceSection!;
+            return (
+              <AccordionItem key={f.id} value={`feature-${f.id}`}>
+                <AccordionTrigger className="py-2 text-xs">{label}</AccordionTrigger>
+                <AccordionContent>
+                  <Component lon={here.lon} lat={here.lat} />
+                </AccordionContent>
+              </AccordionItem>
+            );
+          })}
 
           <AccordionItem value="directions">
             <AccordionTrigger className="py-2 text-xs">Walking directions</AccordionTrigger>

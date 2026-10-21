@@ -20,6 +20,11 @@
     "limit": "2 kB"
   },
   {
+    "name": "features: lazy feature layers (layers-*.js; each loads only when its flag/chip is on)",
+    "path": ".size-build/assets/layers-*.js",
+    "limit": "4.5 kB"
+  },
+  {
     "name": "shared 3D layer: streetSigns + three (lazy)",
     "path": ".size-build/assets/streetSigns-*.js",
     "limit": "128 kB"

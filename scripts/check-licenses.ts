@@ -15,6 +15,7 @@ const EXCEPTIONS: Record<string, string> = {
   mapshaper: "MPL-2.0, dev-only CLI (scripts/load-areas.ts), file-level copyleft, unmodified",
   "@resvg/resvg-wasm": "MPL-2.0, transitive dev dependency, unmodified",
   "caniuse-lite": "CC-BY-4.0 browser-support data used by the build only",
+  suncalc: "BSD-2-Clause per its LICENSE file; package.json has no license field",
   "axe-core": "MPL-2.0, dev-only via eslint-plugin-jsx-a11y, unmodified",
   "gtfs-realtime-bindings": "Apache-2.0 (package.json spells it \"Apache 2.0\"), MTA's official GTFS-rt bindings",
 };
