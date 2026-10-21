@@ -22,6 +22,7 @@ import { useMapState } from "@/lib/store/MapStateContext";
 import { useFlag } from "@/lib/flags";
 import { usePanel, usePanelChip, usePanelSearch, type SearchProvider } from "@/lib/store/PanelContext";
 import { setFollowed, useFollowed } from "./follow";
+import FollowTrain from "./FollowTrain";
 import { SYSTEM_LABELS } from "./model";
 import { StationDetails, VehicleDetails } from "./TransitCard";
 import { TransitStatusDetails } from "./TransitStatus";
@@ -365,8 +366,8 @@ export default function TransitLayer() {
     );
   }, [vehicles, three, walking]);
 
-  // Follow mode: ease the camera onto the tweened vehicle; drag or Esc exits.
-  const followed = following ? vehicles.find((v) => v.key === selectedKey) : undefined;
+  // Follow mode: trains ride their track in FollowTrain; buses keep the simple re-centre. Drag or Esc exits.
+  const followed = following && selectedKey?.startsWith("bus:") ? vehicles.find((v) => v.key === selectedKey) : undefined;
   useEffect(() => {
     if (!map || !followed) return;
     map.easeTo({ center: [followed.lon, followed.lat], bearing: three ? followed.bearing : map.getBearing(), duration: 250, easing: (t) => t });
@@ -422,6 +423,7 @@ export default function TransitLayer() {
   const hide2d = three;
   return (
     <>
+      {following && followedKey && !followedKey.startsWith("bus:") ? <FollowTrain vehicleKey={followedKey} /> : null}
       <Source id="transit-lines" type="geojson" data={lines}>
         <Layer id="transit-line-under" type="line" filter={["==", ["get", "grade"], "underground"]}
           paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 16, 2.5], "line-opacity": 0.45, "line-dasharray": [2, 2] }} />

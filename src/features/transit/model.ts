@@ -71,12 +71,11 @@ function bearingOf(a: [number, number], b: [number, number]) {
 }
 
 /**
- * Approximate where a train is now: between the last stop whose time has
- * passed and the next one, linearly in time, measured along the route shape.
- * Feeds drop passed stops, so with no passed stop we extrapolate back from the
- * first two upcoming ones (capped). Returns null when we cannot place it.
+ * Where along its route shape a train is now: metres from the shape start,
+ * which way it is moving (+1 / -1) and its next stop with predicted time.
+ * Linear in time between stops, so it is continuous as `now` advances.
  */
-export function estimateTrain(sys: StaticSystem, trip: LiveTrip, now: number): Vehicle | null {
+export function trainProgress(sys: StaticSystem, trip: LiveTrip, now: number): { m: number; forward: number; next: { id: string; t: number; m: number } } | null {
   const shape = sys.shapes[trip.route];
   const sm = sys.stopM[trip.route];
   if (!shape || !sm) return null;
@@ -104,6 +103,30 @@ export function estimateTrain(sys: StaticSystem, trip: LiveTrip, now: number): V
     m = next.m;
     forward = 1;
   }
+  return { m, forward, next };
+}
+
+/** A point on a route shape at distance `m`, with its track height and grade. */
+export function trackPoint(sys: StaticSystem, route: string, m: number): { lon: number; lat: number; z: number; grade: Grade } | null {
+  const shape = sys.shapes[route];
+  if (!shape) return null;
+  const here = pointAt(shape, m);
+  const prof = trackHeightProfile(sys, route);
+  const z = prof ? prof.h[here.lo] + (prof.h[here.hi] - prof.h[here.lo]) * here.f : 0;
+  return { lon: here.lon, lat: here.lat, z, grade: prof ? prof.grade[here.lo] : here.grade };
+}
+
+/**
+ * Approximate where a train is now: between the last stop whose time has
+ * passed and the next one, linearly in time, measured along the route shape.
+ * Feeds drop passed stops, so with no passed stop we extrapolate back from the
+ * first two upcoming ones (capped). Returns null when we cannot place it.
+ */
+export function estimateTrain(sys: StaticSystem, trip: LiveTrip, now: number): Vehicle | null {
+  const shape = sys.shapes[trip.route];
+  const p = trainProgress(sys, trip, now);
+  if (!shape || !p) return null;
+  const { m, forward, next } = p;
   const here = pointAt(shape, m);
   const prof = trackHeightProfile(sys, trip.route);
   const z = prof ? prof.h[here.lo] + (prof.h[here.hi] - prof.h[here.lo]) * here.f : 0;
