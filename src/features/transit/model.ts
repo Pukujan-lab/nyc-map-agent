@@ -172,14 +172,14 @@ function bodyPolygonFlat(lon: number, lat: number, bearing: number, length: numb
  * real deck height. Bridges are drawn by the bridges work in the shared
  * threeLayer, so we draw no viaduct there; trains just ride at `deck`.
  */
-export type Structure = { id: string; kind: "bridge" | "viaduct"; deck: number; line: Array<[number, number]> };
+export type Structure = { id: string; kind: "bridge" | "viaduct"; deck: number; routes: string[]; line: Array<[number, number]> };
 export const STRUCTURES: Structure[] = [
   // Subway tracks on the Manhattan Bridge (B D N Q), lower level ~40 m over the river.
-  { id: "manhattan-bridge", kind: "bridge", deck: 40, line: [[-73.9944, 40.7136], [-73.9906, 40.7075], [-73.9862, 40.7032]] },
+  { id: "manhattan-bridge", kind: "bridge", deck: 40, routes: ["B", "D", "N", "Q"], line: [[-73.9947, 40.7149], [-73.9902, 40.7072], [-73.9866, 40.7010]] },
   // J M Z on the Williamsburg Bridge, centre tracks ~38 m.
-  { id: "williamsburg-bridge", kind: "bridge", deck: 38, line: [[-73.9807, 40.7166], [-73.9712, 40.7135], [-73.9617, 40.7104]] },
+  { id: "williamsburg-bridge", kind: "bridge", deck: 38, routes: ["J", "M", "Z"], line: [[-73.9807, 40.7166], [-73.9712, 40.7135], [-73.9617, 40.7104]] },
   // 1 train's Manhattan Valley Viaduct over 125 St, ~16 m.
-  { id: "manhattan-valley-viaduct", kind: "viaduct", deck: 16, line: [[-73.9620, 40.8105], [-73.9585, 40.8158], [-73.9561, 40.8205]] },
+  { id: "manhattan-valley-viaduct", kind: "viaduct", deck: 16, routes: ["1"], line: [[-73.9620, 40.8105], [-73.9585, 40.8158], [-73.9561, 40.8205]] },
 ];
 
 function metresToSegment(p: [number, number], a: [number, number], b: [number, number]): number {
@@ -189,8 +189,8 @@ function metresToSegment(p: [number, number], a: [number, number], b: [number, n
   const t = Math.max(0, Math.min(1, -(ax * dx + ay * dy) / (dx * dx + dy * dy || 1)));
   return Math.hypot(ax + dx * t, ay + dy * t);
 }
-export function structureAt(p: [number, number], within = 60): Structure | undefined {
-  return STRUCTURES.find((s) => s.line.some((a, i) => i > 0 && metresToSegment(p, s.line[i - 1], a) < within));
+export function structureAt(p: [number, number], within = 60, route?: string): Structure | undefined {
+  return STRUCTURES.find((s) => (!route || s.routes.includes(route)) && s.line.some((a, i) => i > 0 && metresToSegment(p, s.line[i - 1], a) < within));
 }
 
 const MAX_GRADE = 0.035; // 3.5 % ramps from portals / up to decks
@@ -209,7 +209,7 @@ export function trackHeightProfile(sys: StaticSystem, route: string): { m: numbe
   if (!p) {
     const n = shape.c.length, h = new Float32Array(n), grade = shape.g.slice();
     for (let i = 0; i < n; i++) {
-      const s = sys.system === "subway" ? structureAt(shape.c[i]) : undefined;
+      const s = sys.system === "subway" ? structureAt(shape.c[i], 60, route) : undefined;
       if (s) { grade[i] = "elevated"; h[i] = s.deck; }
       else if (sys.system !== "subway") grade[i] = "grade";
       else h[i] = grade[i] === "elevated" ? VIADUCT_TOP : 0;
@@ -255,7 +255,7 @@ export function raisedTrack(sys: StaticSystem): {
       const len = Math.hypot(dx, dy);
       if (len < 1) continue;
       const brg = ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
-      const bridge = structureAt(mid, 150)?.kind === "bridge";
+      const bridge = structureAt(mid, 150, route)?.kind === "bridge";
       decks.push({ type: "Feature", properties: { color, top, bridge }, geometry: bodyPolygonFlat(mid[0], mid[1], brg, len + 1, bridge ? 3.5 : 7) });
       sincePier += len;
       if (!bridge && sincePier > 40) {
