@@ -109,6 +109,7 @@ function eyeCamera(map: MaplibreMapInstance, eye: Eye): CameraOptions {
 import { useMapState } from "@/lib/store/MapStateContext";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 import { WalkControls } from "./WalkControls";
+import { MAX_HEIGHT_M, pitchForHeight, STREET_LEVEL_M } from "@/lib/map/cameraHeight";
 import { FEATURES } from "@/features";
 
 /**
@@ -223,8 +224,10 @@ export function MapView({
     walking,
     walkRequest,
     stopWalk,
+    startWalk,
     cameraTarget,
     navCommand,
+    reportCameraHeight,
     eco,
     highlightedNtaCodes,
     selectedNtaCode,
@@ -1088,6 +1091,35 @@ export function MapView({
     const map = mapRef.current?.getMap();
     if (!map) return;
     const duration = reducedMotion ? 0 : 260;
+    if (navCommand.type === "height") {
+      const heightM = navCommand.heightM ?? MAX_HEIGHT_M;
+      if (heightM <= STREET_LEVEL_M) {
+        if (!walking) startWalk();
+        return;
+      }
+      const apply = () => {
+        // Stand the camera `heightM` up, behind the current centre along the
+        // bearing, looking at the centre on the ground, the same way the eye camera does.
+        const pitch = pitchForHeight(heightM);
+        const bearing = map.getBearing();
+        const center = map.getCenter();
+        const back = Math.max(heightM * Math.tan((pitch * Math.PI) / 180), heightM * 0.01);
+        const rad = (bearing * Math.PI) / 180;
+        const cosLat = Math.cos((center.lat * Math.PI) / 180);
+        const eye = new LngLat(
+          center.lng - (back * Math.sin(rad)) / (111_320 * cosLat),
+          center.lat - (back * Math.cos(rad)) / 111_320,
+        );
+        map.jumpTo(map.calculateCameraOptionsFromTo(eye, heightM, center, 0));
+        setTilted(pitch > 0);
+      };
+      if (walking) {
+        // Leave the walk first; its exit animation would undo the jump.
+        stopWalk();
+        window.setTimeout(apply, reducedMotion ? 0 : 750);
+      } else apply();
+      return;
+    }
     if (navCommand.type === "zoom-in") {
       map.zoomIn({ duration });
       return;
@@ -1110,7 +1142,22 @@ export function MapView({
     setTilted(false);
     // "Reset view" means the city, not the street you were standing on.
     stopWalk();
-  }, [ready, navCommand, reducedMotion, setTilted, stopWalk]);
+    // `walking` is read, not a trigger: only a new command moves the camera.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, navCommand, reducedMotion, setTilted, stopWalk, startWalk]);
+
+  // The camera-height slider shows where the camera actually is.
+  useEffect(() => {
+    if (!ready) return;
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    const report = () => reportCameraHeight(map.transform.getCameraAltitude());
+    report();
+    map.on("moveend", report);
+    return () => {
+      map.off("moveend", report);
+    };
+  }, [ready, reportCameraHeight]);
 
   // Eco mode: render at 1x instead of the device pixel ratio.
   useEffect(() => {

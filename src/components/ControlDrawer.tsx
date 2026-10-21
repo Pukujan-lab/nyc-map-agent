@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Label } from "@/components/ui/label";
+import { formatHeight, heightFromSlider, MIN_HEIGHT_M, sliderFromHeight } from "@/lib/map/cameraHeight";
 import { Switch } from "@/components/ui/switch";
 import { useAdvancedMode, useFlags } from "@/lib/flags";
 import { setAmbient, useAmbient, type LightingMode, type WeatherMode } from "@/lib/ambient";
@@ -74,6 +75,31 @@ interface ControlDrawerProps {
   view?: ViewInfo;
   areas: AreaDatum[];
   onOpenSources: () => void;
+}
+
+/** Eye level (1.7 m, the street-level walk) up to an overhead view. */
+function CameraHeight() {
+  const { cameraHeightM, setCameraHeight, walking } = useMapState();
+  const shown = walking ? MIN_HEIGHT_M : cameraHeightM;
+  return (
+    <div className="mt-2 flex items-center gap-2">
+      <Label htmlFor="camera-height" className="shrink-0 text-xs text-muted-foreground">
+        Height
+      </Label>
+      <input
+        id="camera-height"
+        type="range"
+        min={0}
+        max={100}
+        step={1}
+        value={Math.round(sliderFromHeight(shown))}
+        onChange={(e) => setCameraHeight(heightFromSlider(Number(e.target.value)))}
+        aria-valuetext={formatHeight(shown)}
+        className="h-6 min-w-0 flex-1 accent-sky-500"
+      />
+      <span className="w-12 shrink-0 text-right text-xs tabular-nums">{formatHeight(shown)}</span>
+    </div>
+  );
 }
 
 function Section({ label, children }: { label: string; children: ReactNode }) {
@@ -322,6 +348,7 @@ export function ControlDrawer({
                 Reset
               </Button>
             </div>
+            <CameraHeight />
           </Section>
 
           <Section label={`Top ${SCALE_PLURALS[scale].toLowerCase()}`}>
