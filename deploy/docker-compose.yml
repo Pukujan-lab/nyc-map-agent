@@ -44,11 +44,21 @@ services:
     env_file:
       - path: ${CD_HOST_ENV_FILE:-/work/.env}
         required: true
+    # Runs as the host user that owns the checkout: git refuses a repo owned by
+    # another uid ("dubious ownership"), and running as root would leave the
+    # checkout full of root-owned files after every checkout/clean. The extra
+    # group is the docker socket's, so the CLI inside can reach the daemon.
+    user: "${CD_UID:-1000}:${CD_GID:-1000}"
+    group_add:
+      - "${CD_DOCKER_GID:-988}"
     environment:
       CD_REPO_DIR: /app
       CD_DEPLOY_DIR: /app/deploy
       CD_STATE_DIR: /work/state
       CD_ENV_FILE: /work/.env
+      # uid 1000 has no passwd entry in the image; git and tsx both want a
+      # writable home, and /root is not one for that uid.
+      HOME: /tmp
     volumes:
       - /srv/nyc-map-agent/app:/app
       - /srv/nyc-map-agent:/work
