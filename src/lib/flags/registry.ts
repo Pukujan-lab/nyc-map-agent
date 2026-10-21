@@ -31,6 +31,7 @@ export const FLAGS = {
   blockDensity: { tier: "basic", default: true, label: "Shade blocks per hectare" },
   daylight: { tier: "basic", default: true, label: "Time-of-day lighting" },
   weather: { tier: "basic", default: true, label: "Live weather" },
+  hazards: { tier: "basic", default: true, label: "Weather alerts and street flooding" },
   crashes: { tier: "advanced", default: true, label: "Classic crashes layer" },
   combined: { tier: "advanced", default: true, label: "Noise + crashes" },
   dataLayers: { tier: "advanced", default: true, label: "Data / analytics layers" },

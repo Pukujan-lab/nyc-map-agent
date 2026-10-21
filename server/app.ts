@@ -18,6 +18,7 @@ import * as restrooms from "../api/restrooms";
 import * as sources from "../api/sources";
 import * as street from "../api/street";
 import * as weather from "./features/weather/routes";
+import * as hazards from "./features/hazards/routes";
 import * as agent from "./features/agent/routes";
 import * as transit from "./features/transit/routes";
 
@@ -34,6 +35,7 @@ const routes: Array<[string, Handler]> = [
   ["/api/sources", sources],
   ["/api/street", street],
   ["/api/weather", weather],
+  ["/api/hazards", hazards],
   ["/api/transit", transit],
   ["/api/transit/:system", transit],
 ];
