@@ -8,7 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "vitest run --exclude 'e2e/**' --exclude '**/node_modules/**'",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:status": "tsx scripts/migrate.ts status",
     "db:refresh": "tsx scripts/refresh-marts.ts",
@@ -30,7 +30,9 @@
     "lint:prune": "eslint . --suppressions-location eslint-suppressions.json --prune-suppressions",
     "knip": "knip --no-progress",
     "openapi": "tsx scripts/openapi.ts",
-    "openapi:check": "tsx scripts/openapi.ts --check"
+    "openapi:check": "tsx scripts/openapi.ts --check",
+    "build:e2e": "VITE_DATA_BACKEND=octo vite build --outDir .e2e-build --emptyOutDir",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@hono/node-server": "2.1.5",
@@ -82,6 +84,7 @@
   "devDependencies": {
     "@duckdb/node-api": "1.5.6-r.1",
     "@eslint/js": "9.39.1",
+    "@playwright/test": "1.56.1",
     "@size-limit/file": "11.2.0",
     "@types/node": "22.10.2",
     "@types/three": "0.134.0",

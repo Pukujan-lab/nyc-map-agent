@@ -76,3 +76,20 @@ jobs:
           fi
           curl -fsSL https://github.com/oasdiff/oasdiff/releases/download/v1.34.0/oasdiff_1.34.0_linux_amd64.tar.gz | tar xz -C /tmp oasdiff
           /tmp/oasdiff breaking /tmp/base.json openapi.json --fail-on ERR --format githubactions
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm build:e2e
+      - name: Smoke e2e (Playwright, fixture API, offline)
+        run: pnpm e2e

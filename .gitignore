@@ -6,3 +6,6 @@ node_modules/
 public/tiles/nyc-city.pmtiles
 public/tiles/nyc-blocks.*
 .size-build/
+.e2e-build/
+playwright-report/
+test-results/
