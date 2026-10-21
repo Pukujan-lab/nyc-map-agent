@@ -180,7 +180,7 @@ export function schoolFootprints(footprints: Row[], schools: Row[]): Map<number,
       SELECT f.i, s.j, row_number() OVER (PARTITION BY s.j ORDER BY ST_Distance(f.geom, s.p)) AS rk
       FROM s JOIN f ON ST_DWithin(f.geom, s.p, 0.00025)) WHERE rk = 1 GROUP BY i) TO '${out}' (HEADER false);`;
   execFileSync("duckdb", ["-c", sql], { stdio: ["ignore", "ignore", "inherit"] });
-  const name = (j: number) => String(schools[j]?.loc_name ?? "School").trim();
+  const name = (j: number) => (typeof schools[j]?.loc_name === "string" ? schools[j].loc_name : "School").trim();
   return new Map(readFileSync(out, "utf8").split("\n").filter(Boolean).map((l) => {
     const [i, j] = l.split(",").map(Number);
     return [i, name(j)];
@@ -238,7 +238,7 @@ async function main() {
     const c = (sc.the_geom as { coordinates?: number[] } | undefined)?.coordinates;
     if (c && inBox(c[1], c[0])) add({
       type: "Feature", tippecanoe: { layer: "schools", minzoom: 14 },
-      properties: { name: String(sc.loc_name ?? "School").trim() },
+      properties: { name: (typeof sc.loc_name === "string" ? sc.loc_name : "School").trim() },
       geometry: { type: "Point", coordinates: c },
     }, "school-point");
   }

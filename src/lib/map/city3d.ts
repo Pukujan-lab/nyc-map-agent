@@ -177,7 +177,8 @@ export function schoolAt(map: MapLibreMap, x: number, y: number): string | null 
   const layers = ["city3d-schools", "city3d-walls"].filter((id) => map.getLayer(id));
   if (!layers.length) return null;
   for (const f of map.queryRenderedFeatures([[x - 6, y - 6], [x + 6, y + 6]], { layers })) {
-    const name = f.layer.id === "city3d-schools" ? f.properties?.name : f.properties?.school;
+    const props = f.properties as Record<string, unknown> | null;
+    const name: unknown = f.layer.id === "city3d-schools" ? props?.name : props?.school;
     if (typeof name === "string" && name) return name;
   }
   return null;
