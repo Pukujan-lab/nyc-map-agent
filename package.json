@@ -28,10 +28,13 @@
     "licenses:check": "tsx scripts/check-licenses.ts",
     "lint": "eslint . --max-warnings=0 --suppressions-location eslint-suppressions.json --pass-on-unpruned-suppressions",
     "lint:prune": "eslint . --suppressions-location eslint-suppressions.json --prune-suppressions",
-    "knip": "knip --no-progress"
+    "knip": "knip --no-progress",
+    "openapi": "tsx scripts/openapi.ts",
+    "openapi:check": "tsx scripts/openapi.ts --check"
   },
   "dependencies": {
     "@hono/node-server": "2.1.5",
+    "@hono/zod-openapi": "0.19.10",
     "@radix-ui/react-accordion": "1.2.1",
     "@radix-ui/react-checkbox": "1.1.2",
     "@radix-ui/react-collapsible": "1.1.1",

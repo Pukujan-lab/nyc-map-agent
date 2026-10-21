@@ -2,7 +2,7 @@ import { z } from "zod";
 import { octoQuery } from "./_lib/octo";
 import { fail, json, parseQuery } from "./_lib/http";
 
-const Query = z.object({
+export const Query = z.object({
   name: z.string().trim().min(2).max(80),
   borough: z.enum(["MANHATTAN", "BRONX", "BROOKLYN", "QUEENS", "STATEN ISLAND"]).optional(),
 });
