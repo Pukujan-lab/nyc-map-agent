@@ -3,14 +3,20 @@ on:
   pull_request:
   push:
     branches: [main]
+permissions:
+  contents: read
+concurrency: 
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, gravebuster]
     timeout-minutes: 20
+    container: { image: node:22-bookworm }
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
@@ -19,25 +25,33 @@ jobs:
         run: pnpm lint:boundaries
       - name: Dead code (knip)
         run: pnpm knip
+      - name: Clean workspace (persistent runner)
+        if: always()
+        run: find "$GITHUB_WORKSPACE" -mindepth 1 -delete || true
   size:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, gravebuster]
     timeout-minutes: 20
+    container: { image: node:22-bookworm }
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm build:size
       - name: Performance budget (size-limit, brotli per chunk)
         run: pnpm size
+      - name: Clean workspace (persistent runner)
+        if: always()
+        run: find "$GITHUB_WORKSPACE" -mindepth 1 -delete || true
   deps:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, gravebuster]
     timeout-minutes: 10
+    container: { image: node:22-bookworm }
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: { node-version: 22, cache: pnpm }
       - name: Lockfile in sync
         run: pnpm install --frozen-lockfile
@@ -45,51 +59,68 @@ jobs:
         run: pnpm audit --audit-level high
       - name: Licence allowlist
         run: pnpm licenses:check
+      - name: Clean workspace (persistent runner)
+        if: always()
+        run: find "$GITHUB_WORKSPACE" -mindepth 1 -delete || true
   lint:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, gravebuster]
     timeout-minutes: 10
+    container: { image: node:22-bookworm }
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - name: ESLint (type-aware; baseline in eslint-suppressions.json)
         run: pnpm lint
+      - name: Clean workspace (persistent runner)
+        if: always()
+        run: find "$GITHUB_WORKSPACE" -mindepth 1 -delete || true
   api:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, gravebuster]
     timeout-minutes: 10
+    container: { image: node:22-bookworm }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { fetch-depth: 0 }
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - name: openapi.json is up to date (every route has a spec)
         run: pnpm openapi:check
       - name: Breaking changes vs main (oasdiff)
         if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          if ! git show origin/${{ github.base_ref }}:openapi.json > /tmp/base.json 2>/dev/null; then
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          tmp=$(mktemp -d)
+          if ! git show "origin/$BASE_REF:openapi.json" > "$tmp/base.json" 2>/dev/null; then
             echo "no openapi.json on base yet; skipping"; exit 0
           fi
-          curl -fsSL https://github.com/oasdiff/oasdiff/releases/download/v1.34.0/oasdiff_1.34.0_linux_amd64.tar.gz | tar xz -C /tmp oasdiff
-          /tmp/oasdiff breaking /tmp/base.json openapi.json --fail-on ERR --format githubactions
+          curl -fsSL https://github.com/oasdiff/oasdiff/releases/download/v1.34.0/oasdiff_1.34.0_linux_amd64.tar.gz | tar xz -C "$tmp" oasdiff
+          "$tmp/oasdiff" breaking "$tmp/base.json" openapi.json --fail-on ERR --format githubactions
+      - name: Clean workspace (persistent runner)
+        if: always()
+        run: find "$GITHUB_WORKSPACE" -mindepth 1 -delete || true
   e2e:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    runs-on: [self-hosted, linux, x64, gravebuster]
+    timeout-minutes: 20
+    container: { image: mcr.microsoft.com/playwright:v1.56.1-noble }
+    env:
+      HOME: /root
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-      - run: pnpm exec playwright install --with-deps chromium
+      # Browsers come from the image (version-matched to @playwright/test 1.56.1); no install step.
       - run: pnpm build:e2e
       - name: Smoke e2e (Playwright, fixture API, offline)
         run: pnpm e2e
+      - name: Clean workspace (persistent runner)
+        if: always()
+        run: find "$GITHUB_WORKSPACE" -mindepth 1 -delete || true

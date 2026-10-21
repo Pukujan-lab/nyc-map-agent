@@ -105,7 +105,14 @@ export function MapPanel({
     }
   }, [selectedNtaCode, selectedBlockKey, closePanel, setCollapsed]);
 
-  if (walking) return null;
+  // Street level keeps the street clear: the panel stays shut unless a tap
+  // there opened something (pushed content, or a place picked after the walk
+  // began). A selection carried in from overhead does not pop it open.
+  const selection = `${selectedNtaCode ?? ""}|${selectedBlockKey ?? ""}`;
+  const [walkStart, setWalkStart] = useState({ walking, selection });
+  if (walkStart.walking !== walking) setWalkStart({ walking, selection });
+  const pickedAtStreet = selection !== walkStart.selection && !!(selectedNtaCode || selectedBlockKey);
+  if (walking && !content && !pickedAtStreet) return null;
 
   const body = content ? (
     <>

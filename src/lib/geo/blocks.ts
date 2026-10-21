@@ -48,3 +48,27 @@ export function blockPolygon(lon: number, lat: number): PolygonRings {
 export function bboxPolygon([w, s, e, n]: [number, number, number, number]): PolygonRings {
   return [[[w, s], [e, s], [e, n], [w, n], [w, s]]];
 }
+
+/**
+ * The block whose polygon holds (lon, lat). Real blocks (Octo tax blocks) are
+ * keyed by their own ids, not by `blockKey`'s grid, so a point lookup has to
+ * test the shapes. Rings use even-odd, so holes count as outside.
+ */
+export function blockContaining<T extends { polygon: PolygonRings }>(blocks: Iterable<T>, lon: number, lat: number): T | undefined {
+  for (const block of blocks) {
+    const outer = block.polygon[0];
+    if (!outer?.length) continue;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const [x, y] of outer) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; }
+    if (lon < minX || lon > maxX || lat < minY || lat > maxY) continue;
+    let inside = false;
+    for (const ring of block.polygon) {
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const [xi, yi] = ring[i], [xj, yj] = ring[j];
+        if (yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+      }
+    }
+    if (inside) return block;
+  }
+  return undefined;
+}
