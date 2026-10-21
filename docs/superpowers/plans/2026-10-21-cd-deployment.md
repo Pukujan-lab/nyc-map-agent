@@ -2156,7 +2156,9 @@ Expected: a count ≥ 1 (every call is under `/deploy/api`).
 
 `knip.json` — add `"deploy/dashboard/**"` to `ignore`.
 
-`eslint.config.js` — add `"deploy/dashboard/**"` to the `ignores` array.
+`eslint.config.js` — add `"deploy/dashboard/**"` and `".aba-results/**"` to the
+`ignores` array. ESLint's flat config does not read `.gitignore`, so the ABA
+scratch tree (1852 pre-existing errors) would keep `pnpm lint` red otherwise.
 
 - [ ] **Step 8: Add `deploy` to the root TypeScript project**
 
@@ -2177,8 +2179,14 @@ which `Dockerfile.edge` copies to `/srv/dashboard`.
 
 - [ ] **Step 10: Run the full check suite**
 
-Run: `pnpm typecheck && pnpm lint && pnpm knip && pnpm test`
+Run: `pnpm typecheck && pnpm lint && pnpm knip` and
+`pnpm exec vitest run --exclude "e2e/**" --exclude "**/node_modules/**"`.
 Expected: all pass. `pnpm knip` must not report `deploy/cd` files as unused.
+
+The literal `pnpm test` script is unusable on the Windows dev box (pnpm's shell
+strips the quotes around `--exclude 'e2e/**'`, a pre-existing defect); the
+explicit vitest invocation above is its exact equivalent there, and CI runs the
+script unchanged on Linux.
 
 - [ ] **Step 11: Commit**
 
