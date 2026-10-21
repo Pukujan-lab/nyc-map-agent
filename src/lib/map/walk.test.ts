@@ -3,6 +3,7 @@ import {
   approachBearing,
   snapToStreet,
   clampLookPitch,
+  lookTarget,
   EYE_HEIGHT_M,
   WALK_PITCH,
   normalizeBearing,
@@ -126,7 +127,8 @@ describe("walk camera limits", () => {
   });
   it("clamps drag-to-look between the kerb and just under level", () => {
     expect(clampLookPitch(10)).toBe(70);
-    expect(clampLookPitch(170)).toBe(89);
+    expect(clampLookPitch(170)).toBe(150);
+    expect(clampLookPitch(120)).toBe(120);
     expect(clampLookPitch(80)).toBe(80);
   });
   it("turns corners the short way round", () => {
@@ -182,5 +184,19 @@ describe("snapToStreet", () => {
   });
   it("gives up beyond the search radius", () => {
     expect(snapToStreet([-73.945, 40.7], [street], 0, 20)).toBeNull();
+  });
+});
+
+describe("lookTarget", () => {
+  it("aims at the pavement when looking down", () => {
+    const t = lookTarget(70, 1.7);
+    expect(t.height).toBeCloseTo(0, 6);
+    expect(t.ahead).toBeCloseTo(1.7 * Math.tan((70 * Math.PI) / 180), 6);
+  });
+  it("floats the aim point in the air when looking up", () => {
+    const t = lookTarget(150, 1.7);
+    expect(t.height).toBeGreaterThan(1.7);
+    expect(t.ahead).toBeGreaterThan(0);
+    expect(lookTarget(90, 1.7).height).toBeCloseTo(1.7, 6);
   });
 });
