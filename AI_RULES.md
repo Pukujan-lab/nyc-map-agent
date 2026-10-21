@@ -61,6 +61,7 @@ Dependency notes:
 - `mapshaper` 0.7.89 (MPL-2.0, dev only) simplifies NTA / community-district boundaries in `scripts/load-areas.ts` before they are stored in Octo `core.area_shapes`.
 - Octo backend (`VITE_DATA_BACKEND=octo`) makes no browser call to NYC Open Data: boundaries come from `/api/areas`, the noise / crash rollups from `/api/aggregate` (precomputed nightly into `marts.aggregates` by `scripts/build-aggregates.ts`, which runs the same `src/lib/geo/aggregateCore.ts` the Socrata worker uses). Socrata stays the explicit fallback backend.
 - `hono` 4.13.13 and `@hono/node-server` 2.1.5 (both MIT) run the API: `server/app.ts` mounts the Web-standard handlers in `api/` and is host-agnostic (Node via `pnpm start` / the Dockerfile, Cloudflare Workers, Bun, Deno); `vite dev` serves the same app in-process. No host-specific (e.g. Vercel) config.
+- `react-draggable` 4.7.2 (MIT, mature, ~3M weekly downloads) lets the desktop `MapPeek` card and the `DetailsSheet` side panel be dragged by their header (`DraggablePanel`), clamped to the viewport. Mobile keeps the bottom drawer.
 - Walking directions are one `fetch` to OSRM (`src/lib/api/routing.ts`). Typed A/B addresses use `downshift` 9.4.0 (MIT) `useCombobox` over NYC Planning GeoSearch (`src/lib/api/geosearch.ts`, keyless Pelias autocomplete); map-click picking stays.
 - Dataset registry: every Socrata map source is one entry in `src/lib/datasets/registry.ts`. Add a source there; do not write a per-dataset module.
 

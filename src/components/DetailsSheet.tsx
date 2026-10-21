@@ -32,6 +32,7 @@ import type { WindowId } from "@/lib/windows";
 import { HourOfDayChart } from "./HourOfDayChart";
 import { ShowQuery } from "./ShowQuery";
 import { StatCard } from "./StatCard";
+import { DRAG_HANDLE, DraggablePanel } from "./DraggablePanel";
 
 interface DetailsSheetProps {
   boundary: NtaBoundary | null;
@@ -203,7 +204,7 @@ function DetailsBody({
 
   return (
     <>
-      <div className="flex items-start justify-between gap-2 border-b border-border/60 p-4 pb-3">
+      <div className={cn("flex items-start justify-between gap-2 border-b border-border/60 p-4 pb-3", isDesktop && cn(DRAG_HANDLE, "cursor-move"))}>
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold">
             {boundary.ntaName}
@@ -562,6 +563,7 @@ export function DetailsSheet(props: DetailsSheetProps) {
 
   if (props.isDesktop) {
     return (
+      <DraggablePanel enabled>
       <Card
         className={cn(
           // Sits above the dock, which owns the bottom of the screen.
@@ -570,6 +572,7 @@ export function DetailsSheet(props: DetailsSheetProps) {
       >
         {body}
       </Card>
+      </DraggablePanel>
     );
   }
 
