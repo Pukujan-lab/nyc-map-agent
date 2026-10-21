@@ -1,4 +1,5 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
+import type { EntranceSigns } from "@/lib/transit/entranceSigns";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { useSearchParams } from "react-router-dom";
 import { RAIL_SYSTEMS, type Bus, type LiveSystem, type StaticSystem, type SystemId , type XrayStation } from "./model";
@@ -55,11 +56,20 @@ export function useTransitMeta() {
   return useQuery({ queryKey: ["transit", "meta"], queryFn: () => getJson<{ bus: boolean }>(`${API_BASE}/api/transit`), staleTime: 5 * 60_000, retry: 1 });
 }
 
+/** Static system; the subway also gets its entrance signs (optional: entrances fall back to GTFS names). */
+async function loadStatic(s: SystemId): Promise<StaticSystem> {
+  const [sys, signs] = await Promise.all([
+    getJson<StaticSystem>(`/transit/${s}.json`),
+    s === "subway" ? getJson<EntranceSigns>(`${API_BASE}/api/entrance-signs`).catch(() => undefined) : undefined,
+  ]);
+  return signs ? { ...sys, signs } : sys;
+}
+
 export function useTransitData(systems: SystemId[]) {
   const statics = useQueries({
     queries: RAIL_SYSTEMS.map((s) => ({
       queryKey: ["transit", "static", s],
-      queryFn: () => getJson<StaticSystem>(`/transit/${s}.json`),
+      queryFn: () => loadStatic(s),
       staleTime: Infinity,
       enabled: systems.includes(s),
     })),

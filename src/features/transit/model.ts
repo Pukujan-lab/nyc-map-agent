@@ -1,3 +1,5 @@
+import { signFor, type EntranceSign, type EntranceSigns } from "@/lib/transit/entranceSigns";
+
 /** Pure transit math: estimated train positions along GTFS shapes, arrivals, vehicle bodies. */
 export type SystemId = "subway" | "lirr" | "mnr";
 export const RAIL_SYSTEMS: SystemId[] = ["subway", "lirr", "mnr"];
@@ -20,6 +22,8 @@ export type StaticSystem = {
   shapes: Record<string, { c: Array<[number, number]>; m: number[]; g: Grade[] }>;
   stopM: Record<string, Record<string, number>>;
   entrances?: GeoJSON.FeatureCollection<GeoJSON.Point, { id: string; name: string; kind: string }>;
+  /** Entrance sign text from /api/entrance-signs (subway only). */
+  signs?: EntranceSigns;
 };
 export type LiveTrip = { id: string; route: string; dir: number | null; stops: Array<[string, number]>; at?: string };
 export type LiveSystem = { at: number; trips: LiveTrip[] };
@@ -335,9 +339,10 @@ export function viaductBays(sys: StaticSystem): Bay[] {
 }
 
 /** A street entrance for the 3D kit: faces its station (stairs descend toward the platform). */
-export type EntranceInstance = { lon: number; lat: number; bearing: number; kind: "stair" | "elevator"; out: boolean };
+export type EntranceInstance = { lon: number; lat: number; bearing: number; kind: "stair" | "elevator"; out: boolean; sign?: EntranceSign };
 export function entranceInstances(sys: StaticSystem, outStations: Set<string>, center: [number, number], radius = 300): EntranceInstance[] {
   const st = new Map(sys.stations.features.map((f) => [String(f.properties.id), f.geometry.coordinates as [number, number]]));
+  const info = new Map(sys.stations.features.map((f) => [String(f.properties.id), f.properties]));
   const kx = 111_320 * Math.cos((center[1] * Math.PI) / 180), out: EntranceInstance[] = [];
   for (const f of sys.entrances?.features ?? []) {
     const [lon, lat] = f.geometry.coordinates;
@@ -346,7 +351,9 @@ export function entranceInstances(sys: StaticSystem, outStations: Set<string>, c
     const s = st.get(String(f.properties.id));
     const bearing = s ? ((Math.atan2((s[0] - lon) * kx, (s[1] - lat) * 111_320) * 180) / Math.PI + 360) % 360 : 0;
     const elevator = /elevator/i.test(f.properties.kind);
-    out.push({ lon, lat, bearing, kind: elevator ? "elevator" : "stair", out: elevator && outStations.has(String(f.properties.id)) });
+    const id = String(f.properties.id), gtfs = info.get(id.split(";")[0].trim());
+    const sign = signFor(sys.signs, id, lon, lat, { name: gtfs?.name ?? f.properties.name, routes: gtfs?.routes ?? "" });
+    out.push({ lon, lat, bearing, kind: elevator ? "elevator" : "stair", out: elevator && outStations.has(id), sign });
   }
   return out;
 }

@@ -83,6 +83,7 @@ export const ROUTES = {
   "/api/block-tiles": binaryRoute("/api/block-tiles", "Real NYC tax-block PMTiles"),
   "/api/blocks": jsonRoute("/api/blocks", "One row per area for a source", BlocksQuery),
   "/api/city-tiles": binaryRoute("/api/city-tiles", "Citywide 3D-city PMTiles"),
+  "/api/entrance-signs": binaryRoute("/api/entrance-signs", "Subway entrance signs: station names and complex routes (JSON, data.ny.gov i9wp-a4ja)"),
   "/api/vehicle-models/:mode": binaryRoute("/api/vehicle-models/{mode}", "Live-vehicle glTF model (subway, bus, rail)"),
   "/api/restrooms": jsonRoute("/api/restrooms", "Public restrooms GeoJSON"),
   "/api/sources": jsonRoute("/api/sources", "Source registry metadata and freshness"),

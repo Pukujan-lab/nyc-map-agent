@@ -149,3 +149,4 @@ Dependency notes:
 ## Textured 3D city (opt-in)
 
 - The "Textured 3D city" item in the map view dropdown adds `fill-extrusion` layers from `public/tiles/nyc-city-pilot.pmtiles` (built by `scripts/build-city-tiles.ts`). Facade patterns (`public/textures/`) and props draw only from zoom 16, and the basemap's own buildings stop at zoom 16 while it is on. This is still MapLibre, not a second renderer. Patterns are the one exception to the single-glass-hue rule, and they apply to buildings, never to data areas.
+- Subway entrance signs: `pnpm build:entrance-signs && pnpm publish:entrance-signs` builds the station name, complex routes and exit-only flags from MTA Subway Entrances and Exits (data.ny.gov `i9wp-a4ja`), publishes `entrance-signs.json` through Octo/R2 and serves it at `/api/entrance-signs`. `threeLayer.ts` draws one cached canvas texture per station. MTA route bullets and line colours live in `src/lib/transit/bullets.ts`, for both 2D and 3D.

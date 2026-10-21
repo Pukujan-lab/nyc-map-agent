@@ -18,6 +18,7 @@ import * as restrooms from "../api/restrooms";
 import * as sources from "../api/sources";
 import * as street from "../api/street";
 import * as vehicleModels from "../api/vehicle-models/[mode]";
+import * as entranceSigns from "../api/entrance-signs";
 import * as weather from "./features/weather/routes";
 import * as hazards from "./features/hazards/routes";
 import * as traffic from "./features/traffic/routes";
@@ -38,6 +39,7 @@ const routes: Array<[string, Handler]> = [
   ["/api/sources", sources],
   ["/api/street", street],
   ["/api/vehicle-models/:mode", vehicleModels],
+  ["/api/entrance-signs", entranceSigns],
   ["/api/weather", weather],
   ["/api/hazards", hazards],
   ["/api/traffic/along", { GET: traffic.GET_ALONG }],
@@ -64,7 +66,7 @@ export const app = new OpenAPIHono({
 // Rollups and boundaries are 0.2-2 MB of JSON; gzip cuts them ~5x.
 app.use("/api/*", async (c, next) => {
   // Tile ranges are already-compressed binary; gzip would break Content-Range.
-  if (c.req.path === "/api/city-tiles" || c.req.path === "/api/block-tiles" || c.req.path.startsWith("/api/vehicle-models/") || c.req.path === "/api/agent") return next();
+  if (c.req.path === "/api/city-tiles" || c.req.path === "/api/block-tiles" || c.req.path.startsWith("/api/vehicle-models/") || c.req.path === "/api/entrance-signs" || c.req.path === "/api/agent") return next();
   return compress()(c, next);
 });
 for (const [path, handler] of routes) {

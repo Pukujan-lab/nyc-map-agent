@@ -35,7 +35,9 @@
     "build:transit": "tsx scripts/build-transit.ts",
     "build:e2e": "VITE_DATA_BACKEND=octo vite build --outDir .e2e-build --emptyOutDir",
     "e2e": "playwright test",
-    "build:xray": "tsx scripts/build-xray.ts"
+    "build:xray": "tsx scripts/build-xray.ts",
+    "build:entrance-signs": "tsx scripts/build-entrance-signs.ts",
+    "publish:entrance-signs": "tsx scripts/publish-city-tiles.ts public/transit/entrance-signs.json"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "3.0.71",

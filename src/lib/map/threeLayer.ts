@@ -10,6 +10,8 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { distanceFade } from "./corner";
 import { LANDMARKS } from "./landmarks";
+import { BULLET_FONT, drawRouteBullet } from "../transit/bullets";
+import type { EntranceSign } from "../transit/entranceSigns";
 import maplibregl, { type CustomLayerInterface, type CustomRenderMethodInput, type Map as MaplibreMap } from "maplibre-gl";
 // Default import: also loads under Node (CJS) for scripts/make-landmarks.ts.
 const { MercatorCoordinate } = maplibregl;
@@ -146,8 +148,58 @@ export interface EntranceKitInstance {
   bearing: number;
   kind: "stair" | "elevator";
   out: boolean;
+  /** Station name and routes for the sign panel; no sign when absent. */
+  sign?: EntranceSign;
 }
 const ENTRANCE_CAP = 300;
+
+/* ---- Entrance sign panels: one canvas texture per unique sign, shared by that station's entrances. ---- */
+const SIGN_W = 1024, SIGN_H = 384; // canvas px; the panel is 2.0 x 0.75 m, so ~5 px per cm: crisp at street level
+export const signKey = (s: EntranceSign) => `${s.name}|${s.routes.join(" ")}|${s.note ?? ""}`;
+
+/** Bullet layout: one row up to 7 routes, else two rows; radius shrinks to fit the width. Pure. */
+export function bulletRows(n: number, width: number, maxR: number): { rows: number[]; r: number; gap: number } {
+  if (n === 0) return { rows: [], r: maxR, gap: 0 };
+  const rows = n > 7 ? [Math.ceil(n / 2), Math.floor(n / 2)] : [n];
+  const perRow = rows[0];
+  const r = Math.min(maxR, width / (perRow * 2 + (perRow - 1) * 0.35) );
+  return { rows, r, gap: r * 0.35 };
+}
+
+/** Draws the NYC-style entrance sign: white station name on a black band, route bullets below. */
+function drawEntranceSign(ctx: CanvasRenderingContext2D, sign: EntranceSign): void {
+  const W = SIGN_W, H = SIGN_H, pad = 36;
+  ctx.fillStyle = "#0b0b0b";
+  ctx.fillRect(0, 0, W, H);
+  const band = 150;
+  // Station name: bold sans, shrunk to fit; a white rule under the band like the real signs.
+  let size = 104;
+  ctx.font = `bold ${size}px ${BULLET_FONT}`;
+  const noteW = sign.note ? 230 : 0;
+  while (size > 44 && ctx.measureText(sign.name).width > W - pad * 2 - noteW) { size -= 4; ctx.font = `bold ${size}px ${BULLET_FONT}`; }
+  ctx.fillStyle = "#ffffff";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  let name = sign.name;
+  while (ctx.measureText(name).width > W - pad * 2 - noteW && name.length > 4) name = name.slice(0, -2) + "\u2026";
+  ctx.fillText(name, pad, band / 2 + 6);
+  if (sign.note) {
+    ctx.font = `bold 46px ${BULLET_FONT}`;
+    ctx.textAlign = "right";
+    ctx.fillText(sign.note, W - pad, band / 2 + 4);
+  }
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(pad, band, W - pad * 2, 6);
+  // Bullets, left-aligned in one or two rows.
+  const area = H - band - 6, { rows, r, gap } = bulletRows(sign.routes.length, W - pad * 2, rows1MaxR(sign.routes.length, area));
+  let k = 0;
+  const rowH = area / rows.length;
+  rows.forEach((count, row) => {
+    const cy = band + 6 + rowH * (row + 0.5);
+    for (let i = 0; i < count; i++, k++) drawRouteBullet(ctx, sign.routes[k], pad + r + i * (2 * r + gap), cy, r);
+  });
+}
+const rows1MaxR = (n: number, area: number) => (n > 7 ? area / 4 - 6 : area / 2 - 22);
 /** Merge coloured boxes [w,l,h,x,y,z,color] (z = base) into one geometry; spheres for globe lamps. */
 function kit(boxes: Array<[number, number, number, number, number, number, string]>, globes: Array<[number, number, number]>): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
@@ -182,13 +234,13 @@ function stairKit(): THREE.BufferGeometry {
     [0.35, 4.6, 0.25, -1.2, 0.6, 0, "#a8a29e"], [0.35, 4.6, 0.25, 1.2, 0.6, 0, "#a8a29e"], [2.75, 0.35, 0.25, 0, -1.7, 0, "#a8a29e"],
   ];
   for (let i = 0; i < 6; i++) boxes.push([1.75, 0.65, 0.12, 0, -1.1 + i * 0.65, -0.25 - i * 0.28, step]);
-  // Sign: a dark panel on two posts at the street end.
-  boxes.push([1.6, 0.08, 0.45, 0, -1.75, 1.35, "#111827"], [1.5, 0.1, 0.08, 0, -1.76, 1.62, "#f8fafc"]); // sign on the end railing, white route band
+  // The sign panel (station name and route bullets) is a textured quad drawn per station, see SIGN_OFFSET.
+  boxes.push([2.1, 0.06, 0.85, 0, -1.69, 1.35, "#1f2937"]); // backing frame between the lamp posts
   return kit(boxes, [[-1.2, -1.7, 2.4], [1.2, -1.7, 2.4]]);
 }
 /** Elevator variant: a glass cab with a dark roof and a sign. */
 function elevatorKit(): THREE.BufferGeometry {
-  return kit([[2.2, 2.2, 2.6, 0, 0, 0, "#93c5fd"], [2.4, 2.4, 0.25, 0, 0, 2.6, "#1f2937"], [1.2, 0.08, 0.35, 0, -1.2, 2.0, "#111827"]], [[1.3, -1.3, 2.4]]);
+  return kit([[2.2, 2.2, 2.6, 0, 0, 0, "#93c5fd"], [2.4, 2.4, 0.25, 0, 0, 2.6, "#1f2937"], [1.7, 0.06, 0.7, 0, -1.13, 1.8, "#1f2937"]], [[1.3, -1.3, 2.4]]);
 }
 
 /**
@@ -328,9 +380,65 @@ export function createVehicleLayer() {
   const kitMat = new THREE.MeshLambertMaterial({ vertexColors: true, color: 0x8a8a8a }); // the scene lights are tuned for vehicles; tone the kit down
   const stairs = new THREE.InstancedMesh(stairKit(), kitMat, ENTRANCE_CAP), lifts = new THREE.InstancedMesh(elevatorKit(), kitMat, ENTRANCE_CAP);
   for (const k of [stairs, lifts]) { k.count = 0; k.frustumCulled = false; scene.add(k); }
-  const white = new THREE.Color(1, 1, 1), gray = new THREE.Color(0.35, 0.35, 0.35);
+  const white = new THREE.Color(1, 1, 1), gray = new THREE.Color(0.35, 0.35, 0.35), sm4 = new THREE.Matrix4();
   /** Entrances near the camera (caller culls to ~300 m); empty hides them. */
+  // Sign panels: one double-sided quad geometry; per unique sign a texture, material and InstancedMesh.
+  const signGeom = (() => {
+    const front = new THREE.PlaneGeometry(2.0, 0.75).rotateX(Math.PI / 2).translate(0, -0.04, 0);
+    const back = new THREE.PlaneGeometry(2.0, 0.75).rotateX(Math.PI / 2).rotateZ(Math.PI).translate(0, 0.04, 0);
+    const g = new THREE.BufferGeometry();
+    for (const name of ["position", "normal", "uv"]) {
+      const a = front.getAttribute(name) as THREE.BufferAttribute, b = back.getAttribute(name) as THREE.BufferAttribute;
+      const arr = new Float32Array(a.array.length + b.array.length);
+      arr.set(a.array as Float32Array); arr.set(b.array as Float32Array, a.array.length);
+      g.setAttribute(name, new THREE.BufferAttribute(arr, a.itemSize));
+    }
+    const fi = Array.from(front.getIndex()!.array), bi = Array.from(back.getIndex()!.array).map((i) => i + front.getAttribute("position").count);
+    g.setIndex([...fi, ...bi]);
+    front.dispose(); back.dispose();
+    return g;
+  })();
+  /** Panel centre in kit-local metres: between the lamp posts at the street end / on the elevator cab. */
+  const SIGN_OFFSET = {
+    stair: new THREE.Matrix4().makeTranslation(0, -1.69, 1.35 + 0.425),
+    elevator: new THREE.Matrix4().makeTranslation(0, -1.13, 1.8 + 0.35).multiply(new THREE.Matrix4().makeScale(0.8, 1, 0.8)),
+  };
+  const SIGN_STATION_CAP = 64, SIGN_CACHE = 24;
+  const signs = new Map<string, { mesh: THREE.InstancedMesh; tex: THREE.CanvasTexture; mat: THREE.MeshBasicMaterial; used: number }>();
+  let signTick = 0;
+  function signMesh(sign: EntranceSign) {
+    const key = signKey(sign);
+    let e = signs.get(key);
+    if (!e) {
+      const canvas = document.createElement("canvas");
+      canvas.width = SIGN_W; canvas.height = SIGN_H;
+      const ctx = canvas.getContext("2d");
+      if (ctx) drawEntranceSign(ctx, sign);
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.encoding = THREE.sRGBEncoding; // the shared renderer outputs sRGB: keep the MTA colours true
+      // Mipmaps plus anisotropy keep the name legible when the sign is seen at a steep angle.
+      tex.anisotropy = renderer?.capabilities.getMaxAnisotropy() ?? 8;
+      const mat = new THREE.MeshBasicMaterial({ map: tex });
+      const mesh = new THREE.InstancedMesh(signGeom, mat, SIGN_STATION_CAP);
+      mesh.count = 0; mesh.frustumCulled = false;
+      scene.add(mesh);
+      e = { mesh, tex, mat, used: 0 };
+      signs.set(key, e);
+    }
+    return e;
+  }
+  function disposeSign(key: string) {
+    const e = signs.get(key);
+    if (!e) return;
+    scene.remove(e.mesh);
+    e.mat.dispose(); e.tex.dispose(); // own texture and material; signGeom and the shared renderer stay
+    e.mesh.dispose();
+    signs.delete(key);
+  }
   function setEntrances(list: EntranceKitInstance[]) {
+    signTick++;
+    const signCount = new Map<string, number>();
+    for (const e of signs.values()) e.mesh.count = 0;
     let a = 0, b = 0;
     for (const e of list) {
       const mesh = e.kind === "elevator" ? lifts : stairs, i = e.kind === "elevator" ? b++ : a++;
@@ -340,7 +448,15 @@ export function createVehicleLayer() {
       q.setFromAxisAngle(zAxis, (-e.bearing * Math.PI) / 180);
       mesh.setMatrixAt(i, m4.compose(p, q, one));
       mesh.setColorAt(i, e.out ? gray : white);
+      if (e.sign) {
+        const sm = signMesh(e.sign), key = signKey(e.sign), j = signCount.get(key) ?? 0;
+        if (j < SIGN_STATION_CAP) { sm.mesh.setMatrixAt(j, sm4.multiplyMatrices(m4, SIGN_OFFSET[e.kind])); signCount.set(key, j + 1); }
+        sm.used = signTick;
+      }
     }
+    for (const [key, n] of signCount) { const e = signs.get(key)!; e.mesh.count = n; e.mesh.instanceMatrix.needsUpdate = true; }
+    // Keep recently seen stations' textures for walking back; drop the oldest beyond SIGN_CACHE.
+    if (signs.size > SIGN_CACHE) for (const [key] of [...signs].filter(([, e]) => e.used !== signTick).sort((x, y) => x[1].used - y[1].used).slice(0, signs.size - SIGN_CACHE)) disposeSign(key);
     for (const [mesh, n] of [[stairs, a], [lifts, b]] as const) {
       mesh.count = Math.min(n, ENTRANCE_CAP);
       mesh.instanceMatrix.needsUpdate = true;
@@ -417,6 +533,7 @@ export function createVehicleLayer() {
     },
     onRemove() {
       map?.off("moveend", syncChunks);
+      for (const key of [...signs.keys()]) disposeSign(key);
       renderer = null; // shared with the other three.js layers: never dispose it here
     },
     render(_gl, args) {

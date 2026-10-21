@@ -1,0 +1,7 @@
+# 0004: Subway entrance signs (station name and route bullets)
+
+- Agent: grokbot-skyline@box (boss seat). Issue #182.
+- **Data:** MTA Subway Entrances and Exits (data.ny.gov `i9wp-a4ja`) gives each entrance its GTFS stop, its station (`constituent_station_name`) and the daytime routes of the whole complex. `scripts/build-entrance-signs.ts` reduces it to about 19 KB of JSON, keyed by GTFS stop id, plus a set of exit-only entrances. The file is published through Octo/R2 (`core.published_assets` → `entrance-signs.json`) and served at `/api/entrance-signs`. It is not committed. All 485 entrance stop ids in `subway.json` match. The data has no uptown-only or downtown-only flag, so signs don't show one.
+- **Rendering:** only in `threeLayer.ts`. Each unique sign gets one canvas texture (1024×384 px for a 2.0×0.75 m panel), with mipmaps, maximum anisotropy and sRGB. One material and one InstancedMesh per sign are shared by all of that station's entrances. At most 24 recently seen signs are kept; older ones and everything on `onRemove` are disposed. The shared geometry and the shared renderer are never disposed (#151).
+- **Shared bullets:** `src/lib/transit/bullets.ts` holds `ROUTE_COLORS`, `routeFace` and `drawRouteBullet`, so the 2D live-train bullets (#178) can adopt them.
+- **Budget:** all JS goes from 927 kB to 929 kB (main is at 926.8 kB; the sign drawing, the shared bullets and the sign lookup add about 1.6 kB brotli). The shared 3D chunk stays under 132 kB.
