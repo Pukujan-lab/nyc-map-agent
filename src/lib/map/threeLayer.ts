@@ -745,7 +745,7 @@ const MAX = 64; // one 1024 x 1024 atlas: 2 x 32 slots of 512 x 32
 const PLATE_H = 0.8;
 const BASE_M = 3.2; // plate centre above the pavement on the ground floor
 const FLOOR_M = 3.5;
-const WALL_GAP_M = 0.05;
+const WALL_GAP_M = 0.15; // clear of the storefront band so depth never hides the plate
 
 export const SIGN_COLORS: Record<string, string> = {
   food: "#9a3412", shop: "#1e3a8a", health: "#047857", money: "#3f3f46", service: "#4c1d95", mall: "#111827",
@@ -832,6 +832,10 @@ export function createStorefrontLayer(): CustomLayerInterface {
   let origin = new MercatorCoordinate(0, 0, 0);
   let scale = 1;
   let shown = "";
+  let lastCheck = 0;
+  const onData = (e: { sourceId?: string; isSourceLoaded?: boolean }) => {
+    if (e.sourceId === "city3d" && e.isSourceLoaded) refresh();
+  };
 
   const refresh = () => {
     if (map.getZoom() < STOREFRONT_MIN_ZOOM) {
@@ -843,7 +847,11 @@ export function createStorefrontLayer(): CustomLayerInterface {
     const signs = nearbyStorefronts(map).flatMap((s): Array<StorefrontSign & { dx?: number; z?: number }> =>
       s.main ? [s, { ...s, name: "Directory", main: 0, sw: 1.2, dx: Math.max(0.8, s.sw) / 2 + 0.9, z: 1.6 }] : [s],
     ).slice(0, MAX);
-    const key = signs.map((s) => `${s.lng},${s.lat}`).join("|");
+    // Real size at eye level; from higher up a 0.8 m plate is 2-4 px, so it
+    // grows to stay about 14 px tall and readable (#67).
+    const mpp = (78_271.517 * Math.cos((map.getCenter().lat * Math.PI) / 180)) / 2 ** map.getZoom();
+    const grow = Math.min(6, Math.max(1, (mpp * 14) / PLATE_H));
+    const key = `${grow.toFixed(1)}|` + signs.map((s) => `${s.lng},${s.lat}`).join("|");
     if (key === shown) return;
     shown = key;
     const c = map.getCenter();
@@ -858,17 +866,22 @@ export function createStorefrontLayer(): CustomLayerInterface {
       const b = (s.brg * Math.PI) / 180;
       const n = new THREE.Vector3(Math.sin(b), Math.cos(b), 0);
       const t = new THREE.Vector3(-Math.cos(b), Math.sin(b), 0);
-      const h = s.main ? 1.2 : PLATE_H;
-      const pos = new THREE.Vector3((s.lng - c.lng) * kx, (s.lat - c.lat) * 111_320, s.z ?? BASE_M + s.fl * FLOOR_M)
-        .addScaledVector(n, WALL_GAP_M)
-        .addScaledVector(t, s.dx ?? 0);
-      m.makeBasis(t.clone().multiplyScalar(Math.max(0.8, s.sw)), new THREE.Vector3(0, 0, h), n).setPosition(pos);
+      const h = (s.main ? 1.2 : PLATE_H) * grow;
+      const w = Math.max(0.8, s.sw) * Math.min(grow, 2);
+      const zc = Math.max(s.z ?? BASE_M + s.fl * FLOOR_M, h / 2 + 0.3);
+      const pos = new THREE.Vector3((s.lng - c.lng) * kx, (s.lat - c.lat) * 111_320, zc)
+        .addScaledVector(n, WALL_GAP_M * grow)
+        .addScaledVector(t, (s.dx ?? 0) * grow);
+      m.makeBasis(t.clone().multiplyScalar(w), new THREE.Vector3(0, 0, h), n).setPosition(pos);
       mesh.setMatrixAt(i, m);
     });
     mesh.count = signs.length;
     mesh.instanceMatrix.needsUpdate = true;
     uv.needsUpdate = true;
     atlas.needsUpdate = true;
+    // refresh runs on moveend/idle, after the last frame: without a repaint the
+    // new signs never reached the screen until the next camera move (#67).
+    map.triggerRepaint();
   };
 
   return {
@@ -880,16 +893,25 @@ export function createStorefrontLayer(): CustomLayerInterface {
       renderer = sharedRenderer(m, gl);
       map.on("moveend", refresh);
       map.on("idle", refresh);
+      map.on("sourcedata", onData);
       refresh();
     },
     onRemove() {
       map.off("moveend", refresh);
       map.off("idle", refresh);
+      map.off("sourcedata", onData);
       geometry.dispose();
       material.dispose();
       atlas.dispose();
     },
     render(_gl, args) {
+      // Animated layers (weather, hazards) keep the map from ever going idle,
+      // so also re-check the loaded tiles about once a second while drawing.
+      const now = performance.now();
+      if (now - lastCheck > 1000) {
+        lastCheck = now;
+        refresh();
+      }
       if (!mesh.count) return;
       const l = new THREE.Matrix4().makeTranslation(origin.x, origin.y, origin.z ?? 0).scale(new THREE.Vector3(scale, -scale, scale));
       camera.projectionMatrix = new THREE.Matrix4().fromArray(args.defaultProjectionData.mainMatrix as unknown as number[]).multiply(l);
