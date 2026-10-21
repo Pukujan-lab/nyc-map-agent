@@ -26,7 +26,7 @@ export const FACADES = ["rowhouse", "walkup", "prewar", "modern", "tower", "scho
 const SOURCE = "city3d";
 const STOREFRONT_M = 4.5;
 
-export const CITY3D_LAYERS = ["city3d-storefront", "city3d-walls", "city3d-roofs", "city3d-props", "city3d-signs"] as const;
+export const CITY3D_LAYERS = ["city3d-storefront", "city3d-walls", "city3d-roofs", "city3d-props", "city3d-signs", "city3d-hydrants"] as const;
 
 async function loadFacades(map: MapLibreMap): Promise<void> {
   await Promise.all(
@@ -136,6 +136,13 @@ export async function installCity3d(map: MapLibreMap): Promise<void> {
   if (!map.getLayer("city3d-signs")) {
     map.addLayer(createStreetSignsLayer(), beforeId);
     map.setLayoutProperty("city3d-signs", "visibility", "none");
+  }
+  // NYC hydrant models (three.js, shared layer); the extruded stubs step aside.
+  const { createHydrantLayer, HYDRANTS_3D_LAYER } = await import("./threeLayer");
+  if (!map.getLayer(HYDRANTS_3D_LAYER)) {
+    map.addLayer(createHydrantLayer(), beforeId);
+    map.setLayoutProperty(HYDRANTS_3D_LAYER, "visibility", map.getLayoutProperty("city3d-props", "visibility") ?? "none");
+    map.setFilter("city3d-props", ["!=", ["get", "kind"], "hydrant"]);
   }
 }
 
