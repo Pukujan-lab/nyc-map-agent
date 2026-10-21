@@ -30,7 +30,9 @@ export function readableChange(l: Layer): { visibility?: "none"; color?: string;
 
 const saved = new WeakMap<MapLibreMap, Map<string, { visibility: unknown; color: unknown; textColor: unknown }>>();
 
-export function applyReadable(map: MapLibreMap, on: boolean): void {
+export interface ReadableColors { street: string; major: string; label: string }
+
+export function applyReadable(map: MapLibreMap, on: boolean, colors: ReadableColors = { street: PALE_STREET, major: PALE_MAJOR, label: FAINT_LABEL }): void {
   const layers = (map.getStyle()?.layers ?? []) as Layer[];
   let store = saved.get(map);
   if (!store) { store = new Map<string, { visibility: unknown; color: unknown; textColor: unknown }>(); saved.set(map, store); }
@@ -46,8 +48,8 @@ export function applyReadable(map: MapLibreMap, on: boolean): void {
     }
     const orig = store.get(l.id);
     if (change.visibility) map.setLayoutProperty(l.id, "visibility", on ? "none" : (orig?.visibility ?? "visible"));
-    if (change.color) map.setPaintProperty(l.id, "line-color", on ? change.color : orig?.color);
-    if (change.textColor) map.setPaintProperty(l.id, "text-color", on ? change.textColor : orig?.textColor);
+    if (change.color) map.setPaintProperty(l.id, "line-color", on ? (change.color === PALE_MAJOR ? colors.major : colors.street) : orig?.color);
+    if (change.textColor) map.setPaintProperty(l.id, "text-color", on ? colors.label : orig?.textColor);
     if (!on) store.delete(l.id);
   }
 }

@@ -24,12 +24,14 @@ test("map loads, search opens a panel, street level toggles, no console errors",
   await page.getByRole("option", { name: /Greenpoint/ }).first().click();
   await expect(page.getByText("Greenpoint").first()).toBeVisible();
 
-  // Street level on, then off.
-  const street = page.getByRole("button", { name: "Street view", exact: true });
-  await street.click();
-  const leave = page.getByRole("button", { name: "Leave street view", exact: true });
-  await expect(leave).toHaveAttribute("aria-pressed", "true");
+  // Street level on from the Layers & filters drawer, then off from the walk bar.
+  const openLayers = () => page.getByRole("button", { name: "Layers & filters", exact: true }).click();
+  await openLayers();
+  await page.getByRole("button", { name: "Street view", exact: true }).click();
+  const leave = page.getByRole("button", { name: "Leave street level and return to the overhead map" });
+  await expect(leave).toBeVisible();
   await leave.click();
+  await openLayers();
   await expect(page.getByRole("button", { name: "Street view", exact: true })).toHaveAttribute("aria-pressed", "false");
 
   expect(errors, errors.join("\n")).toEqual([]);

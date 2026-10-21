@@ -1057,6 +1057,11 @@ function signsNear(map: MapLibreMap, lng: number, lat: number, radius: number): 
   return [...seen.values()].sort((a, b) => a.d - b.d);
 }
 
+/** The storefront sign nearest a point on a building's ground floor (eye-level picking). */
+export function storefrontAt(map: MapLibreMap, lng: number, lat: number, radius = 12): StorefrontSign | null {
+  return signsNear(map, lng, lat, radius)[0] ?? null;
+}
+
 /** The directory (main) sign nearest a clicked ground point, for the panel. */
 export function directoryAt(map: MapLibreMap, lng: number, lat: number): StorefrontSign | null {
   if (map.getZoom() < STOREFRONT_MIN_ZOOM) return null;
