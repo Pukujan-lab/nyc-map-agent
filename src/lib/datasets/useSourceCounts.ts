@@ -44,7 +44,12 @@ export function useSourceCounts(params: {
   const index = useMemo(() => (boundaries ? new NtaIndex(boundaries) : null), [boundaries]);
   const remote = enabled
     .map((id) => SOURCE_BY_ID[id])
-    .filter((source) => source && (octo || source.kind !== "builtin"));
+    // Noise and crashes always come from the aggregates the map already holds:
+    // those are keyed by real tax block (Octo) and crashes use their own 12-month
+    // window. Asking /api for them by grid cell and the 90-day window gave block
+    // keys the block tiles don't have and an empty crash window, so the crash
+    // views drew nothing (#45).
+    .filter((source) => source && source.kind !== "builtin");
 
   const results = useQueries({
     queries: remote.map((source) => ({
@@ -61,7 +66,6 @@ export function useSourceCounts(params: {
       queryFn: ({ signal }: { signal: AbortSignal }) => {
         if (!index) throw new Error("Neighborhood boundaries are not loaded yet.");
         if (octo) return fetchOctoCounts(source, windowId, filters, index, signal);
-        if (source.kind === "builtin") throw new Error("Builtin sources come from the worker.");
         return fetchSourceCounts(source, windowBounds(windowId), index, signal);
       },
     })),
@@ -85,11 +89,11 @@ export function useSourceCounts(params: {
         error: result?.error ? result.error.message : null,
       };
     });
-    if (!octo && enabled.includes("noise")) {
+    if (enabled.includes("noise")) {
       counts.noise = noise ? countsFromAggregate("noise", noise) : undefined;
       status.noise = { isLoading: !noise, error: null };
     }
-    if (!octo && enabled.includes("crashes")) {
+    if (enabled.includes("crashes")) {
       counts.crashes = crashes ? countsFromAggregate("crashes", crashes) : undefined;
       status.crashes = { isLoading: !crashes, error: null };
     }
