@@ -6,6 +6,9 @@ import { setAmbient } from "@/lib/ambient";
 import { useFlags } from "@/lib/flags";
 import { useFeatureToggles } from "@/lib/featureToggles";
 import { useMediaQuery } from "@/lib/useMediaQuery";
+import { applyReadable } from "@/lib/map/readable";
+import { applyPlaces, usePlacesShown } from "@/lib/map/places";
+import { useTransitFocus } from "@/lib/map/transitFocus";
 import { useFlag } from "@/lib/flags";
 import MapLibreMap, {
   type MapLayerMouseEvent,
@@ -413,6 +416,17 @@ export function MapView({
     [],
   );
 
+  // Readable transit basemap: always on phones, and whenever Transit Focus is on.
+  const phone = useMediaQuery("(max-width: 1023px)");
+  const [transitFocus] = useTransitFocus();
+  const placesShown = usePlacesShown();
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map || !ready) return;
+    applyReadable(map, phone || transitFocus);
+    applyPlaces(map, placesShown);
+  }, [ready, styleEpoch, phone, transitFocus, placesShown]);
+
   const handleLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
     if (!map) return;
@@ -440,9 +454,14 @@ export function MapView({
    * blank, so fall back once to the bundled raster style. Tile errors are
    * survivable; only an unloaded style is not.
    */
-  const handleError = useCallback(() => {
+  const handleError = useCallback((e: object) => {
     const map = mapRef.current?.getMap();
     if (!map || fellBack.current || map.isStyleLoaded()) return;
+    // A tile or data-source error while the style is still loading (a slow
+    // phone, one 404 tile, the areas API) is survivable; only a style that
+    // never arrived needs the raster fallback. Before this check one such
+    // error swapped the whole map to raster, which no style rule can restyle.
+    if ("sourceId" in e && e.sourceId) return;
     fellBack.current = true;
     map.setStyle(buildFallbackStyle());
   }, []);

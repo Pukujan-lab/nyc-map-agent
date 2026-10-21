@@ -12,6 +12,7 @@ import { PanelSearch } from "./PanelSearch";
 import { ViewModeMenu } from "./ViewModeMenu";
 import { FEATURES } from "@/features";
 import { useFeatureToggles } from "@/lib/featureToggles";
+import { setPlacesShown, usePlacesShown } from "@/lib/map/places";
 
 /** Mobile snap points: peek shows the summary only. */
 /** One row (title + number) plus the grab handle. */
@@ -38,13 +39,15 @@ function FeatureTopBar() {
 }
 
 /** Always-visible chips; everything else is one level down in "More layers". */
-const PRIMARY = ["transit", "transitFocus", "restrooms", "weather"];
+const PRIMARY = ["transit", "transitFocus", "places", "restrooms", "weather"];
 
 function Chips() {
   const { restrooms, setRestrooms } = useMapState();
   const { chips } = usePanel();
   const flags = useFlags();
+  const placesShown = usePlacesShown();
   const builtIn: PanelChip[] = [
+    { id: "places", label: "Places", active: placesShown, onToggle: () => setPlacesShown(!placesShown) },
     { id: "restrooms", label: "Restrooms", active: restrooms, onToggle: () => setRestrooms(!restrooms) },
   ];
   const [toggledOn, toggle] = useFeatureToggles();

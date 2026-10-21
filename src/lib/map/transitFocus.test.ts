@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FOCUS_KEY, WORLD, readFocus } from "./focus";
+import { FOCUS_KEY, WORLD, readFocus } from "./transitFocus";
 
 describe("transit focus", () => {
   it("is off unless the saved choice is on", () => {
