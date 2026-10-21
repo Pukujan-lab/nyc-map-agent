@@ -1,3 +1,4 @@
+import type { ComponentType } from "react";
 import type { FlagId } from "@/lib/flags";
 
 /**
@@ -7,8 +8,14 @@ import type { FlagId } from "@/lib/flags";
 export interface FeatureModule {
   /** Stable id; also its feature-flag id. */
   id: FlagId;
-  /** Lazy-loaded MapLibre layer installer, its own JS chunk. */
+  /**
+   * Lazy-loaded MapLibre layer installer, its own JS chunk. If the module
+   * exports `mount(map): () => void`, MapView mounts it while the flag is on
+   * (and again after a style reload) and calls the cleanup when it goes off.
+   */
   layers?: () => Promise<unknown>;
+  /** A small line under the search bar (e.g. a hazard notice). No tooltips. */
+  TopBar?: ComponentType;
   /** Panel content ids this module pushes via usePanel().showPanel. */
   panel?: { idPrefix: string };
   /** Chip ids it registers with usePanelChip. */

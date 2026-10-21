@@ -8,6 +8,7 @@ import { useMapState } from "@/lib/store/MapStateContext";
 import { usePanel, type PanelChip, type SheetSnap } from "@/lib/store/PanelContext";
 import { cn } from "@/lib/utils";
 import { PanelSearch } from "./PanelSearch";
+import { FEATURES } from "@/features";
 
 /** Mobile snap points: peek shows the summary only. */
 /** One row (title + number) plus the grab handle. */
@@ -17,6 +18,21 @@ const SNAP_BY_NAME: Record<SheetSnap, string | number> = { peek: PEEK, half: 0.5
 const nameOf = (point: string | number | null): SheetSnap =>
   point === 1 ? "full" : point === 0.5 ? "half" : "peek";
 
+
+/** Feature top-bar lines (hazard notice, weather) in one quiet row under the search bar. */
+function FeatureTopBar() {
+  const flags = useFlags();
+  const bars = FEATURES.filter((f) => f.TopBar && flags[f.id]);
+  if (!bars.length) return null;
+  return (
+    <div className="flex min-h-0 items-center justify-between gap-3 px-1 empty:hidden">
+      {bars.map((f) => {
+        const Bar = f.TopBar!;
+        return <Bar key={f.id} />;
+      })}
+    </div>
+  );
+}
 
 function Chips() {
   const { layer, setLayer, restrooms, setRestrooms } = useMapState();
@@ -146,7 +162,9 @@ export function MapPanel({
               <PanelSearch boundaries={boundaries} />
               {status}
             </div>
-            <Chips />
+            <FeatureTopBar />
+            <FeatureTopBar />
+        <Chips />
           </div>
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-border/60">{body}</div>
         </div>
@@ -172,6 +190,7 @@ export function MapPanel({
           <PanelSearch boundaries={boundaries} />
           {status}
         </div>
+        <FeatureTopBar />
         <Chips />
       </div>
       <Drawer.Root

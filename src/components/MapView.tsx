@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RestroomDetails } from "@/components/RestroomCard";
 import { usePanel } from "@/lib/store/PanelContext";
+import { setAmbient } from "@/lib/ambient";
+import { useFlags } from "@/lib/flags";
+import { FEATURES } from "@/features";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import MapLibreMap, {
   type MapLayerMouseEvent,
@@ -667,6 +670,33 @@ export function MapView({
     walking,
   ]);
 
+  // Feature modules whose lazy `layers` chunk exports mount(map): mounted while
+  // their flag is on, remounted after a style reload, cleaned up otherwise.
+  const flags = useFlags();
+  const mountedKey = FEATURES.filter((f) => f.layers && flags[f.id]).map((f) => f.id).join(",");
+  useEffect(() => {
+    if (!ready) return;
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    const cleanups: Array<() => void> = [];
+    let live = true;
+    for (const f of FEATURES) {
+      if (!f.layers || !mountedKey.split(",").includes(f.id)) continue;
+      f.layers()
+        .then((mod) => {
+          const m = mod as { mount?: (map: MaplibreMapInstance) => () => void };
+          if (live && m.mount) cleanups.push(m.mount(map));
+        })
+        .catch((err) => console.warn(`${f.id} failed to load`, err));
+    }
+    return () => {
+      live = false;
+      cleanups.forEach((c) => c());
+    };
+  }, [ready, styleEpoch, mountedKey]);
+
+  useEffect(() => setAmbient({ eco }), [eco]);
+
   // Public restrooms: lazily installed icon layer, toggled from the Layers dropdown.
   useEffect(() => {
     if (!ready) return;
@@ -779,6 +809,8 @@ export function MapView({
     if (!map) return;
     applyAtmosphere(map, walking);
     applyStreetPalette(map, walking);
+    // After the street palette, so time-of-day lighting re-tints on top of it.
+    setAmbient({ walking });
     // The sidewalk texture arrives a moment later; repaint once it has.
     if (walking) void loadStreetTextures(map).then(() => applyStreetPalette(map, true)).catch(() => {});
     // At eye level basemap labels stand on the horizon and float in the sky,

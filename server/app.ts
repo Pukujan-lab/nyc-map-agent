@@ -17,6 +17,8 @@ import * as cityTiles from "../api/city-tiles";
 import * as restrooms from "../api/restrooms";
 import * as sources from "../api/sources";
 import * as street from "../api/street";
+import * as hazards from "./features/hazards/routes";
+import * as weather from "./features/weather/routes";
 
 type Handler = { GET: (request: Request) => Promise<Response> };
 
@@ -30,6 +32,8 @@ const routes: Array<[string, Handler]> = [
   ["/api/restrooms", restrooms],
   ["/api/sources", sources],
   ["/api/street", street],
+  ["/api/weather", weather],
+  ["/api/hazards", hazards],
 ];
 
 export const app = new OpenAPIHono({
