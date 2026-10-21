@@ -32,6 +32,14 @@
       "machine_label": "laptop",
       "may_implement": true,
       "notes": "Worker/coder seed."
+    },
+    {
+      "agent_id": "grokbot-skyline@box",
+      "role_seed": "coder",
+      "harness": "grok-bot",
+      "machine_label": "box",
+      "may_implement": true,
+      "notes": "Skyline and city-tile rebuild lane plus vehicle models; sole holder of the tile rebuild/publish."
     }
   ],
   "boss_failover": {
@@ -39,7 +47,8 @@
     "check_in": {
       "mechanism": "claim_file",
       "interval_hint_minutes": 15,
-      "claim_file_path": ".coord/boss_claim.json"
+      "claim_file_path": ".coord/boss_claim.json",
+      "issue_url": "https://github.com/Pukujan/nyc-map-agent/issues/156"
     },
     "claim_queue": [],
     "standby": [],
@@ -132,7 +141,7 @@
         "readme_product_entry": "writing-direction (MUST load; scan-first selective bold; do not apply HSW bold restraints)",
         "pr_issue_docs_commits": "human-sounding-writing / hsw (MUST load for PR/issue titles+bodies, docs, commits)",
         "posts_blogs_papers": "human-sounding-writing (hsw / HSW)",
-        "contract": "docs/writing-routing.json + docs/ACS_VERIFY.md — application=must_load; human_facing_default; acs_prompt_inject after VALID",
+        "contract": "docs/writing-routing.json + docs/ACS_VERIFY.md \u2014 application=must_load; human_facing_default; acs_prompt_inject after VALID",
         "html_reports_compare_appendable": "human-sounding-writing / hsw (MUST; default ON; no per-report opt-in)",
         "generated_artifact_filenames": "human-output-naming / hon (MUST; basenames + legends)"
       },
