@@ -29,7 +29,7 @@ export const FACADES = [
 const SOURCE = "city3d";
 const STOREFRONT_M = 4.5;
 
-export const CITY3D_LAYERS = ["city3d-storefront", "city3d-walls", "city3d-roofs", "city3d-props", "city3d-bridges", "city3d-signs", "city3d-hydrants", "city3d-storefront-signs"] as const;
+export const CITY3D_LAYERS = ["city3d-storefront", "city3d-walls", "city3d-roofs", "city3d-props", "city3d-bridges", "city3d-signs", "city3d-hydrants", "city3d-landmarks", "city3d-storefront-signs"] as const;
 
 async function loadFacades(map: MapLibreMap): Promise<void> {
   await Promise.all(
@@ -172,6 +172,12 @@ export async function installCity3d(map: MapLibreMap): Promise<void> {
     map.addLayer(createHydrantLayer(), beforeId);
     map.setLayoutProperty(HYDRANTS_3D_LAYER, "visibility", map.getLayoutProperty("city3d-props", "visibility") ?? "none");
     map.setFilter("city3d-props", ["!=", ["get", "kind"], "hydrant"]);
+  }
+  // Hero landmarks (glTF); the tiles leave their footprints out.
+  const { createLandmarksLayer, LANDMARKS_3D_LAYER } = await import("./threeLayer");
+  if (!map.getLayer(LANDMARKS_3D_LAYER)) {
+    map.addLayer(createLandmarksLayer(), beforeId);
+    map.setLayoutProperty(LANDMARKS_3D_LAYER, "visibility", map.getLayoutProperty("city3d-walls", "visibility") ?? "none");
   }
 }
 
