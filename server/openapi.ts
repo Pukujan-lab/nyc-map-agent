@@ -8,6 +8,7 @@ import { Query as AggregateQuery } from "../api/aggregate";
 import { Query as AreasQuery } from "../api/areas";
 import { Query as BlocksQuery } from "../api/blocks";
 import { Query as StreetQuery } from "../api/street";
+import { Query as WeatherQuery } from "./features/weather/routes";
 
 const Json = z.record(z.unknown()).openapi("Json");
 const ApiError = z.object({ error: z.string(), issues: z.array(z.string()).optional() }).openapi("ApiError");
@@ -82,6 +83,7 @@ export const ROUTES = {
   "/api/restrooms": jsonRoute("/api/restrooms", "Public restrooms GeoJSON"),
   "/api/sources": jsonRoute("/api/sources", "Source registry metadata and freshness"),
   "/api/street": jsonRoute("/api/street", "Street noise / crash stats", StreetQuery),
+  "/api/weather": jsonRoute("/api/weather", "Current weather near a point (Open-Meteo, NWS fallback)", WeatherQuery),
   "/api/transit": jsonRoute("/api/transit", "Live transit capabilities ({ bus })"),
   "/api/transit/:system": jsonRoute(
     "/api/transit/{system}",

@@ -13,7 +13,7 @@ import { Progress } from "@/components/ui/progress";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useAdvancedMode, useFlags } from "@/lib/flags";
-import { setAmbient, useAmbient, type LightingMode } from "@/lib/ambient";
+import { setAmbient, useAmbient, type LightingMode, type WeatherMode } from "@/lib/ambient";
 import {
   Select,
   SelectContent,
@@ -205,7 +205,7 @@ export function ControlDrawer({
             <Switch id="advanced-mode" checked={advancedMode} onCheckedChange={setAdvancedMode} />
           </div>
 
-          {flags.daylight ? (
+          {flags.daylight || flags.weather ? (
             <div className="grid grid-cols-2 gap-2">
               {flags.daylight ? (
                 <div className="space-y-1">
@@ -216,6 +216,19 @@ export function ControlDrawer({
                       <SelectItem value="auto">Auto</SelectItem>
                       <SelectItem value="day">Day</SelectItem>
                       <SelectItem value="night">Night</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
+              {flags.weather ? (
+                <div className="space-y-1">
+                  <Label htmlFor="weather" className="text-xs text-muted-foreground">Weather</Label>
+                  <Select value={ambient.weatherMode} onValueChange={(v) => setAmbient({ weatherMode: v as WeatherMode })}>
+                    <SelectTrigger id="weather" className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="live">Live</SelectItem>
+                      <SelectItem value="clear">Clear</SelectItem>
+                      <SelectItem value="off">Off</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
