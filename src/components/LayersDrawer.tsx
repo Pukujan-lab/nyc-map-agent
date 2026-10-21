@@ -13,7 +13,7 @@ import { setTransitFocusOff } from "@/lib/map/transitFocus";
 import { useDataView } from "@/lib/store/DataViewContext";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { usePanel, type PanelChip } from "@/lib/store/PanelContext";
-import { THEMES, setTheme, useTheme, type ThemeId } from "@/lib/theme";
+import { CHOICES, THEMES, setTheme, useAutoPhase, useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
 /** A labelled filter chip: filled ink when on, outlined when off. No icons. */
@@ -101,6 +101,7 @@ export function LayersDrawer({
   const places = usePlaces();
   const opts = useMapOptions();
   const theme = useTheme();
+  const phase = useAutoPhase();
   const shared = useSharedLocation();
   const hood = useNeighborhood(boundaries);
   const [q, setQ] = useState("");
@@ -260,7 +261,7 @@ export function LayersDrawer({
           </div>
         </Section>
 
-        <Section title="Map detail" hidden={!!q.trim() && !["streets", "street names", "buildings", "theme", "ivory", "ink", "mta", "map detail"].some(match)}>
+        <Section title="Map detail" hidden={!!q.trim() && !["streets", "street names", "buildings", "theme", "auto", "dusk", "night", "ivory", "ink", "mta", "neon", "map detail"].some(match)}>
           <div className="flex flex-wrap gap-[var(--sp-2)]">
             <Pill on={opts.streets === "simple"} onClick={() => setOptions({ streets: "simple" })}>Simple streets</Pill>
             <Pill on={opts.streets === "full"} onClick={() => setOptions({ streets: "full" })}>Detailed streets</Pill>
@@ -271,8 +272,10 @@ export function LayersDrawer({
           <p className="text-[13px] text-muted-foreground">Rotate: right-drag or Ctrl+drag</p>
           <div className="text-[13px] text-muted-foreground">Theme</div>
           <div className="flex flex-wrap gap-[var(--sp-2)]" role="radiogroup" aria-label="Theme">
-            {(Object.keys(THEMES) as ThemeId[]).map((id) => (
-              <Pill key={id} on={theme === id} onClick={() => setTheme(id)}>{THEMES[id].label}</Pill>
+            {CHOICES.map((id) => (
+              <Pill key={id} on={theme === id} onClick={() => setTheme(id)}>
+                {id === "auto" ? `Auto${theme === "auto" && phase ? ` · ${phase[0].toUpperCase()}${phase.slice(1)}` : " (time of day)"}` : THEMES[id].label}
+              </Pill>
             ))}
           </div>
         </Section>

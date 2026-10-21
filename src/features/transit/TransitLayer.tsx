@@ -27,7 +27,7 @@ import { StationDetails, VehicleDetails } from "./TransitCard";
 import { TransitStatusDetails } from "./TransitStatus";
 import { lineOpacity, useMapOptions } from "@/lib/map/mapOptions";
 import { NOTCH_ICON, addBulletImage, stationRowId, bulletId, busBadgeId, busPrefix } from "@/lib/transit/bullets";
-import { THEMES, useTheme } from "@/lib/theme";
+import { usePalette } from "@/lib/theme";
 import { FOCUS_OPACITY, FOCUS_VEIL_ID, WORLD, useTransitFocus } from "@/lib/map/transitFocus";
 
 /** Layers a click on the map should hand to transit instead of the area pick. */
@@ -292,7 +292,7 @@ export default function TransitLayer() {
     const id = window.setInterval(() => setHitFc({ type: "FeatureCollection", features: [...display.current.values()].map((v) => ({ type: "Feature", properties: { key: v.key, label: v.label }, geometry: { type: "Point", coordinates: [v.lon, v.lat] } })) }), 1000);
     return () => window.clearInterval(id);
   }, [three]);
-  const theme = THEMES[useTheme()];
+  const theme = usePalette();
   const [hoverStation, setHoverStation] = useState("");
   const openStationId = content?.id.startsWith("transit:station:") ? content.id.split(":").pop() ?? "" : "";
   useEffect(() => {

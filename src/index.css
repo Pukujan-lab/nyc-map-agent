@@ -183,6 +183,58 @@
     --map-street: #2A2A29;
     --serif: "DejaVu Serif", Georgia, serif;
   }
+  html.theme-dusk {
+    --background: 34 30% 91%;
+    --foreground: 0 0% 7%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 7%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 7%;
+    --primary: 0 0% 7%;
+    --primary-foreground: 48 16% 94%;
+    --secondary: 45 17% 91%;
+    --secondary-foreground: 0 0% 7%;
+    --muted: 45 17% 91%;
+    --muted-foreground: 48 2% 41%;
+    --accent: 45 17% 91%;
+    --accent-foreground: 0 0% 7%;
+    --border: 45 13% 88%;
+    --input: 45 13% 88%;
+    --ring: 0 0% 7%;
+    --acc: 72 98% 49%;
+    --acc-foreground: 0 0% 7%;
+    --map-land: #F2F1ED;
+    --map-water: #CFE0EE;
+    --map-park: #DCEFE3;
+    --map-street: #FFFFFF;
+    --serif: "DejaVu Serif", Georgia, serif;
+  }
+  html.theme-night {
+    --background: 212 22% 15%;
+    --foreground: 48 16% 94%;
+    --card: 212 22% 18%;
+    --card-foreground: 48 16% 94%;
+    --popover: 212 22% 18%;
+    --popover-foreground: 48 16% 94%;
+    --primary: 48 16% 94%;
+    --primary-foreground: 0 0% 7%;
+    --secondary: 212 18% 25%;
+    --secondary-foreground: 48 16% 94%;
+    --muted: 212 18% 25%;
+    --muted-foreground: 212 18% 74%;
+    --accent: 212 18% 25%;
+    --accent-foreground: 48 16% 94%;
+    --border: 212 16% 30%;
+    --input: 212 16% 30%;
+    --ring: 48 16% 94%;
+    --acc: 72 98% 49%;
+    --acc-foreground: 0 0% 7%;
+    --map-land: #141414;
+    --map-water: #1D2523;
+    --map-park: #1C2620;
+    --map-street: #2A2A29;
+    --serif: "DejaVu Serif", Georgia, serif;
+  }
   html.theme-mta {
     --background: 60 8% 95%;
     --foreground: 0 0% 7%;
@@ -210,29 +262,30 @@
     --serif: "DejaVu Serif", Georgia, serif;
   }
   html.theme-neon {
-    --background: 248 47% 7%;
-    --foreground: 259 89% 96%;
-    --card: 247 42% 12%;
-    --card-foreground: 259 89% 96%;
-    --popover: 247 42% 12%;
-    --popover-foreground: 259 89% 96%;
-    --primary: 258 90% 66%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 248 39% 18%;
-    --secondary-foreground: 259 89% 96%;
-    --muted: 248 39% 18%;
-    --muted-foreground: 251 29% 70%;
-    --accent: 248 39% 18%;
-    --accent-foreground: 259 89% 96%;
-    --border: 249 36% 23%;
-    --input: 249 36% 23%;
-    --ring: 258 90% 66%;
-    --acc: 339 100% 70%;
-    --acc-foreground: 248 47% 7%;
-    --map-land: #0B0919;
-    --map-water: #111A2C;
-    --map-park: #10241E;
-    --map-street: #1F1A3A;
+    /* Lifted (#177): deep indigo, not near-black; violet / pink only as accents. Text ≥ 4.5:1 on cards. */
+    --background: 248 38% 15%;
+    --foreground: 259 89% 97%;
+    --card: 247 34% 19%;
+    --card-foreground: 259 89% 97%;
+    --popover: 247 34% 19%;
+    --popover-foreground: 259 89% 97%;
+    --primary: 259 89% 96%;
+    --primary-foreground: 248 40% 15%;
+    --secondary: 248 30% 26%;
+    --secondary-foreground: 259 89% 97%;
+    --muted: 248 30% 26%;
+    --muted-foreground: 251 40% 82%;
+    --accent: 248 30% 26%;
+    --accent-foreground: 259 89% 97%;
+    --border: 249 28% 34%;
+    --input: 249 28% 34%;
+    --ring: 258 90% 72%;
+    --acc: 330 95% 72%;
+    --acc-foreground: 248 40% 12%;
+    --map-land: #221D4A;
+    --map-water: #1B2550;
+    --map-park: #1E3A3A;
+    --map-street: #3B3475;
     --serif: "DejaVu Serif", Georgia, serif;
   }
 }

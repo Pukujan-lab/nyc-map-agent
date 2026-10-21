@@ -11,7 +11,10 @@ import { applyReadable } from "@/lib/map/readable";
 import { applyPlaces, usePlaces } from "@/lib/map/places";
 import { useMapOptions } from "@/lib/map/mapOptions";
 import { applyBuildings } from "@/lib/map/buildings";
-import { THEMES, applyMapTheme, useTheme } from "@/lib/theme";
+import { applyMapTheme, setThemeCoords, usePalette } from "@/lib/theme";
+import { sharedCoords } from "@/lib/geo/sharedLocation";
+
+setThemeCoords(sharedCoords);
 import { useTransitFocus } from "@/lib/map/transitFocus";
 import { useFlag } from "@/lib/flags";
 import MapLibreMap, {
@@ -425,14 +428,13 @@ export function MapView({
   const [transitFocus] = useTransitFocus();
   const places = usePlaces();
   const opts = useMapOptions();
-  const theme = useTheme();
+  const t = usePalette();
   // Flat pale footprints unless the person picked 3D buildings in Map detail (#174).
   const flatBuildings = opts.buildings !== "3d";
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!map || !ready) return;
-    const t = THEMES[theme];
-    applyMapTheme(map, theme);
+    applyMapTheme(map, t);
     applyReadable(map, opts.streets === "simple" || transitFocus, { street: t.street, major: t.major, label: t.label_ });
     for (const l of map.getStyle()?.layers ?? []) {
       if (/^highway-name-major$/.test(l.id)) map.setLayoutProperty(l.id, "visibility", opts.streetNames ? "visible" : "none");
@@ -445,7 +447,7 @@ export function MapView({
     }
     applyPlaces(map, places);
     applyBuildings(map, flatBuildings, t.building);
-  }, [ready, styleEpoch, transitFocus, places, opts, theme, flatBuildings]);
+  }, [ready, styleEpoch, transitFocus, places, opts, t, flatBuildings]);
 
   const handleLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
