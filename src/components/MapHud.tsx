@@ -1,123 +1,178 @@
 import {
-  Box,
+  BatteryLow,
+  Building2,
   Camera,
+  Compass,
+  Info,
+  Maximize,
   MessageSquare,
+  Minimize,
+  Minus,
   Navigation,
+  Plus,
   SlidersHorizontal,
-  Square,
 } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { useMapState } from "@/lib/store/MapStateContext";
 import { useDataView } from "@/lib/store/DataViewContext";
+import { useMapState } from "@/lib/store/MapStateContext";
+import { cn } from "@/lib/utils";
 import { ViewModeMenu } from "./ViewModeMenu";
 
 interface MapHudProps {
   onOpenControls: () => void;
   onOpenSources: () => void;
+  isDesktop: boolean;
+  /** Set by the transit feature; the Follow button is hidden until then. */
+  follow?: { active: boolean; onToggle: () => void };
+}
+
+/** iOS Safari has no element fullscreen; hide the button where it can't work. */
+const canFullscreen = typeof document !== "undefined" && document.fullscreenEnabled === true;
+
+function Group({ children }: { children: ReactNode }) {
+  return (
+    <div className="pointer-events-auto flex flex-col items-center rounded-full border border-border/70 bg-card/95 p-0.5 shadow-lg backdrop-blur-md">
+      {children}
+    </div>
+  );
+}
+
+function RailButton({
+  label,
+  active,
+  onClick,
+  children,
+}: {
+  label: string;
+  active?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Button
+      type="button"
+      size="icon"
+      variant={active ? "default" : "ghost"}
+      aria-label={label}
+      aria-pressed={active}
+      className="h-9 w-9 rounded-full"
+      onClick={onClick}
+    >
+      {children}
+    </Button>
+  );
 }
 
 /**
- * The whole always-visible UI: one dock. Everything that is set once — time
- * window, scale, neighborhood jump, zoom, the map key, caveats — lives in the
- * control drawer so the map is what fills the screen.
+ * The always-visible controls: a slim vertical rail on the right (Mini Tokyo
+ * 3D style), grouped pills of icon-only buttons. Desktop and mobile share it;
+ * on mobile it is compact and sits above the sheet's peek.
  */
-export function MapHud({ onOpenControls, onOpenSources }: MapHudProps) {
+export function MapHud({ onOpenControls, onOpenSources, isDesktop, follow }: MapHudProps) {
   const { routePicking, routeStart, setRoutePicking } = useDataView();
   const {
-    tilted,
-    setTilted,
     walking,
     startWalk,
     stopWalk,
+    navigate,
+    city3d,
+    setCity3d,
+    eco,
+    setEco,
     setChatOpen,
+    setCaveatsOpen,
   } = useMapState();
+  const [fullscreen, setFullscreen] = useState(false);
+  useEffect(() => {
+    const sync = () => setFullscreen(document.fullscreenElement !== null);
+    document.addEventListener("fullscreenchange", sync);
+    return () => document.removeEventListener("fullscreenchange", sync);
+  }, []);
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-[168px] z-30 flex justify-center p-3 lg:bottom-0 lg:left-[380px]">
-      <div className="pointer-events-auto flex max-w-full items-center gap-1 rounded-full border border-border/70 bg-card/90 p-1 shadow-xl backdrop-blur-md">
-        <ViewModeMenu compact onOpenSources={onOpenSources} />
+    <div
+      className={cn(
+        "pointer-events-none absolute right-3 z-20 flex flex-col gap-2",
+        isDesktop
+          ? "top-3"
+          : "top-[calc(env(safe-area-inset-top)+6.5rem)] max-h-[calc(100%-6.5rem-108px)] overflow-y-auto [scrollbar-width:none]",
+      )}
+    >
+      <Group>
+        {isDesktop ? (
+          <>
+            <RailButton label="Zoom in" onClick={() => navigate("zoom-in")}>
+              <Plus className="h-4 w-4" />
+            </RailButton>
+            <RailButton label="Zoom out" onClick={() => navigate("zoom-out")}>
+              <Minus className="h-4 w-4" />
+            </RailButton>
+          </>
+        ) : null}
+        <RailButton label="Face north and flatten the map" onClick={() => navigate("north")}>
+          <Compass className="h-4 w-4" />
+        </RailButton>
+      </Group>
 
-        <Separator orientation="vertical" className="mx-0.5 h-6" />
-
-        {/* The tilt is the overhead view's business. Street level is already
-            pitched to the ceiling, so the button would only be able to undo it. */}
-        {walking ? null : (
-          <Button
-            type="button"
-            size="icon"
-            variant={tilted ? "default" : "ghost"}
-            aria-label={
-              tilted ? "Flatten the map to north-up" : "Tilt the map into 3D"
+      {canFullscreen ? (
+        <Group>
+          <RailButton
+            label={fullscreen ? "Exit full screen" : "Full screen"}
+            onClick={() =>
+              fullscreen
+                ? void document.exitFullscreen()
+                : void document.documentElement.requestFullscreen()
             }
-            aria-pressed={tilted}
-            className="h-8 w-8 shrink-0 rounded-full"
-            onClick={() => setTilted(!tilted)}
           >
-            {tilted ? (
-              <Square className="h-4 w-4" />
-            ) : (
-              <Box className="h-4 w-4" />
-            )}
-          </Button>
-        )}
+            {fullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
+          </RailButton>
+        </Group>
+      ) : null}
 
-        {/*
-          The headline control: one press puts the camera at eye level and hands
-          you the city to walk through. Named, not an icon alone — a camera icon
-          with no label was invisible to anyone who did not guess at it.
-        */}
-        <Button
-          type="button"
-          size="sm"
-          variant={walking ? "default" : "ghost"}
-          aria-label={
-            walking
-              ? "Leave street level and return to the overhead map"
-              : "Switch to the street-level camera and walk the city"
-          }
-          aria-pressed={walking}
-          className="h-8 shrink-0 gap-1.5 rounded-full px-2.5 text-[11px] font-medium"
+      <Group>
+        <RailButton label="Textured 3D city" active={city3d} onClick={() => setCity3d(!city3d)}>
+          <Building2 className="h-4 w-4" />
+        </RailButton>
+        <RailButton
+          label={walking ? "Leave street level" : "Street level"}
+          active={walking}
           onClick={() => (walking ? stopWalk() : startWalk())}
         >
           <Camera className="h-4 w-4" />
-          Street
-        </Button>
+        </RailButton>
+        {follow ? (
+          <RailButton label="Follow" active={follow.active} onClick={follow.onToggle}>
+            <Navigation className="h-4 w-4 rotate-45" />
+          </RailButton>
+        ) : null}
+        <RailButton label="Eco mode" active={eco} onClick={() => setEco(!eco)}>
+          <BatteryLow className="h-4 w-4" />
+        </RailButton>
+      </Group>
 
-        <Button
-          type="button"
-          size="icon"
-          variant={routePicking || routeStart ? "default" : "ghost"}
-          aria-label="Walking directions: pick a start and end on the map"
-          aria-pressed={routePicking !== null}
-          className="h-8 w-8 shrink-0 rounded-full"
+      <Group>
+        <ViewModeMenu iconOnly onOpenSources={onOpenSources} />
+        <RailButton
+          label="Walking directions"
+          active={routePicking !== null || routeStart !== null}
           onClick={() => setRoutePicking(routeStart ? "end" : "start")}
         >
           <Navigation className="h-4 w-4" />
-        </Button>
-
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          aria-label="Map settings"
-          className="h-8 w-8 shrink-0 rounded-full"
-          onClick={onOpenControls}
-        >
+        </RailButton>
+        <RailButton label="Filters and map settings" onClick={onOpenControls}>
           <SlidersHorizontal className="h-4 w-4" />
-        </Button>
-
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          aria-label="Ask the map"
-          className="h-8 w-8 shrink-0 rounded-full"
-          onClick={() => setChatOpen(true)}
-        >
+        </RailButton>
+        <RailButton label="Ask the map" onClick={() => setChatOpen(true)}>
           <MessageSquare className="h-4 w-4" />
-        </Button>
-      </div>
+        </RailButton>
+      </Group>
+
+      <Group>
+        <RailButton label="About the data and credits" onClick={() => setCaveatsOpen(true)}>
+          <Info className="h-4 w-4" />
+        </RailButton>
+      </Group>
     </div>
   );
 }

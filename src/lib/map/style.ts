@@ -89,9 +89,11 @@ function emptyCollection(): FeatureCollection {
 }
 
 export const DATA_SOURCES: Record<string, SourceSpecification> = {
-  neighborhoods: { type: "geojson", data: emptyCollection() },
+  // Coastline boundaries carry pier-level detail; a higher tolerance smooths
+  // them at city zooms instead of drawing a stair-stepped edge.
+  neighborhoods: { type: "geojson", data: emptyCollection(), tolerance: 1 },
   blocks: { type: "geojson", data: emptyCollection() },
-  boroughs: { type: "geojson", data: emptyCollection() },
+  boroughs: { type: "geojson", data: emptyCollection(), tolerance: 1.5 },
   emphasis: { type: "geojson", data: emptyCollection() },
   "block-selection": { type: "geojson", data: emptyCollection() },
   "walk-route": { type: "geojson", data: emptyCollection() },
@@ -179,22 +181,25 @@ export const DATA_LAYERS: LayerSpecification[] = [
     id: LAYER_IDS.neighborhoodOutline,
     type: "line",
     source: SOURCE_IDS.neighborhoods,
-    layout: { "line-join": "round" },
+    layout: { "line-join": "round", "line-cap": "round" },
     paint: {
       "line-color": "rgba(30, 41, 59, 0.5)",
-      "line-width": 0.9,
+      "line-width": ["interpolate", ["linear"], ["zoom"], 10, 0.5, 14, 1.1],
+      "line-blur": 0.3,
     },
   },
   {
     id: LAYER_IDS.boroughOutline,
     type: "line",
     source: SOURCE_IDS.boroughs,
-    layout: { "line-join": "round" },
+    layout: { "line-join": "round", "line-cap": "round" },
     paint: {
       // The county line: heavier and darker than a neighborhood edge, so the
-      // five boroughs read as the top level of the map.
-      "line-color": "rgba(15, 23, 42, 0.88)",
-      "line-width": 2.4,
+      // five boroughs read as the top level of the map. Thin at city zooms,
+      // where a 2.4 px line turned every pier into a jagged tooth.
+      "line-color": "rgba(15, 23, 42, 0.7)",
+      "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 13, 1.8, 16, 2.4],
+      "line-blur": 0.4,
     },
   },
   {

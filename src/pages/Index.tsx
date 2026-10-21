@@ -183,6 +183,7 @@ export default function Index() {
       />
 
       <MapHud
+        isDesktop={isDesktop}
         onOpenControls={() => setControlsOpen(true)}
         onOpenSources={() => setSourcesOpen(true)}
       />
@@ -223,8 +224,20 @@ export default function Index() {
       <MapPanel
         isDesktop={isDesktop}
         boundaries={data.boundaries}
+        status={
+          <MapStatusChip
+            variant="line"
+            windowId={windowId}
+            progress={data.progress}
+            isLoading={data.isLoading}
+            isError={data.isError}
+            errorMessage={data.error?.message ?? null}
+            onRetry={data.retry}
+          />
+        }
         place={selectedBoundary ? (
       <PlaceDetails
+        loading={data.isLoading}
         onSummaryTap={() => setSnap(snap === "peek" ? "half" : snap === "half" ? "full" : "peek")}
         boundary={selectedBoundary}
         block={selectedBlock}
