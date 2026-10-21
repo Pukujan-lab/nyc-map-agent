@@ -25,7 +25,8 @@ import { LngLat, type GeoJSONSource } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { NtaBoundary } from "@/lib/api/nta";
 import { formatCount, formatPercent } from "@/lib/format";
-import { blockKey } from "@/lib/geo/blocks";
+import { blockContaining, blockKey } from "@/lib/geo/blocks";
+import { eyePick } from "@/lib/map/eyePick";
 import { boroughOutlinesToGeoJson } from "@/lib/geo/boroughs";
 import { NtaIndex } from "@/lib/geo/ntaIndex";
 import { areasToGeoJson, blockPointsToGeoJson, type AreaDatum } from "@/lib/geo/areas";
@@ -494,6 +495,20 @@ export function MapView({
    * so both fallbacks are O(1) — the map stays clickable even if a layer's
    * render pass yields nothing.
    */
+  /** The block or neighborhood under a ground point (no screen query). */
+  const areaAt = useCallback(
+    (lngLat: { lat: number; lng: number }): Picked | null => {
+      if (scale === "blocks") {
+        const datum = blockByKey.get(blockKey(lngLat.lat, lngLat.lng).key) ?? blockContaining(blockByKey.values(), lngLat.lng, lngLat.lat);
+        return datum ? { kind: "block", datum } : null;
+      }
+      const code = ntaIndex?.assignCode(lngLat.lat, lngLat.lng) ?? null;
+      const datum = code ? neighborhoodByCode.get(code) : undefined;
+      return datum ? { kind: "neighborhood", datum } : null;
+    },
+    [scale, blockByKey, neighborhoodByCode, ntaIndex],
+  );
+
   const pickAt = useCallback(
     (
       x: number,
@@ -524,21 +539,9 @@ export function MapView({
         }
       }
 
-      if (scale === "blocks") {
-        const datum = blockByKey.get(blockKey(lngLat.lat, lngLat.lng).key);
-        return datum ? { kind: "block", datum } : null;
-      }
-      const code = ntaIndex?.assignCode(lngLat.lat, lngLat.lng) ?? null;
-      const datum = code ? neighborhoodByCode.get(code) : undefined;
-      return datum ? { kind: "neighborhood", datum } : null;
+      return areaAt(lngLat);
     },
-    [
-      scale,
-      blockByKey,
-      neighborhoodById,
-      neighborhoodByCode,
-      ntaIndex,
-    ],
+    [scale, blockByKey, neighborhoodById, areaAt],
   );
 
   const handleMouseMove = useCallback(
@@ -595,6 +598,41 @@ export function MapView({
       const clicked = mapRef.current?.getMap();
       const own = FEATURES.flatMap((f) => f.clickLayers ?? []).filter((id) => clicked?.getLayer(id));
       if (clicked && own.length && clicked.queryRenderedFeatures([event.point.x, event.point.y], { layers: own }).length) return;
+      // Eye level: cast the camera ray through the tap and open whatever it
+      // hits first (landmark model, storefront, building), like overhead.
+      if (walking) {
+        const hit = eyePick(event.target, event.point.x, event.point.y);
+        if (hit?.kind === "landmark") {
+          showPanel({ id: `landmark:${hit.landmark.id}`, title: hit.landmark.name, subtitle: "Landmark" });
+          return;
+        }
+        if (hit?.kind === "building") {
+          if (typeof hit.props.school === "string" && hit.props.school) {
+            showPanel({ id: `school:${hit.props.school}`, title: hit.props.school, subtitle: "School · NYC DOE (LCGMS)" });
+            return;
+          }
+          const shop = hit.props.store === 1 && hit.z < 4.5 ? signsMod.current?.storefrontAt(event.target, hit.lng, hit.lat) : null;
+          if (shop) {
+            const shops = (shop.dir ?? "").split("|").filter(Boolean);
+            showPanel({
+              id: `storefront:${shop.lng},${shop.lat}:${shop.name}`,
+              title: shop.name,
+              subtitle: `${shop.cat ? `${shop.cat} · ` : ""}© OpenStreetMap contributors`,
+              details: shops.length ? <ul className="space-y-1 text-sm">{shops.map((name) => <li key={name}>{name}</li>)}</ul> : undefined,
+            });
+            return;
+          }
+        }
+        // Anything else the ray hits (a facade, the pavement) opens the block
+        // or neighborhood it stands in, from the hit point rather than the
+        // ground far behind the facade that the click's lngLat would give.
+        if (hit) {
+          const area = areaAt({ lng: hit.lng, lat: hit.lat });
+          if (area?.kind === "block") selectBlock({ key: area.datum.key, ntaCode: area.datum.ntaCode });
+          else if (area) selectNta(area.datum.ntaCode);
+          if (area || hit.kind === "building") return;
+        }
+      }
       const school = city3dMod.current?.schoolAt(event.target, event.point.x, event.point.y);
       if (school) {
         showPanel({ id: `school:${school}`, title: school, subtitle: "School · NYC DOE (LCGMS)" });
@@ -610,7 +648,7 @@ export function MapView({
         selectNta(picked.datum.ntaCode);
       }
     },
-    [pickAt, selectBlock, selectNta, routePicking, setRoutePoint, showPanel, city3d],
+    [pickAt, selectBlock, selectNta, routePicking, setRoutePoint, showPanel, city3d, walking, areaAt],
   );
 
   const handleMoveEnd = useCallback(() => {
