@@ -204,6 +204,17 @@ export function schoolFootprints(footprints: Row[], schools: Row[]): Map<number,
   }));
 }
 
+/** Facades drawn in several materials (textures facade-<name>-2, -3). */
+export const VARIANT_FACADES = new Set<Facade>(["rowhouse", "walkup", "prewar", "modern"]);
+
+/** Stable 1..3 material variant for a building (by BBL/footprint), or 0 when the facade has one look. */
+export function facadeVariant(facade: Facade, key: string | number): number {
+  if (!VARIANT_FACADES.has(facade)) return 0;
+  let h = 2166136261;
+  for (const ch of String(key)) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  return ((h >>> 0) % 3) + 1;
+}
+
 /** Parsed OSM height in metres ("120", "120 m", "394'"), or undefined. */
 export function osmHeight(v: unknown): number | undefined {
   if (typeof v !== "string") return undefined;
@@ -318,6 +329,9 @@ async function main() {
       bldgclass: p?.bldgclass as string | undefined, floors, heightM, year, school: schoolIdx.has(i), lon: c?.[0], lat: c?.[1],
     });
     const school = schoolIdx.has(i) ? { school: schoolIdx.get(i) } : {};
+    // Neighbours of one class still differ: tan, red or dark brick, other panels.
+    const vv = facadeVariant(facade, typeof f.base_bbl === "string" ? f.base_bbl : i);
+    const variant = vv > 1 ? { v: vv } : {};
     const parts = partsOf.get(i);
     if (parts) {
       for (const pt of parts) add({
@@ -325,7 +339,7 @@ async function main() {
         tippecanoe: { layer: "buildings", minzoom: 14 },
         properties: {
           h: Math.round(pt.h * 10) / 10, base: Math.round(pt.base * 10) / 10, facade,
-          store: storefront && pt.base === 0 ? 1 : 0, ...school,
+          store: storefront && pt.base === 0 ? 1 : 0, ...school, ...variant,
         },
         geometry: pt.geom,
       }, "building-part");
@@ -335,7 +349,7 @@ async function main() {
         {
           type: "Feature",
           tippecanoe: { layer: "buildings", minzoom: 14 },
-          properties: { h: Math.round(heightM * 10) / 10, facade, store: storefront ? 1 : 0, ...school },
+          properties: { h: Math.round(heightM * 10) / 10, facade, store: storefront ? 1 : 0, ...school, ...variant },
           geometry: f.the_geom,
         },
         `building:${facade}`,

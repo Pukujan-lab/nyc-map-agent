@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classify, osmHeight, wantsWaterTower } from "./build-city-tiles";
+import { classify, facadeVariant, osmHeight, wantsWaterTower } from "./build-city-tiles";
 
 describe("classify", () => {
   it("maps PLUTO classes and heights to facades", () => {
@@ -30,5 +30,14 @@ describe("osmHeight / wantsWaterTower", () => {
     expect(wantsWaterTower({ facade: "prewar", floors: 12, year: 1925, i: 4 })).toBe(false);
     expect(wantsWaterTower({ facade: "glass", floors: 12, year: 1925, i: 3 })).toBe(false);
     expect(wantsWaterTower({ facade: "walkup", floors: 4, year: 1925, i: 3 })).toBe(false);
+  });
+});
+
+describe("facadeVariant", () => {
+  it("is stable, 1..3 for varied facades and 0 otherwise", () => {
+    expect(facadeVariant("walkup", "1000010010")).toBe(facadeVariant("walkup", "1000010010"));
+    const seen = new Set(Array.from({ length: 60 }, (_, i) => facadeVariant("rowhouse", 3000000000 + i)));
+    expect([...seen].sort()).toEqual([1, 2, 3]);
+    expect(facadeVariant("glass", "1")).toBe(0);
   });
 });
