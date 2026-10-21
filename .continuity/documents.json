@@ -1,0 +1,71 @@
+{
+  "documents": [
+    {
+      "id": "agents",
+      "keywords": [],
+      "path": "AGENTS.md",
+      "related": [],
+      "reviewed_commit": "uncommitted",
+      "reviewed_sha256": "17f5f43f3be0bfc49dd178bf8536002ec528e1b5376cf925f69aeb7ffe689419",
+      "summary": "How agents work in this repo: issue to PR to green CI, filing rules, issue-log format.",
+      "tasks": [],
+      "title": "Agent rules"
+    },
+    {
+      "id": "ai-rules",
+      "keywords": [],
+      "path": "AI_RULES.md",
+      "related": [],
+      "reviewed_commit": "f31e4f7ff5a2c8ae3166a9b7ef8613b3aad6a27d",
+      "reviewed_sha256": "fbd75536facfeb03f90aff9784652d3d022e96fb801c5e88bf989ab7b1d2e021",
+      "summary": "Which library to use for each job, banned tools, and dependency notes.",
+      "tasks": [],
+      "title": "Stack and library rules"
+    },
+    {
+      "id": "architecture",
+      "keywords": [],
+      "path": "docs/ARCHITECTURE.md",
+      "related": [],
+      "reviewed_commit": "f31e4f7ff5a2c8ae3166a9b7ef8613b3aad6a27d",
+      "reviewed_sha256": "b306425360e6e82839f8184fa001de83f300739c98d272f06dd3e6bf04627f82",
+      "summary": "Modular monolith layout, features and module boundaries.",
+      "tasks": [],
+      "title": "Architecture"
+    },
+    {
+      "id": "brief",
+      "keywords": [],
+      "path": "context/BRIEF.md",
+      "related": [],
+      "reviewed_commit": "uncommitted",
+      "reviewed_sha256": "deef8ec62e6e0f10ca25cb335d463ca30515610d9b0cab22883e71b6948aac69",
+      "summary": "The project contract: what the map agent answers and for whom.",
+      "tasks": [],
+      "title": "Product brief"
+    },
+    {
+      "id": "modules",
+      "keywords": [],
+      "path": "docs/MODULES.md",
+      "related": [],
+      "reviewed_commit": "f31e4f7ff5a2c8ae3166a9b7ef8613b3aad6a27d",
+      "reviewed_sha256": "baa624fe80c836bde929727db7bb81641e7ff36e6e49df02b85836eca675f060",
+      "summary": "Per-module responsibilities and ownership.",
+      "tasks": [],
+      "title": "Modules"
+    },
+    {
+      "id": "readme",
+      "keywords": [],
+      "path": "README.md",
+      "related": [],
+      "reviewed_commit": "f31e4f7ff5a2c8ae3166a9b7ef8613b3aad6a27d",
+      "reviewed_sha256": "9dfc0738020b2d1775d5341f358c970881f5c12f8f8b24d797a63db73d2d2ecb",
+      "summary": "What the app is and how to run it.",
+      "tasks": [],
+      "title": "README"
+    }
+  ],
+  "schema": "project-continuity.documents.v1"
+}
