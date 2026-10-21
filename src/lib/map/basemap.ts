@@ -66,6 +66,14 @@ export function installDataLayers(map: MapLibreMap): void {
   for (const layer of map.getStyle().layers ?? []) {
     if (layer.type === "symbol") map.moveLayer(layer.id);
   }
+
+  // The filled areas tint the ground, not the streets: they sit under the
+  // basemap's roads, so zoomed in a block reads as a tinted block with its
+  // streets still drawn instead of one flat tan sheet (#46).
+  const firstRoad = (map.getStyle().layers ?? []).find(
+    (l) => l.type === "line" && "source-layer" in l && l["source-layer"] === "transportation",
+  )?.id;
+  if (firstRoad && map.getLayer(LAYER_IDS.areaFill)) map.moveLayer(LAYER_IDS.areaFill, firstRoad);
 }
 
 /**

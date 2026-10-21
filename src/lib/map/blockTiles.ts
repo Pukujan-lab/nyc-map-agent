@@ -51,7 +51,13 @@ export async function installBlockTiles(map: MapLibreMap): Promise<boolean> {
       layout: { visibility: "none" },
       paint: {
         "fill-color": ["interpolate", ["linear"], ["coalesce", ["feature-state", "t"], 0], ...CHOROPLETH_RAMP.flat()] as never,
-        "fill-opacity": ["case", [">", ["coalesce", ["feature-state", "t"], 0], 0], 0.62, 0.06],
+        // Same zoom fade as area-fill (#46); empty blocks barely tinted.
+        "fill-opacity": [
+          "interpolate", ["linear"], ["zoom"],
+          14, ["case", [">", ["coalesce", ["feature-state", "t"], 0], 0], 0.62, 0.06],
+          16, ["case", [">", ["coalesce", ["feature-state", "t"], 0], 0], 0.42, 0.04],
+          18, ["case", [">", ["coalesce", ["feature-state", "t"], 0], 0], 0.22, 0.02],
+        ] as never,
         "fill-outline-color": "rgba(51, 65, 85, 0.35)",
       },
     },
