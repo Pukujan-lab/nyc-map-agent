@@ -1,0 +1,31 @@
+name: nightly-ingest
+on:
+  schedule:
+    - cron: "30 7 * * *" # 03:30 New York (EDT)
+  workflow_dispatch:
+    inputs:
+      sources:
+        description: "Space-separated registry ids (blank = all)"
+        required: false
+        default: ""
+concurrency: { group: ingest, cancel-in-progress: false }
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      OCTO_API_KEY: ${{ secrets.OCTO_API_KEY }}
+      OCTO_WORKSPACE_ID: ${{ secrets.OCTO_WORKSPACE_ID }}
+      SOCRATA_KEY_ID: ${{ secrets.SOCRATA_KEY_ID }}
+      SOCRATA_KEY_SECRET: ${{ secrets.SOCRATA_KEY_SECRET }}
+      SOCRATA_APP_TOKEN: ${{ secrets.SOCRATA_APP_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:migrate
+      - run: pnpm exec tsx scripts/ingest.ts ${{ github.event.inputs.sources }}
+      - if: always()
+        run: pnpm db:refresh

@@ -43,18 +43,35 @@ export const HOME_VIEW = {
   blockZoom: 13,
 } as const;
 
-/** How coarse the map draws: whole neighborhoods, or ~300 m squares. */
-export type MapScale = "neighborhoods" | "blocks";
+/** The geographic unit the map aggregates to. */
+export type MapScale = "blocks" | "neighborhoods" | "districts" | "boroughs";
 
-export const MAP_SCALES: MapScale[] = ["neighborhoods", "blocks"];
+export const MAP_SCALES: MapScale[] = ["blocks", "neighborhoods", "districts", "boroughs"];
 
 export const SCALE_LABELS: Record<MapScale, string> = {
-  neighborhoods: "Neighborhoods",
-  blocks: "Blocks",
+  blocks: "Block (~300 m)",
+  neighborhoods: "Neighborhood (NTA 2020)",
+  districts: "Community district",
+  boroughs: "Borough",
 };
 
 export function parseMapScale(value: string | null): MapScale {
-  return value === "blocks" ? "blocks" : "neighborhoods";
+  return MAP_SCALES.includes(value as MapScale) ? (value as MapScale) : "neighborhoods";
+}
+
+/** How areas are drawn. `fill` is a flat choropleth; `columns` the 3D glass columns. */
+export type MapStyleId = "fill" | "columns" | "heat";
+
+export const MAP_STYLES: MapStyleId[] = ["fill", "columns", "heat"];
+
+export const MAP_STYLE_LABELS: Record<MapStyleId, string> = {
+  fill: "Filled areas",
+  columns: "3D columns",
+  heat: "Heatmap",
+};
+
+export function parseMapStyle(value: string | null): MapStyleId {
+  return MAP_STYLES.includes(value as MapStyleId) ? (value as MapStyleId) : "fill";
 }
 
 /**

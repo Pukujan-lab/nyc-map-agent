@@ -70,11 +70,11 @@ const gridRow = z.object({
   n: z.coerce.number().finite().nullish(),
 });
 
-function emptyCounts(sourceId: string, sources: SoqlSource[]): SourceCounts {
+export function emptyCounts(sourceId: string, sources: SoqlSource[]): SourceCounts {
   return { sourceId, byNta: {}, blocks: {}, total: 0, truncated: false, sources };
 }
 
-function addCell(
+export function addCell(
   out: SourceCounts,
   index: NtaIndex,
   row: number,

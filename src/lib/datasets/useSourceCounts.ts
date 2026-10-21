@@ -5,7 +5,14 @@ import { NtaIndex } from "@/lib/geo/ntaIndex";
 import type { AggregateResult } from "@/lib/geo/types";
 import { windowBounds, type WindowId } from "@/lib/windows";
 import { countsFromAggregate, fetchSourceCounts, type SourceCounts } from "./fetchSource";
-import { SOURCE_BY_ID } from "./registry";
+import { DATA_BACKEND, fetchOctoCounts, type DataFilters } from "./backend";
+import { SOURCE_BY_ID, type SourceConfig } from "./registry";
+
+const EMPTY_FILTERS: DataFilters = { categories: {}, severity: [] };
+
+function isWindowed(source: SourceConfig): boolean {
+  return source.kind === "builtin" || Boolean(source.dateField);
+}
 
 export interface SourceStatus {
   isLoading: boolean;
@@ -28,19 +35,24 @@ export function useSourceCounts(params: {
   boundaries: NtaBoundary[] | null;
   noise: AggregateResult | null;
   crashes: AggregateResult | null;
+  /** Octo backend only: borough / category / severity filters. */
+  filters?: DataFilters;
 }): SourceCountsState {
   const { enabled, windowId, boundaries, noise, crashes } = params;
+  const filters = params.filters ?? EMPTY_FILTERS;
+  const octo = DATA_BACKEND === "octo";
   const index = useMemo(() => (boundaries ? new NtaIndex(boundaries) : null), [boundaries]);
   const remote = enabled
     .map((id) => SOURCE_BY_ID[id])
-    .filter((source) => source && source.kind !== "builtin");
+    .filter((source) => source && (octo || source.kind !== "builtin"));
 
   const results = useQueries({
     queries: remote.map((source) => ({
       queryKey: [
         "source-counts",
         source.id,
-        source.dateField ? windowId : "static",
+        isWindowed(source) ? windowId : "static",
+        octo ? JSON.stringify(filters) : "socrata",
       ],
       enabled: index !== null,
       staleTime: 30 * 60 * 1000,
@@ -48,6 +60,8 @@ export function useSourceCounts(params: {
       retry: 1,
       queryFn: ({ signal }: { signal: AbortSignal }) => {
         if (!index) throw new Error("Neighborhood boundaries are not loaded yet.");
+        if (octo) return fetchOctoCounts(source, windowId, filters, index, signal);
+        if (source.kind === "builtin") throw new Error("Builtin sources come from the worker.");
         return fetchSourceCounts(source, windowBounds(windowId), index, signal);
       },
     })),
@@ -71,15 +85,15 @@ export function useSourceCounts(params: {
         error: result?.error ? result.error.message : null,
       };
     });
-    if (enabled.includes("noise")) {
+    if (!octo && enabled.includes("noise")) {
       counts.noise = noise ? countsFromAggregate("noise", noise) : undefined;
       status.noise = { isLoading: !noise, error: null };
     }
-    if (enabled.includes("crashes")) {
+    if (!octo && enabled.includes("crashes")) {
       counts.crashes = crashes ? countsFromAggregate("crashes", crashes) : undefined;
       status.crashes = { isLoading: !crashes, error: null };
     }
     return { counts, status };
     // `results` is a new array every render; key the memo on what it holds.
-  }, [resultsKey, enabledKey, noise, crashes]);
+  }, [resultsKey, enabledKey, noise, crashes, octo]);
 }

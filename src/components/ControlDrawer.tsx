@@ -29,12 +29,15 @@ import type { AggregationProgress } from "@/lib/geo/types";
 import {
   HOME_VIEW,
   MAP_SCALES,
+  MAP_STYLE_LABELS,
+  MAP_STYLES,
   SCALE_LABELS,
   type MapScale,
+  type MapStyleId,
 } from "@/lib/layers";
+import type { AreaDatum } from "@/lib/geo/areas";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { useMediaQuery } from "@/lib/useMediaQuery";
-import { cn } from "@/lib/utils";
 import { windowBounds } from "@/lib/windows";
 import type { ViewInfo } from "@/lib/layers";
 import { ViewModeMenu } from "./ViewModeMenu";
@@ -64,6 +67,7 @@ interface ControlDrawerProps {
   /** Areas on the current scale with at least one record. */
   areasWithData: number;
   view?: ViewInfo;
+  areas: AreaDatum[];
   onOpenSources: () => void;
 }
 
@@ -78,50 +82,66 @@ function Section({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function ScaleToggle() {
-  const { scale, setScale, flyTo } = useMapState();
+function UnitAndStyle() {
+  const { scale, setScale, mapStyle, setMapStyle, flyTo } = useMapState();
 
   const changeScale = (next: MapScale) => {
     if (next === scale) return;
     setScale(next);
-    // Switching scale is a view change: frame the city so the chosen
-    // granularity is actually visible.
+    // A unit change is a view change: frame the city so it is visible.
     flyTo({
       lon: HOME_VIEW.lon,
       lat: HOME_VIEW.lat,
-      zoom:
-        next === "blocks"
-          ? HOME_VIEW.blockZoom
-          : HOME_VIEW.neighborhoodZoom,
+      zoom: next === "blocks" ? HOME_VIEW.blockZoom : next === "boroughs" ? 10 : HOME_VIEW.neighborhoodZoom,
     });
   };
 
   return (
-    <div
-      role="group"
-      aria-label="Map scale"
-      className="flex w-full rounded-lg border border-border/60 bg-muted/40 p-0.5"
-    >
-      {MAP_SCALES.map((id) => {
-        const activeScale = id === scale;
-        return (
-          <button
-            key={id}
-            type="button"
-            aria-pressed={activeScale}
-            onClick={() => changeScale(id)}
-            className={cn(
-              "flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              activeScale
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {SCALE_LABELS[id]}
-          </button>
-        );
-      })}
+    <div className="grid grid-cols-2 gap-2">
+      <Select value={scale} onValueChange={(v) => changeScale(v as MapScale)}>
+        <SelectTrigger aria-label="Map unit" className="h-8 text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {MAP_SCALES.map((id) => (
+            <SelectItem key={id} value={id}>
+              {SCALE_LABELS[id]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select value={mapStyle} onValueChange={(v) => setMapStyle(v as MapStyleId)}>
+        <SelectTrigger aria-label="Map style" className="h-8 text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {MAP_STYLES.map((id) => (
+            <SelectItem key={id} value={id}>
+              {MAP_STYLE_LABELS[id]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
+  );
+}
+
+/** The highest areas at the chosen unit, so the map can be read as a list too. */
+function TopAreas({ areas }: { areas: AreaDatum[] }) {
+  const top = [...areas].filter((a) => a.value > 0).sort((x, y) => y.value - x.value).slice(0, 8);
+  if (!top.length) return null;
+  return (
+    <ol className="space-y-0.5 text-[11px]">
+      {top.map((a, i) => (
+        <li key={a.code} className="flex items-baseline justify-between gap-2">
+          <span className="truncate">
+            <span className="mr-1 tabular-nums text-muted-foreground">{i + 1}.</span>
+            {a.name}
+          </span>
+          <span className="tabular-nums text-muted-foreground">{formatCount(Math.round(a.value))}</span>
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -137,6 +157,7 @@ export function ControlDrawer({
   maxValue,
   areasWithData,
   view,
+  areas,
   onOpenSources,
 }: ControlDrawerProps) {
   const {
@@ -185,8 +206,8 @@ export function ControlDrawer({
             </Button>
           </Section>
 
-          <Section label="Scale">
-            <ScaleToggle />
+          <Section label="Unit and style">
+            <UnitAndStyle />
           </Section>
 
           <Section label="Time window">
@@ -255,6 +276,10 @@ export function ControlDrawer({
                 Reset
               </Button>
             </div>
+          </Section>
+
+          <Section label={`Top ${SCALE_LABELS[scale].toLowerCase()}s`}>
+            <TopAreas areas={areas} />
           </Section>
 
           <Legend

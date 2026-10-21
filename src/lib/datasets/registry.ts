@@ -43,6 +43,26 @@ interface BaseSource {
    * uses 100 − percentile. Users can flip it per source (URL `flip`).
    */
   polarity: Polarity;
+  /** Plain-language guide shown inside the sources drawer. */
+  guide: SourceGuide;
+  /** Filters this source supports when the Octo backend serves it. */
+  filters?: SourceFilters;
+}
+
+export interface SourceGuide {
+  /** What one record is. */
+  what: string;
+  /** What to keep in mind before reading the map. */
+  caveats: string;
+  /** How often the city updates it. */
+  cadence: string;
+}
+
+export interface SourceFilters {
+  /** Records carry a category (complaint type) the user can pick from. */
+  categories?: boolean;
+  /** Records carry a severity (crashes: fatal / injury / no injury). */
+  severity?: boolean;
 }
 
 /**
@@ -90,6 +110,12 @@ export type SourceConfig = BuiltinSource | GridSource | GeometrySource;
 export const SOURCES: SourceConfig[] = [
   {
     id: "noise",
+    guide: {
+      what: "One 311 call or app report about noise, with its complaint type (residential, street, commercial\u2026).",
+      caveats: "Counts reports, not decibels. Some areas call 311 far more than others.",
+      cadence: "Daily",
+    },
+    filters: { categories: true },
     polarity: "worse",
     kind: "builtin",
     builtin: "noise",
@@ -103,7 +129,12 @@ export const SOURCES: SourceConfig[] = [
   },
   {
     id: "311",
-    polarity: "worse",
+    guide: {
+      what: "Any 311 service request: heat, parking, sanitation, noise and more.",
+      caveats: "Reporting habits vary by neighborhood; one problem can get many calls.",
+      cadence: "Daily",
+    },
+        polarity: "worse",
     kind: "grid",
     label: "All 311 service requests",
     shortLabel: "311 (all)",
@@ -119,6 +150,12 @@ export const SOURCES: SourceConfig[] = [
   },
   {
     id: "crashes",
+    guide: {
+      what: "A police-reported motor vehicle collision, with injuries and deaths.",
+      caveats: "Only crashes with a police report. The city publishes with a lag of weeks to months.",
+      cadence: "Daily, with a reporting lag",
+    },
+    filters: { severity: true },
     polarity: "worse",
     kind: "builtin",
     builtin: "crashes",
@@ -132,6 +169,11 @@ export const SOURCES: SourceConfig[] = [
   },
   {
     id: "hpd",
+    guide: {
+      what: "A Housing Maintenance Code violation issued after an HPD inspection.",
+      caveats: "Inspections follow tenant complaints, so buildings with active tenants show more.",
+      cadence: "Daily",
+    },
     polarity: "worse",
     kind: "grid",
     label: "HPD housing violations",
@@ -148,6 +190,11 @@ export const SOURCES: SourceConfig[] = [
   },
   {
     id: "pluto-units",
+    guide: {
+      what: "Residential units on each tax lot, from MapPLUTO.",
+      caveats: "A snapshot of the building stock, not a trend. Higher means denser housing.",
+      cadence: "Several releases a year",
+    },
     polarity: "better",
     kind: "grid",
     label: "Residential units (PLUTO)",
@@ -164,6 +211,11 @@ export const SOURCES: SourceConfig[] = [
   },
   {
     id: "trees",
+    guide: {
+      what: "A living street tree counted by volunteers in the 2015 census.",
+      caveats: "From 2015; trees planted or lost since are missing.",
+      cadence: "One-time census (2015)",
+    },
     polarity: "better",
     kind: "grid",
     label: "Street trees (2015 census)",
@@ -180,6 +232,11 @@ export const SOURCES: SourceConfig[] = [
   },
   {
     id: "ramps",
+    guide: {
+      what: "A surveyed pedestrian curb ramp.",
+      caveats: "Presence only, not condition or compliance.",
+      cadence: "Irregular DOT updates",
+    },
     polarity: "better",
     kind: "geometry",
     label: "Pedestrian ramps",
@@ -194,6 +251,11 @@ export const SOURCES: SourceConfig[] = [
   },
   {
     id: "speed-humps",
+    guide: {
+      what: "A speed hump segment installed under Vision Zero.",
+      caveats: "Counted once per segment, whatever its length.",
+      cadence: "Irregular DOT updates",
+    },
     polarity: "better",
     kind: "geometry",
     label: "Speed humps",
@@ -208,6 +270,11 @@ export const SOURCES: SourceConfig[] = [
   },
   {
     id: "sip-corridors",
+    guide: {
+      what: "A Vision Zero Street Improvement Project corridor.",
+      caveats: "Shows where redesigns happened, not their effect.",
+      cadence: "Irregular DOT updates",
+    },
     polarity: "better",
     kind: "geometry",
     label: "Street improvement corridors",
@@ -222,6 +289,11 @@ export const SOURCES: SourceConfig[] = [
   },
   {
     id: "sip-intersections",
+    guide: {
+      what: "A Vision Zero Street Improvement Project intersection.",
+      caveats: "Shows where redesigns happened, not their effect.",
+      cadence: "Irregular DOT updates",
+    },
     polarity: "better",
     kind: "grid",
     label: "Street improvement intersections",

@@ -1,3 +1,4 @@
+import { SCALE_LABELS } from "@/lib/layers";
 import { Card } from "@/components/ui/card";
 import { formatCount } from "@/lib/format";
 import { SOURCE_BY_ID } from "@/lib/datasets/registry";
@@ -49,7 +50,7 @@ export function LegendContent({
   areasWithData,
   view,
 }: LegendProps) {
-  const { window: windowId, setCaveatsOpen } = useMapState();
+  const { window: windowId, setCaveatsOpen, mapStyle } = useMapState();
   const { shortLabel } = windowBounds(windowId);
 
   return (
@@ -63,14 +64,29 @@ export function LegendContent({
         </div>
       </div>
 
-      <p className="mt-2 text-[11px] leading-snug">
-        Taller = more. Every area is drawn as see-through glass, so the streets
-        stay readable underneath and no colour is doing any of the work.
-      </p>
+      {mapStyle === "columns" ? (
+        <p className="mt-2 text-[11px] leading-snug">
+          Taller = more. Every area is drawn as see-through glass, so the streets
+          stay readable underneath.
+        </p>
+      ) : mapStyle === "heat" ? (
+        <p className="mt-2 text-[11px] leading-snug">
+          Brighter = more records nearby. The heatmap blends blocks, so use it for
+          hot spots, not exact counts.
+        </p>
+      ) : (
+        <div className="mt-2 space-y-1">
+          {/* Same stops as CHOROPLETH_RAMP in src/lib/map/style.ts (ColorBrewer YlOrRd). */}
+          <div className="h-2 rounded-full bg-[linear-gradient(to_right,#ffffcc,#fed976,#fd8d3c,#e31a1c,#800026)]" />
+          <div className="flex justify-between text-[10px] text-muted-foreground">
+            <span>fewer</span>
+            <span>more</span>
+          </div>
+        </div>
+      )}
       <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
-        Height = {view ? view.unit : LAYER_METRICS[layer].value} · peak{" "}
-        {formatCount(maxValue)} · {formatCount(areasWithData)}{" "}
-        {scale === "blocks" ? "~300 m blocks" : "neighborhoods"} with records
+        {view ? view.unit : LAYER_METRICS[layer].value} · peak {formatCount(maxValue)} ·{" "}
+        {formatCount(areasWithData)} {SCALE_LABELS[scale].toLowerCase()} areas with records
       </p>
 
       {view ? (
