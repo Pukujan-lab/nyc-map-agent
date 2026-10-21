@@ -30,7 +30,7 @@ import {
   neighborhoodsToGeoJson,
 } from "@/lib/map/geojson";
 import { LAYER_IDS, SOURCE_IDS, buildFallbackStyle } from "@/lib/map/style";
-import type { WalkingRoute } from "@/lib/api/routing";
+import { fetchNearestStreet, type WalkingRoute } from "@/lib/api/routing";
 import { useDataView } from "@/lib/store/DataViewContext";
 import type { CameraOptions, Map as MaplibreMapInstance } from "maplibre-gl";
 import {
@@ -41,6 +41,7 @@ import {
   LOOK_DEG_PER_PX,
   poseAlongRoute,
   resolveWalkInput,
+  snapToStreet,
   stepPose,
   WALK_IDLE,
   WALK_KEYS,
@@ -50,6 +51,22 @@ import {
   WALK_SPEED,
   type WalkInput,
 } from "@/lib/map/walk";
+
+/** Basemap road classes a pedestrian can stand in (no motorways, rail or ferries). */
+const STREET_CLASSES = new Set(["minor", "service", "tertiary", "secondary", "primary", "trunk", "pedestrian", "living_street"]);
+
+/** Street centrelines from the basemap's loaded vector tiles, as [lon, lat] lines. */
+function streetLines(map: MaplibreMapInstance): Array<Array<[number, number]>> {
+  if (!map.getSource("openmaptiles")) return [];
+  const lines: Array<Array<[number, number]>> = [];
+  for (const f of map.querySourceFeatures("openmaptiles", { sourceLayer: "transportation" })) {
+    if (!STREET_CLASSES.has(String(f.properties?.class)) || f.properties?.brunnel === "tunnel") continue;
+    const g = f.geometry;
+    if (g.type === "LineString") lines.push(g.coordinates as Array<[number, number]>);
+    else if (g.type === "MultiLineString") lines.push(...(g.coordinates as Array<Array<[number, number]>>));
+  }
+  return lines;
+}
 
 /** The walker's eye: where they stand, which way they face, how far they look up or down. */
 interface Eye {
@@ -746,9 +763,28 @@ export function MapView({
             center.lat,
           ]);
 
-    const eye: Eye = { lon: target[0], lat: target[1], bearing: map.getBearing(), pitch: WALK_PITCH };
+    // Stand in the middle of the nearest street, facing along it: a block
+    // centre or the map centre can be inside a building footprint.
+    const snapped = snapToStreet(target, streetLines(map), map.getBearing());
+    const eye: Eye = snapped
+      ? { lon: snapped.lon, lat: snapped.lat, bearing: snapped.bearing, pitch: WALK_PITCH }
+      : { lon: target[0], lat: target[1], bearing: map.getBearing(), pitch: WALK_PITCH };
     eyeRef.current = eye;
     map.easeTo({ ...eyeCamera(map, eye), duration: reducedMotion ? 0 : 900 });
+    if (!snapped) {
+      // No road tiles in view yet (e.g. entering from the citywide map): ask OSRM.
+      const controller = new AbortController();
+      fetchNearestStreet({ lon: target[0], lat: target[1] }, controller.signal)
+        .then((p) => {
+          if (!p || eyeRef.current !== eye) return;
+          eye.lon = p.lon;
+          eye.lat = p.lat;
+          const aligned = snapToStreet([p.lon, p.lat], streetLines(map), eye.bearing, 30);
+          if (aligned) eye.bearing = aligned.bearing;
+          map.jumpTo(eyeCamera(map, eye));
+        })
+        .catch(() => {});
+    }
     setWalkPlace(describeAtRef.current(target[1], target[0]));
     // `describeAt` is deliberately read through a ref: its identity changes
     // with the data, and re-running this would yank the camera back.

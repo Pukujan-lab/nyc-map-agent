@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   approachBearing,
+  snapToStreet,
   clampLookPitch,
   EYE_HEIGHT_M,
   WALK_PITCH,
@@ -160,5 +161,26 @@ describe("poseAlongRoute", () => {
     const end = poseAlongRoute(route, 10_000);
     expect(end?.done).toBe(true);
     expect(end?.lon).toBeCloseTo(-73.979, 6);
+  });
+});
+
+describe("snapToStreet", () => {
+  // An east-west street ~55 m north of the point, and a far north-south one.
+  const street: Array<[number, number]> = [[-73.95, 40.7005], [-73.94, 40.7005]];
+  const far: Array<[number, number]> = [[-73.93, 40.69], [-73.93, 40.71]];
+  it("lands on the nearest centreline", () => {
+    const s = snapToStreet([-73.945, 40.7], [street, far], 0);
+    expect(s).not.toBeNull();
+    expect(s!.lat).toBeCloseTo(40.7005, 6);
+    expect(s!.lon).toBeCloseTo(-73.945, 6);
+    expect(s!.distance).toBeGreaterThan(50);
+    expect(s!.distance).toBeLessThan(60);
+  });
+  it("faces along the street, the way closest to the current heading", () => {
+    expect(snapToStreet([-73.945, 40.7], [street], 80)!.bearing).toBeCloseTo(90, 0);
+    expect(snapToStreet([-73.945, 40.7], [street], 260)!.bearing).toBeCloseTo(270, 0);
+  });
+  it("gives up beyond the search radius", () => {
+    expect(snapToStreet([-73.945, 40.7], [street], 0, 20)).toBeNull();
   });
 });
