@@ -3,7 +3,7 @@ import { octoQuery } from "./_lib/octo";
 import { csv, fail, json, parseQuery, sourceId, windowParam } from "./_lib/http";
 import { blocksQuery, LEVELS } from "./_lib/queries";
 
-const Query = z.object({
+export const Query = z.object({
   source: sourceId,
   window: windowParam,
   level: z.enum(LEVELS as [string, ...string[]]).default("block"),

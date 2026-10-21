@@ -2,7 +2,7 @@ import { z } from "zod";
 import { octoQuery } from "./_lib/octo";
 import { fail, json, parseQuery } from "./_lib/http";
 
-const Query = z.object({
+export const Query = z.object({
   dataset: z.enum(["noise", "crashes"]),
   window: z.enum(["90d", "12mo"]).default("12mo"),
 });
