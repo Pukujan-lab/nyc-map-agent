@@ -10,12 +10,12 @@ let dir: string;
 let config: ServerConfig;
 
 const healthyRunner: Runner = {
-  async run(cmd, args, opts) {
-    if (cmd === "git" && args[0] === "rev-parse") return { code: 0, output: `${SHA}\n` };
-    if (cmd === "docker" && args[0] === "inspect" && args.includes("{{.Config.Image}}")) return { code: 0, output: "nyc-map-agent:old\n" };
-    if (cmd === "docker" && args[0] === "inspect") return { code: 0, output: "healthy\n" };
+  run(cmd, args, opts) {
+    if (cmd === "git" && args[0] === "rev-parse") return Promise.resolve({ code: 0, output: `${SHA}\n` });
+    if (cmd === "docker" && args[0] === "inspect" && args.includes("{{.Config.Image}}")) return Promise.resolve({ code: 0, output: "nyc-map-agent:old\n" });
+    if (cmd === "docker" && args[0] === "inspect") return Promise.resolve({ code: 0, output: "healthy\n" });
     opts?.onLine?.("line");
-    return { code: 0, output: "line" };
+    return Promise.resolve({ code: 0, output: "line" });
   },
 };
 

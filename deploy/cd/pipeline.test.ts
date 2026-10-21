@@ -14,13 +14,13 @@ function fakeRunner(script: (cmd: string, args: string[]) => RunResult | undefin
   const calls: string[] = [];
   return {
     calls,
-    async run(cmd, args, opts?: RunOptions) {
+    run(cmd, args, opts?: RunOptions) {
       const env = Object.entries(opts?.env ?? {}).map(([k, v]) => `${k}=${v}`).join(" ");
       calls.push(`${[cmd, ...args].join(" ")}${env ? ` [${env}]` : ""}`);
       const out = script(cmd, args);
-      if (out) return out;
+      if (out) return Promise.resolve(out);
       opts?.onLine?.("fake output");
-      return { code: 0, output: "fake output" };
+      return Promise.resolve({ code: 0, output: "fake output" });
     },
   };
 }
