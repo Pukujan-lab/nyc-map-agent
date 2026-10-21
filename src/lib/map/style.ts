@@ -41,6 +41,9 @@ export const SOURCE_IDS = {
   blockPoints: "block-points",
 } as const;
 
+/** Filled-areas opacity: strong overview, a tint once streets matter. */
+export const FILL_OPACITY = ["interpolate", ["linear"], ["zoom"], 14, 0.62, 16, 0.42, 18, 0.22] as never;
+
 export const LAYER_IDS = {
   basemap: "osm-raster",
   buildings: "basemap-buildings",
@@ -107,7 +110,8 @@ export const DATA_LAYERS: LayerSpecification[] = [
     type: "fill",
     source: SOURCE_IDS.areas,
     layout: { visibility: "none" },
-    paint: { "fill-color": rampExpression, "fill-opacity": 0.62 },
+    // Lighter as you zoom in, so streets and buildings show through (#46).
+    paint: { "fill-color": rampExpression, "fill-opacity": FILL_OPACITY },
   },
   {
     id: LAYER_IDS.areaColumns,
