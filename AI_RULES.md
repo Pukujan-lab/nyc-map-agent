@@ -66,6 +66,9 @@ Dependency notes:
 - Walking directions are one `fetch` to OSRM (`src/lib/api/routing.ts`). Typed A/B addresses use `downshift` 9.4.0 (MIT) `useCombobox` over NYC Planning GeoSearch (`src/lib/api/geosearch.ts`, keyless Pelias autocomplete); map-click picking stays.
 - Dataset registry: every Socrata map source is one entry in `src/lib/datasets/registry.ts`. Add a source there; do not write a per-dataset module.
 
+- **Architecture**: the app is a modular monolith; read `docs/ARCHITECTURE.md` first. Features live in `src/features/<name>/` and never import each other.
+- **three.js (approved)**: only for 3D models, only through the one shared MapLibre custom layer module (`src/lib/map/threeLayer.ts` / `streetSigns.ts`), same canvas. deck.gl stays banned. Enforced by dependency-cruiser.
+
 ## Data and correctness rules
 
 - **Every number shown in chat or on the map comes from a query.** The model never computes or recalls a figure; it calls `query_data` and reports the returned rows. If a query fails, say so — do not estimate.
