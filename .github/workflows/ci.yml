@@ -95,8 +95,7 @@ jobs:
         run: pnpm e2e
   deploy:
     needs: [check, size, deps, lint, api, e2e]
-    # Rollout guard: Task 13 removes this line once the stack is bootstrapped.
-    if: false
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     concurrency:

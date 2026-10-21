@@ -80,7 +80,7 @@ export function LiveCard({
               : pendingAction
                 ? "Waiting for the deploy server…"
                 : current
-                  ? "Deploys run on prod-1 and swap the live image on success."
+                  ? "Deploys run on gravebuster and swap the live image on success."
                   : "No previous image to roll back to."}
           </p>
           <div className="order-1 flex flex-col gap-2 sm:order-2 sm:flex-row sm:items-center">
