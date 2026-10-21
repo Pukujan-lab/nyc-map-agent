@@ -230,7 +230,7 @@ export function buildingParts(footprints: Row[]): Map<number, Part[]> {
   execFileSync("osmium", ["export", pbf, "-f", "geojsonseq", "-o", seq, "--overwrite"], { stdio: ["ignore", "ignore", "inherit"] });
   const parts: Array<{ base: number; h: number; geom: unknown }> = [];
   for (const line of readFileSync(seq, "utf8").split("\n")) {
-    const t = line.replace(/^\x1e/, "").trim();
+    const t = line.split(String.fromCharCode(30)).join("").trim();
     if (!t) continue;
     const f = JSON.parse(t) as { geometry: { type: string }; properties: Record<string, unknown> };
     const pr = f.properties;
