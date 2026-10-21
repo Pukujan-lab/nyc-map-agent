@@ -66,6 +66,7 @@
 Create `server/node.healthz.test.ts`. The root Hono app is built inside `node.ts`, which also calls `serve()`, so extract nothing yet — test the behaviour by importing a small exported factory instead. Change `server/node.ts` to export `createRoot()` in step 3; the test imports it.
 
 ```ts
+import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { createRoot } from "./node";
 
@@ -76,9 +77,13 @@ describe("root app", () => {
     expect(await res.json()).toEqual({ ok: true });
   });
 
-  it("still answers unknown paths with the SPA shell when dist exists", async () => {
+  it("serves the SPA shell for a client route when dist exists", async () => {
+    // `serveStatic` resolves its root against the working directory, which is the
+    // repo root under vitest. CI checks out without dist, so the expectation
+    // follows what is on disk rather than pretending the build always ran.
+    const built = existsSync("dist/index.html");
     const res = await createRoot().fetch(new Request("http://x/some/client/route"));
-    expect([200, 404]).toContain(res.status);
+    expect(res.status).toBe(built ? 200 : 404);
   });
 });
 ```
@@ -2044,10 +2049,10 @@ SOCRATA_KEY_SECRET=
 
 Run:
 ```bash
-cd deploy && NYC_MAP_IMAGE=nyc-map-agent:test CD_HOST_ENV_FILE=./.env.example docker compose -f docker-compose.yml config >/dev/null && echo ok
+cd deploy && touch .env && CD_HOST_ENV_FILE="$PWD/.env" NYC_MAP_IMAGE=nyc-map-agent:test docker compose -f docker-compose.yml config >/dev/null && rm .env && echo ok
 ```
-Expected: `ok`. (`CD_HOST_ENV_FILE` points at a file that exists locally so the
-required env file resolves; the value is irrelevant to the rendered config.)
+Expected: `ok`. The throwaway `.env` satisfies the required `env_file` entry; it is
+git-ignored and removed by the same command.
 
 - [ ] **Step 9: Commit**
 
@@ -2061,8 +2066,9 @@ git commit -m "feat(deploy): three-container stack and edge router"
 ### Task 10: Dashboard integration
 
 **Files:**
-- Modify: `deploy/dashboard/` (ABA output)
-- Modify: `deploy/dashboard/vite.config.ts`
+- Create: `deploy/dashboard/` (ABA output, copied from `.aba-results/`)
+- Delete: `deploy/dashboard/src/lib/demo.ts`, `deploy/dashboard/src/components/made-with-dyad.tsx`
+- Modify: `deploy/dashboard/src/lib/api.ts`, `deploy/dashboard/src/pages/Index.tsx`
 - Create: `deploy/dashboard/README.md`
 - Modify: `tsconfig.json`
 - Modify: `knip.json`
@@ -2072,50 +2078,66 @@ git commit -m "feat(deploy): three-container stack and edge router"
 - Consumes: the `/deploy/api/*` contract in the spec.
 - Produces: `deploy/dashboard/dist` baked into `nyc-map-edge`.
 
-- [ ] **Step 1: Pull the ABA run**
+- [ ] **Step 1: Copy the ABA output into `deploy/dashboard/`**
 
-Wait for the queued run to finish, then pull it:
-
-```bash
-cd D:/development/app-builder-automation
-node scripts/aba.mjs wait 20261021-160252-nyc-map-deploy-dashboard --timeout 7200
-node scripts/aba.mjs pull 20261021-160252-nyc-map-deploy-dashboard --dest D:/development/nyc-map-agent/.aba-results
-```
-
-Then copy the workspace (not `node_modules`, not `.git`) into `deploy/dashboard/`:
+The ABA run `20261021-160252-nyc-map-deploy-dashboard` has already finished and
+its workspace is pulled to `.aba-results/20261021-160252-nyc-map-deploy-dashboard/`.
+Copy the app sources into `deploy/dashboard/`, skipping the installed tree, the
+git history, the built output, and the run bookkeeping:
 
 ```bash
 cd D:/development/nyc-map-agent
-robocopy .aba-results/20261021-160252-nyc-map-deploy-dashboard deploy/dashboard /E /XD node_modules .git /NFL /NDL /NJH /NJS
+robocopy .aba-results/20261021-160252-nyc-map-deploy-dashboard deploy/dashboard /E \
+  /XD node_modules .git dist \
+  /XF run.json RUN_META.json spec.md *.log *.log.boot *.status vercel.json \
+  /NFL /NDL /NJH /NJS
 ```
+
+`spec.md` is excluded because it would collide with the committed
+`deploy/dashboard/SPEC.md` on a case-insensitive filesystem. `SPEC.md` stays —
+it is the outcome spec handed to ABA and the record of what was asked for.
 
 - [ ] **Step 2: Confirm the ABA gates passed**
 
-Read `.aba-results/20261021-160252-nyc-map-deploy-dashboard/RUN_META.json` and check `gatesPassed: true` and `gatesRun` includes `typecheck` and `build`.
+`RUN_META.json` reports `"gatesPassed": true` with `gatesRun: ["build"]`. No
+typecheck gate ran, so the build below is the only compile check; treat a build
+failure as a blocker rather than a warning.
 
-If `gatesPassed` is not `true`, do not proceed — re-run ABA with the failure in the prompt, or fix the generated code by hand and note it in `deploy/dashboard/README.md`.
+- [ ] **Step 3: Verify the Vite base path**
 
-- [ ] **Step 3: Set the Vite base path**
+`deploy/dashboard/vite.config.ts` must already return `base: "/deploy/"` (ABA
+set it). Confirm it is there — `handle_path /deploy*` strips the prefix at the
+edge, so without the base every asset URL would 404. Do not add it twice.
 
-In `deploy/dashboard/vite.config.ts`, add `base: "/deploy/"` to the returned config object:
+- [ ] **Step 4: Remove the demo-mode fallback**
 
-```ts
-export default defineConfig(() => ({
-  base: "/deploy/",
-  server: { host: "::", port: 8080 },
-  // ...unchanged
-}));
-```
+The generated `src/lib/api.ts` silently switches to a local simulation
+(`src/lib/demo.ts`) when `/deploy/api` answers 404 or a non-JSON body. On the
+real host that would hide a broken backend behind plausible fake data. Remove
+it:
 
-- [ ] **Step 4: Verify the dashboard builds**
+- delete `deploy/dashboard/src/lib/demo.ts`
+- in `src/lib/api.ts`: drop `import * as demo from "./demo"`, the
+  `type Mode`/`let mode`/`isDemoMode()` block, and every `if (mode === "demo")`
+  branch (in `getStatus`, `getDeploy`, `postDeploy`, `postRollback`, `postLogin`,
+  `postLogout`, `subscribeToLog`) plus the `mode = "demo"` fallback in
+  `getStatus`. `request()` becomes the only path.
+- in `src/pages/Index.tsx`: drop `isDemoMode` from the `@/lib/api` import, the
+  `demoMode` state, the `setDemoMode(isDemoMode())` call, and the
+  `demoMode ? <Banner tone="info">…` block. Leave the error and notice banners.
+- delete `src/components/made-with-dyad.tsx` (never mounted) and
+  `vercel.json` (not deployed by Vercel)
+
+- [ ] **Step 5: Verify the dashboard builds and typechecks**
 
 Run:
 ```bash
-cd deploy/dashboard && pnpm install && pnpm run build
+cd deploy/dashboard && pnpm install && pnpm exec tsc -p tsconfig.app.json --noEmit && pnpm run build
 ```
-Expected: `dist/index.html` exists and `dist/index.html` references `/deploy/assets/`.
+Expected: typecheck clean, then `dist/index.html` exists and references
+`/deploy/assets/`.
 
-- [ ] **Step 5: Verify the API paths in the built output**
+- [ ] **Step 6: Verify the API paths in the built output**
 
 Run:
 ```bash
@@ -2123,7 +2145,7 @@ grep -c "/deploy/api" deploy/dashboard/dist/assets/*.js
 ```
 Expected: a count ≥ 1 (every call is under `/deploy/api`).
 
-- [ ] **Step 6: Exclude the dashboard from the root toolchain**
+- [ ] **Step 7: Exclude the dashboard from the root toolchain**
 
 `tsconfig.json` — add `"exclude": ["deploy/dashboard", "node_modules", "dist"]` at the top level (siblings of `include`).
 
@@ -2131,7 +2153,7 @@ Expected: a count ≥ 1 (every call is under `/deploy/api`).
 
 `eslint.config.js` — add `"deploy/dashboard/**"` to the `ignores` array.
 
-- [ ] **Step 7: Add `deploy` to the root TypeScript project**
+- [ ] **Step 8: Add `deploy` to the root TypeScript project**
 
 In `tsconfig.json`, add `"deploy"` to `include` (but keep `deploy/dashboard` excluded):
 
@@ -2142,12 +2164,18 @@ In `tsconfig.json`, add `"deploy"` to `include` (but keep `deploy/dashboard` exc
 
 In `knip.json`, add `"deploy/**/*.ts"` to `project` and `"deploy/cd/server.ts"` to `entry`.
 
-- [ ] **Step 8: Run the full check suite**
+- [ ] **Step 9: Write `deploy/dashboard/README.md`**
+
+State that the app is generated by ABA, the spec lives in `SPEC.md`, the base
+path is `/deploy/`, and the build command is `pnpm run build` producing `dist/`
+which `Dockerfile.edge` copies to `/srv/dashboard`.
+
+- [ ] **Step 10: Run the full check suite**
 
 Run: `pnpm typecheck && pnpm lint && pnpm knip && pnpm test`
 Expected: all pass. `pnpm knip` must not report `deploy/cd` files as unused.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 11: Commit**
 
 ```bash
 git add deploy/dashboard tsconfig.json knip.json eslint.config.js
@@ -2170,7 +2198,8 @@ git commit -m "feat(deploy): add ABA-generated dashboard served under /deploy"
 ```yaml
   deploy:
     needs: [check, size, deps, lint, api, e2e]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Rollout guard: Task 13 removes this line once the stack is bootstrapped.
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 30
     concurrency:
@@ -2366,7 +2395,16 @@ gh secret set NYC_DEPLOY_TOKEN --repo Pukujan/nyc-map-agent
 ```
 Paste the same value as `CD_DEPLOY_TOKEN` from `/srv/nyc-map-agent/.env`.
 
-- [ ] **Step 4: Push a trivial commit and watch the workflow**
+- [ ] **Step 4: Enable the job**
+
+In `.github/workflows/ci.yml`, replace the rollout guard with the real
+condition:
+
+```yaml
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+```
+
+- [ ] **Step 5: Push a trivial commit and watch the workflow**
 
 ```bash
 git commit --allow-empty -m "ci: verify automated deploy"
@@ -2375,7 +2413,7 @@ gh run watch
 ```
 Expected: the `deploy` job runs after all others and exits 0.
 
-- [ ] **Step 5: Verify the live SHA matches the pushed commit**
+- [ ] **Step 6: Verify the live SHA matches the pushed commit**
 
 ```bash
 curl -s -H "Cookie: ..." https://nyc.design-bakery.com/deploy/api/status
