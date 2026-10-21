@@ -7,6 +7,7 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import type { Context } from "hono";
 import { compress } from "hono/compress";
+import { rateLimiter } from "hono-rate-limiter";
 import { AGENT_ROUTE, ROUTES } from "./openapi";
 import * as aggregate from "../api/aggregate";
 import * as area from "../api/area/[block]";
@@ -82,7 +83,18 @@ export const MOUNTED_PATHS = routes.map(([path]) => path);
 
 // Smart-mode agent (POST, NDJSON stream; body validated by zod in the handler). Skips gzip above.
 // The handler validates the body itself (zod) so it can stream; the route adds docs.
-app.openapi(AGENT_ROUTE, ((c: Context) => agent.POST(c.req.raw)) as never);
+// Per-IP limit on the paid model route (in-memory store; one Node process).
+app.use("/api/agent", rateLimiter({
+  windowMs: 60_000,
+  limit: Number(process.env.AGENT_RATE_PER_MIN ?? 10),
+  standardHeaders: "draft-6",
+  keyGenerator: (c) => c.req.header("x-forwarded-for")?.split(",")[0].trim() || c.req.header("x-real-ip") || "local",
+  handler: (c) => c.json({ error: "rate_limited" }, 429),
+}));
+// The OpenAPI validator has already read the raw body, so hand the handler a fresh
+// Request built from Hono's cached JSON (passing c.req.raw made every real call a 400).
+app.openapi(AGENT_ROUTE, (async (c: Context) =>
+  agent.POST(new Request(c.req.url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(await c.req.json()), signal: c.req.raw.signal }))) as never);
 
 app.doc31("/api/openapi.json", { openapi: "3.1.0", info: { title: "NYC Map Agent API", version: "1" } });
 app.all("/api/*", (c) => c.json({ error: "not_found" }, 404));

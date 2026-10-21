@@ -15,6 +15,11 @@
     "limit": "9 kB"
   },
   {
+    "name": "feature: voice fallback intents (lazy)",
+    "path": ".size-build/assets/fallback-*.js",
+    "limit": "3 kB"
+  },
+  {
     "name": "feature: city3d (lazy)",
     "path": ".size-build/assets/city3d-*.js",
     "limit": "2.5 kB"
@@ -67,6 +72,6 @@
   {
     "name": "all JS",
     "path": ".size-build/assets/*.js",
-    "limit": "932 kB"
+    "limit": "935 kB"
   }
 ]

@@ -26,6 +26,9 @@ import type { Trip, TripMode } from "./schema";
 import { askAgent } from "./stream";
 import { TripSummary } from "./TripSummary";
 import { showTrip } from "./tripLayer";
+import { useDataView } from "@/lib/store/DataViewContext";
+import { onVoiceToggle, setVoiceState } from "@/lib/voice/voiceBus";
+import type { FallbackDeps } from "./fallback";
 import { sharedCoords, startSharing, stopSharing, useSharedLocation } from "@/lib/geo/sharedLocation";
 import { usePlayer, type Speed } from "./usePlayer";
 import { useWakePhrase } from "./useWakePhrase";
@@ -38,6 +41,8 @@ const MODES: Array<{ id: TripMode; label: string; Icon: typeof Bus }> = [
   { id: "drive", label: "Drive", Icon: Car },
 ];
 
+const UNAVAILABLE = "Ask isn't available right now. You can still ask for the next train at a station, a line's status, directions to a place, the nearest restroom, the weather, or to follow a train.";
+
 export default function AgentOverlay() {
   const { chatOpen, setChatOpen, flyTo, startWalk } = useMapState();
   const { showPanel } = usePanel();
@@ -49,6 +54,8 @@ export default function AgentOverlay() {
   const [trip, setTrip] = useState<Trip | null>(null);
   const [mode, setMode] = useState<TripMode>("transit");
   const [wake, setWake] = useState(false);
+  const [handsFree, setHandsFree] = useState(false);
+  const { setRoutePoint } = useDataView();
   const [mapTime, setMapTime] = useState<string | null>(null);
   const shared = useSharedLocation();
   const abort = useRef<AbortController | null>(null);
@@ -67,6 +74,14 @@ export default function AgentOverlay() {
     playFlythrough: (t, speed) => { setTrip(t); setChatOpen(false); player.start(t, speed); },
     setTime: (iso) => setMapTime(iso),
   };
+  const fallbackDeps: FallbackDeps = {
+    center: () => { const c = getMapInstance()?.getCenter(); return c ? { lon: c.lng, lat: c.lat } : { lon: -73.9855, lat: 40.758 }; },
+    flyTo: (lon, lat, zoom) => flyTo({ lon, lat, zoom }),
+    directionsTo: (p) => { const here = sharedCoords(); if (here) setRoutePoint("start", { lon: here.lon, lat: here.lat }); setRoutePoint("end", p); },
+    follow: (_route, at) => flyTo({ lon: at.lon, lat: at.lat, zoom: 15 }),
+  };
+  const fallbackRef = useRef(fallbackDeps);
+  fallbackRef.current = fallbackDeps;
   const ctxRef = useRef(ctx);
   ctxRef.current = ctx;
 
@@ -75,6 +90,16 @@ export default function AgentOverlay() {
     if (!q || busy) return;
     setInput("");
     setChatOpen(true);
+    // Core asks (next train, line status, restroom, weather, directions, follow) are answered on
+    // device from the app's own feeds, with no language model, so they work when the model is down.
+    // Its own small chunk, loaded on the first ask.
+    const local = await import("./fallback").then((f) => f.tryFallback(q, fallbackRef.current)).catch(() => null);
+    if (local?.intent.kind === "stop") { setHandsFree(false); speech.stopListening(); speech.stopSpeaking(); return; }
+    if (local) {
+      setMessages((m) => [...m, { id: crypto.randomUUID(), role: "user", content: q }, { id: crypto.randomUUID(), role: "assistant", content: local.text }]);
+      speech.speak(local.text);
+      return;
+    }
     const history: Msg[] = [...messages, { id: crypto.randomUUID(), role: "user", content: q }];
     const reply: Msg = { id: crypto.randomUUID(), role: "assistant", content: "" };
     setMessages([...history, reply]);
@@ -84,6 +109,7 @@ export default function AgentOverlay() {
     // Only a position the person chose to share with My location; never asked for here.
     const location = sharedCoords();
     let spoken = "";
+    let failed = false;
     try {
       for await (const ev of askAgent({ messages: history.map(({ role, content }) => ({ role, content })), location, mode, now: new Date().toISOString() }, abort.current.signal)) {
         if (ev.type === "text") {
@@ -92,18 +118,47 @@ export default function AgentOverlay() {
         } else if (ev.type === "command") {
           executeCommand(ev.command, ctxRef.current);
         } else if (ev.type === "error") {
-          setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, content: x.content || ev.message } : x)));
+          failed = true;
         }
       }
     } catch {
-      setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, content: x.content || "The assistant is unavailable right now." } : x)));
+      failed = true;
     } finally {
+      if (failed && !spoken) {
+        spoken = UNAVAILABLE;
+        setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, content: UNAVAILABLE } : x)));
+      }
       setBusy(false);
       if (spoken) speech.speak(spoken);
     }
   }, [busy, messages, mode, setChatOpen, speech]);
 
-  useWakePhrase(wake && speech.sttSupported, speech.listening || busy || speech.speaking, (t) => void send(t));
+  // The top bar's Voice button: tap to listen, tap again to stop. Typing is the fallback.
+  const toggleRef = useRef(() => {});
+  toggleRef.current = () => {
+    if (speech.listening || handsFree) { setHandsFree(false); speech.stopListening(); return; }
+    setChatOpen(true);
+    if (!speech.sttSupported) return;
+    // iOS Safari only speaks after a user gesture: prime synthesis on this tap.
+    try { window.speechSynthesis?.speak(new SpeechSynthesisUtterance("")); } catch { /* no synthesis */ }
+    speech.stopSpeaking();
+    speech.startListening();
+  };
+  useEffect(() => {
+    setVoiceState({ available: true });
+    const off = onVoiceToggle(() => toggleRef.current());
+    return () => { off(); setVoiceState({ available: false, listening: false }); };
+  }, []);
+  useEffect(() => { setVoiceState({ listening: speech.listening || handsFree, handsFree }); }, [speech.listening, handsFree]);
+  // Hands-free: keep listening between answers (also during a trip preview) until Stop.
+  useEffect(() => {
+    if (!handsFree || speech.listening || speech.speaking || busy || !speech.sttSupported) return;
+    const id = window.setTimeout(() => speech.startListening(), 400);
+    return () => window.clearTimeout(id);
+  }, [handsFree, speech, busy]);
+  useEffect(() => { if (speech.error && !/catch that/.test(speech.error)) setHandsFree(false); }, [speech.error]);
+
+  useWakePhrase(wake && !handsFree && speech.sttSupported, speech.listening || busy || speech.speaking, (t) => void send(t));
   useEffect(() => () => abort.current?.abort(), []);
 
   const ModeIcon = MODES.find((m) => m.id === mode)!.Icon;
@@ -133,6 +188,9 @@ export default function AgentOverlay() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-64">
             <DropdownMenuLabel>Voice</DropdownMenuLabel>
+            <DropdownMenuCheckboxItem checked={handsFree} disabled={!speech.sttSupported} onCheckedChange={(v) => setHandsFree(v === true)}>
+              Hands-free (keep listening until Stop)
+            </DropdownMenuCheckboxItem>
             <DropdownMenuCheckboxItem checked={wake} disabled={!speech.sttSupported} onCheckedChange={(v) => setWake(v === true)}>
               Listen for “Hey map”
             </DropdownMenuCheckboxItem>
@@ -140,7 +198,7 @@ export default function AgentOverlay() {
             <DropdownMenuSeparator />
             <p className="px-2 py-1.5 text-xs text-muted-foreground">
               {speech.sttSupported
-                ? "Hold a conversation by voice: tap the mic, or turn on “Hey map”. Your location is sent only after you tap My location, and only for that question."
+                ? "The mic is on only after you tap Voice. Your browser turns speech into text; some browsers, such as Chrome, do that on their own servers. Audio never comes to this app's server. Your location is sent only after you tap My location, and only for that question."
                 : "Voice input is not available in this browser, so type instead. Answers can still be spoken."}
             </p>
           </DropdownMenuContent>
@@ -187,6 +245,14 @@ export default function AgentOverlay() {
           </>
         )}
       </div>
+      {speech.listening || handsFree ? (
+        <div className="flex items-center justify-between gap-2 border-t px-3 pt-2 text-xs" role="status">
+          <span className="text-muted-foreground">{handsFree ? "Hands-free is on: listening between answers." : "Listening…"}</span>
+          <Button type="button" size="sm" variant="destructive" className="h-7 shrink-0 rounded-full px-2.5 text-xs" onClick={() => { setHandsFree(false); speech.stopListening(); }}>
+            Stop listening
+          </Button>
+        </div>
+      ) : null}
       <form className="flex items-end gap-2 p-3" onSubmit={(e) => { e.preventDefault(); void send(input); }}>
         {speech.listening ? (
           <div className="flex h-9 flex-1 items-center gap-2 rounded-md border px-3 text-sm" role="status">

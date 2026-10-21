@@ -1,6 +1,6 @@
 # Continuity Document Index
 
-<!-- continuity:documents-index {"catalog_sha256":"4c54c474731e9ef0e2bdb88ab0eb846ed373d423f75eb5b703cf8ae3f5453ed6","schema":"project-continuity.documents-index.v1"} -->
+<!-- continuity:documents-index {"catalog_sha256":"7e6fde181924be9e496acd7fd788b72192885c6aab87e4b08c9db248fbb92347","schema":"project-continuity.documents-index.v1"} -->
 
 > Generated from `.continuity/documents.json`. Edit the JSON inventory, then run `continuity docs render`; do not edit this view directly.
 > Freshness below compares local file bytes; after `git fetch origin`, use `continuity docs find` for cached remote freshness.
@@ -21,9 +21,9 @@
 
 - File: [`AI_RULES.md`](../AI_RULES.md)
 - Local content status: **CURRENT**
-- Last reviewed at commit: `f31e4f7ff5a2c8ae3166a9b7ef8613b3aad6a27d`
-- Reviewed SHA-256: `fbd75536facfeb03f90aff9784652d3d022e96fb801c5e88bf989ab7b1d2e021`
-- Current SHA-256: `fbd75536facfeb03f90aff9784652d3d022e96fb801c5e88bf989ab7b1d2e021`
+- Last reviewed at commit: `uncommitted`
+- Reviewed SHA-256: `886aaac8b7887d63a96c7718a5cdd7907afd0e0a0860dd4b830b7109ab31bb2b`
+- Current SHA-256: `886aaac8b7887d63a96c7718a5cdd7907afd0e0a0860dd4b830b7109ab31bb2b`
 - Summary: Which library to use for each job, banned tools, and dependency notes.
 - Search terms: none
 - Neighboring records: none

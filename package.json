@@ -35,6 +35,7 @@
     "build:transit": "tsx scripts/build-transit.ts",
     "build:e2e": "VITE_DATA_BACKEND=octo vite build --outDir .e2e-build --emptyOutDir",
     "e2e": "playwright test",
+    "agent:eval": "tsx scripts/agent-eval.ts",
     "build:xray": "tsx scripts/build-xray.ts"
   },
   "dependencies": {
@@ -67,6 +68,7 @@
     "downshift": "9.4.0",
     "gtfs-realtime-bindings": "1.1.1",
     "hono": "4.13.13",
+    "hono-rate-limiter": "0.4.2",
     "lucide-react": "0.454.0",
     "mapillary-js": "^4.1.2",
     "maplibre-gl": "5.24.0",

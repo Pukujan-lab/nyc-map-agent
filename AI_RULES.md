@@ -109,7 +109,7 @@ Dependency notes:
 
 - `INFERHUB_API_KEY` lives in a gitignored `.env`, has no `VITE_` prefix, and is never logged or sent to the browser. Chat goes through a server-side handler that proxies InferHub.
 - The tool schema in `src/lib/agent/tools.ts` mirrors `context/CHAT_TOOLS.md` exactly: `query_data`, `fly_to`, `set_layer`, `highlight`.
-- Model default: `deepseek/deepseek-v4-flash`; escalate to `deepseek/deepseek-v4-pro` only for multi-step questions.
+- Model default: `cb/deepseek-v4.1-flash` (InferHub ids need a provider prefix; override with INFERHUB_MODEL); escalate to a `deepseek-v4-pro` id only for multi-step questions.
 - Validate every tool-call argument with zod before acting on it, and every tool result before rendering it.
 - Answers are short, lead with the number, and name place + time window, plus a "show query" source link. Each answer must trigger `fly_to`, `set_layer`, or `highlight`.
 - Voice reuses the same chat flow: transcript is appended to the same message history, spoken reply is a short summary of the text answer, and a blocked microphone degrades to typing with an explanatory message.

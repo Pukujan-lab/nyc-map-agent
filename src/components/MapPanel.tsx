@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { PanelSearch } from "./PanelSearch";
 import { FEATURES } from "@/features";
 import { LayersDrawer } from "./LayersDrawer";
+import { toggleVoice, useVoiceState } from "@/lib/voice/voiceBus";
 
 /** Mobile snap points: peek shows the summary only. */
 /** One row (title + number) plus the grab handle. */
@@ -44,6 +45,7 @@ function TopBar({ boundaries, status, onLayers }: { boundaries: NtaBoundary[] | 
   const { setChatOpen } = useMapState();
   const { chips } = usePanel();
   const transit = chips.find((c) => c.id === "transit");
+  const voice = useVoiceState();
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 rounded-full border border-border bg-card p-1 pl-1 shadow-lg">
@@ -54,6 +56,11 @@ function TopBar({ boundaries, status, onLayers }: { boundaries: NtaBoundary[] | 
         <button type="button" onClick={() => setChatOpen(true)} className="h-9 shrink-0 rounded-full bg-primary px-4 text-[14px] font-semibold text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           Ask
         </button>
+        {voice.available ? (
+          <button type="button" onClick={toggleVoice} aria-pressed={voice.listening} className={cn("h-9 shrink-0 rounded-full px-4 text-[14px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", voice.listening ? "bg-destructive text-destructive-foreground" : "border border-border bg-card")}>
+            {voice.listening ? "Stop listening" : "Voice"}
+          </button>
+        ) : null}
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={onLayers} className="h-9 rounded-full border border-border bg-card px-4 text-[13px] font-semibold shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">

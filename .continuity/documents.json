@@ -16,8 +16,8 @@
       "keywords": [],
       "path": "AI_RULES.md",
       "related": [],
-      "reviewed_commit": "f31e4f7ff5a2c8ae3166a9b7ef8613b3aad6a27d",
-      "reviewed_sha256": "fbd75536facfeb03f90aff9784652d3d022e96fb801c5e88bf989ab7b1d2e021",
+      "reviewed_commit": "uncommitted",
+      "reviewed_sha256": "886aaac8b7887d63a96c7718a5cdd7907afd0e0a0860dd4b830b7109ab31bb2b",
       "summary": "Which library to use for each job, banned tools, and dependency notes.",
       "tasks": [],
       "title": "Stack and library rules"
