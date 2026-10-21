@@ -12,7 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { useAdvancedMode } from "@/lib/flags";
+import { useAdvancedMode, useFlags } from "@/lib/flags";
+import { setAmbient, useAmbient, type LightingMode } from "@/lib/ambient";
 import {
   Select,
   SelectContent,
@@ -176,6 +177,8 @@ export function ControlDrawer({
   } = useMapState();
   const isDesktop = useMediaQuery("(min-width: 1024px)");
   const [advancedMode, setAdvancedMode] = useAdvancedMode();
+  const ambient = useAmbient();
+  const flags = useFlags();
   const { shortLabel } = windowBounds(windowId);
   const active = progress.noise ?? progress.crashes;
   const percent =
@@ -201,6 +204,24 @@ export function ControlDrawer({
             <Label htmlFor="advanced-mode" className="text-sm">Advanced</Label>
             <Switch id="advanced-mode" checked={advancedMode} onCheckedChange={setAdvancedMode} />
           </div>
+
+          {flags.daylight ? (
+            <div className="grid grid-cols-2 gap-2">
+              {flags.daylight ? (
+                <div className="space-y-1">
+                  <Label htmlFor="lighting" className="text-xs text-muted-foreground">Lighting</Label>
+                  <Select value={ambient.lighting} onValueChange={(v) => setAmbient({ lighting: v as LightingMode })}>
+                    <SelectTrigger id="lighting" className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">Auto</SelectItem>
+                      <SelectItem value="day">Day</SelectItem>
+                      <SelectItem value="night">Night</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           <Section label="Map view">
             <ViewModeMenu onOpenSources={onOpenSources} />

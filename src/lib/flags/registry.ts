@@ -29,6 +29,7 @@ export const FLAGS = {
   city3d: { tier: "basic", default: true, label: "Textured 3D city" },
   noise: { tier: "basic", default: true, label: "Noise layer" },
   blockDensity: { tier: "basic", default: true, label: "Shade blocks per hectare" },
+  daylight: { tier: "basic", default: true, label: "Time-of-day lighting" },
   crashes: { tier: "advanced", default: true, label: "Classic crashes layer" },
   combined: { tier: "advanced", default: true, label: "Noise + crashes" },
   dataLayers: { tier: "advanced", default: true, label: "Data / analytics layers" },
