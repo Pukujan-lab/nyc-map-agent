@@ -25,7 +25,7 @@ import { setFollowed, useFollowed } from "./follow";
 import { SYSTEM_LABELS } from "./model";
 import { StationDetails, VehicleDetails } from "./TransitCard";
 import { TransitStatusDetails } from "./TransitStatus";
-import { FOCUS_OPACITY, FOCUS_VEIL_ID, WORLD, useTransitFocus } from "./focus";
+import { FOCUS_OPACITY, FOCUS_VEIL_ID, WORLD, useTransitFocus } from "@/lib/map/transitFocus";
 
 /** Layers a click on the map should hand to transit instead of the area pick. */
 /** CC BY 4.0 credits for the 3D vehicle models (public/models/LICENSE.md), shown while they can be on screen. */
