@@ -1,0 +1,44 @@
+{
+  "schema_version": "content-generation.project-brief.v2",
+  "project": "NYC Map Agent",
+  "audience": [
+    "New Yorkers comparing blocks before renting, buying or walking",
+    "the project owner and agents working on this repository"
+  ],
+  "problem": "Open NYC data on noise, crashes, housing complaints and street improvements is scattered across many Socrata datasets, so judging one block means opening several portals and reconciling different units.",
+  "solution": "A browser map that aggregates registry-defined NYC datasets onto a block grid and shows per-source and average concern views with walking routes and street-level imagery.",
+  "mechanism": [
+    "a dataset registry declares each source, its query and polarity",
+    "points are aggregated to a roughly 300 m block grid",
+    "per-source and average concern scores are rendered as map layers"
+  ],
+  "evidence": [
+    {
+      "claim": "The map aggregates registry-defined NYC datasets onto a block grid.",
+      "source": "src/lib/datasets/registry.ts",
+      "status": "shipped",
+      "supports": "The registry file lists the datasets the map queries.",
+      "limits": "Shows the datasets are wired, not that scores are accurate.",
+      "recorded_at": "2026-10-20T20:10:00-04:00",
+      "source_revision": {
+        "kind": "repository_artifact",
+        "reference": "src/lib/datasets/registry.ts at 01280d8",
+        "repository": "Pukujan/nyc-map-agent",
+        "commit": "01280d8a4da9f4d8f8c069f538f92bd92da364c0",
+        "path": "src/lib/datasets/registry.ts",
+        "locator": "file",
+        "uri": "https://github.com/Pukujan/nyc-map-agent/blob/01280d8a4da9f4d8f8c069f538f92bd92da364c0/src/lib/datasets/registry.ts"
+      },
+      "cite_in_readme": false
+    }
+  ],
+  "boundaries": [
+    "not an official City of NYC product",
+    "scores summarize reported data and inherit its reporting bias",
+    "no personal data is collected"
+  ],
+  "terminology": {
+    "block": "a roughly 300 m grid cell",
+    "concern score": "average of per-source normalized values with polarity"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "schema_version": "oio.install-manifest.v1",
+  "oio_version": "0.2.0",
+  "ontology_id": "oio:issue-log",
+  "ontology_version": "1.1.0",
+  "project_id": "Pukujan/nyc-map-agent",
+  "namespace": "pukujan-nyc-map-agent",
+  "managed_files": {
+    ".oio/ontology/default.json": "1120f15a62c92698bb102e1d1566609191ae446c8d1950f124fb5b939d4f8d87",
+    ".oio/ontology/project-template.json": "ab7957e5d540717302dd39d1a96a11e46e8b2a79fa793426f8c3271bce0857e3",
+    ".oio/ontology/ISSUE_LOG_ONTOLOGY.md": "f7b22af69e1ead2cae0cb8fef94fd7bbdd3611bb9a28d54ba02e883c854a50bd",
+    ".oio/ontology/AGENT_GUIDE.md": "fd5f8109859bca84e5088ab6643309bb43087ce42ef5a595b87e4fcbf7e01b0e",
+    ".oio/requirements.txt": "9671d9b90a21841752d8189c55c8807b0e06283947c6199384dbec6b68542151",
+    ".oio/schemas/v1/default-ontology.schema.json": "358628082b317ef6d1de422c5e17664d8397d57b059f52a696576400788f56b5",
+    ".oio/schemas/v1/project-ontology.schema.json": "976c8cb8272352ec9b83f2f42559191e2200ed71c795b34832490f9ca60b6455",
+    ".oio/schemas/v1/issue-log-record.schema.json": "9f8000a9058dc6c853df29472b87956dd56a744274f72efdcc27ddc50945bbdd",
+    ".github/ISSUE_TEMPLATE/observational-issue.yml": "0e2a91de7d04664e89b8c614a1ca7c26ebf83443b7a98ce745d0bbc335cb2b15",
+    ".github/workflows/issue-triage.yml": "9c42b5a9f763df15d510f117076dd3f237c1e5ad4c77c6a69520321a8ad9cb76",
+    ".github/scripts/oio_installer.py": "8ea13bc27c4b33657e0c2dabd1cd1379a0b7bb2bb70b81b7b2c945a3c06a9c09",
+    ".github/scripts/oio_triage.py": "c796ce66a03c3e655b108200b24ca0015bdc17c83bf9504b32d7f57af6609c82"
+  },
+  "agents_block_sha256": "dd08b0a68f4af90c53d164dfdde8dc1996547193a2404965bf4c4adeffa5b9dc",
+  "project_extension": ".oio/ontology/project.json"
+}

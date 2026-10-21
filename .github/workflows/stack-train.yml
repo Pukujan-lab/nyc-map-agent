@@ -1,0 +1,5 @@
+name: stack-train
+on: [pull_request, workflow_dispatch]
+jobs:
+  check-adopter:
+    uses: Pukujan/agent-stack-train/.github/workflows/check-adopter.yml@main
