@@ -592,9 +592,15 @@ git commit -m "feat(cd): session, bearer, and login rate-limit primitives"
 
 **Interfaces:**
 - Produces:
-  - `acquireLock(dir: string, opts?: { nowMs?: number; staleMs?: number }): boolean`
-  - `releaseLock(dir: string): void`
-  - `lockOwner(dir: string): { pid: number; at: number } | null`
+  - `acquireLock(file: string, opts?: { nowMs?: number; staleMs?: number }): boolean`
+  - `releaseLock(file: string): void`
+  - `lockOwner(file: string): { pid: number; at: number } | null`
+
+The lock is a **file** at `config.lockDir` (`<state>/deploy.lock`), published
+atomically with `linkSync` from a temp file whose content is already written.
+`link` cannot publish an inode without its content, so no concurrent acquirer
+can ever observe a lock that exists but has no owner — which is what makes a
+single `mkdir`-then-`writeFileSync` sequence unsound.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -607,44 +613,55 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { acquireLock, lockOwner, releaseLock } from "./lock";
 
-let dir: string;
+let file: string;
 const NOW = Date.parse("2026-10-21T12:00:00Z");
 
 beforeEach(() => {
-  dir = join(mkdtempSync(join(tmpdir(), "cd-lock-")), "deploy.lock");
+  file = join(mkdtempSync(join(tmpdir(), "cd-lock-")), "deploy.lock");
 });
-afterEach(() => rmSync(join(dir, ".."), { recursive: true, force: true }));
+afterEach(() => rmSync(join(file, ".."), { recursive: true, force: true }));
 
 describe("deploy lock", () => {
   it("acquires an unheld lock and records the owner", () => {
-    expect(acquireLock(dir, { nowMs: NOW })).toBe(true);
-    expect(lockOwner(dir)?.at).toBe(NOW);
+    expect(acquireLock(file, { nowMs: NOW })).toBe(true);
+    expect(lockOwner(file)?.at).toBe(NOW);
+    expect(lockOwner(file)?.pid).toBe(process.pid);
   });
 
   it("refuses a second acquire while held", () => {
-    expect(acquireLock(dir, { nowMs: NOW })).toBe(true);
-    expect(acquireLock(dir, { nowMs: NOW + 1000 })).toBe(false);
+    expect(acquireLock(file, { nowMs: NOW })).toBe(true);
+    expect(acquireLock(file, { nowMs: NOW + 1000 })).toBe(false);
+    expect(lockOwner(file)?.at).toBe(NOW);
   });
 
   it("reclaims a stale lock", () => {
-    expect(acquireLock(dir, { nowMs: NOW })).toBe(true);
-    expect(acquireLock(dir, { nowMs: NOW + 31 * 60 * 1000, staleMs: 30 * 60 * 1000 })).toBe(true);
+    expect(acquireLock(file, { nowMs: NOW })).toBe(true);
+    expect(acquireLock(file, { nowMs: NOW + 31 * 60 * 1000, staleMs: 30 * 60 * 1000 })).toBe(true);
+    expect(lockOwner(file)?.at).toBe(NOW + 31 * 60 * 1000);
   });
 
   it("releases so the next caller can acquire", () => {
-    expect(acquireLock(dir, { nowMs: NOW })).toBe(true);
-    releaseLock(dir);
-    expect(acquireLock(dir, { nowMs: NOW })).toBe(true);
+    expect(acquireLock(file, { nowMs: NOW })).toBe(true);
+    releaseLock(file);
+    expect(lockOwner(file)).toBeNull();
+    expect(acquireLock(file, { nowMs: NOW })).toBe(true);
   });
 
-  it("reclaims a lock directory with no owner file", () => {
-    expect(acquireLock(dir, { nowMs: NOW })).toBe(true);
-    rmSync(join(dir, "owner"), { force: true });
-    expect(acquireLock(dir, { nowMs: NOW + 31 * 60 * 1000, staleMs: 30 * 60 * 1000 })).toBe(true);
+  it("leaves a lock owned by another process alone", () => {
+    writeFileSync(file, JSON.stringify({ pid: process.pid + 1, at: NOW }));
+    releaseLock(file);
+    expect(lockOwner(file)?.pid).toBe(process.pid + 1);
+    expect(acquireLock(file, { nowMs: NOW + 1000 })).toBe(false);
+  });
+
+  it("reclaims a lock file with unreadable content", () => {
+    writeFileSync(file, "not json");
+    expect(acquireLock(file, { nowMs: NOW })).toBe(true);
+    expect(lockOwner(file)?.pid).toBe(process.pid);
   });
 
   it("creates the state directory when it does not exist yet", () => {
-    const nested = join(dir, "..", "state", "deploy.lock");
+    const nested = join(file, "..", "state", "deploy.lock");
     expect(acquireLock(nested, { nowMs: NOW })).toBe(true);
     expect(lockOwner(nested)?.pid).toBe(process.pid);
   });
@@ -661,62 +678,71 @@ Expected: FAIL — cannot resolve `./lock`.
 Create `deploy/cd/lock.ts`:
 
 ```ts
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { linkSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 
 export interface LockOwner {
   pid: number;
   at: number;
 }
 
-export function lockOwner(dir: string): LockOwner | null {
-  const file = join(dir, "owner");
-  if (!existsSync(file)) return null;
+export function lockOwner(file: string): LockOwner | null {
   try {
     const owner = JSON.parse(readFileSync(file, "utf8")) as LockOwner;
-    return typeof owner.at === "number" ? owner : null;
+    return typeof owner.at === "number" && typeof owner.pid === "number" ? owner : null;
   } catch {
     return null;
   }
 }
 
-/** `mkdir` is atomic, so the directory itself is the lock. */
-export function acquireLock(dir: string, opts: { nowMs?: number; staleMs?: number } = {}): boolean {
+/**
+ * `link` publishes an inode whose content is already written, so a reader can
+ * never observe a lock that exists but has no owner. The path is the lock.
+ */
+export function acquireLock(file: string, opts: { nowMs?: number; staleMs?: number } = {}): boolean {
   const nowMs = opts.nowMs ?? Date.now();
   const staleMs = opts.staleMs ?? 30 * 60 * 1000;
   // The state directory does not exist on a fresh host; creating it here keeps
   // the first deploy from failing every acquire with ENOENT.
-  mkdirSync(dirname(dir), { recursive: true });
+  mkdirSync(dirname(file), { recursive: true });
+
+  const tmp = `${file}.${process.pid}.tmp`;
+  writeFileSync(tmp, JSON.stringify({ pid: process.pid, at: nowMs }));
   try {
-    mkdirSync(dir);
-    writeFileSync(join(dir, "owner"), JSON.stringify({ pid: process.pid, at: nowMs }));
-    return true;
-  } catch {
-    const owner = lockOwner(dir);
-    // An owner file with no timestamp, or a lock older than staleMs, is dead.
-    if (!owner || nowMs - owner.at > staleMs) {
-      rmSync(dir, { recursive: true, force: true });
-      try {
-        mkdirSync(dir);
-        writeFileSync(join(dir, "owner"), JSON.stringify({ pid: process.pid, at: nowMs }));
-        return true;
-      } catch {
-        return false;
-      }
+    try {
+      linkSync(tmp, file);
+      return true;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
     }
-    return false;
+    const owner = lockOwner(file);
+    if (owner && nowMs - owner.at < staleMs) return false;
+    // Unreadable content cannot come from a concurrent creator — `link`
+    // publishes complete content — so it is a damaged lock and safe to clear.
+    rmSync(file, { force: true });
+    try {
+      linkSync(tmp, file);
+      return true;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+      return false;
+    }
+  } finally {
+    rmSync(tmp, { force: true });
   }
 }
 
-export function releaseLock(dir: string): void {
-  rmSync(dir, { recursive: true, force: true });
+/** Removes the lock only when this process owns it. */
+export function releaseLock(file: string): void {
+  if (lockOwner(file)?.pid !== process.pid) return;
+  rmSync(file, { force: true });
 }
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `pnpm vitest run deploy/cd/lock.test.ts`
-Expected: PASS (6 tests).
+Expected: PASS (7 tests).
 
 - [ ] **Step 5: Commit**
 
@@ -738,7 +764,7 @@ git commit -m "feat(cd): exclusive deploy lock with stale reclamation"
   - `interface Runner { run(cmd: string, args: string[], opts?: RunOptions): Promise<RunResult> }`
   - `interface RunOptions { cwd?: string; env?: Record<string, string>; onLine?: (line: string) => void }`
   - `interface RunResult { code: number; output: string }`
-  - `createRunner(): Runner` — spawns with `shell: false`, streams stdout and stderr line by line to `onLine`.
+  - `createRunner(): Runner` — spawns with `shell: false`, streams stdout and stderr line by line to `onLine`. Each stream keeps its own partial-line buffer: a stdout fragment followed by a stderr line must never be glued into one fabricated line.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -777,6 +803,38 @@ describe("process runner", () => {
     });
     expect(result.output).toBe(`${process.cwd()}|yes`);
   });
+
+  it("streams stderr lines without merging them into stdout", async () => {
+    const lines: string[] = [];
+    await createRunner().run(
+      process.execPath,
+      ["-e", "process.stdout.write('out-no-newline'); process.stderr.write('err\\n')"],
+      { onLine: (line) => lines.push(line) },
+    );
+    expect(lines).toContain("err");
+    expect(lines.some((line) => line.includes("out-no-newlineerr"))).toBe(false);
+  });
+
+  it("flushes a trailing partial line when the process exits", async () => {
+    const lines: string[] = [];
+    await createRunner().run(process.execPath, ["-e", "process.stdout.write('tail')"], {
+      onLine: (line) => lines.push(line),
+    });
+    expect(lines).toEqual(["tail"]);
+  });
+
+  it("rejects when the command cannot be spawned", async () => {
+    await expect(createRunner().run("definitely-not-a-real-binary-xyz", [])).rejects.toThrow();
+  });
+
+  it("passes arguments through without a shell", async () => {
+    const result = await createRunner().run(process.execPath, [
+      "-e",
+      "process.stdout.write(process.argv[1] ?? '')",
+      "a && b",
+    ]);
+    expect(result.output).toBe("a && b");
+  });
 });
 ```
 
@@ -807,6 +865,11 @@ export interface Runner {
   run(cmd: string, args: string[], opts?: RunOptions): Promise<RunResult>;
 }
 
+interface LineSplitter {
+  push(text: string): void;
+  flush(): void;
+}
+
 /** The only place the deploy code shells out. Tests inject a fake Runner. */
 export function createRunner(): Runner {
   return {
@@ -818,20 +881,44 @@ export function createRunner(): Runner {
           shell: false,
         });
         let output = "";
-        let pending = "";
-        const onData = (chunk: Buffer) => {
-          const text = chunk.toString();
-          output += text;
-          pending += text;
-          const lines = pending.split("\n");
-          pending = lines.pop() ?? "";
-          for (const line of lines) opts.onLine?.(line);
+
+        // Each stream needs its own partial line: a stdout fragment followed by
+        // a stderr line must not be glued into a line neither stream wrote.
+        const splitter = (): LineSplitter => {
+          let pending = "";
+          const emit = (line: string) => opts.onLine?.(line.endsWith("\r") ? line.slice(0, -1) : line);
+          return {
+            push(text) {
+              pending += text;
+              const lines = pending.split("\n");
+              pending = lines.pop() ?? "";
+              for (const line of lines) emit(line);
+            },
+            flush() {
+              if (pending) emit(pending);
+              pending = "";
+            },
+          };
         };
-        child.stdout.on("data", onData);
-        child.stderr.on("data", onData);
+        const out = splitter();
+        const err = splitter();
+
+        // Decoding at the stream keeps a multi-byte character split across two
+        // chunks from being emitted as a replacement character.
+        child.stdout.setEncoding("utf8");
+        child.stderr.setEncoding("utf8");
+        child.stdout.on("data", (text: string) => {
+          output += text;
+          out.push(text);
+        });
+        child.stderr.on("data", (text: string) => {
+          output += text;
+          err.push(text);
+        });
         child.on("error", reject);
         child.on("close", (code) => {
-          if (pending) opts.onLine?.(pending);
+          out.flush();
+          err.flush();
           resolve({ code: code ?? -1, output });
         });
       });
@@ -843,7 +930,7 @@ export function createRunner(): Runner {
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `pnpm vitest run deploy/cd/runner.test.ts`
-Expected: PASS (4 tests).
+Expected: PASS (8 tests).
 
 - [ ] **Step 5: Commit**
 
@@ -2359,7 +2446,7 @@ openssl rand -hex 32   # CD_DEPLOY_TOKEN  (also the GitHub secret NYC_DEPLOY_TOK
 | Read deploy history | `tail -n 20 /srv/nyc-map-agent/state/deploys.jsonl` |
 | Force a deploy | `curl -X POST -H "Authorization: Bearer $CD_DEPLOY_TOKEN" https://nyc.design-bakery.com/deploy/api/deploy` |
 | Roll back | press **Roll back** in the dashboard |
-| Clear a stuck lock | `rm -rf /srv/nyc-map-agent/state/deploy.lock` (only when no deploy is running) |
+| Clear a stuck lock | `rm -f /srv/nyc-map-agent/state/deploy.lock` (only when no deploy is running; the lock is a file, not a directory) |
 
 ## Failure modes
 
