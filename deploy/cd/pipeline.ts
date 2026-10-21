@@ -224,6 +224,11 @@ export async function startDeploy(deps: PipelineDeps, config: PipelineConfig, re
     step("health", "succeeded");
 
     return finish(request.kind === "rollback" ? "rolled-back" : "succeeded", null);
+  } catch (err) {
+    // A runner that throws (missing binary, spawn failure) would otherwise leave
+    // the record `running` forever, which /status reports as a live deploy.
+    finish("failed", err instanceof Error ? err.message : String(err));
+    throw err;
   } finally {
     releaseLock(config.lockDir);
   }

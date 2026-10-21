@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createApp, createLogStore, type ServerConfig } from "./server";
+import { createApp, createLogStore, clientIp, type ServerConfig } from "./server";
 import type { Runner } from "./runner";
 
 const SHA = "a".repeat(40);
@@ -134,6 +134,74 @@ describe("deploy API", () => {
       headers: { authorization: `Bearer ${config.deployToken}` },
     });
     expect(res.status).toBe(401);
+  });
+
+  it("returns 404 instead of holding open a log stream for an unknown run", async () => {
+    const app = createApp(config, { runner: healthyRunner });
+    const login = await call(app, "/deploy/api/login", { method: "POST", body: JSON.stringify({ password: "correct horse" }) });
+    const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0];
+    const res = await call(app, "/deploy/api/deploys/nope/log", { headers: { cookie } });
+    expect(res.status).toBe(404);
+  });
+
+  it("records a runner that throws as a failed run rather than a stuck one", async () => {
+    const failing: Runner = {
+      run() {
+        return Promise.reject(new Error("docker: command not found"));
+      },
+    };
+    const app = createApp(config, { runner: failing });
+    const started = await call(app, "/deploy/api/deploy", {
+      method: "POST",
+      headers: { authorization: `Bearer ${config.deployToken}` },
+      body: JSON.stringify({ sha: SHA }),
+    });
+    expect(started.status).toBe(202);
+    const { id } = (await started.json()) as { id: string };
+    const res = await call(app, `/deploy/api/deploys/${id}`, {
+      headers: { authorization: `Bearer ${config.deployToken}` },
+    });
+    expect(res.status).toBe(200);
+    const run = (await res.json()) as { status: string; error: string | null };
+    expect(run.status).toBe("failed");
+    expect(run.error).toMatch(/docker: command not found/);
+  });
+
+  it("reports a second concurrent deploy as busy", async () => {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const slow: Runner = {
+      async run(cmd, args) {
+        if (cmd === "git" && args[0] === "fetch") await gate;
+        if (cmd === "git" && args[0] === "rev-parse") return { code: 0, output: `${SHA}\n` };
+        return { code: 0, output: "healthy\n" };
+      },
+    };
+    const app = createApp(config, { runner: slow });
+    const headers = { authorization: `Bearer ${config.deployToken}` };
+    const first = call(app, "/deploy/api/deploy", { method: "POST", headers, body: JSON.stringify({ sha: SHA }) });
+    const second = await call(app, "/deploy/api/deploy", { method: "POST", headers, body: JSON.stringify({ sha: SHA }) });
+    expect(second.status).toBe(409);
+    release();
+    expect((await first).status).toBe(202);
+  });
+});
+
+describe("client ip", () => {
+  const headers = (h: Record<string, string>) => ({ get: (k: string) => h[k.toLowerCase()] });
+
+  it("prefers the Cloudflare header, which the client cannot forge", () => {
+    expect(clientIp(headers({ "cf-connecting-ip": "203.0.113.9", "x-forwarded-for": "1.1.1.1, 2.2.2.2" }))).toBe("203.0.113.9");
+  });
+
+  it("falls back to the last X-Forwarded-For entry, which Caddy appended", () => {
+    expect(clientIp(headers({ "x-forwarded-for": "1.1.1.1, 2.2.2.2" }))).toBe("2.2.2.2");
+  });
+
+  it("uses a single bucket when no address header is present", () => {
+    expect(clientIp(headers({}))).toBe("local");
   });
 });
 

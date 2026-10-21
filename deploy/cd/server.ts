@@ -68,6 +68,23 @@ function readCookie(header: string | undefined, name: string): string | undefine
   return undefined;
 }
 
+/**
+ * The only path to this server is Cloudflare -> cloudflared -> Caddy, so the
+ * peer Cloudflare recorded in CF-Connecting-IP is the real client. Caddy appends
+ * its own peer to X-Forwarded-For, so the last entry there is the tunnel
+ * container, not the caller — falling back to it keeps one bucket for all
+ * traffic rather than trusting a header the client controls.
+ */
+export function clientIp(headers: { get(k: string): string | undefined }): string {
+  const cloudflare = headers.get("cf-connecting-ip")?.trim();
+  if (cloudflare) return cloudflare;
+  const real = headers.get("x-real-ip")?.trim();
+  if (real) return real;
+  const forwarded = headers.get("x-forwarded-for");
+  const last = forwarded?.split(",").pop()?.trim();
+  return last || "local";
+}
+
 export function createApp(config: ServerConfig, deps: { runner: Runner }): Hono {
   const app = new Hono();
   const limiter = createRateLimiter();
@@ -86,7 +103,7 @@ export function createApp(config: ServerConfig, deps: { runner: Runner }): Hono 
   const unauthorized = (c: { json: (b: unknown, s: 401) => Response }) => c.json({ error: "unauthorized" }, 401);
 
   app.post("/deploy/api/login", async (c) => {
-    const ip = c.req.header("x-forwarded-for")?.split(",")[0].trim() || "local";
+    const ip = clientIp({ get: (k) => c.req.header(k) });
     if (limiter.blocked(ip, now().getTime())) return c.json({ error: "rate-limited" }, 429);
     const body = (await c.req.json().catch(() => ({}))) as { password?: string };
     if (!body.password || !checkPassword(body.password, config.password)) {
@@ -135,6 +152,16 @@ export function createApp(config: ServerConfig, deps: { runner: Runner }): Hono 
   app.get("/deploy/api/deploys/:id/log", (c) => {
     if (!authed(c)) return unauthorized(c);
     const id = c.req.param("id");
+    // A finished run lives in the state file and its lines are gone after a
+    // restart; an unknown id would otherwise hold the stream open forever.
+    const stored = readRuns(config.stateFile, Number.MAX_SAFE_INTEGER).find((r) => r.id === id);
+    const buffered = logs.lines(id);
+    if (!stored && buffered.length === 0 && !logs.isDone(id)) return c.json({ error: "not_found" }, 404);
+    // Nothing left to stream and the run is already over: close immediately
+    // rather than waiting on a completion event this process never saw.
+    if (buffered.length === 0 && stored && stored.status !== "running") {
+      return streamSSE(c, async (stream) => stream.writeSSE({ event: "done", data: "{}" }));
+    }
     return streamSSE(c, async (stream) => {
       for (const line of logs.lines(id)) await stream.writeSSE({ data: JSON.stringify({ line, at: now().toISOString() }) });
       if (logs.isDone(id)) return stream.writeSSE({ event: "done", data: "{}" });
@@ -161,11 +188,13 @@ export function createApp(config: ServerConfig, deps: { runner: Runner }): Hono 
   });
 
   const start = (kind: "deploy" | "rollback", sha?: string): Promise<string> => {
-    const firstUpdate = new Promise<string>((resolve) => {
-      let resolved = false;
+    return new Promise<string>((resolve, reject) => {
+      let settled = false;
+      let startedId: string | null = null;
       const onUpdate = (run: Run) => {
-        if (!resolved && run.sha !== "0".repeat(40)) {
-          resolved = true;
+        if (!settled && run.sha !== "0".repeat(40)) {
+          settled = true;
+          startedId = run.id;
           resolve(run.id);
         }
       };
@@ -181,16 +210,23 @@ export function createApp(config: ServerConfig, deps: { runner: Runner }): Hono 
       )
         .then((run) => {
           logs.done(run.id);
-          if (!resolved) resolve(run.id);
+          if (!settled) {
+            settled = true;
+            resolve(run.id);
+          }
         })
         .catch((err: unknown) => {
-          // The pipeline throws before publishing only for a bad request or a busy lock;
-          // both are handled by the caller before this point.
-          logs.append("error", `error: ${String(err)}`);
-          if (!resolved) resolve("");
+          // Only surface the failure when the request is still waiting on it.
+          // Once the run id is out, the run's own record carries the outcome —
+          // but its log stream still has to be closed or it waits forever.
+          if (settled) {
+            if (startedId) logs.done(startedId);
+            return;
+          }
+          settled = true;
+          reject(err instanceof Error ? err : new Error(String(err)));
         });
     });
-    return firstUpdate;
   };
 
   app.post("/deploy/api/deploy", async (c) => {
@@ -199,9 +235,7 @@ export function createApp(config: ServerConfig, deps: { runner: Runner }): Hono 
     const body = (await c.req.json().catch(() => ({}))) as { sha?: string };
     if (body.sha && !/^[0-9a-f]{40}$/.test(body.sha)) return c.json({ error: "invalid_sha" }, 400);
     try {
-      const id = await start("deploy", body.sha);
-      if (!id) return c.json({ error: "busy" }, 409);
-      return c.json({ id }, 202);
+      return c.json({ id: await start("deploy", body.sha) }, 202);
     } catch (err) {
       if (err instanceof BusyError) return c.json({ error: "busy" }, 409);
       throw err;
@@ -212,9 +246,7 @@ export function createApp(config: ServerConfig, deps: { runner: Runner }): Hono 
     const bearer = checkBearer(c.req.header("authorization"), config.deployToken);
     if (!bearer && !authed(c)) return unauthorized(c);
     try {
-      const id = await start("rollback");
-      if (!id) return c.json({ error: "busy" }, 409);
-      return c.json({ id }, 202);
+      return c.json({ id: await start("rollback") }, 202);
     } catch (err) {
       if (err instanceof BusyError) return c.json({ error: "busy" }, 409);
       throw err;
