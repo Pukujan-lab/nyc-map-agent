@@ -8,9 +8,10 @@ import { toast } from "sonner";
 import {
   estimateTrain,
   stationOf,
-  structureAt,
-  viaductPiers,
-  viaductPolygons,
+  raisedTrack,
+  viaductBays,
+  entranceInstances,
+  splitRaised,
   type StaticSystem,
   type SystemId,
   type Vehicle,
@@ -28,7 +29,6 @@ import { TransitStatusDetails } from "./TransitStatus";
 const TRANSIT_CLICK_LAYERS = ["transit-vehicle-2d", "transit-vehicle-hit", "transit-access", "transit-entrance", "transit-station"];
 
 const MAX_VEHICLES = 400;
-const midpoint = (c: GeoJSON.Position[]) => c[Math.floor(c.length / 2)] as [number, number];
 const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 const ICONS: Record<string, { node: JSX.Element; sdf: boolean }> = {
   "transit-arrow": { node: <Navigation2 fill="#fff" color="#fff" strokeWidth={1.5} size={48} />, sdf: true },
@@ -73,8 +73,12 @@ export default function TransitLayer() {
   const enabled = useFlag("transit");
   const { current } = useMap();
   const map = current?.getMap();
-  const { tilted, walking } = useMapState();
+  const { tilted, walking, startWalk } = useMapState();
   const three = tilted || walking;
+  // Dev-only: lets headless QA enter street level at a point.
+  useEffect(() => {
+    if (import.meta.env.DEV) (window as unknown as { __walk?: unknown }).__walk = startWalk;
+  }, [startWalk]);
   const { on, set, panelOpen, setPanelOpen } = useTransitToggles();
   const { content, showPanel } = usePanel();
   const meta = useTransitMeta();
@@ -120,17 +124,25 @@ export default function TransitLayer() {
 
   const statics = rail.map((s) => data[s]?.stat).filter((s): s is StaticSystem => Boolean(s));
   const staticKey = statics.map((s) => s.system).join(",");
+  // Raised subway track (viaducts, portal ramps, bridge decks) from the height profiles.
+  const raised = useMemo(() => {
+    const sub = statics.find((s) => s.system === "subway");
+    return sub ? raisedTrack(sub) : { decks: EMPTY as GeoJSON.FeatureCollection<GeoJSON.Polygon>, piers: EMPTY as GeoJSON.FeatureCollection<GeoJSON.Polygon>, raisedCells: new Set<string>() };
+  }, [staticKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const lines = useMemo<GeoJSON.FeatureCollection>(() => ({
     type: "FeatureCollection",
-    // Commuter rail is drawn at grade; only the subway gets viaducts and tunnels.
-    features: statics.flatMap((s) => s.lines.features.map((f) => ({ ...f, properties: { ...f.properties, system: s.system, grade: s.system !== "subway" ? "grade" : structureAt(midpoint(f.geometry.coordinates)) ? "elevated" : f.properties.grade } }))),
-  }), [staticKey]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Commuter rail is drawn at grade; subway ground lines step aside under raised track.
+    features: statics.flatMap((s) => {
+      const fs = s.lines.features.map((f) => ({ ...f, properties: { ...f.properties, system: s.system, grade: s.system !== "subway" ? ("grade" as const) : f.properties.grade } }));
+      return s.system === "subway" ? splitRaised(fs, raised.raisedCells) : fs;
+    }),
+  }), [staticKey, raised]); // eslint-disable-line react-hooks/exhaustive-deps
   const stations = useMemo<GeoJSON.FeatureCollection>(() => ({
     type: "FeatureCollection",
     features: statics.flatMap((s) => s.stations.features.map((f) => ({ ...f, properties: { ...f.properties, system: s.system } }))),
   }), [staticKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  const viaduct = useMemo(() => viaductPolygons(lines as StaticSystem["lines"]), [lines]);
-  const piers = useMemo(() => viaductPiers(lines as StaticSystem["lines"]), [lines]);
+  const viaduct = raised.decks;
+  const piers = raised.piers;
   const entrances = data.subway?.stat?.entrances ?? EMPTY;
 
   // Planned work: wrenches on affected stations; reroutes and planned work get an
@@ -262,6 +274,13 @@ export default function TransitLayer() {
     features: vehicles.map((v) => ({ type: "Feature", properties: { key: v.key, color: v.color, bearing: v.bearing, grade: v.grade, label: v.label }, geometry: { type: "Point", coordinates: [v.lon, v.lat] } })),
   }), [vehicles]);
   // 3D: one three.js custom layer in the map's canvas, loaded on first tilt.
+  const entr = useRef<ReturnType<typeof entranceInstances>>([]);
+  const bays = useRef<ReturnType<typeof viaductBays>>([]);
+  useEffect(() => {
+    const sub = statics.find((s) => s.system === "subway");
+    bays.current = sub ? viaductBays(sub) : [];
+    v3d.current?.setStructure(bays.current);
+  }, [staticKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const v3d = useRef<ReturnType<typeof import("@/lib/map/threeLayer").createVehicleLayer> | null>(null);
   useEffect(() => {
     if (!map || !three) return;
@@ -272,6 +291,9 @@ export default function TransitLayer() {
     };
     void import("@/lib/map/threeLayer").then(({ createVehicleLayer }) => {
       v3d.current ??= createVehicleLayer();
+      v3d.current.setStructure(bays.current);
+      v3d.current.setEntrances(entr.current);
+      if (import.meta.env.DEV) Object.assign(window, { __v3d: v3d.current, __entr: entr });
       ensure();
     });
     map.on("styledata", ensure);
@@ -281,6 +303,20 @@ export default function TransitLayer() {
       if (v3d.current && map.getLayer(v3d.current.layer.id)) map.removeLayer(v3d.current.layer.id);
     };
   }, [map, three]);
+  // Street level: the 3D entrance kit within ~300 m of the camera; elevator entrances gray when out.
+  const outStations = useMemo(() => new Set(work.access.features.map((f) => String(f.properties?.id))), [work.access]);
+  useEffect(() => {
+    if (!map) return;
+    const sync = () => {
+      const sub = statics.find((s) => s.system === "subway");
+      const c = map.getCenter();
+      entr.current = walking && sub ? entranceInstances(sub, outStations, [c.lng, c.lat]) : [];
+      v3d.current?.setEntrances(entr.current);
+    };
+    sync();
+    map.on("moveend", sync);
+    return () => { map.off("moveend", sync); };
+  }, [map, walking, outStations, staticKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!three) return;
     v3d.current?.update(
@@ -358,20 +394,21 @@ export default function TransitLayer() {
         <Layer id="transit-work-line" type="line" paint={{ "line-color": "#f59e0b", "line-width": ["interpolate", ["linear"], ["zoom"], 10, 2, 16, 6], "line-dasharray": [1, 1.5], "line-opacity": 0.85 }} />
       </Source>
       <Source id="transit-viaduct" type="geojson" data={three ? viaduct : EMPTY}>
-        <Layer id="transit-viaduct" type="fill-extrusion" minzoom={13}
+        <Layer id="transit-viaduct" type="fill-extrusion" minzoom={13} filter={["any", ["get", "bridge"], ["<", ["zoom"], 15]]}
           paint={{ "fill-extrusion-color": ["get", "color"], "fill-extrusion-base": ["-", ["get", "top"], 1.2], "fill-extrusion-height": ["get", "top"], "fill-extrusion-opacity": 0.9 }} />
       </Source>
       <Source id="transit-piers" type="geojson" data={three ? piers : EMPTY}>
-        <Layer id="transit-pier" type="fill-extrusion" minzoom={14}
+        <Layer id="transit-pier" type="fill-extrusion" minzoom={14} maxzoom={15}
           paint={{ "fill-extrusion-color": "#6b7280", "fill-extrusion-base": 0, "fill-extrusion-height": ["-", ["get", "top"], 1.2], "fill-extrusion-opacity": 0.9 }} />
       </Source>
       <Source id="transit-stations" type="geojson" data={stations}>
         <Layer id="transit-station" type="circle" minzoom={11}
           paint={{ "circle-color": "#ffffff", "circle-stroke-color": "#111827", "circle-stroke-width": 1.5, "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 2, 16, 6] }} />
       </Source>
-      <Source id="transit-entrances" type="geojson" data={walking ? entrances : EMPTY}>
-        <Layer id="transit-entrance" type="circle"
-          paint={{ "circle-color": "#16a34a", "circle-stroke-color": "#ffffff", "circle-stroke-width": 2, "circle-radius": 7, "circle-pitch-alignment": "viewport" }} />
+      <Source id="transit-entrances" type="geojson" data={entrances}>
+        {/* Overhead: a small green dot. Street level: the 3D kit draws it; this stays as an invisible tap target. */}
+        <Layer id="transit-entrance" type="circle" minzoom={16}
+          paint={{ "circle-color": "#16a34a", "circle-stroke-color": "#ffffff", "circle-stroke-width": walking ? 0 : 1, "circle-radius": walking ? 14 : 3.5, "circle-opacity": walking ? 0.01 : 1, "circle-stroke-opacity": walking ? 0 : 1 }} />
       </Source>
       <Source id="transit-work-points" type="geojson" data={work.points}>
         <Layer id="transit-work" type="symbol" minzoom={11}

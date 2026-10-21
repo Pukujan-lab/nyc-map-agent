@@ -35,3 +35,43 @@ describe("track height profile", () => {
     expect(p.grade[2]).toBe("elevated");
   });
 });
+
+import { raisedTrack } from "./model";
+describe("raised track", () => {
+  it("puts a deck at bridge height and no piers on the bridge", () => {
+    const c: Array<[number, number]> = [[-73.9944, 40.7136], [-73.9906, 40.7075], [-73.9862, 40.7032]];
+    const s = { ...sys, shapes: { B: { c, m: [0, 740, 1340], g: ["underground", "underground", "underground"] } } } as unknown as StaticSystem;
+    const r = raisedTrack(s);
+    expect(r.decks.features.length).toBe(2);
+    expect(r.decks.features[0].properties?.top).toBe(40);
+    expect(r.piers.features.length).toBe(0);
+  });
+});
+
+describe("viaductBays", () => {
+  it("stamps 15 m bays along elevated track, skipping bridges and flagging stations", async () => {
+    const { viaductBays } = await import("./model");
+    const c: Array<[number, number]> = [[-73.96, 40.70], [-73.96, 40.7018]]; // ~200 m due north
+    const sys = { system: "subway", routes: {}, lines: { type: "FeatureCollection", features: [] }, stopM: {},
+      stations: { type: "FeatureCollection", features: [{ type: "Feature", properties: { id: "s", name: "S", routes: "J" }, geometry: { type: "Point", coordinates: [-73.96, 40.7009] } }] },
+      shapes: { J: { c, m: [0, 200], g: ["elevated", "elevated"] } } } as never;
+    const bays = viaductBays(sys);
+    expect(bays.length).toBeGreaterThanOrEqual(13);
+    expect(bays.every((b) => b.top === 8 && Math.round(b.bearing) % 360 === 0)).toBe(true);
+    expect(bays.some((b) => b.station)).toBe(true);
+    expect(bays.some((b) => !b.station)).toBe(true);
+  });
+});
+
+describe("entranceInstances", () => {
+  it("culls to radius, faces the station, and grays only out-of-service elevators", async () => {
+    const { entranceInstances } = await import("./model");
+    const pt = (lon: number, lat: number, props: object) => ({ type: "Feature", properties: props, geometry: { type: "Point", coordinates: [lon, lat] } });
+    const sys = { system: "subway", routes: {}, shapes: {}, stopM: {}, lines: { type: "FeatureCollection", features: [] },
+      stations: { type: "FeatureCollection", features: [pt(-73.99, 40.7310, { id: "S", name: "S", routes: "" })] },
+      entrances: { type: "FeatureCollection", features: [pt(-73.99, 40.7300, { id: "S", name: "S", kind: "Stair" }), pt(-73.99, 40.7301, { id: "S", name: "S", kind: "Elevator" }), pt(-73.99, 40.7302, { id: "S", name: "S", kind: "Easement - Street" }), pt(-73.95, 40.73, { id: "S", name: "S", kind: "Stair" })] } } as never;
+    const e = entranceInstances(sys, new Set(["S"]), [-73.99, 40.73]);
+    expect(e.map((x) => [x.kind, x.out])).toEqual([["stair", false], ["elevator", true]]);
+    expect(Math.round(e[0].bearing)).toBe(0);
+  });
+});

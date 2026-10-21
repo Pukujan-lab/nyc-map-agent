@@ -162,47 +162,9 @@ export function bodyPolygon(lon: number, lat: number, bearing: number, length: n
   return { type: "Polygon", coordinates: [[corner(l + 2, 0), corner(l, w), corner(-l, w), corner(-l, -w), corner(l, -w), corner(l + 2, 0)]] };
 }
 
-/** Thin deck polygons under elevated runs: one quad per segment. */
-export function viaductPolygons(lines: StaticSystem["lines"]): GeoJSON.FeatureCollection<GeoJSON.Polygon> {
-  const features: GeoJSON.Feature<GeoJSON.Polygon>[] = [];
-  for (const f of lines.features) {
-    if (f.properties.grade !== "elevated") continue;
-    const c = f.geometry.coordinates;
-    for (let i = 1; i < c.length; i++) {
-      const [a, b] = [c[i - 1], c[i]];
-      const mid: [number, number] = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-      if (structureAt(mid, 120)?.kind === "bridge") continue; // the bridge model carries the track
-      const dx = (b[0] - a[0]) * 111_320 * Math.cos((a[1] * Math.PI) / 180), dy = (b[1] - a[1]) * 111_320;
-      const len = Math.hypot(dx, dy);
-      if (len < 1) continue;
-      const brg = ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
-      features.push({ type: "Feature", properties: { color: f.properties.color, top: structureAt(mid)?.deck ?? VIADUCT_TOP }, geometry: bodyPolygonFlat(mid[0], mid[1], brg, len + 1, 7) });
-    }
-  }
-  return { type: "FeatureCollection", features };
-}
 function bodyPolygonFlat(lon: number, lat: number, bearing: number, length: number, width: number): GeoJSON.Polygon {
   const p = bodyPolygon(lon, lat, bearing, length, width).coordinates[0];
   return { type: "Polygon", coordinates: [[p[1], p[2], p[3], p[4], p[1]]] };
-}
-
-/** Square piers every ~40 m under elevated runs. */
-export function viaductPiers(lines: StaticSystem["lines"]): GeoJSON.FeatureCollection<GeoJSON.Polygon> {
-  const features: GeoJSON.Feature<GeoJSON.Polygon>[] = [];
-  for (const f of lines.features) {
-    if (f.properties.grade !== "elevated") continue;
-    let acc = 0;
-    if (structureAt(f.geometry.coordinates[0] as [number, number], 120)?.kind === "bridge") continue;
-    const c = f.geometry.coordinates;
-    for (let i = 1; i < c.length; i++) {
-      const dx = (c[i][0] - c[i - 1][0]) * 111_320 * Math.cos((c[i][1] * Math.PI) / 180), dy = (c[i][1] - c[i - 1][1]) * 111_320;
-      acc += Math.hypot(dx, dy);
-      if (acc < 40) continue;
-      acc = 0;
-      features.push({ type: "Feature", properties: { top: structureAt(c[i] as [number, number])?.deck ?? VIADUCT_TOP }, geometry: bodyPolygonFlat(c[i][0], c[i][1], 0, 1.2, 1.2) });
-    }
-  }
-  return { type: "FeatureCollection", features };
 }
 
 /**
@@ -210,14 +172,14 @@ export function viaductPiers(lines: StaticSystem["lines"]): GeoJSON.FeatureColle
  * real deck height. Bridges are drawn by the bridges work in the shared
  * threeLayer, so we draw no viaduct there; trains just ride at `deck`.
  */
-export type Structure = { id: string; kind: "bridge" | "viaduct"; deck: number; line: Array<[number, number]> };
+export type Structure = { id: string; kind: "bridge" | "viaduct"; deck: number; routes: string[]; line: Array<[number, number]> };
 export const STRUCTURES: Structure[] = [
   // Subway tracks on the Manhattan Bridge (B D N Q), lower level ~40 m over the river.
-  { id: "manhattan-bridge", kind: "bridge", deck: 40, line: [[-73.9944, 40.7136], [-73.9906, 40.7075], [-73.9862, 40.7032]] },
+  { id: "manhattan-bridge", kind: "bridge", deck: 40, routes: ["B", "D", "N", "Q"], line: [[-73.9947, 40.7149], [-73.9902, 40.7072], [-73.9866, 40.7010]] },
   // J M Z on the Williamsburg Bridge, centre tracks ~38 m.
-  { id: "williamsburg-bridge", kind: "bridge", deck: 38, line: [[-73.9807, 40.7166], [-73.9712, 40.7135], [-73.9617, 40.7104]] },
+  { id: "williamsburg-bridge", kind: "bridge", deck: 38, routes: ["J", "M", "Z"], line: [[-73.9807, 40.7166], [-73.9712, 40.7135], [-73.9617, 40.7104]] },
   // 1 train's Manhattan Valley Viaduct over 125 St, ~16 m.
-  { id: "manhattan-valley-viaduct", kind: "viaduct", deck: 16, line: [[-73.9620, 40.8105], [-73.9585, 40.8158], [-73.9561, 40.8205]] },
+  { id: "manhattan-valley-viaduct", kind: "viaduct", deck: 16, routes: ["1"], line: [[-73.9620, 40.8105], [-73.9585, 40.8158], [-73.9561, 40.8205]] },
 ];
 
 function metresToSegment(p: [number, number], a: [number, number], b: [number, number]): number {
@@ -227,8 +189,8 @@ function metresToSegment(p: [number, number], a: [number, number], b: [number, n
   const t = Math.max(0, Math.min(1, -(ax * dx + ay * dy) / (dx * dx + dy * dy || 1)));
   return Math.hypot(ax + dx * t, ay + dy * t);
 }
-export function structureAt(p: [number, number], within = 60): Structure | undefined {
-  return STRUCTURES.find((s) => s.line.some((a, i) => i > 0 && metresToSegment(p, s.line[i - 1], a) < within));
+export function structureAt(p: [number, number], within = 60, route?: string): Structure | undefined {
+  return STRUCTURES.find((s) => (!route || s.routes.includes(route)) && s.line.some((a, i) => i > 0 && metresToSegment(p, s.line[i - 1], a) < within));
 }
 
 const MAX_GRADE = 0.035; // 3.5 % ramps from portals / up to decks
@@ -247,7 +209,7 @@ export function trackHeightProfile(sys: StaticSystem, route: string): { m: numbe
   if (!p) {
     const n = shape.c.length, h = new Float32Array(n), grade = shape.g.slice();
     for (let i = 0; i < n; i++) {
-      const s = sys.system === "subway" ? structureAt(shape.c[i]) : undefined;
+      const s = sys.system === "subway" ? structureAt(shape.c[i], 60, route) : undefined;
       if (s) { grade[i] = "elevated"; h[i] = s.deck; }
       else if (sys.system !== "subway") grade[i] = "grade";
       else h[i] = grade[i] === "elevated" ? VIADUCT_TOP : 0;
@@ -261,4 +223,130 @@ export function trackHeightProfile(sys: StaticSystem, route: string): { m: numbe
     profiles.set(shape, p);
   }
   return { m: shape.m, ...p };
+}
+
+/**
+ * Raised track from the height profiles: one deck quad per shape segment that
+ * sits above ground (viaducts, portal ramps, bridge decks), each at its own
+ * height, so bridge tracks climb, hold the deck and descend. Piers only off
+ * the bridges. `raisedCells` lets the ground lines step aside under them.
+ */
+export function raisedTrack(sys: StaticSystem): {
+  decks: GeoJSON.FeatureCollection<GeoJSON.Polygon>;
+  piers: GeoJSON.FeatureCollection<GeoJSON.Polygon>;
+  raisedCells: Set<string>;
+} {
+  const decks: GeoJSON.Feature<GeoJSON.Polygon>[] = [], piers: GeoJSON.Feature<GeoJSON.Polygon>[] = [];
+  const raisedCells = new Set<string>();
+  if (sys.system !== "subway") return { decks: { type: "FeatureCollection", features: decks }, piers: { type: "FeatureCollection", features: piers }, raisedCells };
+  for (const route of Object.keys(sys.shapes)) {
+    const shape = sys.shapes[route];
+    const prof = trackHeightProfile(sys, route);
+    if (!prof) continue;
+    const color = sys.routes[route]?.color ?? "#808183";
+    let sincePier = 0;
+    for (let i = 1; i < shape.c.length; i++) {
+      const top = (prof.h[i - 1] + prof.h[i]) / 2;
+      if (top < 1) continue;
+      const [a, b] = [shape.c[i - 1], shape.c[i]];
+      const mid: [number, number] = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      raisedCells.add(cellKey(a)).add(cellKey(b));
+      const dx = (b[0] - a[0]) * 111_320 * Math.cos((a[1] * Math.PI) / 180), dy = (b[1] - a[1]) * 111_320;
+      const len = Math.hypot(dx, dy);
+      if (len < 1) continue;
+      const brg = ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
+      const bridge = structureAt(mid, 150, route)?.kind === "bridge";
+      decks.push({ type: "Feature", properties: { color, top, bridge }, geometry: bodyPolygonFlat(mid[0], mid[1], brg, len + 1, bridge ? 3.5 : 7) });
+      sincePier += len;
+      if (!bridge && sincePier > 40) {
+        sincePier = 0;
+        piers.push({ type: "Feature", properties: { top }, geometry: bodyPolygonFlat(b[0], b[1], 0, 1.2, 1.2) });
+      }
+    }
+  }
+  return { decks: { type: "FeatureCollection", features: decks }, piers: { type: "FeatureCollection", features: piers }, raisedCells };
+}
+/** ~45 m grid cell key. */
+export const cellKey = (p: GeoJSON.Position) => `${Math.round(p[0] * 2400)},${Math.round(p[1] * 2400)}`;
+
+/** Split subway ground lines into runs, marking runs under raised track `raised` so 3D hides them and 2D draws them solid. */
+export function splitRaised(lines: GeoJSON.Feature<GeoJSON.LineString>[], raised: Set<string>): GeoJSON.Feature<GeoJSON.LineString>[] {
+  const out: GeoJSON.Feature<GeoJSON.LineString>[] = [];
+  for (const f of lines) {
+    const c = f.geometry.coordinates;
+    const flag = c.map((p) => raised.has(cellKey(p)));
+    let start = 0;
+    for (let i = 1; i <= c.length; i++) {
+      if (i === c.length || flag[i] !== flag[start]) {
+        const seg = c.slice(start, Math.min(i + 1, c.length));
+        if (seg.length > 1) out.push({ ...f, properties: { ...f.properties, grade: flag[start] ? "elevated" : (f.properties as { grade: Grade }).grade }, geometry: { type: "LineString", coordinates: seg } });
+        start = i;
+      }
+    }
+  }
+  return out;
+}
+
+/** One 15 m viaduct bay (columns + girders + rails) centred at lon/lat; `station` bays get a platform and canopy. */
+export type Bay = { lon: number; lat: number; bearing: number; top: number; len: number; station: boolean };
+const BAY = 15;
+const BRIDGE_BOX = STRUCTURES.filter((s) => s.kind === "bridge").map((s) => {
+  const xs = s.line.map((p) => p[0]), ys = s.line.map((p) => p[1]);
+  return [Math.min(...xs) - 0.002, Math.min(...ys) - 0.002, Math.max(...xs) + 0.002, Math.max(...ys) + 0.002];
+});
+
+/**
+ * Bays along elevated subway shapes (not bridges, which have their own model; not portal ramps under 5 m).
+ * Several routes share one structure, so bays are de-duplicated on a ~10 m grid by heading.
+ */
+export function viaductBays(sys: StaticSystem): Bay[] {
+  if (sys.system !== "subway") return [];
+  const seen = new Set<string>(), bays: Bay[] = [];
+  // ~45 m cells around each station (3x3 neighbourhood ≈ an 8-car platform either side).
+  const stationCells = new Set<string>();
+  for (const f of sys.stations.features) {
+    const [x, y] = f.geometry.coordinates;
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) stationCells.add(`${Math.round(x * 2400) + dx},${Math.round(y * 2400) + dy}`);
+  }
+  const nearBridge = (p: [number, number], route: string) => BRIDGE_BOX.some((b) => p[0] > b[0] && p[0] < b[2] && p[1] > b[1] && p[1] < b[3]) && structureAt(p, 80, route)?.kind === "bridge";
+  for (const route of Object.keys(sys.shapes)) {
+    const shape = sys.shapes[route], prof = trackHeightProfile(sys, route);
+    if (!prof) continue;
+    let carry = 0;
+    for (let i = 1; i < shape.c.length; i++) {
+      const [a, b] = [shape.c[i - 1], shape.c[i]];
+      const ha = prof.h[i - 1], hb = prof.h[i], seg = shape.m[i] - shape.m[i - 1];
+      if (Math.min(ha, hb) < 5 || seg <= 0) { carry = 0; continue; }
+      const kx = 111_320 * Math.cos((a[1] * Math.PI) / 180);
+      const brg = ((Math.atan2((b[0] - a[0]) * kx, (b[1] - a[1]) * 111_320) * 180) / Math.PI + 360) % 360;
+      for (let d = carry; d < seg; d += BAY) {
+        const t = d / seg, lon = a[0] + (b[0] - a[0]) * t, lat = a[1] + (b[1] - a[1]) * t;
+        if (nearBridge([lon, lat], route)) continue;
+        const key = `${Math.round(lon * 9000)},${Math.round(lat * 9000)},${Math.round((brg % 180) / 20)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const station = stationCells.has(cellKey([lon, lat]));
+        bays.push({ lon, lat, bearing: brg, top: ha + (hb - ha) * t, len: BAY, station });
+      }
+      carry = (carry + Math.ceil((seg - carry) / BAY) * BAY) - seg;
+    }
+  }
+  return bays;
+}
+
+/** A street entrance for the 3D kit: faces its station (stairs descend toward the platform). */
+export type EntranceInstance = { lon: number; lat: number; bearing: number; kind: "stair" | "elevator"; out: boolean };
+export function entranceInstances(sys: StaticSystem, outStations: Set<string>, center: [number, number], radius = 300): EntranceInstance[] {
+  const st = new Map(sys.stations.features.map((f) => [String(f.properties.id), f.geometry.coordinates as [number, number]]));
+  const kx = 111_320 * Math.cos((center[1] * Math.PI) / 180), out: EntranceInstance[] = [];
+  for (const f of sys.entrances?.features ?? []) {
+    const [lon, lat] = f.geometry.coordinates;
+    if (Math.hypot((lon - center[0]) * kx, (lat - center[1]) * 111_320) > radius) continue;
+    if (!/stair|elevator|escalator/i.test(f.properties.kind)) continue; // easements, station houses, walkways: no kit
+    const s = st.get(String(f.properties.id));
+    const bearing = s ? ((Math.atan2((s[0] - lon) * kx, (s[1] - lat) * 111_320) * 180) / Math.PI + 360) % 360 : 0;
+    const elevator = /elevator/i.test(f.properties.kind);
+    out.push({ lon, lat, bearing, kind: elevator ? "elevator" : "stair", out: elevator && outStations.has(String(f.properties.id)) });
+  }
+  return out;
 }

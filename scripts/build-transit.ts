@@ -190,7 +190,15 @@ async function build(id: SystemId, osm: OsmWay[], work: string) {
       if (seen.has(ends)) return;
       seen.add(ends);
       const thin: Pt[] = [];
-      for (const p of pts) if (!thin.length || dist(thin[thin.length - 1], p) > 12) thin.push([r5(p[0]), r5(p[1])]);
+      for (const p of pts) {
+        const last = thin[thin.length - 1];
+        if (last && dist(last, p) <= 12) continue;
+        // Some shapes jump kilometres in one segment (e.g. B/D over the Manhattan
+        // Bridge); resample so heights and grades can vary along it.
+        const steps = last && id === "subway" ? Math.floor(dist(last, p) / 40) : 0;
+        for (let k = 1; k < steps; k++) thin.push([r5(last[0] + ((p[0] - last[0]) * k) / steps), r5(last[1] + ((p[1] - last[1]) * k) / steps)]);
+        thin.push([r5(p[0]), r5(p[1])]);
+      }
       if (thin.length < 2) return;
       const grades = smooth(thin.map(gradeAt));
       if (idx === 0) {

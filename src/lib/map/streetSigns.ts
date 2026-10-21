@@ -2,6 +2,7 @@ import type { CustomLayerInterface, CustomRenderMethodInput, Map as MapLibreMap 
 import { MercatorCoordinate } from "maplibre-gl";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { distanceFade } from "./corner";
 
 /**
  * Corner street-name signs at street level. Intersections and street names are
@@ -22,8 +23,11 @@ const BLADES = [
   { y: 2.775, axis: "x" as const, half: 0.0175 },
   { y: 2.9535, axis: "z" as const, half: 0.0175 },
 ];
-const DECAL_W = 0.58;
-const DECAL_H = 0.14;
+// Real blades are ~0.6 m, but at eye level and 30 m away that is a few pixels
+// of text: the decal blades are drawn ~1.6x larger so names stay readable.
+const BLADE_SCALE = 1.6;
+const DECAL_W = 0.58 * BLADE_SCALE;
+const DECAL_H = 0.14 * BLADE_SCALE;
 
 interface Sign {
   key: string;
@@ -58,6 +62,35 @@ function bladeTexture(name: string): THREE.CanvasTexture {
   return t;
 }
 
+/**
+ * Street name painted on the asphalt before the crossing, white on clear.
+ * Letters are drawn ~2.5x tall: seen from 1.7 m up the road foreshortens them
+ * back to normal proportions (the same trick as painted "STOP" markings).
+ */
+function roadTexture(name: string): THREE.CanvasTexture {
+  const c = document.createElement("canvas");
+  c.width = 512;
+  c.height = 256;
+  const g = c.getContext("2d")!;
+  g.fillStyle = "rgba(244,241,232,0.95)";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  let size = 96;
+  do g.font = `700 ${size}px "Helvetica Neue", Arial, sans-serif`;
+  while (g.measureText(name).width > c.width - 24 && (size -= 4) > 24);
+  g.setTransform(1, 0, 0, 2.5, 0, 0);
+  g.fillText(name, c.width / 2, c.height / 5);
+  const t = new THREE.CanvasTexture(c);
+  t.encoding = THREE.sRGBEncoding;
+  t.anisotropy = 8;
+  return t;
+}
+/** Road-surface name: metres across the street, along it, and back from the crossing. */
+const ROAD_W = 7;
+const ROAD_H = 3.5;
+const ROAD_BACK_M = 14;
+const ROAD_OPACITY = 0.85;
+
 /** Picks the nearest signs from the loaded tiles. */
 function nearbySigns(map: MapLibreMap): Sign[] {
   const { lng, lat } = map.getCenter();
@@ -86,12 +119,26 @@ export function createStreetSignsLayer(): CustomLayerInterface {
   let meters = 1;
   const placed = new Map<string, THREE.Object3D>();
   const decalGeo = new THREE.PlaneGeometry(DECAL_W, DECAL_H);
+  const roadGeo = new THREE.PlaneGeometry(ROAD_W, ROAD_H);
+  /** Material opacity at full strength (before the distance fade). */
+  const baseOpacity = new WeakMap<THREE.Material, number>();
+  /** Blade materials whose text texture this layer made (and must dispose). */
+  const ownMaps = new WeakSet<THREE.Material>();
 
   const build = (s: Sign): THREE.Object3D => {
     const root = model!.clone();
     root.scale.setScalar(SCALE);
+    // Own materials per sign so each can fade with its distance from the eye.
+    const mats: THREE.Material[] = [];
+    root.traverse((c) => {
+      if (!(c instanceof THREE.Mesh)) return;
+      c.material = (c.material as THREE.Material).clone();
+      mats.push(c.material as THREE.Material);
+    });
     BLADES.forEach((blade, i) => {
       const mat = new THREE.MeshStandardMaterial({ map: bladeTexture(i === 0 ? s.a : s.b), roughness: 0.6 });
+      ownMaps.add(mat);
+      mats.push(mat);
       for (const side of [1, -1]) {
         const m = new THREE.Mesh(decalGeo, mat);
         m.position.y = blade.y;
@@ -113,14 +160,36 @@ export function createStreetSignsLayer(): CustomLayerInterface {
     const ub = [Math.sin((s.bb * Math.PI) / 180), -Math.cos((s.bb * Math.PI) / 180)];
     const bis = [ua[0] + ub[0], ua[1] + ub[1]];
     const len = Math.hypot(bis[0], bis[1]) || 1;
-    wrap.userData = { lng: s.lng, lat: s.lat, off: [(bis[0] / len) * CORNER_M, (bis[1] / len) * CORNER_M] };
+    const off = [(bis[0] / len) * CORNER_M, (bis[1] / len) * CORNER_M];
+    wrap.userData = { lng: s.lng, lat: s.lat, off };
+    // Names on the road, on each approach to the crossing, facing the walker coming up to it.
+    for (const [name, u] of [[s.a, ua], [s.b, ub]] as const) {
+      const mat = new THREE.MeshBasicMaterial({ map: roadTexture(name), transparent: true, depthWrite: false });
+      ownMaps.add(mat);
+      baseOpacity.set(mat, ROAD_OPACITY);
+      mats.push(mat);
+      for (const side of [1, -1]) {
+        const d = [-side * u[0], -side * u[1]]; // the walker's view direction
+        const m = new THREE.Mesh(roadGeo, mat);
+        m.rotation.order = "YXZ";
+        m.rotation.set(-Math.PI / 2, Math.atan2(-d[0], -d[1]), 0);
+        m.position.set(-off[0] + side * u[0] * ROAD_BACK_M, 0.05, -off[1] + side * u[1] * ROAD_BACK_M);
+        wrap.add(m);
+      }
+    }
+    for (const m of mats) m.transparent = true;
+    wrap.userData.mats = mats;
     return wrap;
   };
 
   const place = (o: THREE.Object3D) => {
-    const { lng, lat, off } = o.userData as { lng: number; lat: number; off: number[] };
+    const { lng, lat, off, mats } = o.userData as { lng: number; lat: number; off: number[]; mats: THREE.Material[] };
     const mc = MercatorCoordinate.fromLngLat([lng, lat], 0);
     o.position.set((mc.x - origin.x) / meters + off[0], 0, (mc.y - origin.y) / meters + off[1]);
+    // The scene origin is the map centre (the walker's eye), so this is the distance to it.
+    const fade = distanceFade(Math.hypot(o.position.x, o.position.z));
+    o.visible = fade > 0.02;
+    for (const m of mats) m.opacity = (baseOpacity.get(m) ?? 1) * fade;
   };
 
   const refresh = () => {
@@ -132,13 +201,11 @@ export function createStreetSignsLayer(): CustomLayerInterface {
     for (const [key, o] of placed) {
       if (keep.has(key)) continue;
       group.remove(o);
-      o.traverse((c) => {
-        if (c instanceof THREE.Mesh && c.geometry === decalGeo) {
-          const mat = c.material as THREE.MeshStandardMaterial;
-          mat.map?.dispose();
-          mat.dispose();
-        }
-      });
+      for (const mat of (o.userData as { mats: THREE.MeshStandardMaterial[] }).mats) {
+        // Cloned model materials share the GLB's textures; only blade text maps are ours.
+        if (ownMaps.has(mat)) mat.map?.dispose();
+        mat.dispose();
+      }
       placed.delete(key);
     }
     for (const s of want) {

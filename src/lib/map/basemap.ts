@@ -157,12 +157,18 @@ function setPaint(map: MapLibreMap, layer: string, prop: string, value: unknown,
 
 /** Sidewalk texture (generated in-repo by scripts/make-facade-textures.py, CC0). */
 const CONCRETE = "street-concrete";
+/** Lawn texture for parks at street level (ambientCG Grass001, CC0); a flat green reads as paint. */
+const GRASS = "street-grass";
 
 /** Loads the sidewalk texture once per style; call before applyStreetPalette. */
 export async function loadStreetTextures(map: MapLibreMap): Promise<void> {
-  if (map.hasImage(CONCRETE)) return;
-  const { data } = await map.loadImage("/textures/concrete.png");
-  if (!map.hasImage(CONCRETE)) map.addImage(CONCRETE, data);
+  await Promise.all(
+    [[CONCRETE, "/textures/concrete.png"], [GRASS, "/textures/grass.png"]].map(async ([id, url]) => {
+      if (map.hasImage(id)) return;
+      const { data } = await map.loadImage(url);
+      if (!map.hasImage(id)) map.addImage(id, data);
+    }),
+  );
 }
 
 /** Street-level ground, roads and sidewalks; `street = false` restores the style. */
@@ -171,7 +177,13 @@ export function applyStreetPalette(map: MapLibreMap, street: boolean): void {
     const id = layer.id;
     if (layer.type === "background") setPaint(map, id, "background-color", STREET_COLORS.ground, street);
     if (layer.type === "fill" && /^landuse_residential$/.test(id)) setPaint(map, id, "fill-color", STREET_COLORS.ground, street);
-    if (layer.type === "fill" && /^park$|landcover_grass/.test(id)) setPaint(map, id, "fill-color", STREET_COLORS.park, street);
+    if (layer.type === "fill" && /^park$|landcover_grass/.test(id)) {
+      setPaint(map, id, "fill-color", STREET_COLORS.park, street);
+      setPaint(map, id, "fill-pattern", map.hasImage(GRASS) ? GRASS : undefined, street);
+      setPaint(map, id, "fill-opacity", 1, street);
+    }
+    // Plazas use the style's tiny hatch pattern, which shimmers white over the lawns at eye level.
+    if (layer.type === "fill" && id === "road_area_pattern") setPaint(map, id, "fill-pattern", map.hasImage(CONCRETE) ? CONCRETE : undefined, street);
     // The 0.5 m choropleth slabs span whole grid squares, streets included:
     // at eye level they read as knee-high white walls across the road.
     if (id === "block-extrusion" || id === "block-selection-rim") setPaint(map, id, "fill-extrusion-opacity", 0, street);

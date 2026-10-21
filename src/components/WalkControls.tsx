@@ -5,6 +5,7 @@ import {
   Camera,
   ChevronDown,
   ChevronUp,
+  MapPin,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,8 @@ import { WALK_IDLE, type WalkInput } from "@/lib/map/walk";
 interface WalkControlsProps {
   /** The block underfoot, so the strip reports what you are walking through. */
   place: { name: string; detail: string } | null;
+  /** Nearest intersection, e.g. "W 44 St at 8 Av"; null when no corner is near. */
+  corner?: string | null;
   /** Fires on press and release; the map reads it every frame. */
   onInput: (input: WalkInput) => void;
   onExit: () => void;
@@ -62,6 +65,7 @@ function HoldButton({
  */
 export function WalkControls({
   place,
+  corner = null,
   onInput,
   onExit,
 }: WalkControlsProps) {
@@ -127,10 +131,22 @@ export function WalkControls({
         </div>
       </div>
 
+      {corner ? (
+        <div className="pointer-events-none absolute left-1/2 top-16 z-30 -translate-x-1/2 sm:top-3">
+          <div
+            data-testid="walk-corner"
+            className="flex items-center gap-1.5 rounded-md border border-emerald-900/40 bg-emerald-800/90 px-2.5 py-1 text-xs font-semibold text-white shadow-lg"
+          >
+            <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
+            <span className="whitespace-nowrap">{corner}</span>
+          </div>
+        </div>
+      ) : null}
+
       <div
         role="group"
         aria-label="Street-level camera controls"
-        className="absolute bottom-20 left-3 z-30 grid grid-cols-3 grid-rows-3 gap-1"
+        className="absolute bottom-32 left-3 z-30 grid sm:bottom-20 grid-cols-3 grid-rows-3 gap-1"
       >
         <span />
         {pad("Walk forward", ChevronUp, {
