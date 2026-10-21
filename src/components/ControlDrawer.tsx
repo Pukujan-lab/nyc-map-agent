@@ -32,6 +32,7 @@ import {
   MAP_STYLE_LABELS,
   MAP_STYLES,
   SCALE_LABELS,
+  SCALE_PLURALS,
   type MapScale,
   type MapStyleId,
 } from "@/lib/layers";
@@ -278,7 +279,7 @@ export function ControlDrawer({
             </div>
           </Section>
 
-          <Section label={`Top ${SCALE_LABELS[scale].toLowerCase()}s`}>
+          <Section label={`Top ${SCALE_PLURALS[scale].toLowerCase()}`}>
             <TopAreas areas={areas} />
           </Section>
 
