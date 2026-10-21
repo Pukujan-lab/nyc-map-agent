@@ -16,7 +16,7 @@ Tracking issue: [#13](https://github.com/Pukujan/nyc-map-agent/issues/13). Each 
 1. Model and schema (raw / core / marts) in Octo, mapping the existing `public.nyc_*` tables through views. No drops.
 2. dbmate-format migrations and a runner over Octo's SQL endpoint; marts refresh script; dbt noted for later.
 3. Registry-driven incremental ingestion (TypeScript, pinned deps), about 12 months of events; nightly GitHub Actions plus manual dispatch.
-4. Vercel serverless `/api`: `/api/sources`, `/api/blocks`, `/api/area/:block`, `/api/street`. Parameterized SQL, zod validation, cache headers; handlers also run inside the Vite dev server.
+4. Portable `/api` (Hono app in `server/app.ts`; Node entry `pnpm start`, also runs on Docker / Cloudflare): `/api/sources`, `/api/blocks`, `/api/area/:block`, `/api/street`. Parameterized SQL, zod validation, cache headers; handlers also run inside the Vite dev server.
 5. Dashboard UI, kept as simple as today: one unit dropdown (block, NTA 2020, community district, borough), one style dropdown (filled areas, 3D columns, heatmap), filters, per-source guides and a first-run guide inside drawers. No tooltips. `VITE_DATA_BACKEND=octo|socrata`.
 6. Docs: `docs/DATA_MODEL.md`, README, `.env.example`.
 

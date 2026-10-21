@@ -60,6 +60,7 @@ Dependency notes:
 - Textured 3D city tiles are citywide: `pnpm build:city-tiles` writes `public/tiles/nyc-city.pmtiles` (~82 MB, gitignored); `VITE_CITY_TILES_URL` points at a CDN copy. Street level turns the textured city on by default (`city3d=0` in the Layers dropdown turns it off). Basemap extrusions only step aside where textured buildings are loaded around the camera.
 - `mapshaper` 0.7.89 (MPL-2.0, dev only) simplifies NTA / community-district boundaries in `scripts/load-areas.ts` before they are stored in Octo `core.area_shapes`.
 - Octo backend (`VITE_DATA_BACKEND=octo`) makes no browser call to NYC Open Data: boundaries come from `/api/areas`, the noise / crash rollups from `/api/aggregate` (precomputed nightly into `marts.aggregates` by `scripts/build-aggregates.ts`, which runs the same `src/lib/geo/aggregateCore.ts` the Socrata worker uses). Socrata stays the explicit fallback backend.
+- `hono` 4.13.13 and `@hono/node-server` 2.1.5 (both MIT) run the API: `server/app.ts` mounts the Web-standard handlers in `api/` and is host-agnostic (Node via `pnpm start` / the Dockerfile, Cloudflare Workers, Bun, Deno); `vite dev` serves the same app in-process. No host-specific (e.g. Vercel) config.
 - Walking directions add no package. They are one `fetch` to OSRM (`src/lib/api/routing.ts`).
 - Dataset registry: every Socrata map source is one entry in `src/lib/datasets/registry.ts`. Add a source there; do not write a per-dataset module.
 
