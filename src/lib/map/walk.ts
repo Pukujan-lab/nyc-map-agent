@@ -16,14 +16,13 @@ export const EYE_HEIGHT_M = 1.7;
  */
 export const WALK_PITCH = 86;
 /** Drag-to-look range: from the kerb at your feet up to the rooftops. */
-export const LOOK_MIN_PITCH = 55;
-export const LOOK_MAX_PITCH = 115;
+export const LOOK_MIN_PITCH = 70;
+/** Just under level: the aim point must stay on the ground ahead. */
+export const LOOK_MAX_PITCH = 89;
 /** The map's pitch ceiling while walking (MapLibre 5 allows up to 180). */
 export const WALK_MAX_PITCH = 120;
 /** Zoom ceiling while walking; an eye 1.7 m up lands around z21.5–22.5. */
 export const WALK_MAX_ZOOM = 24;
-/** Distance to the point the camera aims at; it becomes the map centre. */
-export const LOOK_AHEAD_M = 30;
 /** Degrees of look per dragged pixel. */
 export const LOOK_DEG_PER_PX = 0.25;
 

@@ -124,10 +124,10 @@ describe("walk camera limits", () => {
     expect(WALK_PITCH).toBeGreaterThan(80);
     expect(WALK_PITCH).toBeLessThan(90);
   });
-  it("clamps drag-to-look between the kerb and the rooftops", () => {
-    expect(clampLookPitch(10)).toBe(55);
-    expect(clampLookPitch(170)).toBe(115);
-    expect(clampLookPitch(90)).toBe(90);
+  it("clamps drag-to-look between the kerb and just under level", () => {
+    expect(clampLookPitch(10)).toBe(70);
+    expect(clampLookPitch(170)).toBe(89);
+    expect(clampLookPitch(80)).toBe(80);
   });
   it("turns corners the short way round", () => {
     const b = approachBearing(350, 10, 0.1);

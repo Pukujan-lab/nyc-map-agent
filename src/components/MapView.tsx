@@ -40,7 +40,7 @@ import {
   approachBearing,
   clampLookPitch,
   EYE_HEIGHT_M,
-  LOOK_AHEAD_M,
+  LOOK_MAX_PITCH,
   LOOK_DEG_PER_PX,
   poseAlongRoute,
   resolveWalkInput,
@@ -85,16 +85,17 @@ interface Eye {
  * pedestrian viewpoint rather than a steep pitch from a rooftop.
  */
 function eyeCamera(map: MaplibreMapInstance, eye: Eye): CameraOptions {
-  // Aim at a point LOOK_AHEAD_M along the street, raised or lowered to match
-  // the look angle. Keeping that target near the ground keeps the map centre
-  // (and so tile LOD) on the street around you rather than kilometres away.
+  // Aim at the ground point the look ray hits. MapLibre keeps the map centre
+  // clamped to the ground, so an aim point above or below it sank the camera
+  // underground (black lower half, pale band) or lifted it to the rooftops.
+  const ahead = EYE_HEIGHT_M * Math.tan((Math.min(eye.pitch, LOOK_MAX_PITCH) * Math.PI) / 180);
   const rad = (eye.bearing * Math.PI) / 180;
   const cosLat = Math.cos((eye.lat * Math.PI) / 180);
   const to: [number, number] = [
-    eye.lon + (LOOK_AHEAD_M * Math.sin(rad)) / (111_320 * cosLat),
-    eye.lat + (LOOK_AHEAD_M * Math.cos(rad)) / 111_320,
+    eye.lon + (ahead * Math.sin(rad)) / (111_320 * cosLat),
+    eye.lat + (ahead * Math.cos(rad)) / 111_320,
   ];
-  const toAlt = EYE_HEIGHT_M - LOOK_AHEAD_M / Math.tan((eye.pitch * Math.PI) / 180);
+  const toAlt = 0;
   return map.calculateCameraOptionsFromTo(new LngLat(eye.lon, eye.lat), EYE_HEIGHT_M, new LngLat(to[0], to[1]), toAlt);
 }
 import { useMapState } from "@/lib/store/MapStateContext";
