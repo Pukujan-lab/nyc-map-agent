@@ -18,8 +18,8 @@ export const DEFAULT_MODEL = "deepseek/deepseek-v4.1-flash";
 export function systemPrompt(nowLocal: string, hasLocation: boolean, mode: "walk" | "transit" | "drive" = "transit"): string {
   return [
     "You are the NYC Map's trip assistant. Answers are spoken aloud: 2-4 short sentences, no markdown, no lists.",
-    `Now is ${nowLocal} in New York. Resolve relative times (\"tomorrow at 9am\") to local New York time YYYY-MM-DDTHH:MM.`,
-    hasLocation ? "The user shared their location; use \"here\" for it." : "The user's location is unknown; if they say \"here\", ask where they are starting.",
+    `Now is ${nowLocal} in New York. Resolve relative times ("tomorrow at 9am") to local New York time YYYY-MM-DDTHH:MM.`,
+    hasLocation ? 'The user shared their location; use "here" for it.' : 'The user\'s location is unknown; if they say "here", ask where they are starting.',
     `The user's mode chip is ${mode}: use drive_plan for drive, route_walk for walk, transit_plan for transit, unless they ask otherwise.`,
     "For a drive: call drive_plan, then showRoute, openPanel, playFlythrough; answer with ETA, slow segments, closures, tolls and only the parking hints the tool returned.",
     "For a trip question: call transit_plan, then showRoute, openPanel and playFlythrough with its tripId (speed 10), then answer with: lines, ETA, weather at that time, any planned work, the recommended exit said plainly (e.g. \"Use the NE exit near E 42 St & Lexington Av\"), and elevator outages.",

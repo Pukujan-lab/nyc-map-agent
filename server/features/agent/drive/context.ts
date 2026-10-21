@@ -60,9 +60,9 @@ export async function closures(route: LngLatTuple[], dayIso: string): Promise<No
     z.object({ onstreetname: z.string(), fromstreetname: z.string().optional(), tostreetname: z.string().optional(), purpose: z.string().optional(), the_geom: z.object({ coordinates: z.array(z.array(z.tuple([z.number(), z.number()]))) }) }));
   const pts = samples(route);
   return rows
-    .filter((r) => r.the_geom.coordinates.flat().some((p) => nearRoute(pts, p as LngLatTuple, 25)))
+    .filter((r) => r.the_geom.coordinates.flat().some((p) => nearRoute(pts, p, 25)))
     .slice(0, 5)
-    .map((r) => ({ kind: "closure" as const, text: `Closure on ${r.onstreetname.toLowerCase()} ${r.fromstreetname ? `from ${r.fromstreetname.toLowerCase()} to ${r.tostreetname?.toLowerCase() ?? ""}` : ""} (${(r.purpose ?? "construction").toLowerCase()})`.replace(/\s+/g, " "), at: r.the_geom.coordinates[0][0] as LngLatTuple }));
+    .map((r) => ({ kind: "closure" as const, text: `Closure on ${r.onstreetname.toLowerCase()} ${r.fromstreetname ? `from ${r.fromstreetname.toLowerCase()} to ${r.tostreetname?.toLowerCase() ?? ""}` : ""} (${(r.purpose ?? "construction").toLowerCase()})`.replace(/\s+/g, " "), at: r.the_geom.coordinates[0][0] }));
 }
 
 /** Event street closures on the day, only where the event location names a street the route uses. */

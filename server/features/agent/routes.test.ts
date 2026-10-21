@@ -9,13 +9,13 @@ const finish = (reason: "tool-calls" | "stop") => ({ type: "finish", finishReaso
 function model() {
   let step = 0;
   return new MockLanguageModelV4({
-    doStream: async () => {
+    doStream: () => {
       step += 1;
       const chunks =
         step === 1
           ? [{ type: "tool-call", toolCallId: "c1", toolName: "enterStreetView", input: JSON.stringify({ place: "here" }) }, finish("tool-calls")]
           : [{ type: "text-start", id: "t" }, { type: "text-delta", id: "t", delta: "You're at street level." }, { type: "text-end", id: "t" }, finish("stop")];
-      return { stream: convertArrayToReadableStream(chunks as never[]) };
+      return Promise.resolve({ stream: convertArrayToReadableStream(chunks as never[]) });
     },
   });
 }

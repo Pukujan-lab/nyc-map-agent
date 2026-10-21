@@ -93,10 +93,10 @@ export function makeTools(ctx: ToolContext) {
     hazards: tool({ description: "Active National Weather Service alerts at a place.", inputSchema: args.hazards, execute: async ({ place }) => ({ alerts: await hazardsAt(at(await resolve(place))) }) }),
     elevator_status: tool({ description: "Current MTA elevator/escalator outages at a station.", inputSchema: args.elevator_status, execute: async ({ station }) => ({ outages: await elevatorStatus(station) }) }),
     flyTo: tool({ description: "Map: fly the camera to a place.", inputSchema: args.flyTo, execute: async ({ place, zoom }) => { const p = await resolve(place); return emit({ type: "flyTo", lon: p.at[0], lat: p.at[1], zoom }); } }),
-    showRoute: tool({ description: "Map: draw a planned trip.", inputSchema: args.tripRef, execute: async ({ tripId }) => emit({ type: "showRoute", trip: tripOf(tripId) }) }),
-    openPanel: tool({ description: "Map: open the trip summary panel (weather chip, lines, alerts, elevators, exit, ETA).", inputSchema: args.tripRef, execute: async ({ tripId }) => emit({ type: "openPanel", trip: tripOf(tripId) }) }),
+    showRoute: tool({ description: "Map: draw a planned trip.", inputSchema: args.tripRef, execute: ({ tripId }) => emit({ type: "showRoute", trip: tripOf(tripId) }) }),
+    openPanel: tool({ description: "Map: open the trip summary panel (weather chip, lines, alerts, elevators, exit, ETA).", inputSchema: args.tripRef, execute: ({ tripId }) => emit({ type: "openPanel", trip: tripOf(tripId) }) }),
     enterStreetView: tool({ description: "Map: drop to street level at a place.", inputSchema: args.enterStreetView, execute: async ({ place }) => { const p = await resolve(place); return emit({ type: "enterStreetView", lon: p.at[0], lat: p.at[1] }); } }),
-    playFlythrough: tool({ description: "Map: fast-forward preview flying along a planned trip.", inputSchema: args.playFlythrough, execute: async ({ tripId, speed }) => emit({ type: "playFlythrough", trip: tripOf(tripId), speed }) }),
-    setTime: tool({ description: "Map: set the time the map shows (for forecasts/planned work).", inputSchema: args.setTime, execute: async ({ iso }) => emit({ type: "setTime", iso }) }),
+    playFlythrough: tool({ description: "Map: fast-forward preview flying along a planned trip.", inputSchema: args.playFlythrough, execute: ({ tripId, speed }) => emit({ type: "playFlythrough", trip: tripOf(tripId), speed }) }),
+    setTime: tool({ description: "Map: set the time the map shows (for forecasts/planned work).", inputSchema: args.setTime, execute: ({ iso }) => emit({ type: "setTime", iso }) }),
   };
 }

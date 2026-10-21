@@ -40,7 +40,7 @@ export function along(coords: LngLatTuple[], f: number): LngLatTuple {
   const cum = cumulative(coords);
   const total = cum[cum.length - 1] || 1;
   const d = Math.min(Math.max(f, 0), 1) * total;
-  let i = cum.findIndex((c) => c >= d);
+  const i = cum.findIndex((c) => c >= d);
   if (i <= 0) return coords[0];
   const t = (d - cum[i - 1]) / (cum[i] - cum[i - 1] || 1);
   return [coords[i - 1][0] + t * (coords[i][0] - coords[i - 1][0]), coords[i - 1][1] + t * (coords[i][1] - coords[i - 1][1])];
