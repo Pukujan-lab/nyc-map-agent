@@ -38,7 +38,7 @@ function FeatureTopBar() {
 }
 
 /** Always-visible chips; everything else is one level down in "More layers". */
-const PRIMARY = ["transit", "restrooms", "weather"];
+const PRIMARY = ["transit", "transitFocus", "restrooms", "weather"];
 
 function Chips() {
   const { restrooms, setRestrooms } = useMapState();
