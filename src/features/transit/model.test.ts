@@ -62,3 +62,16 @@ describe("viaductBays", () => {
     expect(bays.some((b) => !b.station)).toBe(true);
   });
 });
+
+describe("entranceInstances", () => {
+  it("culls to radius, faces the station, and grays only out-of-service elevators", async () => {
+    const { entranceInstances } = await import("./model");
+    const pt = (lon: number, lat: number, props: object) => ({ type: "Feature", properties: props, geometry: { type: "Point", coordinates: [lon, lat] } });
+    const sys = { system: "subway", routes: {}, shapes: {}, stopM: {}, lines: { type: "FeatureCollection", features: [] },
+      stations: { type: "FeatureCollection", features: [pt(-73.99, 40.7310, { id: "S", name: "S", routes: "" })] },
+      entrances: { type: "FeatureCollection", features: [pt(-73.99, 40.7300, { id: "S", name: "S", kind: "Stair" }), pt(-73.99, 40.7301, { id: "S", name: "S", kind: "Elevator" }), pt(-73.99, 40.7302, { id: "S", name: "S", kind: "Easement - Street" }), pt(-73.95, 40.73, { id: "S", name: "S", kind: "Stair" })] } } as never;
+    const e = entranceInstances(sys, new Set(["S"]), [-73.99, 40.73]);
+    expect(e.map((x) => [x.kind, x.out])).toEqual([["stair", false], ["elevator", true]]);
+    expect(Math.round(e[0].bearing)).toBe(0);
+  });
+});
