@@ -59,13 +59,13 @@ export function partSlices(parts: Part[], start: number, end: number): Array<{ u
 }
 
 /** A same-origin Range endpoint for one published PMTiles asset (also /api/block-tiles). */
-export function pmtilesProxy(name: string): (request: Request) => Promise<Response> {
-  return (request) => serve(name, request);
+export function pmtilesProxy(name: string, contentType = "application/vnd.pmtiles"): (request: Request) => Promise<Response> {
+  return (request) => serve(name, request, contentType);
 }
 
 export const GET = pmtilesProxy("nyc-city.pmtiles");
 
-async function serve(name: string, request: Request): Promise<Response> {
+async function serve(name: string, request: Request, contentType: string): Promise<Response> {
   const asset = await manifest(name).catch(() => null);
   if (!asset) return new Response(`${name} not published`, { status: 404 });
   const common = {
@@ -75,7 +75,7 @@ async function serve(name: string, request: Request): Promise<Response> {
     // ranges (blocky trees, props in the road) in browsers for a day after a
     // rebuild. Five minutes bounds that; PMTiles' own etag check catches the rest.
     "cache-control": "public, max-age=300",
-    "content-type": "application/vnd.pmtiles",
+    "content-type": contentType,
     // Same-origin in the app; open to other origins so a separately hosted
     // frontend can point VITE_CITY_TILES_URL here too.
     "access-control-allow-origin": "*",
