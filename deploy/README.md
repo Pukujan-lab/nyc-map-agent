@@ -39,6 +39,30 @@ openssl rand -hex 32   # CD_SESSION_SECRET
 openssl rand -hex 32   # CD_DEPLOY_TOKEN  (also the GitHub secret NYC_DEPLOY_TOKEN)
 ```
 
+## CI runner
+
+The repository's workflows run on a self-hosted runner on this host, because
+the account's hosted-minutes budget rejects every `ubuntu-latest` job. It lives
+at `~/actions-runner`, labels `self-hosted, linux, x64, gravebuster`, and is a
+systemd unit so it survives reboots:
+
+```bash
+systemctl status actions.runner.Pukujan-nyc-map-agent.gravebuster.service
+```
+
+The runner's user needs the `docker` group and passwordless sudo (the e2e job
+runs `playwright install --with-deps`). To re-register after a rebuild:
+
+```bash
+mkdir -p ~/actions-runner && cd ~/actions-runner
+curl -fsSL -o runner.tar.gz https://github.com/actions/runner/releases/download/v2.338.0/actions-runner-linux-x64-2.338.0.tar.gz
+tar xzf runner.tar.gz && rm runner.tar.gz
+./config.sh --unattended --replace --url https://github.com/Pukujan/nyc-map-agent \
+  --token "$(gh api -X POST repos/Pukujan/nyc-map-agent/actions/runners/registration-token --jq .token)" \
+  --name gravebuster --labels self-hosted,linux,x64,gravebuster --work _work
+sudo ./svc.sh install yoav && sudo ./svc.sh start
+```
+
 ## Manual operations
 
 | Task | Command |
