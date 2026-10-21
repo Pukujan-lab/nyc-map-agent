@@ -152,6 +152,7 @@ export default function Index() {
       .map((boundary) => ({
         code: boundary.ntaCode,
         name: boundary.ntaName,
+        bbox: boundary.bbox,
         count: noiseByCode.get(boundary.ntaCode)?.count ?? 0,
       }))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
