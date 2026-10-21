@@ -16,7 +16,8 @@
     "build:city-tiles": "tsx scripts/build-city-tiles.ts",
     "load:areas": "tsx scripts/load-areas.ts",
     "build:aggregates": "tsx scripts/build-aggregates.ts",
-    "start": "tsx server/node.ts"
+    "start": "tsx server/node.ts",
+    "publish:city-tiles": "tsx scripts/publish-city-tiles.ts"
   },
   "dependencies": {
     "@hono/node-server": "2.1.5",
