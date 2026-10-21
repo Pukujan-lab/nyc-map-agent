@@ -9,6 +9,7 @@ import { useSourceCounts } from "@/lib/datasets/useSourceCounts";
 import { applyView } from "@/lib/datasets/view";
 import { useDataView } from "@/lib/store/DataViewContext";
 import { ChatPanel } from "@/components/ChatPanel";
+import { FeatureOverlays, useChatReplaced } from "@/components/FeatureOverlays";
 import { ControlDrawer } from "@/components/ControlDrawer";
 import { useAreas } from "@/lib/geo/useAreas";
 import { useFilters } from "@/lib/datasets/useFilters";
@@ -36,6 +37,7 @@ export default function Index() {
     selectedBlockKey,
   } = useMapState();
   const { snap, setSnap } = usePanel();
+  const chatReplaced = useChatReplaced();
   const [controlsOpen, setControlsOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const { enabledSources, viewMode, routeStart, routeEnd } = useDataView();
@@ -217,12 +219,15 @@ export default function Index() {
         }}
       />
 
-      <ChatPanel
-        boundaries={data.boundaries}
-        noise={data.noise}
-        crashes={data.crashes}
-        isDesktop={isDesktop}
-      />
+      {chatReplaced ? null : (
+        <ChatPanel
+          boundaries={data.boundaries}
+          noise={data.noise}
+          crashes={data.crashes}
+          isDesktop={isDesktop}
+        />
+      )}
+      <FeatureOverlays />
 
       <MapPanel
         isDesktop={isDesktop}

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { setMapInstance } from "@/lib/map/mapInstance";
 import { RestroomDetails } from "@/components/RestroomCard";
 import { usePanel } from "@/lib/store/PanelContext";
 import { useMediaQuery } from "@/lib/useMediaQuery";
@@ -397,6 +398,7 @@ export function MapView({
     if (!map) return;
     installDataLayers(map);
     applyAtmosphere(map);
+    setMapInstance(map);
     setStyleEpoch((epoch) => epoch + 1);
     setReady(true);
     const blockTiles = () =>
