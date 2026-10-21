@@ -55,6 +55,14 @@ export const SCALE_LABELS: Record<MapScale, string> = {
   boroughs: "Borough",
 };
 
+/** Plural headings ("Top neighborhoods") — appending "s" to a label with a parenthetical reads wrong. */
+export const SCALE_PLURALS: Record<MapScale, string> = {
+  blocks: "Blocks",
+  neighborhoods: "Neighborhoods",
+  districts: "Community districts",
+  boroughs: "Boroughs",
+};
+
 export function parseMapScale(value: string | null): MapScale {
   return MAP_SCALES.includes(value as MapScale) ? (value as MapScale) : "neighborhoods";
 }
