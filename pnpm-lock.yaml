@@ -131,6 +131,9 @@ importers:
       tailwindcss-animate:
         specifier: 1.0.7
         version: 1.0.7(tailwindcss@3.4.14)
+      three:
+        specifier: 0.134.0
+        version: 0.134.0
       typescript:
         specifier: 5.6.3
         version: 5.6.3
@@ -150,6 +153,9 @@ importers:
       '@types/node':
         specifier: 22.10.2
         version: 22.10.2
+      '@types/three':
+        specifier: 0.134.0
+        version: 0.134.0
       mapshaper:
         specifier: 0.7.89
         version: 0.7.89(@types/geojson@7946.0.14)(@types/node@22.10.2)
