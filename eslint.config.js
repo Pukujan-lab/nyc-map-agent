@@ -8,7 +8,7 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist/**", ".size-build/**", "node_modules/**", "public/**", "**/*.d.ts", "playwright-report/**", "test-results/**"] },
+  { ignores: ["dist/**", ".size-build/**", ".e2e-build/**", "node_modules/**", "public/**", "**/*.d.ts", "playwright-report/**", "test-results/**"] },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
   {
