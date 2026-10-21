@@ -1,0 +1,18 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "src/main.tsx",
+    "server/app.ts",
+    "scripts/*.ts",
+    "api/**/*.ts",
+    "src/lib/geo/*.worker.ts",
+    "src/features/index.ts"
+  ],
+  "project": ["src/**/*.{ts,tsx}", "server/**/*.ts", "api/**/*.ts", "scripts/**/*.ts"],
+  "ignore": ["dist/**", ".size-build/**"],
+  "rules": {
+    "exports": "warn",
+    "types": "warn",
+    "duplicates": "warn"
+  }
+}

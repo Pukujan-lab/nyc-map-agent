@@ -7,6 +7,31 @@ const THREE_LAYER = "^src/lib/map/(streetSigns|threeLayer)\\.ts$";
 module.exports = {
   forbidden: [
     {
+      name: "no-circular",
+      comment: "Runtime cycles only; type-only imports are erased (2 such cycles in src/lib/agent).",
+      severity: "error",
+      from: {},
+      to: { circular: true, viaOnly: { dependencyTypesNot: ["type-only"] } },
+    },
+    {
+      name: "no-orphans",
+      comment: "A module nobody imports is dead code (entry points and config excepted).",
+      severity: "error",
+      from: {
+        orphan: true,
+        pathNot: [
+          "(^|/)\\.[^/]+\\.(c|m)?js$",
+          "\\.d\\.ts$",
+          "^src/main\\.tsx$",
+          "^server/(app|node)\\.ts$",
+          "^scripts/[^/]+\\.ts$",
+          "^src/lib/geo/[^/]+\\.worker\\.ts$",
+          "^src/features/index\\.ts$",
+        ],
+      },
+      to: {},
+    },
+    {
       name: "no-cross-feature",
       comment: "A feature imports only shared core, never another feature.",
       severity: "error",

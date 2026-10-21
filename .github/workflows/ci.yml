@@ -15,8 +15,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
-      - name: Module boundaries (dependency-cruiser)
+      - name: Module boundaries, orphans, cycles (dependency-cruiser)
         run: pnpm lint:boundaries
+      - name: Dead code (knip)
+        run: pnpm knip
   size:
     runs-on: ubuntu-latest
     timeout-minutes: 20

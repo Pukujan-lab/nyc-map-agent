@@ -27,7 +27,8 @@
     "feeds:health": "tsx scripts/feed-health.ts",
     "licenses:check": "tsx scripts/check-licenses.ts",
     "lint": "eslint . --max-warnings=0 --suppressions-location eslint-suppressions.json --pass-on-unpruned-suppressions",
-    "lint:prune": "eslint . --suppressions-location eslint-suppressions.json --prune-suppressions"
+    "lint:prune": "eslint . --suppressions-location eslint-suppressions.json --prune-suppressions",
+    "knip": "knip --no-progress"
   },
   "dependencies": {
     "@hono/node-server": "2.1.5",
@@ -37,11 +38,8 @@
     "@radix-ui/react-dialog": "1.1.2",
     "@radix-ui/react-dropdown-menu": "2.1.2",
     "@radix-ui/react-label": "2.1.0",
-    "@radix-ui/react-popover": "1.1.2",
     "@radix-ui/react-progress": "1.1.0",
-    "@radix-ui/react-scroll-area": "1.2.0",
     "@radix-ui/react-select": "2.1.2",
-    "@radix-ui/react-separator": "1.1.0",
     "@radix-ui/react-slot": "1.1.0",
     "@radix-ui/react-switch": "1.1.1",
     "@radix-ui/react-tabs": "1.1.1",
@@ -89,6 +87,7 @@
     "eslint-plugin-jsx-a11y": "6.10.2",
     "eslint-plugin-react-hooks": "5.2.0",
     "globals": "16.5.0",
+    "knip": "5.66.0",
     "mapshaper": "0.7.89",
     "size-limit": "11.2.0",
     "tsx": "4.19.2",
