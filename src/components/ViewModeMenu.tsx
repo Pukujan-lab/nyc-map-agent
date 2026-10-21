@@ -5,7 +5,6 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
@@ -13,15 +12,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SOURCE_BY_ID } from "@/lib/datasets/registry";
-import { LAYER_IDS, LAYER_LABELS, LAYER_SHORT_LABELS } from "@/lib/layers";
+import { DEFAULT_VIEW } from "@/lib/datasets/view";
 import { useDataView } from "@/lib/store/DataViewContext";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { useFlags } from "@/lib/flags";
 import { cn } from "@/lib/utils";
 
 /**
- * One dropdown for "what is the map showing": the classic noise / crashes /
- * both layers, any single enabled registry source, or the Average composite.
+ * One dropdown for "what is the map showing", driven by the registry: each
+ * enabled source once, then the Concern score (average of the chosen ones).
  */
 export function ViewModeMenu({
   compact = false,
@@ -33,44 +32,32 @@ export function ViewModeMenu({
   iconOnly?: boolean;
   onOpenSources?: () => void;
 }) {
-  const { layer, setLayer, city3d, setCity3d, restrooms, setRestrooms } = useMapState();
+  const { city3d, setCity3d, restrooms, setRestrooms } = useMapState();
   const { viewMode, setViewMode, enabledSources, averageSources } = useDataView();
   const flags = useFlags();
-  // Simple mode (advancedMode off) hides the analytics layers; advanced adds
-  // them back into this same dropdown without changing the layout.
-  const layerIds = LAYER_IDS.filter((id) => flags[id]);
-  const showData = flags.dataLayers;
-  const hidden =
-    (viewMode.kind === "legacy" && !flags[layer]) || (viewMode.kind !== "legacy" && !showData);
+  // Simple mode (advancedMode off) hides the analytics layers: noise is basic,
+  // crashes and every other registry source and the Concern score are advanced.
+  const allowed = (id: string) =>
+    id === "noise" ? flags.noise : id === "crashes" ? flags.crashes : flags.dataLayers;
+  const sources = enabledSources.filter(allowed);
+  const showAverage = flags.dataLayers;
+  const hidden = viewMode.kind === "source" ? !allowed(viewMode.sourceId) : !showAverage;
   useEffect(() => {
-    if (!hidden) return;
-    setLayer("noise");
-    setViewMode({ kind: "legacy" });
-  }, [hidden, setLayer, setViewMode]);
+    if (hidden) setViewMode(DEFAULT_VIEW);
+  }, [hidden, setViewMode]);
 
-  const value =
-    viewMode.kind === "legacy"
-      ? `legacy:${layer}`
-      : viewMode.kind === "source"
-        ? `src:${viewMode.sourceId}`
-        : "avg";
+  const value = viewMode.kind === "source" ? `src:${viewMode.sourceId}` : "avg";
 
   const label =
-    viewMode.kind === "legacy"
-      ? (compact ? LAYER_SHORT_LABELS : LAYER_LABELS)[layer]
-      : viewMode.kind === "source"
-        ? (SOURCE_BY_ID[viewMode.sourceId]?.shortLabel ?? "Source")
-        : `Concern (${averageSources.length})`;
+    viewMode.kind === "source"
+      ? (SOURCE_BY_ID[viewMode.sourceId]?.shortLabel ?? "Source")
+      : compact
+        ? `Concern (${averageSources.length})`
+        : `Concern score (${averageSources.length})`;
 
   const onChange = (next: string) => {
-    if (next.startsWith("legacy:")) {
-      setLayer(next.slice(7) as (typeof LAYER_IDS)[number]);
-      setViewMode({ kind: "legacy" });
-    } else if (next.startsWith("src:")) {
-      setViewMode({ kind: "source", sourceId: next.slice(4) });
-    } else {
-      setViewMode({ kind: "average", sourceIds: averageSources });
-    }
+    if (next.startsWith("src:")) setViewMode({ kind: "source", sourceId: next.slice(4) });
+    else setViewMode({ kind: "average", sourceIds: averageSources });
   };
 
   return (
@@ -107,37 +94,24 @@ export function ViewModeMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align={iconOnly ? "end" : "center"} side={iconOnly ? "left" : undefined} className="w-64">
         <DropdownMenuRadioGroup value={value} onValueChange={onChange}>
-          <DropdownMenuLabel className="text-[11px] text-muted-foreground">
-            Classic layers
-          </DropdownMenuLabel>
-          {layerIds.map((id) => (
-            <DropdownMenuRadioItem key={id} value={`legacy:${id}`}>
-              {id === "combined" ? "Noise + crashes" : LAYER_LABELS[id]}
-            </DropdownMenuRadioItem>
-          ))}
-          {showData ? (
-            <>
-          <DropdownMenuSeparator />
-          <DropdownMenuLabel className="text-[11px] text-muted-foreground">
-            Single source
-          </DropdownMenuLabel>
-          {enabledSources.map((id) => (
+          {sources.map((id) => (
             <DropdownMenuRadioItem key={id} value={`src:${id}`}>
               {SOURCE_BY_ID[id]?.label ?? id}
             </DropdownMenuRadioItem>
           ))}
-          <DropdownMenuSeparator />
-          <DropdownMenuRadioItem value="avg" disabled={averageSources.length === 0}>
-            Concern score: average of {averageSources.length} source
-            {averageSources.length === 1 ? "" : "s"}
-          </DropdownMenuRadioItem>
+          {showAverage ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuRadioItem value="avg" disabled={averageSources.length === 0}>
+                Concern score (average of {averageSources.length})
+              </DropdownMenuRadioItem>
             </>
           ) : null}
         </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />
         {flags.city3d ? (
         <DropdownMenuCheckboxItem checked={city3d} onCheckedChange={(on) => setCity3d(on === true)}>
-          Textured 3D city (Lower Manhattan + Brownstone Brooklyn, zoom in)
+          Textured 3D city
         </DropdownMenuCheckboxItem>
         ) : null}
         {flags.restrooms ? (
@@ -145,7 +119,7 @@ export function ViewModeMenu({
           Public restrooms
         </DropdownMenuCheckboxItem>
         ) : null}
-        {onOpenSources && showData ? (
+        {onOpenSources && flags.dataLayers ? (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={onOpenSources}>

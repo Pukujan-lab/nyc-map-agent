@@ -112,9 +112,13 @@ function counts(id: string, byNta: Record<string, number>): SourceCounts {
 }
 
 describe("applyView", () => {
-  it("leaves the classic view alone", () => {
-    const m = model();
-    expect(applyView(m, { kind: "legacy" }, {})).toBe(m);
+  it("migrates old classic-layer links to registry views", () => {
+    expect(parseViewMode("legacy", [], [], "noise")).toEqual({ kind: "source", sourceId: "noise" });
+    expect(parseViewMode("legacy", [], [], "crashes")).toEqual({ kind: "source", sourceId: "crashes" });
+    expect(parseViewMode(null, [], [], "combined")).toMatchObject({ kind: "average", sourceIds: ["noise", "crashes"] });
+    expect(parseViewMode("crashes", [], [])).toEqual({ kind: "source", sourceId: "crashes" });
+    expect(parseViewMode(null, [], [])).toEqual({ kind: "source", sourceId: "noise" });
+    expect(parseViewMode("src:311", [], [])).toEqual({ kind: "source", sourceId: "311" });
   });
 
   it("re-scores a single source and records its breakdown", () => {
@@ -143,7 +147,7 @@ describe("applyView", () => {
       kind: "source",
       sourceId: "trees",
     });
-    expect(parseViewMode("src:nope", [])).toEqual({ kind: "legacy" });
+    expect(parseViewMode("src:nope", [])).toEqual({ kind: "source", sourceId: "noise" });
     expect(parseViewMode("avg", ["hpd"])).toEqual({ kind: "average", sourceIds: ["hpd"], better: [] });
   });
 });

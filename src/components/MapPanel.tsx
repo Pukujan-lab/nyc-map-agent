@@ -4,6 +4,7 @@ import { useEffect, type ReactNode } from "react";
 import { Drawer } from "vaul";
 import { Button } from "@/components/ui/button";
 import type { NtaBoundary } from "@/lib/api/nta";
+import { useDataView } from "@/lib/store/DataViewContext";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { usePanel, type PanelChip, type SheetSnap } from "@/lib/store/PanelContext";
 import { cn } from "@/lib/utils";
@@ -19,12 +20,15 @@ const nameOf = (point: string | number | null): SheetSnap =>
 
 
 function Chips() {
-  const { layer, setLayer, restrooms, setRestrooms } = useMapState();
+  const { restrooms, setRestrooms } = useMapState();
+  const { viewMode, setViewMode } = useDataView();
   const { chips } = usePanel();
+  const shows = (id: string) => viewMode.kind === "source" && viewMode.sourceId === id;
   const flags = useFlags();
   const builtIn: PanelChip[] = [
-    { id: "noise", label: "Noise", active: layer === "noise", onToggle: () => setLayer(layer === "noise" ? "combined" : "noise") },
-    { id: "crashes", label: "Crashes", active: layer === "crashes", onToggle: () => setLayer(layer === "crashes" ? "combined" : "crashes") },
+    // The chips pick the same registry views as the Layers dropdown.
+    { id: "noise", label: "Noise", active: shows("noise"), onToggle: () => setViewMode({ kind: "source", sourceId: "noise" }) },
+    { id: "crashes", label: "Crashes", active: shows("crashes"), onToggle: () => setViewMode({ kind: "source", sourceId: "crashes" }) },
     { id: "restrooms", label: "Restrooms", active: restrooms, onToggle: () => setRestrooms(!restrooms) },
   ];
   const registered = new Map(chips.map((chip) => [chip.id, chip]));

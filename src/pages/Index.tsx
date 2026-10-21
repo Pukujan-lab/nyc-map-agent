@@ -63,18 +63,18 @@ export default function Index() {
 
   const blockDensity = useFlag("blockDensity");
   const model = useMemo(() => {
-    // Non-classic views re-score a combined model, so every populated block
-    // (noise or crash) exists to carry its detail through.
+    // Every view re-scores a combined model, so every populated block (noise
+    // or crash) exists to carry its detail through.
     const base = buildMapModel({
       boundaries: data.boundaries,
       noise: data.noise,
       crashes: data.crashes,
-      layer: viewMode.kind === "legacy" ? layer : "combined",
+      layer: "combined",
       scale,
       blockDensity,
     });
     return applyView(base, viewMode, sourceState.counts);
-  }, [data.boundaries, data.noise, data.crashes, layer, scale, viewMode, sourceState.counts, blockDensity]);
+  }, [data.boundaries, data.noise, data.crashes, scale, viewMode, sourceState.counts, blockDensity]);
 
   const areas = useAreas(model, data.boundaries, scale);
 
