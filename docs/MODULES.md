@@ -19,7 +19,9 @@ Then add it to `src/features/index.ts` and give it a flag in `src/lib/flags/regi
   Need something from another feature? Move it into `src/lib/` first (its own small PR).
 - Core (`src/lib`, `src/components`, `src/pages`) does not import `src/features/<name>/` except
   through `src/features/index.ts`, or a legacy shim listed in `.dependency-cruiser.cjs` `SHIMS`.
-- `three` only in the shared 3D custom layer (`src/lib/map/streetSigns.ts` / `threeLayer.ts`). deck.gl is banned.
+- `three` only in the shared 3D custom layers: `src/lib/map/three/**` behind the thin public entry
+  point `src/lib/map/threeLayer.ts`. Everything else imports `threeLayer.ts`, never `three/**` directly.
+  deck.gl is banned.
 
 ## Moving an existing feature (do it when nobody else is editing it)
 
@@ -35,8 +37,8 @@ Keep each move its own PR; rebase on main right before merging.
 | --- | --- | --- |
 | restrooms | moved (`src/features/restrooms`, `server/features/restrooms`, `ingest/restrooms`), shims at old paths | not under active edit |
 | directions | not moved | `src/lib/api/routing.ts` exports `LngLat`, used by core (`DataViewContext`, `geosearch`); first lift `LngLat` into `src/lib/geo`. `RoutePanel`/`AddressCombobox` are under active edit (#49) |
-| street signs | stays core | `streetSigns.ts` is the one shared three.js custom layer, not a feature; `build:sign-tiles` is part of the city-tiles pipeline |
-| transit | built in `src/features/transit`, `server/features/transit`; vehicles in shared `src/lib/map/threeLayer.ts` | — |
+| street signs | stays core | `three/layers/streetSigns.ts` is part of the shared three.js custom layers (via `threeLayer.ts`), not a feature; `build:sign-tiles` is part of the city-tiles pipeline |
+| transit | built in `src/features/transit`, `server/features/transit`; vehicles in shared `src/lib/map/three/layers/vehicles.ts` (via `threeLayer.ts`) | — |
 | agent / smart mode (#84) | `src/features/agent` (+ `drive` sub-flag `agentDrive`), `server/features/agent` (+ `drive/`) | lazy overlay on the Ask button; transit planner and entrances are interfaces (`TransitPlanner`, `StationEntrances` in `server/features/agent/transit.ts`) stubbed on MTA open data until #56 lands |
 | places/schools/storefronts (#55, #67), real blocks (#50, #59), camera (#47), mobile panel (#66) | build new code directly in `src/features/<name>/` | in flight by other workers |
 | noise / crashes / data registry, city3d, street level, chat | not moved | core of `MapView` (1100+ lines, edited constantly); move layer installers out one at a time later |
@@ -60,3 +62,15 @@ Raising a limit is a deliberate change in the PR, with the reason.
 - Driving context sources are listed at the top of `drive/context.ts`; anything without a source (camera
   locations, the DOT weekly advisory, parking difficulty) is reported as missing, never invented. 511NY needs
   `NY511_API_KEY`.
+
+## Shared three.js layers (`src/lib/map/three/`)
+
+| module | does |
+|---|---|
+| `threeLayer.ts` (entry) | the only import path for callers; re-exports the layers and picking helpers |
+| `three/context.ts` | one `WebGLRenderer` per MapLibre GL context (#98), legacy colour workflow + light scale, `drawScene` (`resetState` then render) |
+| `three/projection.ts` | layer-local metres ⇄ MapLibre mercator on `MercatorCoordinate`; ground distance via `LngLat.distanceTo` |
+| `three/picking.ts` | nearest hydrants, corner signs and storefront signboards from the loaded `city3d` tiles |
+| `three/assets.ts` | glTF loaders (meshopt decoder on demand), vehicle model fitting |
+| `three/layers/vehicles.ts` | vehicles (boxes → glTF), composing `structure.ts` (viaduct bays, entrances) and `xray.ts` |
+| `three/layers/hydrants.ts`, `streetSigns.ts`, `storefronts.ts`, `landmarks.ts` | one custom layer each |
