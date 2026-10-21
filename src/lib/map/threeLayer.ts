@@ -8,7 +8,6 @@
  */
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import { distanceFade } from "./corner";
 import { LANDMARKS } from "./landmarks";
 import maplibregl, { type CustomLayerInterface, type CustomRenderMethodInput, type Map as MaplibreMap } from "maplibre-gl";
@@ -256,6 +255,8 @@ export function createVehicleLayer() {
   const models: Record<VehicleMode, THREE.InstancedMesh[]> = { subway: [], rail: [], bus: [] };
   let last: VehicleInstance[] = [];
   function loadModels() {
+    // The meshopt decoder is only needed for these models: keep it out of the shared 3D chunk.
+    void import("three/examples/jsm/libs/meshopt_decoder.module.js").then(({ MeshoptDecoder }) => {
     const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
     for (const mode of Object.keys(VEHICLE_MODELS) as VehicleMode[]) {
       loader.load(VEHICLE_MODELS[mode].url, (gltf) => {
@@ -271,6 +272,7 @@ export function createVehicleLayer() {
         update(last);
       }, undefined, () => { /* keep the box for this mode */ });
     }
+    }, () => { /* no decoder: keep the boxes */ });
   }
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1), zAxis = new THREE.Vector3(0, 0, 1), color = new THREE.Color();
 
