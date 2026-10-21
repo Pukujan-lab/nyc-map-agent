@@ -148,6 +148,7 @@ export function MapView({
     layer,
     scale,
     mapStyle,
+    city3d,
     tilted,
     setTilted,
     walking,
@@ -331,6 +332,8 @@ export function MapView({
     applyAtmosphere(map);
     setStyleEpoch((epoch) => epoch + 1);
     setReady(true);
+    // Dev-only handle for headless QA (camera placement, fps sampling).
+    if (import.meta.env.DEV) (window as unknown as { __map?: unknown }).__map = map;
     // A style swap (the raster fallback) replaces every source, so the data
     // has to be re-attached and re-pushed.
     map.on("style.load", () => {
@@ -581,6 +584,28 @@ export function MapView({
     mapStyle,
     walking,
   ]);
+
+  // Textured 3D city: installed lazily the first time it is switched on.
+  useEffect(() => {
+    if (!ready) return;
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    let cancelled = false;
+    // Lazy chunk: users who never turn it on never download it.
+    import("@/lib/map/city3d")
+      .then(async ({ installCity3d, setCity3dVisible }) => {
+        if (!city3d) {
+          setCity3dVisible(map, false);
+          return;
+        }
+        await installCity3d(map);
+        if (!cancelled) setCity3dVisible(map, true);
+      })
+      .catch((err) => console.warn("3D city failed to load", err));
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, styleEpoch, city3d]);
 
   useEffect(() => {
     if (!ready) return;
