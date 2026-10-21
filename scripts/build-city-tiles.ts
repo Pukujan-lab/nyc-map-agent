@@ -131,8 +131,14 @@ async function main() {
     if (!inBox(lat, lon)) continue;
     const dbh = Math.min(40, Math.max(3, Number(t.tree_dbh) || 8));
     const canopy = 1.4 + dbh * 0.09;
-    add(prop("trunk", lon, lat, 0.18, 4, 0, 2.6), "tree");
-    lines.push(JSON.stringify(prop("canopy", lon, lat, canopy, 6, 2.4, 2.4 + canopy * 2.2)));
+    add(prop("trunk", lon, lat, 0.15, 6, 0, 2.8), "tree");
+    // Three stacked, narrowing octagonal tiers read as a crown, not a cube.
+    const top = 2.4 + canopy * 2.2;
+    const tiers: Array<[number, number, number]> = [[0.75, 2.4, 0.45], [1, 0.45, 0.8], [0.55, 0.8, 1]];
+    for (const [scale, from, to] of tiers) {
+      const base = from > 1 ? from : 2.4 + (top - 2.4) * from;
+      lines.push(JSON.stringify(prop("canopy", lon, lat, canopy * scale, 8, base, 2.4 + (top - 2.4) * to)));
+    }
   }
   for (const h of hydrants) {
     const lat = Number(h.latitude), lon = Number(h.longitude);

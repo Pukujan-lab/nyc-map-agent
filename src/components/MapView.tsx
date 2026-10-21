@@ -24,6 +24,7 @@ import {
 import {
   applyAtmosphere,
   applyStreetPalette,
+  loadStreetTextures,
   BASEMAP_STYLE_URL,
   installDataLayers,
 } from "@/lib/map/basemap";
@@ -771,6 +772,8 @@ export function MapView({
     if (!map) return;
     applyAtmosphere(map, walking);
     applyStreetPalette(map, walking);
+    // The sidewalk texture arrives a moment later; repaint once it has.
+    if (walking) void loadStreetTextures(map).then(() => applyStreetPalette(map, true)).catch(() => {});
     // At eye level basemap labels stand on the horizon and float in the sky,
     // so they step aside while walking; our own route markers stay.
     const own = new Set(Object.keys(SOURCE_IDS).map((k) => SOURCE_IDS[k as keyof typeof SOURCE_IDS] as string));

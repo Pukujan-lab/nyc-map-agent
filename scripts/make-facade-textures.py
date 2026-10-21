@@ -59,4 +59,18 @@ d.rectangle([0, 0, S, 7], fill="#b23a2e")
 d.rectangle([2, 10, 14, S - 1], fill="#9fc3d6")
 d.rectangle([18, 10, 30, S - 1], fill="#9fc3d6")
 im.resize((OUT_PX, OUT_PX), Image.NEAREST).save(OUT / "facade-storefront.png")
+# Sidewalk concrete: speckled light grey flags with dark joints (seeded, so stable).
+import random
+rng = random.Random(7)
+C = 64
+im = Image.new("RGBA", (C, C), "#c9c4ba")
+px = im.load()
+for x in range(C):
+    for y in range(C):
+        v = rng.randint(-10, 10)
+        px[x, y] = (201 + v, 196 + v, 186 + v, 255)
+d = ImageDraw.Draw(im)
+d.line([(0, 0), (C, 0)], fill="#9d978c", width=2)
+d.line([(0, 0), (0, C)], fill="#9d978c", width=2)
+im.save(OUT / "concrete.png")
 print(sorted(p.name for p in OUT.glob("*.png")))
