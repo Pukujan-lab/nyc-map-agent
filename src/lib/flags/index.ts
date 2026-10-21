@@ -44,8 +44,10 @@ export function useAdvancedMode(): [boolean, (on: boolean) => void] {
 /** All resolved flags: default, VITE_FLAGS, ?flags=, then the advanced tier gate. */
 export function useFlags(): Record<FlagId, boolean> {
   const [advancedMode] = useAdvancedMode();
-  const url = typeof location === "undefined" ? null : new URLSearchParams(location.search).get("flags");
-  return resolveFlags({ env: import.meta.env.VITE_FLAGS, url, advancedMode });
+  const params = typeof location === "undefined" ? null : new URLSearchParams(location.search);
+  const url = params?.get("flags") ?? null;
+  const analyticsLink = params ? params.has("view") || params.has("layer") : false;
+  return resolveFlags({ env: import.meta.env.VITE_FLAGS, url, advancedMode, analyticsLink });
 }
 
 export function useFlag(id: FlagId): boolean {

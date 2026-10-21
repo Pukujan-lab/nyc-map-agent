@@ -6,6 +6,8 @@ const weather: FeatureModule = {
   id: "weather",
   layers: () => import("./weatherLayers"),
   TopBar: WeatherBadge,
+  /** Rain / snow particles on the map; the badge above shows either way. */
+  chip: { id: "weather", label: "Weather" },
   flags: ["weather"],
   routes: ["/api/weather"],
 };

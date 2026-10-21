@@ -1,33 +1,28 @@
-import {
-  BatteryLow,
-  Building2,
-  Camera,
-  Compass,
-  Info,
-  Maximize,
-  MessageSquare,
-  Minimize,
-  Minus,
-  Navigation,
-  Plus,
-  SlidersHorizontal,
-} from "lucide-react";
+import { Compass, Minus, Plus } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useDataView } from "@/lib/store/DataViewContext";
 import { useMapState } from "@/lib/store/MapStateContext";
+import { useFlags } from "@/lib/flags";
 import { cn } from "@/lib/utils";
-import { ViewModeMenu } from "./ViewModeMenu";
 
 interface MapHudProps {
   onOpenControls: () => void;
   onOpenSources: () => void;
   isDesktop: boolean;
-  /** Set by the transit feature; the Follow button is hidden until then. */
+  /** Set by the transit feature; the Follow item is hidden until then. */
   follow?: { active: boolean; onToggle: () => void };
 }
 
-/** iOS Safari has no element fullscreen; hide the button where it can't work. */
+/** iOS Safari has no element fullscreen; hide the item where it can't work. */
 const canFullscreen = typeof document !== "undefined" && document.fullscreenEnabled === true;
 
 function Group({ children }: { children: ReactNode }) {
@@ -38,26 +33,28 @@ function Group({ children }: { children: ReactNode }) {
   );
 }
 
-function RailButton({
-  label,
+/** A text-labelled rail button. The only icon-only buttons are zoom and compass. */
+function TextButton({
   active,
+  primary,
   onClick,
   children,
+  ...rest
 }: {
-  label: string;
   active?: boolean;
-  onClick: () => void;
+  primary?: boolean;
+  onClick?: () => void;
   children: ReactNode;
 }) {
   return (
     <Button
       type="button"
-      size="icon"
-      variant={active ? "default" : "ghost"}
-      aria-label={label}
+      size="sm"
+      variant={active || primary ? "default" : "outline"}
       aria-pressed={active}
-      className="h-9 w-9 rounded-full"
+      className="pointer-events-auto h-9 justify-center rounded-full px-3.5 text-xs font-medium shadow-lg"
       onClick={onClick}
+      {...rest}
     >
       {children}
     </Button>
@@ -65,9 +62,9 @@ function RailButton({
 }
 
 /**
- * The always-visible controls: a slim vertical rail on the right (Mini Tokyo
- * 3D style), grouped pills of icon-only buttons. Desktop and mobile share it;
- * on mobile it is compact and sits above the sheet's peek.
+ * The always-visible controls on the right: a small zoom / compass cluster,
+ * then a few text buttons — Directions, Street view, Ask — and one More menu
+ * for everything else. Layers live in the panel's chip row and its dropdowns.
  */
 export function MapHud({ onOpenControls, onOpenSources, isDesktop, follow }: MapHudProps) {
   const { routePicking, routeStart, setRoutePicking } = useDataView();
@@ -83,17 +80,19 @@ export function MapHud({ onOpenControls, onOpenSources, isDesktop, follow }: Map
     setChatOpen,
     setCaveatsOpen,
   } = useMapState();
+  const flags = useFlags();
   const [fullscreen, setFullscreen] = useState(false);
   useEffect(() => {
     const sync = () => setFullscreen(document.fullscreenElement !== null);
     document.addEventListener("fullscreenchange", sync);
     return () => document.removeEventListener("fullscreenchange", sync);
   }, []);
+  const directing = routePicking !== null || routeStart !== null;
 
   return (
     <div
       className={cn(
-        "pointer-events-none absolute right-3 z-20 flex flex-col gap-2",
+        "pointer-events-none absolute right-3 z-20 flex flex-col items-end gap-2",
         isDesktop
           ? "top-3"
           : "top-[calc(env(safe-area-inset-top)+6.5rem)] max-h-[calc(100%-6.5rem-108px)] overflow-y-auto [scrollbar-width:none]",
@@ -102,77 +101,64 @@ export function MapHud({ onOpenControls, onOpenSources, isDesktop, follow }: Map
       <Group>
         {isDesktop ? (
           <>
-            <RailButton label="Zoom in" onClick={() => navigate("zoom-in")}>
+            <Button type="button" size="icon" variant="ghost" aria-label="Zoom in" className="h-9 w-9 rounded-full" onClick={() => navigate("zoom-in")}>
               <Plus className="h-4 w-4" />
-            </RailButton>
-            <RailButton label="Zoom out" onClick={() => navigate("zoom-out")}>
+            </Button>
+            <Button type="button" size="icon" variant="ghost" aria-label="Zoom out" className="h-9 w-9 rounded-full" onClick={() => navigate("zoom-out")}>
               <Minus className="h-4 w-4" />
-            </RailButton>
+            </Button>
           </>
         ) : null}
-        <RailButton label="Face north and flatten the map" onClick={() => navigate("north")}>
+        <Button type="button" size="icon" variant="ghost" aria-label="Face north and flatten the map" className="h-9 w-9 rounded-full" onClick={() => navigate("north")}>
           <Compass className="h-4 w-4" />
-        </RailButton>
+        </Button>
       </Group>
 
-      {canFullscreen ? (
-        <Group>
-          <RailButton
-            label={fullscreen ? "Exit full screen" : "Full screen"}
-            onClick={() =>
-              fullscreen
-                ? void document.exitFullscreen()
-                : void document.documentElement.requestFullscreen()
-            }
-          >
-            {fullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
-          </RailButton>
-        </Group>
+      {flags.directions ? (
+        <TextButton primary active={directing} onClick={() => setRoutePicking(routeStart ? "end" : "start")}>
+          Directions
+        </TextButton>
       ) : null}
+      {flags.streetLevel ? (
+        <TextButton active={walking} onClick={() => (walking ? stopWalk() : startWalk())}>
+          {walking ? "Leave street view" : "Street view"}
+        </TextButton>
+      ) : null}
+      <TextButton onClick={() => setChatOpen(true)}>Ask</TextButton>
 
-      <Group>
-        <RailButton label="Textured 3D city" active={city3d} onClick={() => setCity3d(!city3d)}>
-          <Building2 className="h-4 w-4" />
-        </RailButton>
-        <RailButton
-          label={walking ? "Leave street level" : "Street level"}
-          active={walking}
-          onClick={() => (walking ? stopWalk() : startWalk())}
-        >
-          <Camera className="h-4 w-4" />
-        </RailButton>
-        {follow ? (
-          <RailButton label="Follow" active={follow.active} onClick={follow.onToggle}>
-            <Navigation className="h-4 w-4 rotate-45" />
-          </RailButton>
-        ) : null}
-        <RailButton label="Eco mode" active={eco} onClick={() => setEco(!eco)}>
-          <BatteryLow className="h-4 w-4" />
-        </RailButton>
-      </Group>
-
-      <Group>
-        <ViewModeMenu iconOnly onOpenSources={onOpenSources} />
-        <RailButton
-          label="Walking directions"
-          active={routePicking !== null || routeStart !== null}
-          onClick={() => setRoutePicking(routeStart ? "end" : "start")}
-        >
-          <Navigation className="h-4 w-4" />
-        </RailButton>
-        <RailButton label="Filters and map settings" onClick={onOpenControls}>
-          <SlidersHorizontal className="h-4 w-4" />
-        </RailButton>
-        <RailButton label="Ask the map" onClick={() => setChatOpen(true)}>
-          <MessageSquare className="h-4 w-4" />
-        </RailButton>
-      </Group>
-
-      <Group>
-        <RailButton label="About the data and credits" onClick={() => setCaveatsOpen(true)}>
-          <Info className="h-4 w-4" />
-        </RailButton>
-      </Group>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" size="sm" variant="outline" className="pointer-events-auto h-9 rounded-full px-3.5 text-xs font-medium shadow-lg">
+            More
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          {follow ? (
+            <DropdownMenuCheckboxItem checked={follow.active} onCheckedChange={follow.onToggle}>
+              Follow vehicle
+            </DropdownMenuCheckboxItem>
+          ) : null}
+          {flags.city3d ? (
+            <DropdownMenuCheckboxItem checked={city3d} onCheckedChange={(on) => setCity3d(on === true)}>
+              Textured 3D city
+            </DropdownMenuCheckboxItem>
+          ) : null}
+          <DropdownMenuCheckboxItem checked={eco} onCheckedChange={(on) => setEco(on === true)}>
+            Eco mode (save battery)
+          </DropdownMenuCheckboxItem>
+          {canFullscreen ? (
+            <DropdownMenuItem
+              onSelect={() => (fullscreen ? void document.exitFullscreen() : void document.documentElement.requestFullscreen())}
+            >
+              {fullscreen ? "Exit full screen" : "Full screen"}
+            </DropdownMenuItem>
+          ) : null}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={onOpenControls}>Filters and settings…</DropdownMenuItem>
+          {flags.dataLayers ? <DropdownMenuItem onSelect={onOpenSources}>Data layers…</DropdownMenuItem> : null}
+          <DropdownMenuItem onSelect={() => setCaveatsOpen(true)}>About the data and credits</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }

@@ -7,7 +7,7 @@ describe("flags", () => {
   });
   it("hides advanced flags in simple mode", () => {
     const f = resolveFlags({ advancedMode: false });
-    expect(f.noise).toBe(true);
+    expect(f.noise).toBe(false);
     expect(f.crashes).toBe(false);
     expect(f.dataLayers).toBe(false);
   });
@@ -15,5 +15,11 @@ describe("flags", () => {
     const f = resolveFlags({ advancedMode: true, env: "-crashes", url: "+crashes,-restrooms" });
     expect(f.crashes).toBe(true);
     expect(f.restrooms).toBe(false);
+  });
+  it("a saved view= link keeps noise and crashes working in simple mode", () => {
+    const f = resolveFlags({ advancedMode: false, analyticsLink: true });
+    expect(f.noise).toBe(true);
+    expect(f.crashes).toBe(true);
+    expect(f.feedHealth).toBe(false);
   });
 });
