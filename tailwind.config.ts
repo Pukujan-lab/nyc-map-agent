@@ -5,7 +5,7 @@ export default {
   darkMode: ["class"],
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   // Theme classes are set at runtime (`theme-${id}`), so keep their token blocks.
-  safelist: ["theme-ivory", "theme-ink", "theme-mta", "theme-neon"],
+  safelist: ["theme-ivory", "theme-ink", "theme-mta", "theme-neon", "theme-dusk", "theme-night"],
   theme: {
     container: {
       center: true,

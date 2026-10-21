@@ -26,9 +26,9 @@ import { SYSTEM_LABELS } from "./model";
 import { StationDetails, VehicleDetails } from "./TransitCard";
 import { TransitStatusDetails } from "./TransitStatus";
 import { lineOpacity, useMapOptions } from "@/lib/map/mapOptions";
-import { NOTCH_ICON, addBulletImage, bulletId, busBadgeId, busPrefix } from "./bullets";
-import { THEMES, useTheme } from "@/lib/theme";
-import { ALL_MINZOOM, MAJOR_MINZOOM, stationLabelColors, stationLabels } from "./stationLabels";
+import { ALL_MINZOOM, MAJOR_MINZOOM, stationComplexes, stationLabelInk, type ComplexInfo } from "./stationLabels";
+import { NOTCH_ICON, addBulletImage, stationRowId, bulletId, busBadgeId, busPrefix } from "@/lib/transit/bullets";
+import { usePalette } from "@/lib/theme";
 import { FOCUS_OPACITY, FOCUS_VEIL_ID, WORLD, useTransitFocus } from "@/lib/map/transitFocus";
 
 /** Layers a click on the map should hand to transit instead of the area pick. */
@@ -159,7 +159,16 @@ export default function TransitLayer() {
   }), [staticKey, raised]); // eslint-disable-line react-hooks/exhaustive-deps
   const stations = useMemo<GeoJSON.FeatureCollection>(() => ({
     type: "FeatureCollection",
-    features: statics.flatMap((s) => s.stations.features.map((f) => ({ ...f, properties: { ...f.properties, system: s.system } }))),
+    features: statics.flatMap((s) => {
+      // Subway stations carry a compact row of route bullets for their label (#177),
+      // one label per complex with every route, and a major flag for z14 (#186).
+      const complexes = s.system === "subway" ? stationComplexes(s.stations.features) : new Map<string, ComplexInfo>();
+      return s.stations.features.map((f) => {
+        const c = complexes.get(String(f.properties.id));
+        const routes = c?.routes ?? [];
+        return { ...f, properties: { ...f.properties, system: s.system, major: c?.major ?? false, dup: c?.dup ?? false, row: routes.length ? stationRowId(routes) : "" } };
+      });
+    }),
   }), [staticKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const viaduct = raised.decks;
   const piers = raised.piers;
@@ -289,16 +298,19 @@ export default function TransitLayer() {
     const id = window.setInterval(() => setHitFc({ type: "FeatureCollection", features: [...display.current.values()].map((v) => ({ type: "Feature", properties: { key: v.key, label: v.label }, geometry: { type: "Point", coordinates: [v.lon, v.lat] } })) }), 1000);
     return () => window.clearInterval(id);
   }, [three]);
-  const themeId = useTheme();
-  const theme = THEMES[themeId];
-  const labelInk = stationLabelColors(themeId);
-  const labelFc = useMemo(() => {
-    const sub = statics.find((s) => s.system === "subway");
-    if (!sub) return EMPTY;
-    const colors = Object.fromEntries(Object.entries(sub.routes).map(([r, info]) => [r, info.color]));
-    return stationLabels(sub.stations.features, colors);
-  }, [staticKey]); // eslint-disable-line react-hooks/exhaustive-deps
-
+  const theme = usePalette();
+  const labelInk = stationLabelInk(theme);
+  const [hoverStation, setHoverStation] = useState("");
+  const openStationId = content?.id.startsWith("transit:station:") ? content.id.split(":").pop() ?? "" : "";
+  useEffect(() => {
+    if (!map) return;
+    const move = (e: MapLayerMouseEvent) => {
+      const f = map.getLayer("transit-station") ? map.queryRenderedFeatures(e.point, { layers: ["transit-station"] })[0] : undefined;
+      setHoverStation(f?.properties?.system === "subway" ? String(f.properties.id) : "");
+    };
+    map.on("mousemove", move);
+    return () => { map.off("mousemove", move); };
+  }, [map]);
   const alerted = useMemo(() => alertedRoutes(alerts.data?.alerts), [alerts.data]);
   const vehicleFc = useMemo<GeoJSON.FeatureCollection>(() => ({
     type: "FeatureCollection",
@@ -485,31 +497,6 @@ export default function TransitLayer() {
         <Layer id="transit-station" type="circle" minzoom={11}
           paint={{ "circle-color": "#ffffff", "circle-stroke-color": "#6b6a66", "circle-stroke-width": 1, "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 1.5, 16, 4] }} />
       </Source>
-      <Source id="transit-station-labels" type="geojson" data={opts.stationNames ? labelFc : EMPTY}>
-        {/* Bold ink name right of the dot, route bullets beneath; drawn above streets and places, so it wins label collisions. */}
-        <Layer id="transit-station-label" type="symbol" minzoom={MAJOR_MINZOOM}
-          filter={["any", ["get", "major"], [">=", ["zoom"], ALL_MINZOOM]]}
-          layout={{
-            "text-field": ["get", "name"],
-            "text-font": ["Noto Sans Bold"],
-            "text-size": ["interpolate", ["linear"], ["zoom"], 14, 12, 17, 15],
-            "text-anchor": "bottom-left",
-            "text-offset": [0.7, 0.1],
-            "text-max-width": 9,
-            "text-justify": "left",
-            "icon-image": ["get", "bullets"],
-            "icon-anchor": "top-left",
-            "icon-offset": [6, 1],
-            "icon-size": ["interpolate", ["linear"], ["zoom"], 14, 0.8, 16, 1, 18, 1.2],
-            // Placed even next to live train bullets (which sit above and would otherwise always win);
-            // it still claims its space, so street and place names below give way to it.
-            "text-allow-overlap": true,
-            "icon-allow-overlap": true,
-            "symbol-sort-key": ["case", ["get", "major"], 0, 1],
-            "symbol-z-order": "source",
-          }}
-          paint={{ "text-color": labelInk.ink, "text-halo-color": labelInk.halo, "text-halo-width": 2, "text-halo-blur": 0.5 }} />
-      </Source>
       <Source id="transit-entrances" type="geojson" data={entrances}>
         {/* Overhead: a small green dot. Street level: the 3D kit draws it; this stays as an invisible tap target. */}
         <Layer id="transit-entrance" type="circle" minzoom={16}
@@ -517,7 +504,7 @@ export default function TransitLayer() {
       </Source>
       <Source id="transit-work-points" type="geojson" data={work.points}>
         <Layer id="transit-work" type="symbol" minzoom={11}
-          layout={{ "icon-image": "transit-wrench", "icon-size": ["interpolate", ["linear"], ["zoom"], 11, 0.35, 16, 0.6], "icon-offset": [18, -18], "icon-allow-overlap": true }} />
+          layout={{ "icon-image": "transit-wrench", "icon-size": ["interpolate", ["linear"], ["zoom"], 11, 0.35, 16, 0.6], "icon-offset": [18, -18], "icon-allow-overlap": true, "icon-ignore-placement": true }} />
       </Source>
       <Source id="transit-skips" type="geojson" data={work.skips}>
         <Layer id="transit-skip" type="circle" minzoom={11}
@@ -525,7 +512,7 @@ export default function TransitLayer() {
       </Source>
       <Source id="transit-access" type="geojson" data={work.access}>
         <Layer id="transit-access" type="symbol" minzoom={11}
-          layout={{ "icon-image": "transit-access", "icon-size": ["interpolate", ["linear"], ["zoom"], 11, 0.35, 16, 0.6], "icon-offset": [-18, -18], "icon-allow-overlap": true }} />
+          layout={{ "icon-image": "transit-access", "icon-size": ["interpolate", ["linear"], ["zoom"], 11, 0.35, 16, 0.6], "icon-offset": [-18, -18], "icon-allow-overlap": true, "icon-ignore-placement": true }} />
       </Source>
       <Source id="transit-vehicle-hits" type="geojson" data={hide2d ? hitFc : EMPTY}>
         <Layer id="transit-vehicle-hit" type="circle" paint={{ "circle-radius": 14, "circle-opacity": 0, "circle-pitch-alignment": "map" }} />
@@ -551,7 +538,7 @@ export default function TransitLayer() {
             "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.5, 16, 0.8], "icon-offset": [0, -26] }}
           paint={{ "icon-opacity": bulletAlpha }} />
         <Layer id="transit-bullet" type="symbol" filter={["==", ["get", "system"], "subway"]}
-          layout={{ "icon-image": ["get", "bullet"], "icon-allow-overlap": true, "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.55, 14, 0.75, 17, 0.95] }}
+          layout={{ "icon-image": ["get", "bullet"], "icon-allow-overlap": true, "icon-ignore-placement": true, "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.55, 14, 0.75, 17, 0.95] }}
           paint={{ "icon-opacity": bulletAlpha }} />
         {/* Buses: SQUARE badges, so they never read as round subway bullets. Zoomed out
             only the borough prefix (all shown, so each heading notch has its badge); from z15 or for the
@@ -561,7 +548,7 @@ export default function TransitLayer() {
             "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.3, 14, 0.45, 15, 0.55, 18, 0.75], "icon-offset": [0, -17] }}
           paint={{ "icon-opacity": ["interpolate", ["linear"], ["zoom"], 12.5, 0, 13.5, 0.8] }} />
         <Layer id="transit-bus-badge" type="symbol" maxzoom={15} filter={["all", ["==", ["get", "system"], "bus"], ["!=", ["get", "route"], selBusRoute]]}
-          layout={{ "icon-image": ["get", "badge"], "icon-allow-overlap": true, "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.3, 14, 0.45] }}
+          layout={{ "icon-image": ["get", "badge"], "icon-allow-overlap": true, "icon-ignore-placement": true, "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.3, 14, 0.45] }}
           paint={{ "icon-opacity": selBusRoute ? 0.4 : 0.85 }} />
         <Layer id="transit-bus-badge-full" type="symbol" minzoom={15} filter={["all", ["==", ["get", "system"], "bus"], ["!=", ["get", "route"], selBusRoute]]}
           layout={{ "icon-image": ["get", "badgeFull"], "icon-allow-overlap": false, "icon-padding": 1, "icon-size": ["interpolate", ["linear"], ["zoom"], 15, 0.55, 18, 0.75] }}
@@ -569,6 +556,19 @@ export default function TransitLayer() {
         <Layer id="transit-bus-badge-selected" type="symbol" filter={["all", ["==", ["get", "system"], "bus"], ["==", ["get", "route"], selBusRoute]]}
           layout={{ "icon-image": ["get", "badgeFull"], "icon-allow-overlap": true, "symbol-sort-key": 1, "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.5, 16, 0.75] }} />
       </Source>
+      {/* Name + route bullets (#177, #186): with Station names on, major complexes from z14 and every
+          station from z15, one label per complex, bold ink beside the dot; the hovered / open one at any zoom.
+          Collision detection still drops overlapping labels. Drawn last, above live buses and the basemap,
+          so it is placed first: street names, places and moving bus badges give way to it. */}
+      <Layer id="transit-station-label" source="transit-stations" type="symbol" minzoom={11}
+        filter={["all", ["==", ["get", "system"], "subway"], ["any",
+          ["==", ["get", "id"], hoverStation], ["==", ["get", "id"], openStationId],
+          ...(opts.stationNames ? [["all", ["!", ["get", "dup"]], ["any", [">=", ["zoom"], ALL_MINZOOM], ["all", ["get", "major"], [">=", ["zoom"], MAJOR_MINZOOM]]]]] : []),
+        ]] as never}
+        layout={{ "icon-image": ["get", "row"], "icon-size": ["interpolate", ["linear"], ["zoom"], 13, 0.8, 17, 1], "icon-anchor": "top-left", "icon-offset": [6, 1],
+          "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": ["interpolate", ["linear"], ["zoom"], 14, 12, 17, 15], "text-anchor": "bottom-left", "text-offset": [0.6, 0.1], "text-max-width": 9, "text-justify": "left",
+          "symbol-sort-key": ["case", ["any", ["==", ["get", "id"], hoverStation], ["==", ["get", "id"], openStationId]], 0, ["get", "major"], 1, 2] }}
+        paint={{ "text-color": labelInk.ink, "text-halo-color": labelInk.halo, "text-halo-width": 2, "text-halo-blur": 0.5 }} />
     </>
   );
 }

@@ -13,7 +13,7 @@ export interface MapOptions {
   /** Subway routes picked in Transit lines; empty = all lines, muted. */
   routes: string[];
   stationsOnly: boolean;
-  /** Our own bold station names with route bullets; hides the basemap's faint ones. On by default. */
+  /** Bold station names with route bullets (#186); hides the basemap's faint ones. On by default. */
   stationNames: boolean;
 }
 export const OPTIONS_KEY = "nma.mapOptions";

@@ -36,8 +36,17 @@ export function StationDetails({ system, id }: { system: SystemId; id: string })
   const xray = useXray();
   // Leaving the station panel turns x-ray off.
   useEffect(() => () => { if (getXray() === id) setXray(null); }, [id]);
+  const st = data[system]?.stat;
+  const routes = [...new Set(String(st?.stations.features.find((f) => f.properties.id === id)?.properties.routes ?? "").split(/[\s,]+/).filter(Boolean))];
+  const doors = system === "subway" ? (st?.entrances?.features ?? []).filter((f) => f.properties.id === id) : [];
+  const lineAlerts = (alerts?.alerts ?? []).filter((a) => a.kind === "delay" && a.routes.some((r) => routes.includes(r)));
   return (
     <div className="space-y-3 text-sm">
+      {routes.length ? (
+        <div className="flex flex-wrap gap-1" aria-label="Lines at this station">
+          {routes.map((r) => <RouteBullet key={r} system={system} route={r} data={data} />)}
+        </div>
+      ) : null}
       <Button size="sm" variant="outline" aria-pressed={isStarred(starKey)} onClick={() => toggle(starKey)}>
         <Star className="mr-1.5 h-4 w-4" fill={isStarred(starKey) ? "currentColor" : "none"} />
         {isStarred(starKey) ? "Starred" : "Star station"}
@@ -73,6 +82,15 @@ export function StationDetails({ system, id }: { system: SystemId; id: string })
             <p><span className="text-xs text-muted-foreground">{a.type}</span> {a.text}</p>
           </div>
         ))}
+      {lineAlerts.map((a) => (
+        <div key={a.id} className="rounded-md border px-2 py-1.5 text-xs"><span className="mr-1 font-semibold">Delay</span>{a.text}</div>
+      ))}
+      {doors.length ? (
+        <div>
+          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Entrances</div>
+          <ul className="mt-1 space-y-0.5">{doors.slice(0, 8).map((d, i) => <li key={i}>{d.properties.name || "Entrance"}{d.properties.kind ? <span className="text-muted-foreground"> · {d.properties.kind}</span> : null}</li>)}</ul>
+        </div>
+      ) : null}
     </div>
   );
 }
