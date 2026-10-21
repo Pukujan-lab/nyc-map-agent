@@ -1,0 +1,24 @@
+{
+  "schema_version": "content-generation.asset-manifest.v1",
+  "system_version": "0.5.12",
+  "assets": [
+    {
+      "id": "map-concern-view",
+      "path": ".content-system/assets/map-concern-view.png",
+      "role": "screenshot",
+      "subject": "map",
+      "description": "Concern score view of the map (QA screenshot)",
+      "dimensions": "1440x900",
+      "model": null,
+      "provider": "headless Chrome screenshot",
+      "prompt_file": null,
+      "prompt_sha256": null,
+      "references": [],
+      "settings": {},
+      "source_sha256": "fd231b20b220777d5b38fe6cff1176792872c6e8f822f3b16b134dd53800164d",
+      "final_sha256": "fd231b20b220777d5b38fe6cff1176792872c6e8f822f3b16b134dd53800164d",
+      "review": "QA screenshot; owner review pending",
+      "generated_at": "2026-10-20T20:10:00-04:00"
+    }
+  ]
+}

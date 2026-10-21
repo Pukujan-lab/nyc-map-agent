@@ -1,0 +1,31 @@
+{
+  "schema_version": "content-generation.visual-style.v1",
+  "reference_asset": ".content-system/assets/map-concern-view.png",
+  "generation_workflow": "built-in image_gen",
+  "narrative_roles": [
+    "hero"
+  ],
+  "palette": {
+    "background": "map basemap",
+    "primary": "concern ramp green to red"
+  },
+  "subjects": [
+    "the live map UI"
+  ],
+  "composition": [
+    "one dominant idea",
+    "map stays visible"
+  ],
+  "text_policy": "screenshots only; no generated text art",
+  "roles": {
+    "hero": {
+      "orientation": "wide",
+      "dimensions": "1440x900"
+    }
+  },
+  "reject_when": [
+    "implies a block is safe or unsafe beyond the data",
+    "shows fabricated data",
+    "hides the map under overlays"
+  ]
+}

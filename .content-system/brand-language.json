@@ -1,0 +1,27 @@
+{
+  "schema_version": "content-generation.brand-language.v1",
+  "name": "NYC Map Agent",
+  "personality": [
+    "plain-spoken",
+    "data-honest",
+    "local"
+  ],
+  "audience_feeling": "I can see what the city's own data says about this block, and where it is thin.",
+  "promise": "See what NYC open data says about a block in one map.",
+  "preferred_terms": {
+    "block": "grid cell used for aggregation",
+    "concern score": "combined per-source score"
+  },
+  "avoid": [
+    "safe neighborhood",
+    "guaranteed",
+    "crime-free"
+  ],
+  "good_examples": [
+    "This block had 42 noise complaints in the last 12 months; reporting rates vary by area."
+  ],
+  "bad_examples": [
+    "This is the safest block in Brooklyn."
+  ],
+  "status_note": "Derived from the repository at 01280d8; owner review pending."
+}

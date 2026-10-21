@@ -117,3 +117,16 @@ Dependency notes:
 - Respect `prefers-reduced-motion` for camera flights — jump instead of animate, including the ease into walk mode.
 - Walk mode has a keyboard path (W/S/A/D or arrows, Shift, Esc) and a labelled touch d-pad; the dock button carries `aria-pressed`, so the mode is never mouse-only.
 - Dark theme via Tailwind `dark:` classes and CSS variables from `src/index.css`; no hard-coded hex colors in components.
+
+## Issue lifecycle (all agents)
+
+- Every piece of work has a GitHub issue. A PR that finishes an issue says `Closes #N` in its body.
+- An issue is closed only when its work is complete and merge-ready (checks green, PR open with `Closes #N`). Partial work uses `Refs #N` and leaves the issue open.
+- Backlog issues stay open until someone builds them. Do not close them as "planned".
+
+## UI/UX rules (all agents)
+
+- No clutter. Keep the current clean look: map first, controls tucked away.
+- **No tooltips.** Explanations, legends and guides live inside drawers (`Drawer`/`Sheet`) or dropdowns (`DropdownMenu`/`Select`). When you touch a component that uses a tooltip, move that content into its drawer or dropdown.
+- Use the existing stack only (shadcn/Radix, Tailwind, lucide). No hand-built components unless no shadcn primitive fits.
+- Prefer glue code over mature, pinned OSS dependencies to custom code. Justify every new dependency (license, maturity, version) in the PR.
