@@ -11,7 +11,6 @@ import type { SourceCounts } from "./fetchSource";
 import { SOURCE_BY_ID } from "./registry";
 
 export type ViewMode =
-  | { kind: "legacy" }
   | { kind: "source"; sourceId: string }
   | {
       kind: "average";
@@ -20,24 +19,36 @@ export type ViewMode =
       better?: string[];
     };
 
-/** URL form: `legacy`, `src:<id>`, or `avg`. */
+/** The view when nothing (or an old classic-layer URL) says otherwise. */
+export const DEFAULT_VIEW: Extract<ViewMode, { kind: "source" }> = { kind: "source", sourceId: "noise" };
+
+/**
+ * URL form: `src:<id>` or `avg`. Old links (`view=legacy` with `layer=…`, or
+ * a bare `view=noise|crashes|combined`) migrate to the matching registry view;
+ * "Noise + crashes" becomes the average of those two sources.
+ */
 export function parseViewMode(
   view: string | null,
   avgIds: string[],
   better: string[] = [],
+  legacyLayer: string | null = null,
 ): ViewMode {
   if (view === "avg") return { kind: "average", sourceIds: avgIds, better };
   if (view?.startsWith("src:")) {
     const id = view.slice(4);
     if (id in SOURCE_BY_ID) return { kind: "source", sourceId: id };
   }
-  return { kind: "legacy" };
+  const old = view === "legacy" || view === null ? legacyLayer : view;
+  if (old === "crashes") return { kind: "source", sourceId: "crashes" };
+  if (old === "combined") {
+    return { kind: "average", sourceIds: ["noise", "crashes"], better: better.filter((id) => id === "noise" || id === "crashes") };
+  }
+  return DEFAULT_VIEW;
 }
 
 export function viewModeToParam(mode: ViewMode): string {
   if (mode.kind === "average") return "avg";
-  if (mode.kind === "source") return `src:${mode.sourceId}`;
-  return "legacy";
+  return `src:${mode.sourceId}`;
 }
 
 function emptyBlock(key: string, lat: number, lon: number, ntaCode: string): BlockDatum {
@@ -60,7 +71,7 @@ function emptyBlock(key: string, lat: number, lon: number, ntaCode: string): Blo
 }
 
 /**
- * Re-scores a map model (built with the `combined` layer, so every populated
+ * Scores a map model (built with the `combined` layer, so every populated
  * block exists) for a single registry source or for the Average composite.
  * Only `value`, `height` and `breakdown` change; everything else — names,
  * noise/crash detail, addresses — is carried through untouched.
@@ -70,7 +81,6 @@ export function applyView(
   mode: ViewMode,
   counts: Record<string, SourceCounts | undefined>,
 ): MapModel {
-  if (mode.kind === "legacy") return base;
   const ids = (mode.kind === "source" ? [mode.sourceId] : mode.sourceIds).filter(
     (id) => counts[id],
   );

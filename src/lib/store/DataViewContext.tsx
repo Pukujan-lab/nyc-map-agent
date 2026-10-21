@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -13,7 +14,7 @@ import {
   parseSourceList,
   type Polarity,
 } from "@/lib/datasets/registry";
-import { parseViewMode, viewModeToParam, type ViewMode } from "@/lib/datasets/view";
+import { DEFAULT_VIEW, parseViewMode, viewModeToParam, type ViewMode } from "@/lib/datasets/view";
 import type { LngLat } from "@/lib/api/routing";
 
 export type RoutePickTarget = "start" | "end";
@@ -52,6 +53,7 @@ export function DataViewProvider({ children }: { children: ReactNode }) {
   const sourcesParam = searchParams.get("sources");
   const avgParam = searchParams.get("avg");
   const viewParam = searchParams.get("view");
+  const legacyLayer = searchParams.get("layer");
   const flipParam = searchParams.get("flip");
   const flippedSources = useMemo(() => parseSourceList(flipParam, []), [flipParam]);
 
@@ -70,13 +72,36 @@ export function DataViewProvider({ children }: { children: ReactNode }) {
     const better = averageSources.filter(
       (id) => effectivePolarity(id, flippedSources) === "better",
     );
-    const mode = parseViewMode(viewParam, averageSources, better);
+    const mode = parseViewMode(viewParam, averageSources, better, legacyLayer);
     // A single-source view of a source that is switched off shows nothing.
     if (mode.kind === "source" && !enabledSources.includes(mode.sourceId)) {
-      return { kind: "legacy" } as const;
+      return enabledSources.includes(DEFAULT_VIEW.sourceId) ? DEFAULT_VIEW : ({ kind: "average", sourceIds: averageSources, better } as const);
     }
     return mode;
-  }, [viewParam, averageSources, enabledSources, flippedSources]);
+  }, [viewParam, averageSources, enabledSources, flippedSources, legacyLayer]);
+
+  // Old links (view=legacy&layer=…, view=noise, …) are rewritten once to the
+  // registry view they mean, so the URL and the dropdown agree.
+  useEffect(() => {
+    if (viewParam === "avg" || viewParam?.startsWith("src:")) return;
+    if (viewParam === null && legacyLayer === null) return;
+    const mode = parseViewMode(viewParam, [], [], legacyLayer);
+    setSearchParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        next.set("view", viewModeToParam(mode));
+        next.delete("layer");
+        if (mode.kind === "average") {
+          next.set("avg", mode.sourceIds.join(","));
+          const on = new Set(parseSourceList(previous.get("sources"), DEFAULT_ENABLED_SOURCES));
+          for (const id of mode.sourceIds) on.add(id);
+          next.set("sources", Array.from(on).join(","));
+        }
+        return next;
+      },
+      { replace: true },
+    );
+  }, [viewParam, legacyLayer, setSearchParams]);
 
   const update = useCallback(
     (patch: Record<string, string>) =>
