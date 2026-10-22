@@ -1,3 +1,4 @@
+import { formatStreetText } from "@/lib/streetName";
 import { liveProgress } from "./monotonic";
 import { BusEstimator } from "./busEstimate";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -462,7 +463,7 @@ export default function TransitLayer() {
     type: "FeatureCollection",
     features: [
       ...busRoute.data.lines.map((l): GeoJSON.Feature => ({ type: "Feature", properties: { kind: "line", route: busRoute.data.route }, geometry: { type: "LineString", coordinates: l } })),
-      ...busRoute.data.stops.map((st): GeoJSON.Feature => ({ type: "Feature", properties: { kind: "stop", name: st.name }, geometry: { type: "Point", coordinates: [st.lon, st.lat] } })),
+      ...busRoute.data.stops.map((st): GeoJSON.Feature => ({ type: "Feature", properties: { kind: "stop", name: formatStreetText(st.name) }, geometry: { type: "Point", coordinates: [st.lon, st.lat] } })),
     ],
   }), [busRoute.data, selBusRoute]);
   // 3D: one three.js custom layer in the map's canvas, loaded on first tilt.

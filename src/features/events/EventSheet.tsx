@@ -1,3 +1,4 @@
+import { formatStreetText } from "@/lib/streetName";
 import { Button } from "@/components/ui/button";
 import { useDataView } from "@/lib/store/DataViewContext";
 import { SOURCE_LABEL, type EventProps } from "./data";
@@ -9,7 +10,7 @@ export function EventSheet({ event, lon, lat }: { event: EventProps; lon: number
   return (
     <div className="space-y-2 text-xs">
       <div className="text-foreground">{formatWhen(event.start, event.end)}</div>
-      {event.address ? <div className="text-muted-foreground">{event.address}</div> : null}
+      {event.address ? <div className="text-muted-foreground">{formatStreetText(event.address)}</div> : null}
       <div className="flex flex-wrap gap-2 pt-1">
         <Button
           type="button"

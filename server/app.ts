@@ -27,6 +27,7 @@ import * as transit from "./features/transit/routes";
 import * as transitSegments from "./features/transit/segments";
 import * as events from "./features/events/routes";
 import * as placeToilets from "./features/place-toilets/routes";
+import * as storefronts from "./features/storefronts/routes";
 
 type Handler = { GET: (request: Request) => Promise<Response> };
 
@@ -53,6 +54,8 @@ const routes: Array<[string, Handler]> = [
   ["/api/transit/:system", transit],
   ["/api/events", events],
   ["/api/place-toilets", placeToilets],
+  ["/api/storefronts/logo", { GET: storefronts.GET_LOGO }],
+  ["/api/storefronts/brands", storefronts],
 ];
 
 export const app = new OpenAPIHono({

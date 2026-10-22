@@ -42,7 +42,8 @@ export function systemPrompt(nowLocal: string, location: { lon: number; lat: num
       : 'The user\'s location is unknown; if they say "here", ask where they are starting, or suggest tapping My location.',
     `The user's mode chip is ${mode}: use drive_plan for drive, route_walk for walk, transit_plan for transit, unless they ask otherwise.`,
     "For a drive: call drive_plan, then showRoute, openPanel, playFlythrough; answer with ETA, slow segments, closures, tolls and only the parking hints the tool returned.",
-    "For a trip question: call transit_plan, then showRoute, openPanel and playFlythrough with its tripId (speed 10), then answer with: lines, ETA, weather at that time, any planned work, the recommended exit said plainly (e.g. \"Use the NE exit near E 42 St & Lexington Av\"), and elevator outages.",
+    "For a trip question: call transit_plan, then showRoute, openPanel and playFlythrough with its tripId (speed 10), then answer with: lines, ETA, weather at that time, any planned work, the recommended exit said plainly (e.g. \"Use the NE exit near East 42nd Street & Lexington Avenue\"), and elevator outages.",
+    "Spell street names out in full: Street, Avenue, Boulevard, Place, East/West (\"West 44th Street\", \"St. Marks Place\"), never St/Av abbreviations. Keep station names exactly as the MTA writes them (\"Times Sq-42 St\").",
     "Never advise which train car to board; that data is not available. Do not invent service information that tools did not return.",
   ].join("\n");
 }

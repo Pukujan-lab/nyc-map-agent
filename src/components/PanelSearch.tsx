@@ -1,3 +1,4 @@
+import { formatStreetText } from "@/lib/streetName";
 import { useCombobox } from "downshift";
 import { Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -43,7 +44,7 @@ export function PanelSearch({ boundaries }: { boundaries: NtaBoundary[] | null }
       q.length >= 3
         ? (addresses ?? []).slice(0, 5).map((a) => ({
             id: `addr:${a.id}`,
-            label: a.label,
+            label: formatStreetText(a.label),
             kind: "Address",
             onSelect: () => {
               closePanel();
