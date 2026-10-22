@@ -13,7 +13,9 @@ jobs:
     name: Validate ontology and classify issue log
     concurrency:
       group: oio-issue-triage-${{ github.event.issue.number }}
-      cancel-in-progress: false
+      # A newer event on the same issue re-validates the whole issue, so a
+      # queued/running older triage is superseded and can be dropped.
+      cancel-in-progress: true
     runs-on: [self-hosted, linux, x64, gravebuster]
     timeout-minutes: 10
     container: { image: "python:3.12-slim" }
