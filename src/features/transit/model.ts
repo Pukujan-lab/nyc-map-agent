@@ -40,6 +40,8 @@ export type Vehicle = {
   lat: number;
   bearing: number;
   grade: Grade;
+  /** Draw opacity 0–1 (buses fade when stale or re-snapping); 1 when absent. */
+  alpha?: number;
   /** Metres above ground (track height profile); 0 for buses. */
   z?: number;
   dir: number | null;
