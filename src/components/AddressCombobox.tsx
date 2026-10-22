@@ -1,3 +1,4 @@
+import { formatStreetText } from "@/lib/streetName";
 import { useCombobox } from "downshift";
 import { useEffect, useRef, useState } from "react";
 import { type AddressHit, useAddressSuggestions } from "@/lib/api/geosearch";
@@ -72,7 +73,7 @@ export function AddressCombobox({
               {...getItemProps({ item, index })}
               className={cn("cursor-pointer rounded px-2 py-1.5", highlightedIndex === index && "bg-accent")}
             >
-              {item.label}
+              {formatStreetText(item.label)}
             </li>
           ))}
       </ul>

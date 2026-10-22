@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatStreetName, formatStreetPair } from "./streetName";
+import { formatStreetName, formatStreetPair, formatStreetText } from "./streetName";
 
 describe("formatStreetName", () => {
   it.each([
@@ -46,5 +46,23 @@ describe("formatStreetName", () => {
   it("formats both halves of a corner", () => {
     expect(formatStreetPair("Grand St & Essex St")).toBe("Grand Street & Essex Street");
     expect(formatStreetPair("W 44 St at 8 Av")).toBe("West 44 Street at 8 Avenue");
+  });
+});
+
+describe("formatStreetText", () => {
+  it.each([
+    ["385 Grand St, Manhattan", "385 Grand Street, Manhattan"],
+    ["Turn left onto W 44 St", "Turn left onto West 44 Street"],
+    ["Use the NE exit near E 42 St & Lexington Av", "Use the NE exit near East 42 Street & Lexington Avenue"],
+    ["GRAND ST/ESSEX ST", "Grand Street/Essex Street"],
+    ["ESSEX ST/DELANCEY ST", "Essex Street/Delancey Street"],
+    ["Meet at St Marks Pl", "Meet at St. Marks Place"],
+    ["Walk to Avenue A", "Walk to Avenue A"],
+    ["Walk to Av A", "Walk to Avenue A"],
+    ["Continue on Broadway", "Continue on Broadway"],
+    ["Times Square park, 7 Av", "Times Square park, 7 Avenue"],
+    ["", ""],
+  ])("%s → %s", (input, want) => {
+    expect(formatStreetText(input)).toBe(want);
   });
 });

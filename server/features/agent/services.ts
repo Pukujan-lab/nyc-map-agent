@@ -2,6 +2,7 @@
  * Thin server-side wrappers over the keyless public APIs the app already uses.
  * Each returns plain data; the AI SDK tools in tools.ts call these.
  */
+import { formatStreetText } from "../../../src/lib/streetName";
 import { z } from "zod";
 import type { LngLatTuple } from "../../../src/features/agent/schema";
 import { bestCandidate, matchLandmark, matchStation, type GeoCandidate } from "./places";
@@ -48,13 +49,8 @@ export async function reverseGeocode([lon, lat]: LngLatTuple): Promise<string | 
     );
     const raw = data.features[0]?.properties.label.replace(/,.*$/, "");
     if (!raw) return null;
-    // "111 EAST 41 STREET" → "E 41 St": the street, not a house number, in plain words.
-    return raw
-      .replace(/^\d+[A-Z-]*\s+/i, "")
-      .toLowerCase()
-      .replace(/\b(east|west|north|south)\b/g, (w) => w[0])
-      .replace(/\bstreet\b/g, "st").replace(/\bavenue\b/g, "av").replace(/\bplace\b/g, "pl").replace(/\bboulevard\b/g, "blvd")
-      .replace(/\b[a-z]/g, (c) => c.toUpperCase());
+    // "111 EAST 41 STREET" → "East 41 Street": the street, not a house number, spelled out.
+    return formatStreetText(raw.replace(/^\d+[A-Z-]*\s+/i, ""));
   } catch {
     return null;
   }
@@ -79,7 +75,7 @@ export async function routeWalk(a: LngLatTuple, b: LngLatTuple): Promise<WalkRes
   const turns = r.legs.flatMap((l) =>
     l.steps
       .filter((s) => s.maneuver.type === "turn" || s.maneuver.type === "end of road" || s.maneuver.type === "fork")
-      .map((s) => ({ at: s.maneuver.location, text: `Turn ${s.maneuver.modifier ?? ""} onto ${s.name || "the path"}`.replace(/\s+/g, " ") })),
+      .map((s) => ({ at: s.maneuver.location, text: formatStreetText(`Turn ${s.maneuver.modifier ?? ""} onto ${s.name || "the path"}`.replace(/\s+/g, " ")) })),
   );
   // OSRM's foot duration is ~5 km/h; keep it.
   return { coords: r.geometry.coordinates, distanceM: r.distance, durationS: r.duration, turns };

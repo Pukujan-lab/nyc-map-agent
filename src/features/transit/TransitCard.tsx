@@ -1,3 +1,4 @@
+import { formatStreetText } from "@/lib/streetName";
 import { liveProgress } from "./monotonic";
 import { useEffect } from "react";
 import { Accessibility, Crosshair, ScanEye, Star, Wrench } from "lucide-react";
@@ -157,13 +158,13 @@ function BusDetails({ id, route }: { id: string; route: string }) {
     <>
       <div><span className="font-semibold">{trip.data.route}</span> <span className="text-muted-foreground">to</span> <span className="font-medium">{trip.data.destination}</span></div>
       {calls[0] ? (
-        <div>Next stop <span className="font-medium">{calls[0].name}</span>
+        <div>Next stop <span className="font-medium">{formatStreetText(calls[0].name)}</span>
           {calls[0].eta ? <span className="tabular-nums text-muted-foreground"> · {minutesUntil(calls[0].eta, now)} min</span> : calls[0].away ? <span className="text-muted-foreground"> · {calls[0].away}</span> : null}
         </div>
       ) : null}
       {mine ? (
         <div className="rounded-md bg-muted px-2 py-1.5">
-          Near you: <span className="font-medium">{mine.name}</span>
+          Near you: <span className="font-medium">{formatStreetText(mine.name)}</span>
           {myCall?.eta ? <span className="tabular-nums"> · {minutesUntil(myCall.eta, now)} min</span> : <span className="text-muted-foreground"> · not on this bus&apos;s way</span>}
         </div>
       ) : null}

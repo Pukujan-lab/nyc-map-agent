@@ -141,7 +141,7 @@ import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 import { WalkControls } from "./WalkControls";
 import { StreetMiniMap } from "./StreetMiniMap";
 import { nearestCorner, type CornerSign } from "@/lib/map/corner";
-import { formatStreetPair } from "@/lib/streetName";
+import { formatStreetPair, formatStreetText } from "@/lib/streetName";
 import { parseAt, streetLabel, streetPosition, type NamedLine } from "@/lib/map/streetPos";
 import { MAX_HEIGHT_M, pitchForHeight, STREET_LEVEL_M } from "@/lib/map/cameraHeight";
 import { hoverBlocked } from "@/lib/map/hover";
@@ -626,7 +626,7 @@ export function MapView({
       if (hit) {
         showPanel({
           id: `restroom:${hit.name}`,
-          title: hit.name,
+          title: formatStreetText(hit.name),
           subtitle: "Public restroom",
           details: <RestroomDetails restroom={hit} />,
         });
