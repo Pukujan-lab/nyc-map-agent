@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodePolyline, itineraryToTrip, rankItineraries, type OtpItinerary } from "./otp";
+import { decodePolyline, itineraryToTrip, rankItineraries, stopName, type OtpItinerary } from "./otp";
 import { planTrip } from "./plan";
 import type { StationEntrances, TransitPlanner } from "./transit";
 
@@ -31,6 +31,10 @@ const subIt: OtpItinerary = { ...busIt, end: t("10:20"), numberOfTransfers: 1, l
 describe("OTP glue", () => {
   it("decodes a Google polyline as [lon, lat]", () => {
     expect(decodePolyline("_p~iF~ps|U_ulLnnqC")).toEqual([[-120.2, 38.5], [-120.95, 40.7]]);
+  });
+  it("title-cases upper-case bus stop names", () => {
+    expect(stopName("ROCKAWAY BEACH BLVD/BEACH 96 ST")).toBe("Rockaway Beach Blvd/Beach 96 St");
+    expect(stopName("Jay St-MetroTech")).toBe("Jay St-MetroTech");
   });
   it("ranks by arrival, then transfers, then walking, one per route sequence", () => {
     const sameArrival = { ...subIt, end: busIt.end };

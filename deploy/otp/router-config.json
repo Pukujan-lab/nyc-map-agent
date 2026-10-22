@@ -15,56 +15,64 @@
       "feedId": "SUBWAY",
       "frequency": "PT30S",
       "backwardsDelayPropagationType": "REQUIRED_NO_DATA",
-      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs"
+      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs",
+      "fuzzyTripMatching": true
     },
     {
       "type": "stop-time-updater",
       "feedId": "SUBWAY",
       "frequency": "PT30S",
       "backwardsDelayPropagationType": "REQUIRED_NO_DATA",
-      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-ace"
+      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-ace",
+      "fuzzyTripMatching": true
     },
     {
       "type": "stop-time-updater",
       "feedId": "SUBWAY",
       "frequency": "PT30S",
       "backwardsDelayPropagationType": "REQUIRED_NO_DATA",
-      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-bdfm"
+      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-bdfm",
+      "fuzzyTripMatching": true
     },
     {
       "type": "stop-time-updater",
       "feedId": "SUBWAY",
       "frequency": "PT30S",
       "backwardsDelayPropagationType": "REQUIRED_NO_DATA",
-      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-g"
+      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-g",
+      "fuzzyTripMatching": true
     },
     {
       "type": "stop-time-updater",
       "feedId": "SUBWAY",
       "frequency": "PT30S",
       "backwardsDelayPropagationType": "REQUIRED_NO_DATA",
-      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-jz"
+      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-jz",
+      "fuzzyTripMatching": true
     },
     {
       "type": "stop-time-updater",
       "feedId": "SUBWAY",
       "frequency": "PT30S",
       "backwardsDelayPropagationType": "REQUIRED_NO_DATA",
-      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-nqrw"
+      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-nqrw",
+      "fuzzyTripMatching": true
     },
     {
       "type": "stop-time-updater",
       "feedId": "SUBWAY",
       "frequency": "PT30S",
       "backwardsDelayPropagationType": "REQUIRED_NO_DATA",
-      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-l"
+      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-l",
+      "fuzzyTripMatching": true
     },
     {
       "type": "stop-time-updater",
       "feedId": "SUBWAY",
       "frequency": "PT30S",
       "backwardsDelayPropagationType": "REQUIRED_NO_DATA",
-      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-si"
+      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-si",
+      "fuzzyTripMatching": true
     },
     {
       "type": "stop-time-updater",

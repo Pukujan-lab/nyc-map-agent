@@ -12,8 +12,8 @@ import { nyLocalToDate, portalFor, safe, toNyLocal } from "./trip";
 
 const OTP_URL = (process.env.OTP_URL ?? "http://nyc-map-otp:8080").replace(/\/$/, "");
 
-const QUERY = `query Plan($o: PlanLabeledLocationInput!, $d: PlanLabeledLocationInput!, $dt: PlanDateTimeInput!) {
-  planConnection(origin: $o, destination: $d, dateTime: $dt, first: 8, searchWindow: "PT90M") {
+const QUERY = `query Plan($o: PlanLabeledLocationInput!, $d: PlanLabeledLocationInput!, $dt: PlanDateTimeInput!, $modes: PlanModesInput) {
+  planConnection(origin: $o, destination: $d, dateTime: $dt, modes: $modes, first: 8, searchWindow: "PT90M") {
     edges { node {
       start end duration numberOfTransfers walkDistance
       legs {
@@ -62,18 +62,26 @@ function nyIso(local: string): string {
   return `${base}:00${off < 0 ? "-" : "+"}${String(Math.floor(a / 60)).padStart(2, "0")}:${String(a % 60).padStart(2, "0")}`;
 }
 
+const RAIL_ONLY = { transit: { transit: [{ mode: "SUBWAY" }, { mode: "RAIL" }, { mode: "FERRY" }, { mode: "TRAM" }] } };
+
 export interface OtpClient { plan(o: LngLatTuple, d: LngLatTuple, local: string, arriveBy: boolean): Promise<OtpItinerary[]> }
 
 export const httpOtp: OtpClient = {
   async plan(o, d, local, arriveBy) {
     const loc = ([lon, lat]: LngLatTuple) => ({ location: { coordinate: { latitude: lat, longitude: lon } } });
     const dt = arriveBy ? { latestArrival: nyIso(local) } : { earliestDeparture: nyIso(local) };
-    const res = await fetch(`${OTP_URL}/otp/gtfs/v1`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(12000),
-      body: JSON.stringify({ query: QUERY, variables: { o: loc(o), d: loc(d), dt } }),
-    });
-    if (!res.ok) throw new Error(`OTP returned ${res.status}`);
-    return response.parse(await res.json()).data.planConnection.edges.map((e) => e.node);
+    const ask = async (modes?: unknown) => {
+      const res = await fetch(`${OTP_URL}/otp/gtfs/v1`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(12000),
+        body: JSON.stringify({ query: QUERY, variables: { o: loc(o), d: loc(d), dt, modes } }),
+      });
+      if (!res.ok) throw new Error(`OTP returned ${res.status}`);
+      return response.parse(await res.json()).data.planConnection.edges.map((e) => e.node);
+    };
+    // All modes, plus a rail-only search so a strong bus option cannot crowd the
+    // subway/LIRR alternative out of the result page.
+    const [all, rail] = await Promise.all([ask(), ask(RAIL_ONLY).catch(() => [])]);
+    return [...all, ...rail];
   },
 };
 
@@ -97,6 +105,12 @@ export function rankItineraries(items: OtpItinerary[], n = 3, arriveBy = false):
   const seen = new Set<string>(); const out: OtpItinerary[] = [];
   for (const i of sorted) { const k = signature(i); if (seen.has(k)) continue; seen.add(k); out.push(i); if (out.length === n) break; }
   return out;
+}
+
+/** "BROADWAY/WHITNEY AV" → "Broadway/Whitney Av" (MTA bus stop names are upper case). */
+export function stopName(s: string): string {
+  if (s !== s.toUpperCase()) return s;
+  return s.toLowerCase().replace(/(^|[\s/(-])([a-z])/g, (_, p: string, c: string) => p + c.toUpperCase()).replace(/\b(\d+)(St|Nd|Rd|Th)\b/g, (_, n: string, x: string) => n + x.toLowerCase());
 }
 
 const MODE: Record<string, "subway" | "bus" | "rail" | "ferry" | "tram"> = { SUBWAY: "subway", BUS: "bus", RAIL: "rail", FERRY: "ferry", TRAM: "tram", MONORAIL: "tram" };
@@ -128,17 +142,17 @@ export async function itineraryToTrip(
     const geom: LngLatTuple[] = coords.length >= 2 ? coords : [ll(l.from), ll(l.to)];
     if (!l.route) {
       const prev = it.legs[i - 1]; const next = it.legs[i + 1];
-      const toName = next ? next.from.stop?.name ?? next.from.name ?? "the stop" : destination.label;
-      const label = !prev ? `Walk to ${toName}` : !next ? `Walk from ${prev.to.stop?.name ?? prev.to.name ?? "the stop"} to ${destination.label}` : `Transfer: walk to ${toName}`;
+      const toName = next ? stopName(next.from.stop?.name ?? next.from.name ?? "the stop") : destination.label;
+      const label = !prev ? `Walk to ${toName}` : !next ? `Walk from ${stopName(prev.to.stop?.name ?? prev.to.name ?? "the stop")} to ${destination.label}` : `Transfer: walk to ${toName}`;
       legs.push({ kind: prev && next ? "transfer" : "walk", label, coords: geom, durationS: l.duration, distanceM: l.distance,
         turns: (l.steps ?? []).filter((s) => s.relativeDirection && !/DEPART|CONTINUE/.test(s.relativeDirection)).map((s) => ({ at: [s.lon, s.lat] as LngLatTuple, text: `Turn ${s.relativeDirection!.toLowerCase().replace(/_/g, " ")} onto ${s.streetName || "the path"}` })) });
       continue;
     }
     const mode = MODE[l.mode] ?? "bus";
     const b = bullet(l); routes.push(b);
-    const fromStop = l.from.stop?.name ?? l.from.name ?? "";
-    const toStop = l.to.stop?.name ?? l.to.name ?? "";
-    const stops = (l.intermediateStops ?? []).map((s) => ({ at: [s.lon, s.lat] as LngLatTuple, text: s.name }));
+    const fromStop = stopName(l.from.stop?.name ?? l.from.name ?? "");
+    const toStop = stopName(l.to.stop?.name ?? l.to.name ?? "");
+    const stops = (l.intermediateStops ?? []).map((s) => ({ at: [s.lon, s.lat] as LngLatTuple, text: stopName(s.name) }));
     if (mode === "subway") elevators.push(...(await safe(elevatorStatus(fromStop), [])), ...(await safe(elevatorStatus(toStop), [])));
     legs.push({
       kind: "ride", route: b, mode, fromStop, toStop, numStops: stops.length + 1, color: l.route.color ? `#${l.route.color}` : undefined, headsign: l.headsign ?? undefined,
