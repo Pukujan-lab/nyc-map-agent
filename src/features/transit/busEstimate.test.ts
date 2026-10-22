@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BusEstimator, buildShape, deadReckon, legMotion, pointAt, project, slerpBearing, type LonLat, type RouteGeom } from "./busEstimate";
+import { BusEstimator, buildShape, deadReckon, legMotion, pointAt, project, slerpBearing, speedFromTravel, type LonLat, type RouteGeom } from "./busEstimate";
 
 // A straight 2 km line heading north along a meridian, stops every 400 m.
 const LAT0 = 40.7, LON0 = -73.99, M = 1 / 111_320;
@@ -38,9 +38,18 @@ describe("shape geometry", () => {
   });
   it("uses learned segment speed and dwell when given", () => {
     const sh = buildShape(line, stops);
-    const slow = deadReckon(sh, "M1", 410, 6, true, 20, 0, { speed: () => 2 });
-    const fast = deadReckon(sh, "M1", 410, 6, true, 20, 0, { speed: () => 10 });
+    const slow = deadReckon(sh, "M1", 410, 6, true, 20, 0, { travel: () => 200 });
+    const fast = deadReckon(sh, "M1", 410, 6, true, 20, 0, { travel: () => 60 });
     expect(fast).toBeGreaterThan(slow);
+    // learned dwell is used at the stop
+    const long = deadReckon(sh, "M1", 300, 6, true, 45, 0, { dwell: () => 60 });
+    expect(long).toBeCloseTo(400, 0);
+  });
+  it("turns learned travel seconds into a plausible cruise speed", () => {
+    const v = speedFromTravel(400, 100, 20)!; // 400 m in 80 s of motion
+    expect(v).toBeGreaterThan(5);
+    expect(v).toBeLessThan(6.5);
+    expect(speedFromTravel(400, 10, 20)).toBeUndefined();
   });
 });
 

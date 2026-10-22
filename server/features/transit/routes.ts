@@ -91,7 +91,7 @@ export async function loadTrips(system: string) {
   return { at: Math.round(now), trips };
 }
 
-async function loadBuses(key: string) {
+export async function loadBuses(key: string) {
   const url = `https://gtfsrt.prod.obanyc.com/vehiclePositions?${new URLSearchParams({ key })}`;
   const feed = await decode(url);
   const buses = [];

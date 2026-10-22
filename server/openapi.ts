@@ -14,6 +14,7 @@ import { NearQuery as ParkingNearQuery } from "./features/parking/routes";
 import { AlongQuery as TrafficAlongQuery } from "./features/traffic/routes";
 import { Query as WeatherQuery } from "./features/weather/routes";
 import { Query as SegmentsQuery, Response_ as SegmentsResponse } from "./features/transit/segments";
+import { Query as BusSegmentsQuery, Response_ as BusSegmentsResponse } from "./features/transit/busSegments";
 import { EventsResponse, Query as EventsQuery } from "./features/events/schema";
 import { PlaceToiletsResponse } from "./features/place-toilets/schema";
 
@@ -115,6 +116,13 @@ export const ROUTES = {
     summary: "Historical subway segment travel and dwell times (median, p80) for a route at an hour of the week",
     request: { query: SegmentsQuery },
     responses: { 200: { description: "OK", content: { "application/json": { schema: SegmentsResponse } } }, ...errors },
+  }),
+  "/api/transit-bus-segments": createRoute({
+    method: "get",
+    path: "/api/transit-bus-segments",
+    summary: "Learned bus stop-to-stop travel and stop dwell times (median seconds) for a route at an hour of the week",
+    request: { query: BusSegmentsQuery },
+    responses: { 200: { description: "OK", content: { "application/json": { schema: BusSegmentsResponse } } }, ...errors },
   }),
   "/api/transit": jsonRoute("/api/transit", "Live transit capabilities ({ bus })"),
   "/api/transit/:system": jsonRoute(
