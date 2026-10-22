@@ -1,5 +1,5 @@
 name: transit-observe
-# Logs observed subway segment and dwell times into Octo every 15 minutes.
+# Logs observed subway and bus segment and dwell times into Octo every 15 minutes.
 on:
   schedule:
     - cron: "*/15 * * * *"
@@ -15,6 +15,7 @@ jobs:
     env:
       OCTO_API_KEY: ${{ secrets.OCTO_API_KEY }}
       OCTO_WORKSPACE_ID: ${{ secrets.OCTO_WORKSPACE_ID }}
+      MTA_BUSTIME_KEY: ${{ secrets.MTA_BUSTIME_KEY }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4

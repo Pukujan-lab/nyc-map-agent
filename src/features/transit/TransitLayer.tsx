@@ -19,7 +19,7 @@ import {
   type SystemId,
   type Vehicle,
 } from "./model";
-import { alertedRoutes, useAlerts, useBusRoute, useBusShapes, useBuses, useStarred, useTransitData, useTransitMeta, useTransitToggles, useXrayData, useSegmentHistory } from "./hooks";
+import { alertedRoutes, useAlerts, useBusRoute, useBusSegmentHistory, useBusShapes, useBuses, useStarred, useTransitData, useTransitMeta, useTransitToggles, useXrayData, useSegmentHistory } from "./hooks";
 import { useXray, xrayPrims } from "./xray";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { useFlag } from "@/lib/flags";
@@ -155,6 +155,8 @@ export default function TransitLayer() {
   const busEst = useRef(new BusEstimator());
   const [busRoutes, setBusRoutes] = useState<string[]>([]);
   const busShapes = useBusShapes(busRoutes);
+  const busHistory = useBusSegmentHistory(busRoutes);
+  useEffect(() => busEst.current.setHistory(busHistory), [busHistory]);
   useEffect(() => {
     for (const g of busShapes) busEst.current.setRoute(g);
     const list = buses.data?.buses ?? [];

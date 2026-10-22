@@ -3,6 +3,7 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useSearchParams } from "react-router-dom";
 import { lookupFrom, type SegmentLookup, type SegmentRow } from "./history";
+import type { BusHistory } from "./busEstimate";
 import { RAIL_SYSTEMS, type Bus, type LiveSystem, type StaticSystem, type SystemId , type XrayStation } from "./model";
 
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
@@ -204,4 +205,30 @@ export function useSegmentHistory(routes: string[]): SegmentLookup | undefined {
   const key = qs.map((q) => q.dataUpdatedAt).join(",");
   // eslint-disable-next-line react-hooks/exhaustive-deps
   return useMemo(() => (qs.some((q) => q.data) ? lookupFrom(new Map(routes.map((r, i) => [r, qs[i].data?.segments ?? []]))) : undefined), [key]);
+}
+
+type BusSegRow = { dir: number; from: string; to: string; kind: "travel" | "dwell"; n: number; median: number };
+/** Learned bus travel and dwell times for these routes at the current hour of week (refetched each 10 min). */
+export function useBusSegmentHistory(routes: string[]): BusHistory | undefined {
+  const qs = useQueries({
+    queries: routes.map((r) => ({
+      queryKey: ["transit", "bus-segments", r],
+      queryFn: () => getJson<{ segments: BusSegRow[] }>(`${API_BASE}/api/transit-bus-segments?${new URLSearchParams({ route: r })}`),
+      staleTime: 10 * 60_000,
+      refetchInterval: 10 * 60_000,
+      retry: 0,
+    })),
+  });
+  const key = qs.map((q) => q.dataUpdatedAt).join(",");
+  return useMemo(() => {
+    if (!qs.some((q) => q.data)) return undefined;
+    const travel = new Map<string, number>(), dwell = new Map<string, number>();
+    routes.forEach((r, i) => {
+      for (const s of qs[i].data?.segments ?? []) {
+        if (s.kind === "travel") travel.set(`${r}|${s.from}|${s.to}`, s.median);
+        else dwell.set(`${r}|${s.from}`, s.median);
+      }
+    });
+    return { travel: (r, a, b) => travel.get(`${r}|${a}|${b}`), dwell: (r, st) => dwell.get(`${r}|${st}`) };
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
 }
