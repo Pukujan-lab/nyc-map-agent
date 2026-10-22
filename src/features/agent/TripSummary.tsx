@@ -1,5 +1,6 @@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
+import { Ship } from "lucide-react";
 import type { Leg, Trip, TripCore } from "./schema";
 
 const fmt = (local: string) => local.slice(11, 16);
@@ -8,6 +9,13 @@ const mins = (a: string, b: string) => Math.round((Date.parse(`${b}:00Z`) - Date
 /** Route bullet: round for subway, rounded-rect for bus/rail/ferry; GTFS colour when known. */
 function RouteBullet({ route, mode, color }: { route: string; mode?: string; color?: string }) {
   const round = !mode || mode === "subway";
+  if (mode === "ferry") {
+    return (
+      <span aria-label={`${route} ferry`} className="inline-flex h-5 items-center gap-1 rounded px-1.5 text-[11px] font-bold leading-none text-white" style={{ backgroundColor: color ?? "#1D7FB8" }}>
+        <Ship className="h-3 w-3" aria-hidden />{route}
+      </span>
+    );
+  }
   return (
     <span
       aria-label={`${route} ${mode ?? "subway"}`}

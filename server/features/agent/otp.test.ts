@@ -12,7 +12,7 @@ function walk(a: ReturnType<typeof pt>, b: ReturnType<typeof pt>, s: string, e: 
 }
 function ride(route: string, mode: string, a: ReturnType<typeof pt>, b: ReturnType<typeof pt>, s: string, e: string, n = 3) {
   return { mode, duration: 1800, distance: 9000, realTime: false, headsign: "Rockaway Park", start: time(s), end: time(e), from: a, to: b,
-    route: { gtfsId: `F:${route}`, shortName: route, longName: null, color: "0039A6" }, legGeometry: null,
+    route: { gtfsId: `F:${route}`, shortName: route, longName: null as string | null, color: "0039A6" }, legGeometry: null,
     intermediateStops: Array.from({ length: n }, (_, i) => ({ name: `S${i}`, lat: 40.6, lon: -73.8 })), steps: [] };
 }
 const home = pt("Origin", -73.882, 40.742), beach = pt("Destination", -73.8197, 40.5833);
@@ -47,6 +47,13 @@ describe("OTP glue", () => {
     expect(r).toMatchObject({ route: "Q53+", mode: "bus", fromStop: "Broadway/Elmhurst Av", toStop: "Beach 98 St", numStops: 13 });
     expect(trip.legs.at(-1)?.label).toBe("Walk from Beach 98 St to Rockaway Beach");
     expect(trip.arriveIso).toBe("2026-10-23T10:00");
+  });
+  it("names ferry legs by route name", async () => {
+    const f = ride("RS", "FERRY", pt("Wall St/Pier 11", -74.006, 40.703, true), pt("Rockaway", -73.83, 40.58, true), "09:04", "10:05", 3);
+    f.route = { ...f.route, longName: "Rockaway" };
+    const it2: OtpItinerary = { ...busIt, legs: [f] };
+    const trip = await itineraryToTrip(it2, { label: "A", at: [-74, 40.7] }, { label: "B", at: [-73.83, 40.58] }, noStations);
+    expect(trip.legs[0]).toMatchObject({ kind: "ride", mode: "ferry", route: "Rockaway", label: "Rockaway ferry Wall St/Pier 11 → Rockaway (toward Rockaway Park)" });
   });
   it("returns alternatives and falls back to the subway router when OTP is down", async () => {
     const o = { label: "A", at: [-73.882, 40.742] as [number, number] }, d = { label: "B", at: [-73.8197, 40.5833] as [number, number] };

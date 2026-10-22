@@ -42,6 +42,7 @@ docker compose -p nyc-map-agent up -d --no-deps otp
 | BUSCO | MTA Bus Company |
 | LIRR, MNR | `gtfslirr.zip`, `gtfsmnr.zip` |
 | FERRY | NYC Ferry (connexionz) |
+| SIFERRY | Staten Island Ferry (NYC DOT GTFS, NYC Open Data b57i-ri22) |
 
 Weekly rebuild: host crontab on gravebuster (host clock is UTC), Sunday 08:10 UTC
 (04:10 New York in EDT, 03:10 in EST). A build takes about 5 minutes:
@@ -60,6 +61,7 @@ paths, so the rebuild lives in cron.)
   updater per bus feed id, every 60 s. The key is `${MTA_BUSTIME_KEY}`, which OTP
   substitutes from the container environment (the `.env` file); it is never in git.
 - LIRR and Metro-North trip updates, every 60 s.
+- NYC Ferry trip updates, alerts and vehicle positions (connexionz GTFS-rt), every 30 s / 2 min.
 - Service alerts (camsys subway, bus, LIRR, MNR), every 2 min.
 
 Known gaps: the NYCT subway GTFS-rt trip ids do not match the static feed's

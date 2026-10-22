@@ -181,6 +181,27 @@
       "feedId": "BUSCO",
       "frequency": "PT2M",
       "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys%2Fbus-alerts"
+    },
+    {
+      "type": "stop-time-updater",
+      "feedId": "FERRY",
+      "frequency": "PT30S",
+      "url": "https://nycferry.connexionz.net/rtt/public/utility/gtfsrealtime.aspx/tripupdate"
+    },
+    {
+      "type": "real-time-alerts",
+      "feedId": "FERRY",
+      "frequency": "PT2M",
+      "url": "https://nycferry.connexionz.net/rtt/public/utility/gtfsrealtime.aspx/alert"
+    },
+    {
+      "type": "vehicle-positions",
+      "feedId": "FERRY",
+      "frequency": "PT30S",
+      "url": "https://nycferry.connexionz.net/rtt/public/utility/gtfsrealtime.aspx/vehicleposition",
+      "features": [
+        "position"
+      ]
     }
   ]
 }

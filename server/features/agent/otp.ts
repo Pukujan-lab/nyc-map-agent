@@ -86,9 +86,11 @@ export const httpOtp: OtpClient = {
 };
 
 const transit = (i: OtpItinerary) => i.legs.filter((l) => l.route);
-/** Route bullet: MTA SBS "Q53-SBS"/"Q53+" → "Q53+"; LIRR/MNR use the branch name. */
+/** Route bullet: MTA SBS "Q53-SBS" → "Q53+"; ferries use the route name. */
 function bullet(l: z.infer<typeof otpLeg>): string {
   const r = l.route!;
+  // NYC Ferry short names are codes ("RS"); riders know the route name ("Rockaway").
+  if (l.mode === "FERRY" && r.longName) return r.longName.replace(/\s+(Route|Ferry Route)$/i, "");
   const s = (r.shortName || r.longName || r.gtfsId.split(":")[1] || "?").replace(/-SBS$/i, "+");
   return s;
 }
