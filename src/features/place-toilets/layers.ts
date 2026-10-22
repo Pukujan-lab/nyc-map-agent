@@ -1,5 +1,6 @@
 import { createElement } from "react";
-import type { GeoJSONSource, Map as MapLibreMap, MapLayerMouseEvent } from "maplibre-gl";
+import type { GeoJSONSource, Map as MapLibreMap, MapLayerMouseEvent, MapMouseEvent } from "maplibre-gl";
+import { kioskSources, pickAt } from "@/lib/map/streetPick";
 import { pushPanel } from "@/lib/store/PanelContext";
 import { ACCESS_LABEL, fetchPlaceToilets, KIND_LABEL, MIN_ZOOM, type PlaceToiletFeature } from "./data";
 import { PlaceToiletSheet } from "./PlaceToiletSheet";
@@ -43,6 +44,7 @@ export function mount(map: MapLibreMap): () => void {
   );
 
   const apply = (on: boolean) => {
+    kioskSources.places = on;
     if (!alive || !map.getLayer(PLACE_TOILETS_LAYER)) return;
     map.setLayoutProperty(PLACE_TOILETS_LAYER, "visibility", on ? "visible" : "none");
     if (on && !places.length) {
@@ -54,10 +56,7 @@ export function mount(map: MapLibreMap): () => void {
     }
   };
 
-  const onClick = (e: MapLayerMouseEvent) => {
-    const id = e.features?.[0]?.properties?.id as string | undefined;
-    const f = places.find((x) => x.properties.id === id);
-    if (!f) return;
+  const open = (f: PlaceToiletFeature) => {
     const p = f.properties;
     const [lon, lat] = f.geometry.coordinates as [number, number];
     pushPanel({
@@ -68,9 +67,22 @@ export function mount(map: MapLibreMap): () => void {
       details: createElement(PlaceToiletSheet, { place: p, lon, lat }),
     });
   };
+  const onClick = (e: MapLayerMouseEvent) => {
+    const id = e.features?.[0]?.properties?.id as string | undefined;
+    const f = places.find((x) => x.properties.id === id);
+    if (f) open(f);
+  };
+  // The 3D kiosk for a place at street level opens the same sheet.
+  const onKiosk = (e: MapMouseEvent) => {
+    const k = pickAt(map, e.point.x, e.point.y);
+    if (k?.kind !== "place") return;
+    const f = places.find((x) => x.properties.id === k.id);
+    if (f) open(f);
+  };
   const pointer = () => (map.getCanvas().style.cursor = "pointer");
   const unpointer = () => (map.getCanvas().style.cursor = "");
   map.on("click", PLACE_TOILETS_LAYER, onClick);
+  map.on("click", onKiosk);
   map.on("mouseenter", PLACE_TOILETS_LAYER, pointer);
   map.on("mouseleave", PLACE_TOILETS_LAYER, unpointer);
   const unsub = subscribeShops(apply);
@@ -80,6 +92,7 @@ export function mount(map: MapLibreMap): () => void {
     alive = false;
     unsub();
     map.off("click", PLACE_TOILETS_LAYER, onClick);
+    map.off("click", onKiosk);
     map.off("mouseenter", PLACE_TOILETS_LAYER, pointer);
     map.off("mouseleave", PLACE_TOILETS_LAYER, unpointer);
     if (map.getLayer(PLACE_TOILETS_LAYER)) map.removeLayer(PLACE_TOILETS_LAYER);
