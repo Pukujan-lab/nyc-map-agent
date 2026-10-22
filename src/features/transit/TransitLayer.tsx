@@ -25,6 +25,7 @@ import { useFlag } from "@/lib/flags";
 import { usePanel, usePanelChip, usePanelMode, usePanelSearch, type SearchProvider } from "@/lib/store/PanelContext";
 import { setFollowed, useFollowed } from "./follow";
 import { publishSubway } from "@/lib/agent/streetContext";
+import { publishLiveDots } from "@/lib/transit/liveVehicles";
 import { setStreetXray, useStreetXray } from "@/lib/transit/streetXray";
 
 const stopFollow = () => setFollowed(null);
@@ -412,6 +413,14 @@ export default function TransitLayer() {
     return () => window.clearInterval(id);
   }, [three]);
   const theme = usePalette();
+  // Street level: publish the drawn vehicles once a second for the mini map.
+  useEffect(() => {
+    if (!walking) { publishLiveDots([]); return; }
+    const push = () => publishLiveDots([...display.current.values()].map((v) => ({ key: v.key, lon: v.lon, lat: v.lat, color: v.system === "bus" ? theme.bus : v.color, bus: v.system === "bus", underground: v.grade === "underground" })));
+    push();
+    const id = window.setInterval(push, 1000);
+    return () => { window.clearInterval(id); publishLiveDots([]); };
+  }, [walking, theme.bus]);
   const [hoverStation, setHoverStation] = useState("");
   const openStationId = content?.id.startsWith("transit:station:") ? content.id.split(":").pop() ?? "" : "";
   useEffect(() => {
