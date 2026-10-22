@@ -42,6 +42,7 @@ export const FLAGS = {
   combined: { tier: "advanced", default: true, label: "Noise + crashes" },
   dataLayers: { tier: "advanced", default: true, label: "Data / analytics layers" },
   feedHealth: { tier: "advanced", default: true, label: "Feed health" },
+  ferry: { tier: "basic", default: true, label: "Ferries (NYC Ferry and Staten Island Ferry; layer off until chosen)" },
   events: { tier: "basic", default: true, label: "Events (street fairs, markets, pop-ups; layer off until chosen)" },
 } as const satisfies Record<string, FlagMeta>;
 

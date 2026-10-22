@@ -20,6 +20,7 @@ import * as street from "../api/street";
 import * as vehicleModels from "../api/vehicle-models/[mode]";
 import * as weather from "./features/weather/routes";
 import * as hazards from "./features/hazards/routes";
+import * as ferry from "./features/ferry/routes";
 import * as traffic from "./features/traffic/routes";
 import * as parking from "./features/parking/routes";
 import * as agent from "./features/agent/routes";
@@ -43,6 +44,7 @@ const routes: Array<[string, Handler]> = [
   ["/api/vehicle-models/:mode", vehicleModels],
   ["/api/weather", weather],
   ["/api/hazards", hazards],
+  ["/api/ferry", ferry],
   ["/api/traffic/along", { GET: traffic.GET_ALONG }],
   ["/api/traffic", traffic],
   ["/api/parking/near", { GET: parking.GET_NEAR }],
