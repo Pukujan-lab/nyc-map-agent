@@ -141,7 +141,7 @@ import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 import { WalkControls } from "./WalkControls";
 import { StreetMiniMap } from "./StreetMiniMap";
 import { nearestCorner, type CornerSign } from "@/lib/map/corner";
-import { streetLabel, streetPosition, type NamedLine } from "@/lib/map/streetPos";
+import { parseAt, streetLabel, streetPosition, type NamedLine } from "@/lib/map/streetPos";
 import { MAX_HEIGHT_M, pitchForHeight, STREET_LEVEL_M } from "@/lib/map/cameraHeight";
 import { hoverBlocked } from "@/lib/map/hover";
 import { FEATURES } from "@/features";
@@ -288,13 +288,12 @@ export function MapView({
   const walkPad = useRef<WalkInput>(WALK_IDLE);
 
   const viewState = useMemo(
-    () => ({
-      longitude: HOME_VIEW.lon,
-      latitude: HOME_VIEW.lat,
-      zoom: initialZoom(),
-      pitch: 0,
-      bearing: 0,
-    }),
+    () => {
+      const at = typeof window === "undefined" ? null : parseAt(new URLSearchParams(window.location.search).get("at"));
+      return at
+        ? { longitude: at.lon, latitude: at.lat, zoom: 18, pitch: 0, bearing: at.bearing }
+        : { longitude: HOME_VIEW.lon, latitude: HOME_VIEW.lat, zoom: initialZoom(), pitch: 0, bearing: 0 };
+    },
     [],
   );
 

@@ -71,3 +71,12 @@ export function streetLabel(p: { street: string; cross: string | null } | null):
   if (!p) return null;
   return p.cross ? `${p.street} & ${p.cross}` : p.street;
 }
+
+/** `?at=lon,lat[,bearing]`: open the map right there (QA and shareable spots). */
+export function parseAt(q: string | null): { lon: number; lat: number; bearing: number } | null {
+  const v = (q ?? "").split(",").map(Number);
+  if (v.length < 2 || v.some((n) => !Number.isFinite(n))) return null;
+  const [lon, lat, bearing = 0] = v;
+  if (lon < -74.3 || lon > -73.6 || lat < 40.4 || lat > 41) return null;
+  return { lon, lat, bearing };
+}
