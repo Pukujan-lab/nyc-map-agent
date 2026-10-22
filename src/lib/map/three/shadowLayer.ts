@@ -43,11 +43,13 @@ function visibleRadius(map: MapLibreMap): number {
 
 function buildingSources(map: MapLibreMap): Array<{ source: string; sourceLayer: string; h: string; base: string }> {
   const out: Array<{ source: string; sourceLayer: string; h: string; base: string }> = [];
-  if (map.getSource("city3d")) out.push({ source: "city3d", sourceLayer: "buildings", h: "h", base: "base" });
+  const shown = (id: string) => !!map.getLayer(id) && map.getLayoutProperty(id, "visibility") !== "none";
+  // Only buildings that are actually drawn cast and receive (never a hidden source).
+  if (map.getSource("city3d") && shown("city3d-walls")) out.push({ source: "city3d", sourceLayer: "buildings", h: "h", base: "base" });
   for (const l of map.getStyle().layers ?? []) {
     const sl = (l as { "source-layer"?: string })["source-layer"];
     const src = (l as { source?: string }).source;
-    if (l.type === "fill-extrusion" && sl === "building" && src && !out.some((o) => o.source === src)) {
+    if (l.type === "fill-extrusion" && sl === "building" && src && shown(l.id) && !out.some((o) => o.source === src)) {
       out.push({ source: src, sourceLayer: sl, h: "render_height", base: "render_min_height" });
     }
   }
@@ -175,7 +177,7 @@ export function createShadowLayer(): CustomLayerInterface {
       b.push(...collect(src.source, src.sourceLayer, src.h, src.base, radius, seen));
       if (src.source === "city3d" && b.length) break; // textured city wins over the basemap
     }
-    const t = map.getSource("city3d") ? collect("city3d", "props", "height", "base", Math.min(radius, 350), seen) : [];
+    const t = map.getSource("city3d") && map.getLayer("city3d-props") && map.getLayoutProperty("city3d-props", "visibility") !== "none" ? collect("city3d", "props", "height", "base", Math.min(radius, 350), seen) : [];
     for (const old of [buildings, props]) if (old) { scene.remove(old); old.geometry.dispose(); }
     if (occluder) scene.remove(occluder);
     const geo = extrude(b);
