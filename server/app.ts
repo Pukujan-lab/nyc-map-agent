@@ -26,8 +26,10 @@ import * as parking from "./features/parking/routes";
 import * as agent from "./features/agent/routes";
 import * as transit from "./features/transit/routes";
 import * as transitSegments from "./features/transit/segments";
+import * as transitBusSegments from "./features/transit/busSegments";
 import * as events from "./features/events/routes";
 import * as placeToilets from "./features/place-toilets/routes";
+import * as storefronts from "./features/storefronts/routes";
 
 type Handler = { GET: (request: Request) => Promise<Response> };
 
@@ -51,10 +53,13 @@ const routes: Array<[string, Handler]> = [
   ["/api/parking/rules", { GET: parking.GET_RULES }],
   ["/api/parking", parking],
   ["/api/transit-segments", transitSegments],
+  ["/api/transit-bus-segments", transitBusSegments],
   ["/api/transit", transit],
   ["/api/transit/:system", transit],
   ["/api/events", events],
   ["/api/place-toilets", placeToilets],
+  ["/api/storefronts/logo", { GET: storefronts.GET_LOGO }],
+  ["/api/storefronts/brands", storefronts],
 ];
 
 export const app = new OpenAPIHono({

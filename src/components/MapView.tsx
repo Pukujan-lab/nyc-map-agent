@@ -9,6 +9,7 @@ import { useFlags } from "@/lib/flags";
 import { useFeatureToggles } from "@/lib/featureToggles";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { MapCompass } from "./MapCompass";
+import { ViewSwitcher } from "./ViewSwitcher";
 import { applyReadable } from "@/lib/map/readable";
 import { applyPlaces, placesStale, usePlaces, withQuickPlaces } from "@/lib/map/places";
 import { useMapOptions } from "@/lib/map/mapOptions";
@@ -143,7 +144,8 @@ import { useQuickLayer } from "@/lib/quickLayers";
 import { QuickLayers } from "./QuickLayers";
 import { StreetMiniMap } from "./StreetMiniMap";
 import { nearestCorner, type CornerSign } from "@/lib/map/corner";
-import { formatStreetPair } from "@/lib/streetName";
+import { kioskSources, pickAt as pickFurniture } from "@/lib/map/streetPick";
+import { formatStreetPair, formatStreetText } from "@/lib/streetName";
 import { parseAt, streetLabel, streetPosition, type NamedLine } from "@/lib/map/streetPos";
 import { MAX_HEIGHT_M, pitchForHeight, STREET_LEVEL_M } from "@/lib/map/cameraHeight";
 import { hoverBlocked } from "@/lib/map/hover";
@@ -641,11 +643,27 @@ export function MapView({
       };
       const transitIds = FEATURES.filter((f) => f.id === "transit").flatMap((f) => f.clickLayers ?? []);
       if (hitsAny(transitIds)) return;
+      // 3D restroom kiosks at street level: public ones open here, shop/café
+      // ones are opened by the place-toilets feature's own click handler.
+      const kiosk = walking ? pickFurniture(event.target, event.point.x, event.point.y) : null;
+      if (kiosk?.kind === "place") return;
+      if (kiosk?.kind === "restroom") {
+        const p = kiosk.props;
+        const str = (k: string) => (typeof p[k] === "string" && p[k] ? p[k] : null);
+        const name = str("name") ?? "Public restroom";
+        showPanel({
+          id: `restroom:${name}`,
+          title: name,
+          subtitle: "Public restroom",
+          details: <RestroomDetails restroom={{ name, status: str("status"), hours: str("hours"), accessibility: str("accessibility"), operator: str("operator") }} />,
+        });
+        return;
+      }
       const hit = restroomsMod.current?.restroomAt(event.target, event.point.x, event.point.y);
       if (hit) {
         showPanel({
           id: `restroom:${hit.name}`,
-          title: hit.name,
+          title: formatStreetText(hit.name),
           subtitle: "Public restroom",
           details: <RestroomDetails restroom={hit} />,
         });
@@ -921,6 +939,7 @@ export function MapView({
         restroomsMod.current = mod;
         if (restrooms) mod.installRestrooms(map);
         mod.setRestroomsVisible(map, restrooms);
+        kioskSources.restrooms = restrooms;
       })
       .catch((err) => console.warn("restrooms failed to load", err));
   }, [ready, styleEpoch, restrooms]);
@@ -1399,7 +1418,8 @@ export function MapView({
           center.lng - (back * Math.sin(rad)) / (111_320 * cosLat),
           center.lat - (back * Math.cos(rad)) / 111_320,
         );
-        map.jumpTo(map.calculateCameraOptionsFromTo(eye, heightM, center, 0));
+        // One scene, smooth moves between levels.
+        map.easeTo({ ...map.calculateCameraOptionsFromTo(eye, heightM, center, 0), duration: reducedMotion ? 0 : 900 });
         setTilted(pitch > 0);
       };
       if (walking) {
@@ -1498,6 +1518,7 @@ export function MapView({
           {FEATURES.map((f) => (f.MapLayer ? <f.MapLayer key={f.id} /> : null))}
         </Suspense>
         {walking ? null : <MapCompass />}
+        <ViewSwitcher />
       </MapLibreMap>
 
 

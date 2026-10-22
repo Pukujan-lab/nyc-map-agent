@@ -1,3 +1,4 @@
+import { formatStreetText } from "@/lib/streetName";
 import { liveProgress } from "./monotonic";
 import { useEffect } from "react";
 import { Accessibility, Crosshair, ScanEye, Star, Wrench } from "lucide-react";
@@ -167,13 +168,13 @@ function BusDetails({ id, route }: { id: string; route: string }) {
     <>
       <div><span className="font-semibold">{trip.data.route}</span> <span className="text-muted-foreground">to</span> <span className="font-medium">{trip.data.destination}</span></div>
       {calls[0] ? (
-        <div>Next stop <span className="font-medium">{calls[0].name}</span>
+        <div>Next stop <span className="font-medium">{formatStreetText(calls[0].name)}</span>
           {calls[0].eta ? <span className="tabular-nums text-muted-foreground"> · {minutesUntil(calls[0].eta, now)} min</span> : calls[0].away ? <span className="text-muted-foreground"> · {calls[0].away}</span> : null}
         </div>
       ) : null}
       {mine ? (
         <div className="rounded-md bg-muted px-2 py-1.5">
-          Near you: <span className="font-medium">{mine.name}</span>
+          Near you: <span className="font-medium">{formatStreetText(mine.name)}</span>
           {myCall?.eta ? <span className="tabular-nums"> · {minutesUntil(myCall.eta, now)} min</span> : <span className="text-muted-foreground"> · not on this bus&apos;s way</span>}
         </div>
       ) : null}
@@ -244,6 +245,38 @@ export function OutageRow({ o }: { o: Outage }) {
         <div className="text-xs">
           {o.ada === "yes" ? "Station still step-free accessible" : o.ada === "no" ? "Not step-free accessible right now" : "Station is not ADA-accessible"}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Follow mode's slim card (top centre, never blocks the view): route, next
+ * stop, ETA and any delay. The camera switcher and "Stop following" live in
+ * the view switcher at the bottom.
+ */
+export function FollowCard({ vehicle }: { vehicle: Vehicle }) {
+  const now = useNow();
+  const sys = vehicle.system === "bus" ? [] : [vehicle.system];
+  const data = useTransitData(sys);
+  const alerts = useAlerts(true);
+  const delay = (alerts.data?.alerts ?? []).find((a) => a.routes.includes(vehicle.route) && a.kind !== "planned");
+  const next = vehicle.stopped?.kind === "at" ? vehicle.stopped.stop : vehicle.nextStop;
+  return (
+    <div data-testid="follow-card" className="pointer-events-none absolute left-1/2 top-16 z-30 w-[min(92vw,420px)] -translate-x-1/2 lg:top-3">
+      <div className="pointer-events-auto flex items-center gap-[var(--sp-2)] rounded-xl border border-border bg-card/95 px-[var(--sp-3)] py-1.5 text-[12px] shadow-lg backdrop-blur-md">
+        <RouteBullet system={vehicle.system} route={vehicle.route} data={data} />
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-semibold">
+            {vehicle.stopped?.kind === "at" ? "At " : "Next "}
+            {next ? stopName(data, vehicle.system, next) : "—"}
+            {vehicle.eta && vehicle.stopped?.kind !== "at" ? <span className="tabular-nums text-muted-foreground"> · {minutesUntil(vehicle.eta, now)} min</span> : null}
+          </div>
+          <div className="truncate text-[11px] text-muted-foreground">
+            {delay ? <><span className="font-semibold text-foreground">{delay.reroute ? "Detour" : "Delay"}:</span> {delay.text}</> : "No delays reported"}
+          </div>
+        </div>
+        <span className="shrink-0 text-[11px] font-medium text-muted-foreground">{vehicle.grade === "underground" ? "Underground" : vehicle.grade === "elevated" ? "Elevated" : "At grade"}</span>
       </div>
     </div>
   );

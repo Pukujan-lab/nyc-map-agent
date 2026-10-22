@@ -11,9 +11,11 @@ import { Query as BlocksQuery } from "../api/blocks";
 import { Query as StreetQuery } from "../api/street";
 import { Query as HazardsQuery } from "./features/hazards/routes";
 import { NearQuery as ParkingNearQuery } from "./features/parking/routes";
+import { BrandsBox as StorefrontBrandsQuery, LogoQuery as StorefrontLogoQuery } from "./features/storefronts/routes";
 import { AlongQuery as TrafficAlongQuery } from "./features/traffic/routes";
 import { Query as WeatherQuery } from "./features/weather/routes";
 import { Query as SegmentsQuery, Response_ as SegmentsResponse } from "./features/transit/segments";
+import { Query as BusSegmentsQuery, Response_ as BusSegmentsResponse } from "./features/transit/busSegments";
 import { EventsResponse, Query as EventsQuery } from "./features/events/schema";
 import { PlaceToiletsResponse } from "./features/place-toilets/schema";
 
@@ -109,6 +111,8 @@ export const ROUTES = {
   "/api/traffic": jsonRoute("/api/traffic", "NYC DOT real-time speed links and today's closures GeoJSON"),
   "/api/parking/near": jsonRoute("/api/parking/near", "Licensed garages and lots near a point", ParkingNearQuery),
   "/api/parking/rules": jsonRoute("/api/parking/rules", "Street parking sign and meter rules near a point", ParkingNearQuery),
+  "/api/storefronts/brands": jsonRoute("/api/storefronts/brands", "OSM shops and amenities with brand:wikidata in a small bbox (ODbL)", StorefrontBrandsQuery),
+  "/api/storefronts/logo": jsonRoute("/api/storefronts/logo", "A brand's freely licensed Wikidata P154 logo, re-hosted via Octo files (R2)", StorefrontLogoQuery),
   "/api/parking": jsonRoute("/api/parking", "Licensed garages and lots GeoJSON (DCWP + OSM)"),
   "/api/transit-segments": createRoute({
     method: "get",
@@ -117,12 +121,19 @@ export const ROUTES = {
     request: { query: SegmentsQuery },
     responses: { 200: { description: "OK", content: { "application/json": { schema: SegmentsResponse } } }, ...errors },
   }),
+  "/api/transit-bus-segments": createRoute({
+    method: "get",
+    path: "/api/transit-bus-segments",
+    summary: "Learned bus stop-to-stop travel and stop dwell times (median seconds) for a route at an hour of the week",
+    request: { query: BusSegmentsQuery },
+    responses: { 200: { description: "OK", content: { "application/json": { schema: BusSegmentsResponse } } }, ...errors },
+  }),
   "/api/transit": jsonRoute("/api/transit", "Live transit capabilities ({ bus })"),
   "/api/transit/:system": jsonRoute(
     "/api/transit/{system}",
-    "Live MTA GTFS-rt (subway / lirr / mnr trips, bus positions, alerts + elevator outages), cached ~15 s; bus-trip?vehicle= (one bus's headsign + upcoming stops) and bus-route?route= (route shape + stops)",
-    z.object({ vehicle: z.string().max(40).optional(), route: z.string().max(8).optional() }),
-    z.object({ system: z.enum(["subway", "lirr", "mnr", "bus", "alerts", "bus-trip", "bus-route"]).openapi({ param: { name: "system", in: "path" }, example: "subway" }) }),
+    "Live MTA GTFS-rt (subway / lirr / mnr trips, bus positions, alerts + elevator outages), cached ~15 s; bus-trip?vehicle= (one bus's headsign + upcoming stops), bus-route?route= (route shape + stops) and bus-stops?lat=&lon= (stops within ~300 m with the routes serving each)",
+    z.object({ vehicle: z.string().max(40).optional(), route: z.string().max(8).optional(), lat: z.string().max(12).optional(), lon: z.string().max(12).optional() }),
+    z.object({ system: z.enum(["subway", "lirr", "mnr", "bus", "alerts", "bus-trip", "bus-route", "bus-stops"]).openapi({ param: { name: "system", in: "path" }, example: "subway" }) }),
   ),
   "/api/events": createRoute({
     method: "get",

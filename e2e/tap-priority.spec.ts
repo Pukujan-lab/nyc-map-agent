@@ -33,8 +33,7 @@ test("empty map tap opens nothing and shows no complaints card", async ({ page }
 
 test("street view tap never opens the neighbourhood card", async ({ page }) => {
   await open(page);
-  await page.locator("button", { hasText: /^Layers & filters$/ }).click();
-  await page.getByRole("button", { name: "Street view", exact: true }).click();
+  await page.getByTestId("view-switcher").getByRole("button", { name: "Street", exact: true }).click();
   await page.waitForTimeout(2500);
   await tapMap(page, 0.5, 0.75);
   await page.waitForTimeout(800);

@@ -3,6 +3,7 @@
  * which is for light use only — set DRIVE_ROUTER_URL to a self-hosted OSRM, or
  * implement `DriveRouter` for Valhalla, before real traffic (docs/MODULES.md).
  */
+import { formatStreetText } from "../../../../src/lib/streetName";
 import { z } from "zod";
 import type { LngLatTuple } from "../../../../src/features/agent/schema";
 
@@ -22,7 +23,7 @@ const osrm = z.object({ routes: z.array(z.object({ distance: z.number(), duratio
 export function describeStep(s: z.infer<typeof step>): string | null {
   const { type, modifier, exit } = s.maneuver;
   if (["depart", "arrive", "new name", "continue", "notification"].includes(type) && !(type === "continue" && modifier && modifier !== "straight")) return null;
-  const road = s.ref ? `${s.name || s.ref} (${s.ref})` : s.name || "the road";
+  const road = s.ref ? `${formatStreetText(s.name) || s.ref} (${s.ref})` : formatStreetText(s.name) || "the road";
   const verb =
     type === "roundabout" || type === "rotary" ? `At the roundabout take exit ${exit ?? ""}`.trim()
       : type === "merge" ? `Merge ${modifier ?? ""}`
