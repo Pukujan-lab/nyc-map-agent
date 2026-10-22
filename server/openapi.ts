@@ -15,6 +15,7 @@ import { AlongQuery as TrafficAlongQuery } from "./features/traffic/routes";
 import { Query as WeatherQuery } from "./features/weather/routes";
 import { Query as SegmentsQuery, Response_ as SegmentsResponse } from "./features/transit/segments";
 import { EventsResponse, Query as EventsQuery } from "./features/events/schema";
+import { PlaceToiletsResponse } from "./features/place-toilets/schema";
 
 const Json = z.record(z.unknown()).openapi("Json");
 const ApiError = z.object({ error: z.string(), issues: z.array(z.string()).optional() }).openapi("ApiError");
@@ -117,6 +118,12 @@ export const ROUTES = {
     summary: "NYC pop-up events, street fairs, markets, outdoor shows, Parks events and event closures (GeoJSON), refreshed nightly",
     request: { query: EventsQuery },
     responses: { 200: { description: "OK", content: { "application/json": { schema: EventsResponse } } }, ...errors },
+  }),
+  "/api/place-toilets": createRoute({
+    method: "get",
+    path: "/api/place-toilets",
+    summary: "Restaurants, cafés, bars and shops with a toilet, labelled anyone / customers only (OpenStreetMap, ODbL; GeoJSON, refreshed nightly)",
+    responses: { 200: { description: "OK", content: { "application/json": { schema: PlaceToiletsResponse } } }, ...errors },
   }),
 } as const;
 

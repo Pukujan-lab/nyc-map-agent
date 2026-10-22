@@ -26,6 +26,7 @@ export const FEEDS: Feed[] = [
   { id: "octo:sources", via: "proxy", url: "/api/sources", expect: json },
   { id: "octo:aggregate", via: "proxy", url: "/api/aggregate?dataset=noise&window=12mo", expect: json },
   { id: "octo:restrooms", via: "proxy", url: "/api/restrooms", expect: json },
+  { id: "octo:place-toilets", via: "proxy", url: "/api/place-toilets", expect: json, optional: true },
   { id: "octo:events", via: "proxy", url: "/api/events", expect: json, optional: true },
   { id: "r2:city-tiles", via: "proxy", url: "/api/city-tiles", init: { headers: { Range: "bytes=0-126" } } },
   // MTA (proxied once the transit module lands, #56)
