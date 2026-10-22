@@ -1,0 +1,93 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Dark-first operational palette: neutral slate, one raised surface. */
+  :root,
+  .dark {
+    --background: 222 30% 6%;
+    --foreground: 213 22% 92%;
+
+    --card: 222 24% 10%;
+    --card-foreground: 213 22% 92%;
+
+    --popover: 222 26% 9%;
+    --popover-foreground: 213 22% 92%;
+
+    --primary: 210 22% 94%;
+    --primary-foreground: 222 32% 8%;
+
+    --secondary: 220 18% 16%;
+    --secondary-foreground: 213 22% 92%;
+
+    --muted: 220 17% 14%;
+    --muted-foreground: 217 12% 60%;
+
+    --accent: 220 18% 17%;
+    --accent-foreground: 213 22% 92%;
+
+    --destructive: 0 65% 48%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 16% 18%;
+    --input: 220 16% 21%;
+    --ring: 216 18% 42%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 222 26% 8%;
+    --sidebar-foreground: 213 22% 92%;
+    --sidebar-primary: 210 22% 94%;
+    --sidebar-primary-foreground: 222 32% 8%;
+    --sidebar-accent: 220 18% 16%;
+    --sidebar-accent-foreground: 213 22% 92%;
+    --sidebar-border: 220 16% 18%;
+    --sidebar-ring: 216 18% 42%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    color-scheme: dark;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    overflow-x: hidden;
+  }
+}
+
+@layer components {
+  /* Inset log surface: the visual centre of gravity when a run is selected. */
+  .log-surface {
+    background-color: hsl(222 34% 4%);
+    box-shadow: inset 0 1px 0 hsl(220 16% 22% / 0.5), inset 0 12px 24px -18px #000;
+  }
+
+  .log-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(220 14% 28%) transparent;
+  }
+
+  .log-scroll::-webkit-scrollbar {
+    height: 10px;
+    width: 10px;
+  }
+
+  .log-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .log-scroll::-webkit-scrollbar-thumb {
+    background-color: hsl(220 14% 26%);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+}

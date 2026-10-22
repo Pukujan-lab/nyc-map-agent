@@ -7,7 +7,7 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import type { Context } from "hono";
 import { compress } from "hono/compress";
-import { AGENT_ROUTE, ROUTES } from "./openapi";
+import { AGENT_ROUTE, API_INFO, ROUTES, legacyAlias, toV1, toV1Route } from "./openapi";
 import * as aggregate from "../api/aggregate";
 import * as area from "../api/area/[block]";
 import * as areas from "../api/areas";
@@ -24,6 +24,7 @@ import * as traffic from "./features/traffic/routes";
 import * as parking from "./features/parking/routes";
 import * as agent from "./features/agent/routes";
 import * as transit from "./features/transit/routes";
+import * as events from "./features/events/routes";
 
 type Handler = { GET: (request: Request) => Promise<Response> };
 
@@ -47,6 +48,7 @@ const routes: Array<[string, Handler]> = [
   ["/api/parking", parking],
   ["/api/transit", transit],
   ["/api/transit/:system", transit],
+  ["/api/events", events],
 ];
 
 export const app = new OpenAPIHono({
@@ -64,16 +66,20 @@ export const app = new OpenAPIHono({
 // Rollups and boundaries are 0.2-2 MB of JSON; gzip cuts them ~5x.
 app.use("/api/*", async (c, next) => {
   // Tile ranges are already-compressed binary; gzip would break Content-Range.
-  if (c.req.path === "/api/city-tiles" || c.req.path === "/api/block-tiles" || c.req.path.startsWith("/api/vehicle-models/") || c.req.path === "/api/agent") return next();
+  const p = c.req.path.replace(/^\/api\/v1\//, "/api/");
+  if (p === "/api/city-tiles" || p === "/api/block-tiles" || p.startsWith("/api/vehicle-models/") || p === "/api/agent") return next();
   return compress()(c, next);
 });
+// Canonical paths are /api/v1/*; /api/* stays as an alias (marked deprecated in the spec).
 for (const [path, handler] of routes) {
   const spec = (ROUTES as Record<string, (typeof ROUTES)[keyof typeof ROUTES]>)[path];
-  if (spec) {
-    // Handlers build their own Response; the route only adds validation + docs.
-    app.openapi(spec, ((c: Context) => handler.GET(c.req.raw)) as never);
-  } else {
-    app.get(path, (c) => handler.GET(c.req.raw));
+  for (const [p, s] of [[toV1(path), spec && toV1Route(spec)], [path, spec && legacyAlias(spec)]] as const) {
+    if (s) {
+      // Handlers build their own Response; the route only adds validation + docs.
+      app.openapi(s, ((c: Context) => handler.GET(c.req.raw)) as never);
+    } else {
+      app.get(p, (c) => handler.GET(c.req.raw));
+    }
   }
 }
 
@@ -82,9 +88,12 @@ export const MOUNTED_PATHS = routes.map(([path]) => path);
 
 // Smart-mode agent (POST, NDJSON stream; body validated by zod in the handler). Skips gzip above.
 // The handler validates the body itself (zod) so it can stream; the route adds docs.
-app.openapi(AGENT_ROUTE, ((c: Context) => agent.POST(c.req.raw)) as never);
+app.openapi(toV1Route(AGENT_ROUTE), ((c: Context) => agent.POST(c.req.raw)) as never);
+app.openapi(legacyAlias(AGENT_ROUTE), ((c: Context) => agent.POST(c.req.raw)) as never);
 
-app.doc31("/api/openapi.json", { openapi: "3.1.0", info: { title: "NYC Map Agent API", version: "1" } });
+const docConfig = { openapi: "3.1.0", info: API_INFO };
+app.doc31("/api/v1/openapi.json", docConfig);
+app.doc31("/api/openapi.json", docConfig);
 app.all("/api/*", (c) => c.json({ error: "not_found" }, 404));
 
 export default app;

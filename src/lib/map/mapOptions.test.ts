@@ -2,9 +2,13 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_OPTIONS, lineOpacity, readOptions } from "./mapOptions";
 
 describe("map options", () => {
-  it("default to simple streets with names and buildings", () => {
+  it("default to simple streets, names and flat buildings", () => {
     expect(readOptions({ getItem: () => null })).toEqual(DEFAULT_OPTIONS);
     expect(readOptions({ getItem: () => JSON.stringify({ streets: "full", routes: ["L", 3] }) })).toMatchObject({ streets: "full", routes: ["L"] });
+  });
+  it("keeps 3D buildings only when chosen", () => {
+    expect(readOptions({ getItem: () => JSON.stringify({ buildings: "3d" }) }).buildings).toBe("3d");
+    expect(readOptions({ getItem: () => JSON.stringify({ buildings: true }) }).buildings).toBe("flat");
   });
   it("mutes lines until picked or focused", () => {
     expect(lineOpacity([], false)).toBe(0.5);

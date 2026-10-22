@@ -16,6 +16,7 @@ import { BLOCK_GRID_DEG } from "../src/lib/geo/blocks";
 import { representativePoint } from "../src/lib/datasets/fetchSource";
 import { SOURCES, type GeometrySource, type GridSource, type SourceConfig } from "../src/lib/datasets/registry";
 import { octoQuery } from "../api/_lib/octo";
+import { collectEvents, upsertEvents } from "../server/features/events/ingest";
 import { loadEnv } from "./env";
 
 const SOCRATA = "https://data.cityofnewyork.us/resource";
@@ -291,6 +292,29 @@ async function main() {
     } catch (err) {
       failed++;
       console.error(`restrooms: FAILED ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  if (!only.length || only.includes("events")) {
+    const started = new Date().toISOString();
+    try {
+      const getJson = async (url: string): Promise<unknown> => {
+        for (let attempt = 0; ; attempt++) {
+          const res = await fetch(url, { headers: url.startsWith(SOCRATA) ? socrataHeaders() : {} });
+          if (res.ok) return res.json();
+          if (attempt >= 3 || (res.status < 500 && res.status !== 429)) throw new Error(`${new URL(url).host} ${res.status}`);
+          await new Promise((r) => setTimeout(r, 2000 * 2 ** attempt));
+        }
+      };
+      const { events, stats } = await collectEvents(getJson);
+      await upsertEvents(events, (sql, params) => octoQuery(sql, params));
+      console.log(`events: ${stats.kept} kept (${stats.permitted} permitted rows, ${stats.parks} Parks rows, ${stats.noLocation} without a location)`);
+      await octoQuery(
+        "INSERT INTO core.ingest_runs (source_id, started_at, finished_at, rows, status) VALUES ('events', $1, now(), $2, 'ok')",
+        [started, stats.kept],
+      );
+    } catch (err) {
+      failed++;
+      console.error(`events: FAILED ${err instanceof Error ? err.message : String(err)}`);
     }
   }
   if (failed) process.exit(1);

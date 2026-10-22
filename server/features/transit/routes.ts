@@ -7,6 +7,8 @@
  *   /api/transit/subway|lirr|mnr → trips with upcoming stop times
  *   /api/transit/bus      → bus vehicle positions (404 without the key)
  *   /api/transit/alerts   → MTA service alerts + elevator/escalator outages
+ *   /api/transit/bus-trip?vehicle=&route= → one bus: headsign + upcoming stops with ETAs (SIRI)
+ *   /api/transit/bus-route?route=        → one route's shape + stops, on demand (Bus Time OBA)
  */
 import GtfsRealtimeBindings from "gtfs-realtime-bindings";
 import { json } from "../../../api/_lib/http";
@@ -21,9 +23,11 @@ const FEEDS: Record<string, string[]> = {
 const TTL = 15_000;
 const cache = new Map<string, { at: number; body: Promise<unknown> }>();
 
-function cached(key: string, load: () => Promise<unknown>): Promise<unknown> {
+function cached(key: string, load: () => Promise<unknown>, ttl = TTL): Promise<unknown> {
   const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < TTL) return hit.body;
+  if (hit && Date.now() - hit.at < ttl) return hit.body;
+  // Per-vehicle keys come and go; drop stale ones so the map cannot grow without bound.
+  if (cache.size > 500) for (const [k, v] of cache) if (Date.now() - v.at > 6 * 3600_000 || (k.startsWith("bus-trip:") && Date.now() - v.at > TTL)) cache.delete(k);
   const body = load();
   cache.set(key, { at: Date.now(), body });
   body.catch(() => cache.delete(key));
@@ -183,14 +187,80 @@ async function loadAlerts() {
   return { at: Math.round(now), alerts, outages };
 }
 
+const BUSTIME = "https://bustime.mta.info/api/";
+const ROUTE_RE = /^[A-Z]{1,3}\d{1,3}[A-Z+]{0,2}$/i;
+const VEHICLE_RE = /^[\w .-]{1,40}$/;
+const first = (v: unknown): string => {
+  const x: unknown = Array.isArray(v) ? v[0] : v;
+  return typeof x === "string" || typeof x === "number" ? String(x) : "";
+};
+
+/** Google encoded polyline → [lon, lat] pairs. */
+export function decodePolyline(str: string): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  let i = 0, lat = 0, lon = 0;
+  while (i < str.length) {
+    for (const axis of [0, 1]) {
+      let shift = 0, result = 0, b: number;
+      do { b = str.charCodeAt(i++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20 && i < str.length);
+      const d = result & 1 ? ~(result >> 1) : result >> 1;
+      if (axis === 0) lat += d; else lon += d;
+    }
+    out.push([lon / 1e5, lat / 1e5]);
+  }
+  return out;
+}
+
+type SiriCall = { StopPointRef?: string; StopPointName?: unknown; ExpectedArrivalTime?: string; AimedArrivalTime?: string; Extensions?: { Distances?: { PresentableDistance?: string } } };
+async function loadBusTrip(key: string, vehicle: string) {
+  const qs = new URLSearchParams({ key, VehicleRef: vehicle, VehicleMonitoringDetailLevel: "calls", MaximumNumberOfCallsOnwards: "40" });
+  const r = await fetch(`${BUSTIME}siri/vehicle-monitoring.json?${qs}`, { signal: AbortSignal.timeout(10_000) });
+  if (!r.ok) throw new Error(`bus-trip upstream ${r.status}`);
+  const d = (await r.json()) as { Siri?: { ServiceDelivery?: { VehicleMonitoringDelivery?: Array<{ VehicleActivity?: Array<{ MonitoredVehicleJourney: Record<string, unknown> }> }> } } };
+  const j = d.Siri?.ServiceDelivery?.VehicleMonitoringDelivery?.[0]?.VehicleActivity?.[0]?.MonitoredVehicleJourney;
+  if (!j) return { found: false };
+  const calls = ((j.OnwardCalls as { OnwardCall?: SiriCall[] } | undefined)?.OnwardCall ?? []).map((c) => {
+    const t = Date.parse(c.ExpectedArrivalTime ?? c.AimedArrivalTime ?? "");
+    return { id: c.StopPointRef ?? "", name: first(c.StopPointName), eta: Number.isFinite(t) ? Math.round(t / 1000) : null, away: c.Extensions?.Distances?.PresentableDistance ?? "" };
+  });
+  return { found: true, route: first(j.PublishedLineName), destination: first(j.DestinationName), dir: first(j.DirectionRef), calls };
+}
+
+async function loadBusRoute(key: string, route: string) {
+  for (const agency of ["MTA NYCT", "MTABC"]) {
+    const r = await fetch(`${BUSTIME}where/stops-for-route/${encodeURIComponent(`${agency}_${route}`)}.json?${new URLSearchParams({ key, includePolylines: "true", version: "2" })}`, { signal: AbortSignal.timeout(10_000) });
+    if (!r.ok) continue;
+    const d = (await r.json()) as { code?: number; data?: { entry?: { polylines?: Array<{ points: string }> }; references?: { stops?: Array<{ id: string; name: string; lat: number; lon: number; routeIds?: string[] }> } } };
+    const lines = (d.data?.entry?.polylines ?? []).map((p) => decodePolyline(p.points)).filter((l) => l.length > 1);
+    if (!lines.length) continue;
+    const id = `${agency}_${route}`;
+    const stops = (d.data?.references?.stops ?? []).filter((s) => !s.routeIds || s.routeIds.includes(id)).map((s) => ({ id: s.id, name: s.name, lon: s.lon, lat: s.lat }));
+    return { route, lines, stops };
+  }
+  return { route, lines: [], stops: [] };
+}
+
 export async function GET(request: Request): Promise<Response> {
-  const system = new URL(request.url).pathname.replace(/^\/api\/transit\/?/, "");
+  const system = new URL(request.url).pathname.replace(/^\/api(?:\/v1)?\/transit\/?/, "");
   const busKey = process.env.MTA_BUSTIME_KEY;
   try {
     if (!system) return json({ bus: Boolean(busKey) }, { maxAge: 60, browserMaxAge: 60 });
     if (system === "bus") {
       if (!busKey) return json({ error: "bus_unavailable" }, { status: 404 });
       return json(await cached("bus", () => loadBuses(busKey)), { maxAge: 15, browserMaxAge: 10 });
+    }
+    if (system === "bus-trip" || system === "bus-route") {
+      if (!busKey) return json({ error: "bus_unavailable" }, { status: 404 });
+      const q = new URL(request.url).searchParams;
+      const route = (q.get("route") ?? "").toUpperCase();
+      if (route && !ROUTE_RE.test(route)) return json({ error: "bad_route" }, { status: 400 });
+      if (system === "bus-route") {
+        if (!route) return json({ error: "bad_route" }, { status: 400 });
+        return json(await cached(`bus-route:${route}`, () => loadBusRoute(busKey, route), 6 * 3600_000), { maxAge: 3600, browserMaxAge: 3600 });
+      }
+      const vehicle = q.get("vehicle") ?? "";
+      if (!VEHICLE_RE.test(vehicle)) return json({ error: "bad_vehicle" }, { status: 400 });
+      return json(await cached(`bus-trip:${vehicle}`, () => loadBusTrip(busKey, vehicle)), { maxAge: 15, browserMaxAge: 10 });
     }
     if (system === "alerts") return json(await cached("alerts", loadAlerts), { maxAge: 60, browserMaxAge: 30 });
     if (!(system in FEEDS)) return json({ error: "unknown_system" }, { status: 404 });
