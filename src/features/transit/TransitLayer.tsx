@@ -1,4 +1,5 @@
 import { liveProgress } from "./monotonic";
+import { BusEstimator } from "./busEstimate";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
@@ -17,7 +18,7 @@ import {
   type SystemId,
   type Vehicle,
 } from "./model";
-import { alertedRoutes, useAlerts, useBusRoute, useBuses, useStarred, useTransitData, useTransitMeta, useTransitToggles, useXrayData, useSegmentHistory } from "./hooks";
+import { alertedRoutes, useAlerts, useBusRoute, useBusShapes, useBuses, useStarred, useTransitData, useTransitMeta, useTransitToggles, useXrayData, useSegmentHistory } from "./hooks";
 import { useXray, xrayPrims } from "./xray";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { useFlag } from "@/lib/flags";
@@ -141,6 +142,16 @@ export default function TransitLayer() {
   const selectedKey = content?.id.startsWith("transit:vehicle:") ? content.id.slice(16) : undefined;
   const followedKey = useFollowed();
   const display = useRef(new Map<string, Vehicle>());
+  // Buses: snapped to their route shape and dead-reckoned between 30 s GPS reports.
+  const busEst = useRef(new BusEstimator());
+  const [busRoutes, setBusRoutes] = useState<string[]>([]);
+  const busShapes = useBusShapes(busRoutes);
+  useEffect(() => {
+    for (const g of busShapes) busEst.current.setRoute(g);
+    const list = buses.data?.buses ?? [];
+    for (const b of list) busEst.current.report(b);
+    busEst.current.retain(new Set(list.map((b) => b.id)));
+  }, [buses.data, busShapes]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
 
   const openStation = useCallback(
@@ -350,6 +361,8 @@ export default function TransitLayer() {
         const v: Vehicle = { key: `bus:${bus.id}`, system: "bus", route: bus.route, label: bus.route, color: "#0039A6", lon: bus.lon, lat: bus.lat, bearing: bus.bearing ?? 0, grade: "grade", dir: bus.dir, nextStop: bus.next ?? undefined };
         if (inView(v) || v.key === selectedKey || v.key === followedKey) out.push(v);
       }
+      const routes = [...new Set(out.filter((v) => v.system === "bus").map((v) => v.route))].sort().slice(0, 80);
+      setBusRoutes((prev) => (prev.join() === routes.join() ? prev : routes));
       const c = eye ?? { lon: map.getCenter().lng, lat: map.getCenter().lat };
       out.sort((a, z) => Math.hypot(a.lon - c.lon, a.lat - c.lat) - Math.hypot(z.lon - c.lon, z.lat - c.lat));
       targets.current = out.slice(0, MAX_VEHICLES);
@@ -367,7 +380,12 @@ export default function TransitLayer() {
       if (t - last < 66) return;
       last = t;
       const next = new Map<string, Vehicle>();
+      const nowS = Date.now() / 1000;
       for (const v of targets.current) {
+        if (v.system === "bus") {
+          const f = busEst.current.frame(v.key.slice(4), nowS);
+          if (f) { next.set(v.key, { ...v, lon: f.lon, lat: f.lat, bearing: f.bearing, alpha: f.alpha }); continue; }
+        }
         const d = display.current.get(v.key);
         if (!d || Math.hypot(d.lon - v.lon, d.lat - v.lat) > 0.01) { next.set(v.key, v); continue; }
         let db = ((v.bearing - d.bearing + 540) % 360) - 180;
@@ -425,7 +443,7 @@ export default function TransitLayer() {
         badge = busBadgeId(p.text, c); // the tiny prefix badge stays plain; the "!" rides the full badge
         badgeFull = busBadgeId(v.route, c, alert);
       }
-      return { type: "Feature", properties: { key: v.key, color: v.color, bearing: v.bearing, grade: v.grade, label: v.label, system: v.system, route: v.route, bullet, badge, badgeFull }, geometry: { type: "Point", coordinates: [v.lon, v.lat] } };
+      return { type: "Feature", properties: { key: v.key, color: v.color, bearing: v.bearing, grade: v.grade, label: v.label, system: v.system, route: v.route, bullet, badge, badgeFull, alpha: v.alpha ?? 1 }, geometry: { type: "Point", coordinates: [v.lon, v.lat] } };
     }),
   }), [vehicles, alerted, theme]);
   const selBusRoute = (selectedKey?.startsWith("bus:") ? vehicles.find((v) => v.key === selectedKey)?.route : undefined) ?? "";
@@ -736,15 +754,16 @@ export default function TransitLayer() {
         <Layer id="transit-bus-notch" type="symbol" filter={["==", ["get", "system"], "bus"]}
           layout={{ "icon-image": NOTCH_ICON, "icon-rotate": ["get", "bearing"], "icon-rotation-alignment": "map", "icon-allow-overlap": true, "icon-ignore-placement": true,
             "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.3, 14, 0.45, 15, 0.55, 18, 0.75], "icon-offset": [0, -17] }}
-          paint={{ "icon-opacity": ["interpolate", ["linear"], ["zoom"], 12.5, 0, 13.5, 0.8] }} />
+          paint={{ "icon-opacity": ["interpolate", ["linear"], ["zoom"], 12.5, 0, 13.5, ["*", 0.8, ["get", "alpha"]]] }} />
         <Layer id="transit-bus-badge" type="symbol" maxzoom={15} filter={["all", ["==", ["get", "system"], "bus"], ["!=", ["get", "route"], selBusRoute]]}
           layout={{ "icon-image": ["get", "badge"], "icon-allow-overlap": true, "icon-ignore-placement": true, "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.3, 14, 0.45] }}
-          paint={{ "icon-opacity": selBusRoute ? 0.4 : 0.85 }} />
+          paint={{ "icon-opacity": ["*", selBusRoute ? 0.4 : 0.85, ["get", "alpha"]] }} />
         <Layer id="transit-bus-badge-full" type="symbol" minzoom={15} filter={["all", ["==", ["get", "system"], "bus"], ["!=", ["get", "route"], selBusRoute]]}
           layout={{ "icon-image": ["get", "badgeFull"], "icon-allow-overlap": false, "icon-ignore-placement": true, "icon-padding": 1, "icon-size": ["interpolate", ["linear"], ["zoom"], 15, 0.55, 18, 0.75] }}
-          paint={{ "icon-opacity": selBusRoute ? 0.45 : 1 }} />
+          paint={{ "icon-opacity": ["*", selBusRoute ? 0.45 : 1, ["get", "alpha"]] }} />
         <Layer id="transit-bus-badge-selected" type="symbol" filter={["all", ["==", ["get", "system"], "bus"], ["==", ["get", "route"], selBusRoute]]}
-          layout={{ "icon-image": ["get", "badgeFull"], "icon-allow-overlap": true, "symbol-sort-key": 1, "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.5, 16, 0.75] }} />
+          layout={{ "icon-image": ["get", "badgeFull"], "icon-allow-overlap": true, "symbol-sort-key": 1, "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.5, 16, 0.75] }}
+          paint={{ "icon-opacity": ["get", "alpha"] }} />
       </Source>
     </>
   );
