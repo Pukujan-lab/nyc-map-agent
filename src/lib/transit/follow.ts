@@ -3,10 +3,39 @@ import { useSyncExternalStore } from "react";
 /** Which vehicle the camera is locked to (null = not following). Shared by the map layer and the panel. */
 let followed: string | null = null;
 const subs = new Set<() => void>();
+/** The map camera from just before follow started. Stop following eases back to it. */
+export type FollowSnap = { center: [number, number]; zoom: number; bearing: number; pitch: number };
+let snap: FollowSnap | null = null;
+let restoreOnStop = false;
+
 export function setFollowed(key: string | null) {
+  // Drag and Esc release the camera where it is. The Stop button sets the flag first.
+  if (key === null && !restoreOnStop) snap = null;
   followed = key;
   subs.forEach((f) => f());
 }
+
+/** Keep the first view. A later train tap must not overwrite it with the chase camera. */
+export function rememberFollowOrigin(cam: FollowSnap) {
+  if (!snap) snap = cam;
+}
+
+/** The Stop following button: release the vehicle and ask the map to ease back. */
+export function stopFollowing() {
+  if (followed === null) return;
+  restoreOnStop = true;
+  setFollowed(null);
+}
+
+/** Read once, on the render where follow has just ended. */
+export function takeFollowRestore(): { restore: boolean; cam: FollowSnap | null } {
+  const restore = restoreOnStop;
+  const cam = restore ? snap : null;
+  restoreOnStop = false;
+  snap = null;
+  return { restore, cam };
+}
+
 export function useFollowed(): string | null {
   return useSyncExternalStore((f) => (subs.add(f), () => subs.delete(f)), () => followed);
 }

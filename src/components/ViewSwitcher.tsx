@@ -3,7 +3,7 @@ import { useMap } from "react-map-gl/maplibre";
 import { ScanEye } from "lucide-react";
 import { useFlag } from "@/lib/flags";
 import { useMapState } from "@/lib/store/MapStateContext";
-import { setFollowMode, setFollowed, useFollowMode, useFollowed, type FollowMode } from "@/lib/transit/follow";
+import { setFollowMode, stopFollowing, useFollowMode, useFollowed, type FollowMode } from "@/lib/transit/follow";
 import { setStreetXray, useStreetXray } from "@/lib/transit/streetXray";
 import { cn } from "@/lib/utils";
 
@@ -84,7 +84,7 @@ export function ViewSwitcher() {
         <ScanEye className="h-3.5 w-3.5" aria-hidden="true" /> X-ray
       </button>
       {followed ? (
-        <button type="button" onClick={() => setFollowed(null)} className={cn(seg, "pointer-events-auto border border-border bg-card text-foreground shadow-md hover:bg-muted")}>
+        <button type="button" onClick={() => stopFollowing()} className={cn(seg, "pointer-events-auto border border-border bg-card text-foreground shadow-md hover:bg-muted")}>
           Stop following
         </button>
       ) : null}
