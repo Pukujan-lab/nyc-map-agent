@@ -1,0 +1,21 @@
+/*
+ * Navigation colours (route core, glow, chevron ink). Defaults only, at zero
+ * specificity, so a theme (including the coming Auto time-of-day theme) can
+ * set --nav-route / --nav-glow / --nav-ink in index.css and win. The themes
+ * are near-monochrome; the route is the one accent.
+ */
+:where(html) {
+  --nav-route: #1a73e8;
+  --nav-glow: #4f8ff7;
+  --nav-ink: #ffffff;
+}
+:where(html.dark, html.theme-ink) {
+  --nav-route: #8ab4f8;
+  --nav-glow: #8ab4f8;
+  --nav-ink: #0b0b0b;
+}
+:where(html.theme-neon) {
+  --nav-route: #ff4fd8;
+  --nav-glow: #ff4fd8;
+  --nav-ink: #ffffff;
+}
