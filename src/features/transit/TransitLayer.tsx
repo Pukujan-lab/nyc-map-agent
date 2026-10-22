@@ -115,7 +115,7 @@ export default function TransitLayer() {
     if (import.meta.env.DEV) (window as unknown as { __walk?: unknown }).__walk = startWalk;
   }, [startWalk]);
   const { on, set, panelOpen, setPanelOpen } = useTransitToggles();
-  const { content, showPanel } = usePanel();
+  const { content, showPanel, setDrawerOpen } = usePanel();
   const meta = useTransitMeta();
   const rail = (["subway", "lirr", "mnr"] as SystemId[]).filter((s) => on.has(s));
   const busOn = on.has("bus") && meta.data?.bus === true;
@@ -504,6 +504,7 @@ export default function TransitLayer() {
       const f = layers.length ? map.queryRenderedFeatures(e.point, { layers })[0] : undefined;
       if (!f?.properties) return;
       if (f.layer.id.startsWith("transit-vehicle") || f.layer.id === "transit-bullet" || f.layer.id.startsWith("transit-bus-badge")) {
+        setDrawerOpen(false);
         setFollowMode("chase");
         setFollowed(String(f.properties.key));
         return;
@@ -515,7 +516,7 @@ export default function TransitLayer() {
     };
     map.on("click", onClick);
     return () => { map.off("click", onClick); };
-  }, [map, openStation]);
+  }, [map, openStation, setDrawerOpen]);
 
   // Notices for alerts touching starred lines or stations (in-app + optional browser).
   const notified = useRef(new Set<string>());

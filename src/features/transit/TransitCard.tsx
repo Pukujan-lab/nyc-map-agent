@@ -246,7 +246,7 @@ export function OutageRow({ o }: { o: Outage }) {
  */
 export function FollowCard({ vehicle }: { vehicle: Vehicle }) {
   const now = useNow();
-  const sys = vehicle.system === "bus" ? [] : [vehicle.system as SystemId];
+  const sys = vehicle.system === "bus" ? [] : [vehicle.system];
   const data = useTransitData(sys);
   const alerts = useAlerts(true);
   const delay = (alerts.data?.alerts ?? []).find((a) => a.routes.includes(vehicle.route) && a.kind !== "planned");
