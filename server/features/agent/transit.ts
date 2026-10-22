@@ -29,11 +29,13 @@ export interface RidePlan {
   durationS: number;
   geometrySource: "gtfs-shape" | "straight-line";
 }
+export type AvoidStop = (station: Station, route: string, from: Station, to: Station) => boolean;
 export interface TransitPlan { rides: RidePlan[]; walkToM: number; walkFromM: number }
 
 /** What the transit worker's planner must expose. */
 export interface TransitPlanner {
-  plan(origin: LngLatTuple, destination: LngLatTuple, departAt: Date): Promise<TransitPlan | null>;
+  /** `avoid(station, route, from, to)`: true when the route's trains do not stop at `station` heading from → to (skips, #253). */
+  plan(origin: LngLatTuple, destination: LngLatTuple, departAt: Date, avoid?: AvoidStop): Promise<TransitPlan | null>;
 }
 
 const R = 6371000;
@@ -108,7 +110,9 @@ function ride(from: Station, to: Station, route: string, all: Station[]): RidePl
 
 export function stubPlanner(src: StationEntrances = openDataEntrances): TransitPlanner {
   return {
-    async plan(origin, destination) {
+    async plan(origin, destination, _departAt, avoid = () => false) {
+      // Board and exit only where the train stops in the direction of travel.
+      const ok = (a: Station, b: Station, r: string) => !avoid(a, r, a, b) && !avoid(b, r, a, b);
       const all = await src.stations();
       const near = (p: LngLatTuple) => all.map((s) => ({ s, d: distM(p, s.at) })).filter((x) => x.d < 1500).sort((a, b) => a.d - b.d).slice(0, 6);
       const A = near(origin);
@@ -117,7 +121,7 @@ export function stubPlanner(src: StationEntrances = openDataEntrances): TransitP
       let best: { cost: number; plan: TransitPlan } | null = null;
       const consider = (cost: number, plan: TransitPlan) => { if (!best || cost < best.cost) best = { cost, plan }; };
       for (const a of A) for (const b of B) {
-        for (const r of a.s.routes) if (b.s.routes.includes(r)) {
+        for (const r of a.s.routes) if (b.s.routes.includes(r) && ok(a.s, b.s, r)) {
           const p = ride(a.s, b.s, r, all);
           consider(a.d / WALK_MPS + b.d / WALK_MPS + p.durationS, { rides: [p], walkToM: a.d, walkFromM: b.d });
         }
@@ -129,7 +133,7 @@ export function stubPlanner(src: StationEntrances = openDataEntrances): TransitP
           if (!r1) continue;
           const y = all.find((s) => s.complexId === x.complexId && s.routes.some((r) => b.s.routes.includes(r)));
           const r2 = y?.routes.find((r) => b.s.routes.includes(r));
-          if (!y || !r2 || r2 === r1) continue;
+          if (!y || !r2 || r2 === r1 || !ok(a.s, x, r1) || !ok(y, b.s, r2)) continue;
           const p1 = ride(a.s, x, r1, all);
           const p2 = ride(y, b.s, r2, all);
           consider(a.d / WALK_MPS + b.d / WALK_MPS + p1.durationS + p2.durationS + 240, { rides: [p1, p2], walkToM: a.d, walkFromM: b.d });
