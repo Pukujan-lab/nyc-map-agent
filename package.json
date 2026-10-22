@@ -27,6 +27,7 @@
     "size": "size-limit",
     "feeds:health": "tsx scripts/feed-health.ts",
     "licenses:check": "tsx scripts/check-licenses.ts",
+    "lint:commit": "commitlint --verbose",
     "lint": "eslint . --max-warnings=0 --suppressions-location eslint-suppressions.json --pass-on-unpruned-suppressions",
     "lint:prune": "eslint . --suppressions-location eslint-suppressions.json --prune-suppressions",
     "knip": "knip --no-progress",
@@ -90,6 +91,8 @@
     "zod": "3.25.76"
   },
   "devDependencies": {
+    "@commitlint/cli": "21.2.4",
+    "@commitlint/config-conventional": "21.2.4",
     "@duckdb/node-api": "1.5.6-r.1",
     "@eslint/js": "9.39.1",
     "@playwright/test": "1.56.1",

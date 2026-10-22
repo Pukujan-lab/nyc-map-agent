@@ -21,6 +21,7 @@ export const FLAGS = {
   agentDrive: { tier: "basic", default: true, label: "Smart mode: driving trips" },
   search: { tier: "basic", default: true, label: "Search" },
   directions: { tier: "basic", default: true, label: "Walking directions" },
+  liveview: { tier: "basic", default: true, label: "Navigation arrows and Live View" },
   transit: { tier: "basic", default: true, label: "Live transit" },
   places: { tier: "basic", default: true, label: "Places" },
   restrooms: { tier: "basic", default: true, label: "Public restrooms" },
