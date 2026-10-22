@@ -24,7 +24,7 @@ import { useXray, xrayPrims } from "./xray";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { useFlag } from "@/lib/flags";
 import { usePanel, usePanelChip, usePanelMode, usePanelSearch, type SearchProvider } from "@/lib/store/PanelContext";
-import { followRig, rememberFollowOrigin, setFollowMode, setFollowed, takeFollowRestore, useFollowMode, useFollowed } from "./follow";
+import { followRig, rememberFollowOrigin, setFollowMode, setFollowed, stableHeading, takeFollowRestore, useFollowMode, useFollowed } from "./follow";
 import { publishSubway } from "@/lib/agent/streetContext";
 import { publishLiveDots } from "@/lib/transit/liveVehicles";
 import { setStreetXray, useStreetXray } from "@/lib/transit/streetXray";
@@ -587,12 +587,22 @@ export default function TransitLayer() {
     const c = map.getCenter();
     rememberFollowOrigin({ center: [c.lng, c.lat], zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() });
   }, [map, followedKey]);
+  // One pose per displayed vehicle. A fresh glide every update piled up and
+  // fought the trip preview. A heading that flips almost backward waits out.
+  const headingKey = useRef<string | null>(null);
+  const headingHold = useRef({ bearing: 0, streak: 0 });
   useEffect(() => {
     if (!map || !followed) return;
-    const { eye, look } = followRig(followMode, followed.bearing, followed.z ?? 0);
+    if (headingKey.current !== followed.key) {
+      headingKey.current = followed.key;
+      headingHold.current = stableHeading(null, followed.bearing, 0);
+    } else {
+      headingHold.current = stableHeading(headingHold.current.bearing, followed.bearing, headingHold.current.streak);
+    }
+    const { eye, look } = followRig(followMode, headingHold.current.bearing, followed.z ?? 0);
     const at = (dx: number, dy: number) => new LngLat(followed.lon + dx / (111_320 * Math.cos((followed.lat * Math.PI) / 180)), followed.lat + dy / 111_320);
     const cam = map.calculateCameraOptionsFromTo(at(eye[0], eye[1]), eye[2], at(look[0], look[1]), look[2]);
-    map.easeTo({ ...cam, duration: 250, easing: (t) => t });
+    map.jumpTo(cam);
   }, [map, followed, followMode]);
   useEffect(() => {
     if (!map || followedKey) return;
