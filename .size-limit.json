@@ -12,7 +12,7 @@
   {
     "name": "feature: agent (lazy overlay)",
     "path": ".size-build/assets/AgentOverlay-*.js",
-    "limit": "10 kB"
+    "limit": "11 kB"
   },
   {
     "name": "feature: city3d (lazy)",

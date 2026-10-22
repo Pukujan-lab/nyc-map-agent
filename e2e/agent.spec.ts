@@ -76,11 +76,43 @@ test("a question in the desktop search bar is asked inside Ask the map", async (
   const box = await page.getByTestId("topbar").boundingBox();
   expect(box?.width ?? 0).toBeGreaterThan(600);
 
-  const q = "how do i get from my place to rockaway beach";
+  const q = "how do i get from union square to rockaway beach";
   await page.getByPlaceholder("Search neighborhoods, addresses, stations").fill(q);
   await page.getByRole("button", { name: "Ask", exact: true }).click();
   await expect(page.getByText(q, { exact: true })).toBeVisible();
   await expect(page.getByText("Take the A train toward the Rockaway peninsula.")).toBeVisible();
   expect(asked).toBe(q);
   await expect(page.locator('input[placeholder="Search neighborhoods, addresses, stations"]')).toHaveValue("");
+});
+
+test("a from-here question offers Use my location, then plans the trip", async ({ page, context }) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 40.7359, longitude: -73.9903 });
+  await mockNetwork(page);
+  let calls = 0;
+  let location: unknown = null;
+  await page.route("**/api/agent", async (route) => {
+    calls += 1;
+    location = (route.request().postDataJSON() as { location: unknown }).location;
+    await route.fulfill({
+      contentType: "application/x-ndjson",
+      body: nd([
+        { type: "text", text: "Take the 4 and use the NW exit on E 41 St." },
+        { type: "done", model: "mock", usage: { inputTokens: 0, outputTokens: 0 } },
+      ]),
+    });
+  });
+
+  await page.goto("/");
+  await expect(page.locator("canvas.maplibregl-canvas").first()).toBeVisible();
+  await page.getByRole("button", { name: "Ask", exact: true }).click();
+  await page.getByLabel("Ask the assistant").fill("How will my trip be tomorrow from here to Grand Central at 9am?");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByText("Tap Use my location, or type a starting address.")).toBeVisible();
+  expect(calls).toBe(0);
+
+  await page.getByRole("button", { name: "Use my location" }).first().click();
+  await expect(page.getByText("Take the 4 and use the NW exit on E 41 St.")).toBeVisible();
+  expect(calls).toBe(1);
+  expect(location).toEqual({ lon: -73.9903, lat: 40.7359 });
 });

@@ -1,4 +1,4 @@
-import { Bus, Car, Footprints, Headphones, Mic, MicOff, MoreVertical, Pause, Play, Send, SkipForward, X } from "lucide-react";
+import { Bus, Car, Footprints, Headphones, LocateFixed, Mic, MicOff, MoreVertical, Pause, Play, Send, SkipForward, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Badge } from "@/components/ui/badge";
@@ -33,8 +33,9 @@ import { usePlayer, type Speed } from "./usePlayer";
 import { useWakePhrase } from "./useWakePhrase";
 import { useHandsFree } from "./useHandsFree";
 import { closeAsk, useAskRequest } from "@/lib/agent/streetContext";
+import { needsSharedOrigin, ORIGIN_PROMPT, replyAsksForOrigin } from "./needsOrigin";
 
-interface Msg { id: string; role: "user" | "assistant"; content: string }
+interface Msg { id: string; role: "user" | "assistant"; content: string; offerLocation?: boolean }
 
 const MODES: Array<{ id: TripMode; label: string; Icon: typeof Bus }> = [
   { id: "walk", label: "Walk", Icon: Footprints },
@@ -60,6 +61,10 @@ export default function AgentOverlay() {
   const [mapTime, setMapTime] = useState<string | null>(null);
   const shared = useSharedLocation();
   const abort = useRef<AbortController | null>(null);
+  const messagesRef = useRef<Msg[]>([]);
+  messagesRef.current = messages;
+  /** The question waiting on a shared location, so the button can ask it again. */
+  const pendingQuestion = useRef<string | null>(null);
   const [handsFree, setHandsFree] = useState(false);
   const askReq = useAskRequest();
   const compact = askReq !== null;
@@ -87,14 +92,26 @@ export default function AgentOverlay() {
     if (!q || busy) return;
     setInput("");
     if (!askReq) setChatOpen(true);
-    const history: Msg[] = [...messages, { id: crypto.randomUUID(), role: "user", content: q }];
+    // A second tap of the same question, after Use my location, keeps the one user bubble.
+    const continuing = messagesRef.current.some((m) => m.offerLocation);
+    const prior = messagesRef.current.filter((m) => !m.offerLocation);
+    const lastUser = [...prior].reverse().find((m) => m.role === "user");
+    const history: Msg[] = continuing && lastUser?.content === q ? prior : [...prior, { id: crypto.randomUUID(), role: "user", content: q }];
+    // Only a position the person chose to share; never asked for here. Street view already has a spot.
+    const location = sharedCoords();
+    if (!askReq && !location && needsSharedOrigin(q)) {
+      pendingQuestion.current = q;
+      const reply: Msg = { id: crypto.randomUUID(), role: "assistant", content: ORIGIN_PROMPT, offerLocation: true };
+      setMessages([...history, reply]);
+      speech.speak(spokenSummary(reply.content), { bargeIn: handsFree });
+      return;
+    }
+    pendingQuestion.current = null;
     const reply: Msg = { id: crypto.randomUUID(), role: "assistant", content: "" };
     setMessages([...history, reply]);
     setBusy(true);
     abort.current?.abort();
     abort.current = new AbortController();
-    // Only a position the person chose to share with My location; never asked for here.
-    const location = sharedCoords();
     let spoken = "";
     try {
       for await (const ev of askAgent({ messages: history.map(({ role, content }) => ({ role, content })), location, mode, now: new Date().toISOString(), ...(askReq ? { context: askReq.context } : {}) }, abort.current.signal)) {
@@ -111,11 +128,25 @@ export default function AgentOverlay() {
       setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, content: x.content || "The assistant is unavailable right now." } : x)));
     } finally {
       setBusy(false);
+      // The model still asked for a start: put the same button on its reply.
+      if (!askReq && spoken && !sharedCoords() && replyAsksForOrigin(spoken)) {
+        pendingQuestion.current = q;
+        setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, offerLocation: true } : x)));
+      }
       // Short spoken answer; the full detail stays on screen. In hands-free the
       // person can talk over it to interrupt.
       if (spoken) speech.speak(spokenSummary(spoken), { bargeIn: handsFree });
     }
-  }, [busy, messages, mode, setChatOpen, speech, askReq, handsFree, closeAll]);
+  }, [busy, mode, setChatOpen, speech, askReq, handsFree, closeAll]);
+
+  // The reply button and the footer chip both share location, then ask the waiting question.
+  const enableLocation = useCallback(async () => {
+    const coords = await startSharing();
+    const q = pendingQuestion.current;
+    if (!coords || !q) return;
+    pendingQuestion.current = null;
+    void send(q);
+  }, [send]);
 
   // ChatPanel is unmounted while this overlay replaces it, so the top bar's
   // question has to be sent from here or Ask the map opens on the examples.
@@ -184,7 +215,7 @@ export default function AgentOverlay() {
             <DropdownMenuSeparator />
             <p className="px-2 py-1.5 text-xs text-muted-foreground">
               {speech.sttSupported
-                ? "Hold a conversation by voice: tap the mic, or turn on “Hey map”. Your location is sent only after you tap My location, and only for that question."
+                ? "Hold a conversation by voice: tap the mic, or turn on “Hey map”. Your location is sent only after you tap Use my location, and only for that question."
                 : "Voice input is not available in this browser, so type instead. Answers can still be spoken."}
             </p>
           </DropdownMenuContent>
@@ -212,6 +243,12 @@ export default function AgentOverlay() {
           messages.map((m) => (
             <div key={m.id} className={cn("max-w-[90%] rounded-lg px-3 py-2 text-sm", m.role === "user" ? "ml-auto bg-primary text-primary-foreground" : "bg-muted")}>
               {m.content || (busy ? "…" : "")}
+              {m.offerLocation && shared.status !== "on" ? (
+                <Button type="button" size="sm" className="mt-2 h-8 w-full gap-1.5" disabled={shared.status === "asking"} onClick={() => void enableLocation()}>
+                  <LocateFixed className="h-4 w-4" aria-hidden="true" />
+                  {shared.status === "asking" ? "Finding you…" : "Use my location"}
+                </Button>
+              ) : null}
             </div>
           ))
         )}
@@ -234,8 +271,8 @@ export default function AgentOverlay() {
         ) : (
           <>
             <span>{shared.status === "denied" ? "Location is blocked in this browser." : shared.status === "asking" ? "Finding your location…" : "Your location is not shared."}</span>
-            <Button type="button" size="sm" variant="outline" className="h-7 shrink-0 rounded-full px-2.5 text-xs" disabled={shared.status === "asking"} onClick={() => void startSharing()}>
-              Use my location
+            <Button type="button" size="sm" variant="outline" className="h-7 shrink-0 gap-1 rounded-full px-2.5 text-xs" disabled={shared.status === "asking"} onClick={() => void enableLocation()}>
+              <LocateFixed className="h-3.5 w-3.5" aria-hidden="true" /> Use my location
             </Button>
           </>
         )}
