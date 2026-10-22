@@ -29,7 +29,7 @@ export const FACADES = [
 const SOURCE = "city3d";
 const STOREFRONT_M = 4.5;
 
-export const CITY3D_LAYERS = ["city3d-storefront", "city3d-walls", "city3d-roofs", "city3d-props", "city3d-bridges", "city3d-signs", "city3d-hydrants", "city3d-landmarks", "city3d-storefront-signs"] as const;
+export const CITY3D_LAYERS = ["city3d-storefront", "city3d-walls", "city3d-roofs", "city3d-props", "city3d-bridges", "city3d-signs", "city3d-furniture", "city3d-hydrants", "city3d-landmarks", "city3d-storefront-signs"] as const;
 
 async function loadFacades(map: MapLibreMap): Promise<void> {
   await Promise.all(
@@ -218,6 +218,12 @@ export async function installCity3d(map: MapLibreMap): Promise<void> {
   if (!map.getLayer("city3d-signs")) {
     map.addLayer(createStreetSignsLayer(), beforeId);
     map.setLayoutProperty("city3d-signs", "visibility", "none");
+  }
+  // Bus stop pole signs and restroom kiosks (three.js, shared layer), street level only.
+  const { createFurnitureLayer, FURNITURE_LAYER } = await import("./threeLayer");
+  if (!map.getLayer(FURNITURE_LAYER)) {
+    map.addLayer(createFurnitureLayer(), beforeId);
+    map.setLayoutProperty(FURNITURE_LAYER, "visibility", map.getLayoutProperty("city3d-signs", "visibility") ?? "none");
   }
   // NYC hydrant models (three.js, shared layer); the extruded stubs step aside.
   const { createHydrantLayer, HYDRANTS_3D_LAYER } = await import("./threeLayer");

@@ -125,6 +125,7 @@ import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 import { WalkControls } from "./WalkControls";
 import { StreetMiniMap } from "./StreetMiniMap";
 import { nearestCorner, type CornerSign } from "@/lib/map/corner";
+import { kioskSources, pickAt as pickFurniture } from "@/lib/map/streetPick";
 import { MAX_HEIGHT_M, pitchForHeight, STREET_LEVEL_M } from "@/lib/map/cameraHeight";
 import { hoverBlocked } from "@/lib/map/hover";
 import { FEATURES } from "@/features";
@@ -603,6 +604,22 @@ export function MapView({
       };
       const transitIds = FEATURES.filter((f) => f.id === "transit").flatMap((f) => f.clickLayers ?? []);
       if (hitsAny(transitIds)) return;
+      // 3D restroom kiosks at street level: public ones open here, shop/café
+      // ones are opened by the place-toilets feature's own click handler.
+      const kiosk = walking ? pickFurniture(event.target, event.point.x, event.point.y) : null;
+      if (kiosk?.kind === "place") return;
+      if (kiosk?.kind === "restroom") {
+        const p = kiosk.props;
+        const str = (k: string) => (typeof p[k] === "string" && p[k] ? p[k] : null);
+        const name = str("name") ?? "Public restroom";
+        showPanel({
+          id: `restroom:${name}`,
+          title: name,
+          subtitle: "Public restroom",
+          details: <RestroomDetails restroom={{ name, status: str("status"), hours: str("hours"), accessibility: str("accessibility"), operator: str("operator") }} />,
+        });
+        return;
+      }
       const hit = restroomsMod.current?.restroomAt(event.target, event.point.x, event.point.y);
       if (hit) {
         showPanel({
@@ -883,6 +900,7 @@ export function MapView({
         restroomsMod.current = mod;
         if (restrooms) mod.installRestrooms(map);
         mod.setRestroomsVisible(map, restrooms);
+        kioskSources.restrooms = restrooms;
       })
       .catch((err) => console.warn("restrooms failed to load", err));
   }, [ready, styleEpoch, restrooms]);
