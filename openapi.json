@@ -3063,6 +3063,322 @@
         }
       }
     },
+    "/api/v1/storefronts/logo": {
+      "get": {
+        "summary": "A brand's freely licensed Wikidata P154 logo, re-hosted via Octo files (R2)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^Q[1-9]\\d{0,10}$"
+            },
+            "required": false,
+            "name": "qid",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "required": false,
+            "name": "name",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": -74.3,
+              "maximum": -73.6
+            },
+            "required": false,
+            "name": "lon",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 40.45,
+              "maximum": 40.95
+            },
+            "required": false,
+            "name": "lat",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/storefronts/logo": {
+      "get": {
+        "summary": "A brand's freely licensed Wikidata P154 logo, re-hosted via Octo files (R2) (alias of /api/v1/storefronts/logo)",
+        "deprecated": true,
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^Q[1-9]\\d{0,10}$"
+            },
+            "required": false,
+            "name": "qid",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "required": false,
+            "name": "name",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": -74.3,
+              "maximum": -73.6
+            },
+            "required": false,
+            "name": "lon",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 40.45,
+              "maximum": 40.95
+            },
+            "required": false,
+            "name": "lat",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/storefronts/brands": {
+      "get": {
+        "summary": "OSM shops and amenities with brand:wikidata in a small bbox (ODbL)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number",
+              "minimum": -74.3,
+              "maximum": -73.6
+            },
+            "required": true,
+            "name": "west",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 40.45,
+              "maximum": 40.95
+            },
+            "required": true,
+            "name": "south",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": -74.3,
+              "maximum": -73.6
+            },
+            "required": true,
+            "name": "east",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 40.45,
+              "maximum": 40.95
+            },
+            "required": true,
+            "name": "north",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/storefronts/brands": {
+      "get": {
+        "summary": "OSM shops and amenities with brand:wikidata in a small bbox (ODbL) (alias of /api/v1/storefronts/brands)",
+        "deprecated": true,
+        "parameters": [
+          {
+            "schema": {
+              "type": "number",
+              "minimum": -74.3,
+              "maximum": -73.6
+            },
+            "required": true,
+            "name": "west",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 40.45,
+              "maximum": 40.95
+            },
+            "required": true,
+            "name": "south",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": -74.3,
+              "maximum": -73.6
+            },
+            "required": true,
+            "name": "east",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 40.45,
+              "maximum": 40.95
+            },
+            "required": true,
+            "name": "north",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/agent": {
       "post": {
         "summary": "Smart-mode trip agent (NDJSON stream of text, tool and map-command events)",
