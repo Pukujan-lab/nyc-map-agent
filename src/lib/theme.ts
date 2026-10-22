@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import SunCalc from "suncalc";
+import { parseSunOverride } from "@/lib/map/three/sun";
 
 /**
  * Layout A themes (#171): Ivory (default), Ink and MTA muted are near-monochrome
@@ -105,6 +106,8 @@ function clock(): Date {
   try {
     const q = new URLSearchParams(globalThis.location?.search ?? "").get("qaTime");
     if (q && !Number.isNaN(Date.parse(q))) return new Date(q);
+    const o = parseSunOverride(globalThis.location?.search ?? "");
+    if (o) return o;
   } catch { /* no location */ }
   return new Date();
 }
