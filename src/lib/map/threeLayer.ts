@@ -777,9 +777,11 @@ function slotMaterial(atlas: THREE.Texture, road: boolean): THREE.MeshBasicMater
       .replace("#include <common>", "#include <common>\nattribute vec2 slot;")
       .replace(
         "#include <uv_vertex>",
-        `#include <uv_vertex>\nvUv = vec2((slot.x + uv.x) / ${COLS.toFixed(1)}, 1.0 - (slot.y + 1.0 - uv.y) * ${(SLOT_H / ATLAS).toFixed(6)});`,
+        `#include <uv_vertex>\nvUv = vec2((slot.x + ${road ? "1.0 - uv.x" : "uv.x"}) / ${COLS.toFixed(1)}, 1.0 - (slot.y + 1.0 - uv.y) * ${(SLOT_H / ATLAS).toFixed(6)});`,
       );
   };
+  // Road letters flip u: the layer matrix mirrors handedness, which read them backwards.
+  m.customProgramCacheKey = () => (road ? "slot-road" : "slot-face");
   return m;
 }
 

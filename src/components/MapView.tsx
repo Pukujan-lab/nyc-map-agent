@@ -10,7 +10,7 @@ import { useFeatureToggles } from "@/lib/featureToggles";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { MapCompass } from "./MapCompass";
 import { applyReadable } from "@/lib/map/readable";
-import { applyPlaces, usePlaces } from "@/lib/map/places";
+import { applyPlaces, placesStale, usePlaces, withQuickPlaces } from "@/lib/map/places";
 import { useMapOptions } from "@/lib/map/mapOptions";
 import { applyBuildings } from "@/lib/map/buildings";
 import { applyMapTheme, buildingEdge, setThemeCoords, usePalette } from "@/lib/theme";
@@ -93,6 +93,22 @@ function streetLines(map: MaplibreMapInstance): Array<Array<[number, number]>> {
   return lines;
 }
 
+/** Named street centrelines (OSM via the basemap's `transportation_name`). */
+function namedStreetLines(map: MaplibreMapInstance): NamedLine[] {
+  if (!map.getSource("openmaptiles")) return [];
+  const out: NamedLine[] = [];
+  for (const f of map.querySourceFeatures("openmaptiles", { sourceLayer: "transportation_name" })) {
+    const p = f.properties ?? {};
+    if (!STREET_CLASSES.has(String(p.class)) || p.brunnel === "tunnel") continue;
+    const name = String(p["name:en"] ?? p.name ?? "");
+    if (!name) continue;
+    const g = f.geometry;
+    if (g.type === "LineString") out.push({ name, coords: g.coordinates as Array<[number, number]> });
+    else if (g.type === "MultiLineString") for (const c of g.coordinates) out.push({ name, coords: c as Array<[number, number]> });
+  }
+  return out;
+}
+
 /** The walker's eye: where they stand, which way they face, how far they look up or down. */
 interface Eye {
   lon: number;
@@ -123,9 +139,13 @@ function eyeCamera(map: MaplibreMapInstance, eye: Eye): CameraOptions {
 import { useMapState } from "@/lib/store/MapStateContext";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 import { WalkControls } from "./WalkControls";
+import { useQuickLayer } from "@/lib/quickLayers";
+import { QuickLayers } from "./QuickLayers";
 import { StreetMiniMap } from "./StreetMiniMap";
 import { nearestCorner, type CornerSign } from "@/lib/map/corner";
 import { kioskSources, pickAt as pickFurniture } from "@/lib/map/streetPick";
+import { formatStreetPair } from "@/lib/streetName";
+import { parseAt, streetLabel, streetPosition, type NamedLine } from "@/lib/map/streetPos";
 import { MAX_HEIGHT_M, pitchForHeight, STREET_LEVEL_M } from "@/lib/map/cameraHeight";
 import { hoverBlocked } from "@/lib/map/hover";
 import { FEATURES } from "@/features";
@@ -223,6 +243,8 @@ export function MapView({
   } | null>(null);
   /** "W 44 St at 8 Av": the nearest corner sign while walking. */
   const [corner, setCorner] = useState<string | null>(null);
+  /** "Grand Street & Essex Street": street underfoot and nearest cross street, throttled. */
+  const [streetHere, setStreetHere] = useState<string | null>(null);
   const { showPanel, closeAll, content: panelContent, minimized: panelMinimized, drawerOpen } = usePanel();
   // The hover card is a mouse affordance; on touch / narrow screens the sheet
   // already shows the same numbers.
@@ -234,7 +256,11 @@ export function MapView({
   const schoolsOn = useFlag("schools");
   const analyticsFlags = useFlags();
   const analytics = analyticsFlags.noise || analyticsFlags.crashes || analyticsFlags.dataLayers;
-  const storefrontsOn = useFlag("storefronts");
+  const businesses = useQuickLayer("businesses");
+  const health = useQuickLayer("health");
+  const parksPlaces = useQuickLayer("parksPlaces");
+  const citibike = useQuickLayer("citibike");
+  const storefrontsOn = useFlag("storefronts") && businesses;
   usePanelChip(schoolsOn ? { id: "schools", label: "Schools", active: schoolIcons, onToggle: toggleSchools } : null);
   const restroomsMod = useRef<typeof import("@/lib/map/restrooms") | null>(null);
   /** So leaving walk mode can restore the overhead camera exactly once. */
@@ -270,13 +296,12 @@ export function MapView({
   const walkPad = useRef<WalkInput>(WALK_IDLE);
 
   const viewState = useMemo(
-    () => ({
-      longitude: HOME_VIEW.lon,
-      latitude: HOME_VIEW.lat,
-      zoom: initialZoom(),
-      pitch: 0,
-      bearing: 0,
-    }),
+    () => {
+      const at = typeof window === "undefined" ? null : parseAt(new URLSearchParams(window.location.search).get("at"));
+      return at
+        ? { longitude: at.lon, latitude: at.lat, zoom: 18, pitch: 0, bearing: at.bearing }
+        : { longitude: HOME_VIEW.lon, latitude: HOME_VIEW.lat, zoom: initialZoom(), pitch: 0, bearing: 0 };
+    },
     [],
   );
 
@@ -449,16 +474,29 @@ export function MapView({
       if (/^highway-name-major$/.test(l.id)) map.setLayoutProperty(l.id, "visibility", opts.streetNames ? "visible" : "none");
       // Transit-first open: neighbourhood / quarter names only with the analytics on.
       if (l.id === "label_other") map.setLayoutProperty(l.id, "visibility", analytics ? "visible" : "none");
-      // Bus stop icons only from zoom 16, where a stop is a place you can walk to.
+      // Bus stop icons only from zoom 15, where a stop is a place you can walk to.
       if (l.id === "poi_transit") {
-        const busFade = ["step", ["zoom"], ["case", ["==", ["get", "class"], "bus"], 0, 1], 16, 1];
+        const busFade = ["step", ["zoom"], ["case", ["==", ["get", "class"], "bus"], 0, 1], 15, 1];
         map.setPaintProperty(l.id, "icon-opacity", busFade as never);
-        map.setPaintProperty(l.id, "text-opacity", busFade as never);
+        // Stop names only up close (17+): at 15–16 the icon alone marks the stop.
+        const busText = ["step", ["zoom"], ["case", ["==", ["get", "class"], "bus"], 0, 1], 17, 1];
+        map.setPaintProperty(l.id, "text-opacity", busText as never);
       }
     }
-    applyPlaces(map, places);
+    const shownPlaces = withQuickPlaces(places, { businesses, health, parksPlaces, citibike });
+    applyPlaces(map, shownPlaces);
+    // Block tiles and the 3D city restyle the basemap after this runs; keep
+    // its POIs to the person's choice instead of the style's defaults.
+    const keep = () => {
+      if (placesStale(map, shownPlaces)) applyPlaces(map, shownPlaces);
+      if (!analytics && map.getLayer("label_other") && map.getLayoutProperty("label_other", "visibility") !== "none") map.setLayoutProperty("label_other", "visibility", "none");
+    };
+    map.on("styledata", keep);
     applyBuildings(map, flatBuildings, t.building, buildingEdge(t));
-  }, [ready, styleEpoch, transitFocus, places, opts, t, flatBuildings, analytics]);
+    return () => {
+      map.off("styledata", keep);
+    };
+  }, [ready, styleEpoch, transitFocus, places, businesses, health, parksPlaces, citibike, opts, t, flatBuildings, analytics]);
 
   const handleLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
@@ -934,6 +972,8 @@ export function MapView({
         if (cancelled) return;
         signsMod.current = signs;
         if (storefrontsOn && !map.getLayer(signs.STOREFRONT_LAYER)) map.addLayer(signs.createStorefrontLayer());
+        // Quick Layers > Businesses off takes the sign bands away.
+        if (!storefrontsOn && map.getLayer(signs.STOREFRONT_LAYER)) map.removeLayer(signs.STOREFRONT_LAYER);
         if (!city3dOn) {
           setCity3dVisible(map, false);
           return;
@@ -1052,7 +1092,8 @@ export function MapView({
         if (p.a && p.b) signs.push({ lng: f.geometry.coordinates[0], lat: f.geometry.coordinates[1], a: p.a, b: p.b });
       }
       const { lng, lat } = map.getCenter();
-      setCorner(nearestCorner(signs, lng, lat));
+      const label = nearestCorner(signs, lng, lat);
+      setCorner(label ? formatStreetPair(label) : null);
     };
     // Sign tiles arrive after the walk starts; a custom layer repaints every
     // frame, so "idle" may never fire — listen for the source instead.
@@ -1064,6 +1105,39 @@ export function MapView({
     map.on("sourcedata", onData);
     return () => {
       map.off("moveend", update);
+      map.off("sourcedata", onData);
+    };
+  }, [ready, walking]);
+
+  // The header names the street underfoot and the cross street, ~3x a second
+  // at most, and only when the eye actually moved.
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!ready || !walking || !map) {
+      setStreetHere(null);
+      return;
+    }
+    let last = "";
+    const update = () => {
+      const eye = eyeRef.current;
+      const c = eye ? { lng: eye.lon, lat: eye.lat } : map.getCenter();
+      const key = `${c.lng.toFixed(5)},${c.lat.toFixed(5)}`;
+      if (key === last) return;
+      last = key;
+      const label = streetLabel(streetPosition(namedStreetLines(map), c.lng, c.lat));
+      setStreetHere((prev) => (prev === label ? prev : label));
+    };
+    update();
+    const id = window.setInterval(update, 350);
+    const onData = (e: { sourceId?: string; isSourceLoaded?: boolean }) => {
+      if (e.sourceId === "openmaptiles" && e.isSourceLoaded) {
+        last = "";
+        update();
+      }
+    };
+    map.on("sourcedata", onData);
+    return () => {
+      window.clearInterval(id);
       map.off("sourcedata", onData);
     };
   }, [ready, walking]);
@@ -1445,9 +1519,11 @@ export function MapView({
       </MapLibreMap>
 
 
+      <QuickLayers />
       {walking ? (
         <WalkControls
           place={walkPlace}
+          street={streetHere}
           corner={corner}
           onInput={(input) => {
             walkPad.current = input;
