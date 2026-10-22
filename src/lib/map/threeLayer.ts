@@ -17,6 +17,12 @@ import maplibregl, { type CustomLayerInterface, type CustomRenderMethodInput, ty
 const { MercatorCoordinate } = maplibregl;
 type MapLibreMap = MaplibreMap;
 
+/** Rebuild a street layer after the camera has moved about this far. Looking around stays under it. */
+const REBUILD_M = 15;
+function movedM(a: { lng: number; lat: number }, b: { lng: number; lat: number }): number {
+  return Math.hypot(...toLocal(a.lng, a.lat, b));
+}
+
 
 const renderers = new WeakMap<WebGLRenderingContext | WebGL2RenderingContext, THREE.WebGLRenderer>();
 
@@ -607,10 +613,21 @@ export function createHydrantLayer(): CustomLayerInterface {
   const zAxis = new THREE.Vector3(0, 0, 1), sc = new THREE.Vector3(), off = new THREE.Vector3();
   // [angle from facing, height, radius, length]: front pumper, two side hose outlets.
   const NOZZLES: Array<[number, number, number, number]> = [[0, 0.4, 0.06, 0.2], [90, 0.44, 0.04, 0.17], [-90, 0.44, 0.04, 0.17]];
+  let builtAt = { lng: 0, lat: 0 };
+  let shownH = "";
+  let wasZoomOk = false;
+  let anchored = false;
 
   const refresh = () => {
     if (!map) return;
+    const c = map.getCenter();
+    builtAt = { lng: c.lng, lat: c.lat };
+    wasZoomOk = map.getZoom() >= HYDRANT_MIN_ZOOM;
+    anchored = true;
     const list = nearbyHydrants(map);
+    const key = list.map((h) => `${h.lon.toFixed(5)},${h.lat.toFixed(5)}`).join("|");
+    if (key === shownH) return;
+    shownH = key;
     let k = 0;
     list.forEach((h, i) => {
       const mc = MercatorCoordinate.fromLngLat([h.lon, h.lat], 0);
@@ -633,6 +650,13 @@ export function createHydrantLayer(): CustomLayerInterface {
   const onData = (e: { sourceId?: string; isSourceLoaded?: boolean }) => {
     if (e.sourceId === "city3d" && e.isSourceLoaded) refresh();
   };
+  // jumpTo fires moveend on every walk frame and every look. Scan when the centre moves, or zoom crosses the cutoff.
+  const onMove = () => {
+    if (!map) return;
+    const zoomOk = map.getZoom() >= HYDRANT_MIN_ZOOM;
+    if (anchored && zoomOk === wasZoomOk && movedM(map.getCenter(), builtAt) < REBUILD_M) return;
+    refresh();
+  };
 
   return {
     id: HYDRANTS_3D_LAYER,
@@ -641,12 +665,12 @@ export function createHydrantLayer(): CustomLayerInterface {
     onAdd(m, gl) {
       map = m;
       renderer = sharedRenderer(m, gl);
-      m.on("moveend", refresh);
+      m.on("moveend", onMove);
       m.on("sourcedata", onData);
       refresh();
     },
     onRemove(m) {
-      m.off("moveend", refresh);
+      m.off("moveend", onMove);
       m.off("sourcedata", onData);
       // The renderer is shared by every three.js layer; never dispose it here.
       renderer = null;
@@ -841,7 +865,7 @@ export function createStreetSignsLayer(): CustomLayerInterface {
 
   const refresh = () => {
     if (map.getZoom() < SIGNS_MIN_ZOOM) {
-      if (poles.count) {
+      if (poles.count || shown) {
         for (const m of [poles, blades, faces, roads]) m.count = 0;
         shown = "";
         map.triggerRepaint();
@@ -849,12 +873,13 @@ export function createStreetSignsLayer(): CustomLayerInterface {
       return;
     }
     const eye = eyeLngLat(map);
+    // Anchor before the scan so a look, which does not move the eye, does not scan again.
+    lastEye = eye;
     const want = nearbySigns(map, eye);
     const key = want.map((s) => s.key).join("|");
     if (key === shown && !dirty) return;
     shown = key;
     dirty = false;
-    lastEye = eye;
     origin = MercatorCoordinate.fromLngLat(eye, 0);
     meters = origin.meterInMercatorCoordinateUnits();
     g.clearRect(0, 0, ATLAS, ATLAS);
@@ -917,6 +942,11 @@ export function createStreetSignsLayer(): CustomLayerInterface {
       refresh();
     }
   };
+  // jumpTo fires moveend every frame. A look only changes bearing, so skip the street scan until the eye moves.
+  const onMove = () => {
+    if (!dirty && shown && movedM(eyeLngLat(map), lastEye) < REBUILD_M) return;
+    refresh();
+  };
 
   return {
     id: STREET_SIGNS_LAYER,
@@ -925,12 +955,12 @@ export function createStreetSignsLayer(): CustomLayerInterface {
     onAdd(m, gl) {
       map = m;
       renderer = sharedRenderer(m, gl);
-      m.on("moveend", refresh);
+      m.on("moveend", onMove);
       m.on("sourcedata", onData);
       refresh();
     },
     onRemove(m) {
-      m.off("moveend", refresh);
+      m.off("moveend", onMove);
       m.off("sourcedata", onData);
       for (const x of [poles, blades, faces, roads]) {
         x.geometry.dispose();
@@ -940,14 +970,11 @@ export function createStreetSignsLayer(): CustomLayerInterface {
       roadAtlas.dispose();
     },
     render(_gl, args: CustomRenderMethodInput) {
-      // Walking moves the eye every frame without a moveend; re-pick every
-      // ~0.4 s once it has gone 15 m, so the corner you stand at is always built.
+      // Backup if the eye moved without a moveend. jumpTo itself does fire moveend.
       const now = performance.now();
       if (now - lastCheck > 400) {
         lastCheck = now;
-        const e = eyeLngLat(map);
-        const [dx, dy] = toLocal(e.lng, e.lat, lastEye);
-        if (Math.hypot(dx, dy) > 15) {
+        if (movedM(eyeLngLat(map), lastEye) > REBUILD_M) {
           dirty = true;
           refresh();
         }
@@ -1177,7 +1204,13 @@ export function createFurnitureLayer(): CustomLayerInterface {
         if (!r || r.d.type !== "FeatureCollection") continue;
         for (const f of r.d.features) next.push({ kind: r.id === "restrooms" ? "restroom" : "place", f });
       }
-      const stamp = `${next.length}:${want.join(",")}`;
+      const stamp = next
+        .map(({ kind, f }) => {
+          const g = f.geometry;
+          const at = g?.type === "Point" ? (g.coordinates as [number, number]).map((n) => n.toFixed(5)).join(",") : "";
+          return `${kind}:${at}`;
+        })
+        .join("|");
       kioskData = next;
       if (stamp !== kioskStamp) {
         kioskStamp = stamp;
@@ -1283,15 +1316,30 @@ export function createFurnitureLayer(): CustomLayerInterface {
 
   const refresh = () => {
     if (!map || map.getZoom() < FURN_MIN_ZOOM) {
-      build();
+      if (shown || busPoles.count || kioskBodies.count) {
+        shown = "";
+        build();
+      }
       return;
     }
-    loadStops(eyeLngLat(map));
+    const eye = eyeLngLat(map);
+    eyeAt = eye;
+    loadStops(eye);
     loadKiosks();
     build();
   };
   const onData = (e: { sourceId?: string; isSourceLoaded?: boolean }) => {
     if (e.sourceId === "restrooms" || e.sourceId === "place-toilets") loadKiosks();
+  };
+  // jumpTo fires moveend every frame. Kiosks depend on the eye, not the bearing.
+  const onMove = () => {
+    if (!map) return;
+    if (map.getZoom() < FURN_MIN_ZOOM) {
+      refresh();
+      return;
+    }
+    if (shown && movedM(eyeLngLat(map), eyeAt) < REBUILD_M) return;
+    refresh();
   };
 
   return {
@@ -1301,12 +1349,12 @@ export function createFurnitureLayer(): CustomLayerInterface {
     onAdd(mp, gl) {
       map = mp;
       renderer = sharedRenderer(mp, gl);
-      mp.on("moveend", refresh);
+      mp.on("moveend", onMove);
       mp.on("sourcedata", onData);
       refresh();
     },
     onRemove(mp) {
-      mp.off("moveend", refresh);
+      mp.off("moveend", onMove);
       mp.off("sourcedata", onData);
       setPickTargets([]);
       for (const x of all) {
@@ -1321,7 +1369,7 @@ export function createFurnitureLayer(): CustomLayerInterface {
       if (now - lastCheck > 500) {
         lastCheck = now;
         const e = eyeLngLat(map);
-        if (Math.hypot(...toLocal(e.lng, e.lat, eyeAt)) > 15) refresh();
+        if (movedM(e, eyeAt) > REBUILD_M) refresh();
       }
       if (map.getZoom() < FURN_MIN_ZOOM || (!busPoles.count && !kioskBodies.count)) return;
       const s = meters;
@@ -1485,15 +1533,22 @@ export function createStorefrontLayer(): CustomLayerInterface {
   let scale = 1;
   let shown = "";
   let lastCheck = 0;
+  let builtAt = { lng: 0, lat: 0 };
+  let builtZoom = -1;
   const onData = (e: { sourceId?: string; isSourceLoaded?: boolean }) => {
     if (e.sourceId === "city3d" && e.isSourceLoaded) refresh();
   };
 
   const refresh = () => {
-    if (map.getZoom() < STOREFRONT_MIN_ZOOM) {
-      mesh.count = 0;
-      facades.count = 0;
-      shown = "";
+    const c = map.getCenter();
+    builtAt = { lng: c.lng, lat: c.lat };
+    builtZoom = map.getZoom();
+    if (builtZoom < STOREFRONT_MIN_ZOOM) {
+      if (mesh.count || facades.count || shown) {
+        mesh.count = 0;
+        facades.count = 0;
+        shown = "";
+      }
       return;
     }
     // A main (mall / many-shop) sign also gets a small "Directory" board beside it.
@@ -1502,9 +1557,8 @@ export function createStorefrontLayer(): CustomLayerInterface {
     ).slice(0, MAX);
     // Real size at eye level; from higher up a 0.8 m plate is 2-4 px, so it
     // grows to stay about 14 px tall and readable (#67).
-    const mpp = (78_271.517 * Math.cos((map.getCenter().lat * Math.PI) / 180)) / 2 ** map.getZoom();
+    const mpp = (78_271.517 * Math.cos((c.lat * Math.PI) / 180)) / 2 ** builtZoom;
     const grow = Math.min(6, Math.max(1, (mpp * 14) / PLATE_H));
-    const c = map.getCenter();
     const logoOf = (s: StorefrontSign) => (s.main || s.name === "Directory" ? null : logoFor(s, () => { shown = ""; refresh(); }));
     const key = `${grow.toFixed(1)}|` + signs.map((s) => `${s.lng},${s.lat},${logoOf(s) ? 1 : 0}`).join("|");
     if (key === shown) return;
@@ -1553,6 +1607,16 @@ export function createStorefrontLayer(): CustomLayerInterface {
     // new signs never reached the screen until the next camera move (#67).
     map.triggerRepaint();
   };
+  // jumpTo fires moveend every frame. Plates depend on where you stand and the zoom, not the bearing.
+  const onMove = () => {
+    const z = map.getZoom();
+    if (z < STOREFRONT_MIN_ZOOM) {
+      if (shown || mesh.count || facades.count) refresh();
+      return;
+    }
+    if (shown && Math.abs(z - builtZoom) < 0.05 && movedM(map.getCenter(), builtAt) < REBUILD_M) return;
+    refresh();
+  };
 
   return {
     id: STOREFRONT_LAYER,
@@ -1561,13 +1625,13 @@ export function createStorefrontLayer(): CustomLayerInterface {
     onAdd(m, gl) {
       map = m;
       renderer = sharedRenderer(m, gl);
-      map.on("moveend", refresh);
+      map.on("moveend", onMove);
       map.on("idle", refresh);
       map.on("sourcedata", onData);
       refresh();
     },
     onRemove() {
-      map.off("moveend", refresh);
+      map.off("moveend", onMove);
       map.off("idle", refresh);
       map.off("sourcedata", onData);
       geometry.dispose();
