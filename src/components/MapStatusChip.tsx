@@ -51,7 +51,7 @@ export function MapStatusChip({
 
   if (isError) {
     return (
-      <div className="absolute left-1/2 top-[calc(env(safe-area-inset-top)+6.5rem)] z-20 lg:left-[calc(50%+190px)] lg:top-3 flex -translate-x-1/2 items-center gap-2 rounded-full border border-destructive/50 bg-destructive/10 px-3 py-1.5 text-[11px] text-foreground shadow-lg backdrop-blur-md">
+      <div className="absolute left-1/2 top-[calc(env(safe-area-inset-top)+var(--edge)+var(--topbar-h)+var(--sp-6))] z-20 lg:left-[calc(50%+190px)] lg:top-[var(--edge)] flex -translate-x-1/2 items-center gap-2 rounded-full border border-destructive/50 bg-destructive/10 px-3 py-1.5 text-[11px] text-foreground shadow-lg backdrop-blur-md">
         <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-destructive" />
         <span className="max-w-[46vw] truncate sm:max-w-none">
           {errorMessage ?? "Could not reach NYC Open Data."} The map still works.

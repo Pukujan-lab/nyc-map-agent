@@ -1224,7 +1224,10 @@ const LANDMARK_MODELS: Record<string, () => THREE.Group> = {
 
 /** GLB bytes for every hero landmark model (Node build step; the exporter is loaded on demand). */
 export async function landmarkGlbs(): Promise<Record<string, ArrayBuffer>> {
-  const { GLTFExporter } = await import("three/examples/jsm/exporters/GLTFExporter.js");
+  // Node-only (scripts/make-landmarks.ts). A non-literal specifier keeps Vite from
+  // emitting the ~7.7 kB br exporter chunk into the app bundle.
+  const exporterPath = "three/examples/jsm/exporters/GLTFExporter.js";
+  const { GLTFExporter } = (await import(/* @vite-ignore */ exporterPath)) as typeof import("three/examples/jsm/exporters/GLTFExporter.js");
   const exporter = new GLTFExporter();
   const out: Record<string, ArrayBuffer> = {};
   for (const [id, make] of Object.entries(LANDMARK_MODELS)) {

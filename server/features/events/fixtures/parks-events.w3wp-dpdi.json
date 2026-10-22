@@ -1,0 +1,448 @@
+[
+ {
+  "title": "Ongoing Museum Exhibit: Still Waters: Reflections of a Maritime Community",
+  "guid": "2198006",
+  "link": {
+   "url": "http://www.nycgovparks.org/events/2026/10/23/ongoing-museum-exhibit-still-waters-reflections-of-a-maritime-community"
+  },
+  "description": "NYC Parks and the Tottenville Historical Society invite you to an exhibit celebrating the South Shore of Staten Island's maritime history and heritage, featuring the A.C. Brown &amp; Sons Shipyard of Tottenville and spotlighting our recreat",
+  "registration_description": "By appointment only. Email Carmine.Raimondi@parks.nyc.gov.",
+  "parkids": "R006",
+  "parknames": "Conference House Park",
+  "starttime": "2026-10-23T11:00:00.000",
+  "endtime": "2026-10-23T15:00:00.000",
+  "location": "Rutan-Becket House (in Conference House Park)",
+  "categories": "Education | Art | History | Waterfront",
+  "coordinates": "40.50473756205100000, -74.25486183166500000",
+  "image": {
+   "url": "http://www.nycgovparks.org/common_images/events/6877efab76fa4.jpg"
+  }
+ },
+ {
+  "title": "NYRR Open Run: Canarsie Park",
+  "guid": "2094556",
+  "link": {
+   "url": "http://www.nycgovparks.org/events/2026/10/31/nyrr-open-run-canarsie-park"
+  },
+  "description": "NYRR Open Run Brings free, 5K weekly community-led runs,&nbsp;to neighborhood parks across the greater New York City area. The program is free and open to runners and walkers of all ages, abilities, and experience levels.Canarsie Park serve",
+  "registration_url": {
+   "url": "https://www.nyrr.org/openrun/parks/canarsie-park?utm_source=NYC+Gov+Parks&utm_medium=Website+&utm_campaign=Canarsie+Park+"
+  },
+  "parkids": "B018",
+  "parknames": "Canarsie Park",
+  "starttime": "2026-10-31T08:45:00.000",
+  "endtime": "2026-10-31T10:00:00.000",
+  "location": "Canarsie Park House (in Canarsie Park)",
+  "categories": "Running/Jogging",
+  "coordinates": "40.62894289677700000, -73.89599752426100000"
+ },
+ {
+  "title": "Kids In Motion: P.S. 55",
+  "guid": "2229878",
+  "link": {
+   "url": "http://www.nycgovparks.org/events/2026/10/22/kids-in-motion-ps-55"
+  },
+  "description": "The Kids in Motion program engages children in active, outdoor play. A NYC Parks staff member leads four to seven hours of free activities in NYC's playgrounds, including organized sports, games, fitness demos, board games, water games, and",
+  "registration_description": "Registration not required.",
+  "parkids": "R090",
+  "parknames": "Lieutenant John H. Martinson Playground",
+  "starttime": "2026-10-22T10:00:00.000",
+  "endtime": "2026-10-22T18:00:00.000",
+  "location": "P.S. 55 (in Lieutenant John H. Martinson Playground)",
+  "categories": "Arts & Crafts | Games | Best for Kids",
+  "coordinates": "40.53636868444000000, -74.16344090400400000"
+ },
+ {
+  "title": "Seed Harvest",
+  "guid": "2274125",
+  "link": {
+   "url": "http://www.nycgovparks.org/events/2026/10/24/seed-harvest"
+  },
+  "description": "Come to Clayton Williams Community Garden to harvest seeds from the garden's summer plants! Learn how to save seeds for next season. Participants will harvest flower, herb, and vegetable seeds for future use.",
+  "starttime": "2026-10-24T14:00:00.000",
+  "endtime": "2026-10-24T16:00:00.000",
+  "location": "Clayton Williams Garden",
+  "categories": "Education | Food | Workshops | Accessible Activities | Gardening",
+  "coordinates": "40.81100082397500000, -73.95099639892600000"
+ },
+ {
+  "title": "Zumba Gold&#174;",
+  "instructor": "Melissa Perez",
+  "guid": "2225881",
+  "link": {
+   "url": "http://www.nycgovparks.org/events/2026/10/23/zumba-gold"
+  },
+  "description": "Zumba Gold\u00ae  offers a low-impact workout set to a fusion of Latin, International and popular music dance themes, creating a dynamic, exciting, effective fitness system! The routines feature aerobic fitness interval training with a combinati",
+  "registration_url": {
+   "url": "https://nycparks.perfectmind.com/24936/Clients/BookMe4LandingPages/Class?widgetId=15f6af07-39c5-473e-b053-96653f77a406&embed=False&redirectedFromEmbededMode=False&classId=a866c633-ebda-4078-b7e8-c335c8423a35&occurrenceDate=20261023"
+  },
+  "registration_description": "Registration has begun and ends on 10/23/2026.",
+  "parkids": "M130",
+  "parknames": "Constance Baker Motley Recreation Center",
+  "starttime": "2026-10-23T09:00:00.000",
+  "endtime": "2026-10-23T10:00:00.000",
+  "location": "Dance Room (in Constance Baker Motley Recreation Center)",
+  "categories": "Dance | Fitness | Shape Up NYC | Recreation Center Programming | Dance Classes | Exercise Classes",
+  "coordinates": "40.75646973000000000, -73.96514130000000000"
+ },
+ {
+  "title": "CANCELED: Cardio Circuit Blast",
+  "instructor": "Chris Patt",
+  "guid": "2273364",
+  "link": {
+   "url": "http://www.nycgovparks.org/events/2026/10/29/cardio-circuit-blast"
+  },
+  "description": "This high-energy total body workout will keep you moving with challenging yet fun bodyweight circuits. Cardio Circuit Blast is a heart-pumping, high-intensity class that is open to all levels and the perfect way to increase your overall end",
+  "registration_url": {
+   "url": "https://nycparks.perfectmind.com/24936/Clients/BookMe4LandingPages/Class?widgetId=15f6af07-39c5-473e-b053-96653f77a406&embed=False&redirectedFromEmbededMode=False&classId=61d1949c-ff83-4fbb-97bf-f0a3632484f7&occurrenceDate=20261029"
+  },
+  "registration_description": "Registration has begun and ends on 10/29/2026.",
+  "parkids": "M047",
+  "parknames": "Thomas Jefferson Park",
+  "starttime": "2026-10-29T18:00:00.000",
+  "endtime": "2026-10-29T19:00:00.000",
+  "location": "Dance Room (in Thomas Jefferson Park)",
+  "categories": "Fitness | Shape Up NYC | Recreation Center Programming | Exercise Classes",
+  "coordinates": "40.79349899000000000, -73.93669891000000000"
+ },
+ {
+  "title": "Zumba",
+  "instructor": "Jessica Zamora",
+  "guid": "2244064",
+  "link": {
+   "url": "http://www.nycgovparks.org/events/2026/11/04/zumba"
+  },
+  "description": "Zumba is a fusion of Latin, International and popular music dance themes creating a dynamic, exciting, effective fitness system! The routines feature aerobic fitness interval training with a combination of fast and slow rhythms that challen",
+  "registration_url": {
+   "url": "https://nycparks.perfectmind.com/24936/Clients/BookMe4LandingPages/Class?widgetId=15f6af07-39c5-473e-b053-96653f77a406&embed=False&redirectedFromEmbededMode=False&classId=38f924d9-f7fa-4e91-b7ed-478fe70c2b52&occurrenceDate=20261104"
+  },
+  "registration_description": "Registration has begun and ends on 11/4/2026.",
+  "parkids": "M047",
+  "parknames": "Thomas Jefferson Park",
+  "starttime": "2026-11-04T18:30:00.000",
+  "endtime": "2026-11-04T19:30:00.000",
+  "location": "Dance Room (in Thomas Jefferson Park)",
+  "categories": "Fitness | Shape Up NYC | Recreation Center Programming | Dance Classes | Exercise Classes",
+  "coordinates": "40.79349899000000000, -73.93669891000000000"
+ },
+ {
+  "title": "Trail Work Thursdays",
+  "guid": "2243902",
+  "link": {
+   "url": "http://www.nycgovparks.org/events/2026/10/29/trail-work-thursdays"
+  },
+  "description": "Be a part of the community effort to maintain the trails in Van Cortlandt Park. Whether you\u2019re an experienced trailblazer or new to trail maintenance, your help will make a significant impact!Meeting Details:Location: VCPA Learning Garden -",
+  "registration_url": {
+   "url": "https://www.eventbrite.com/e/trail-work-thursdays-tickets-1988013995376?aff=oddtdtcreator"
+  },
+  "parkids": "X092",
+  "parknames": "Van Cortlandt Park",
+  "starttime": "2026-10-29T09:00:00.000",
+  "endtime": "2026-10-29T12:00:00.000",
+  "contact_phone": "7186011553",
+  "location": "VCPA Learning Garden (in Van Cortlandt Park)",
+  "categories": "Nature | Fitness | Volunteer | It's My Park | Outdoor Fitness | Hiking | Wildlife | Walking",
+  "coordinates": "40.88610076904300000, -73.89749908447300000",
+  "image": {
+   "url": "http://www.nycgovparks.org/common_images/events/69ea6b7e8c677.jpg"
+  }
+ },
+ {
+  "title": "Kids in Motion: Sol Lain Playground",
+  "guid": "2250077",
+  "link": {
+   "url": "http://www.nycgovparks.org/events/2026/10/29/kids-in-motion-sol-lain-playground"
+  },
+  "description": "The Kids in Motion program engages children in active, outdoors play. A NYC Parks staff member leads four to seven hours of free activities in NYC's playgrounds, including organized sports, games, fitness demos, board games, and more!Kids i",
+  "registration_description": "Registration not required.",
+  "parkids": "M235",
+  "parknames": "Sol Lain Plgd",
+  "starttime": "2026-10-29T14:00:00.000",
+  "endtime": "2026-10-29T18:00:00.000",
+  "location": "Sol Lain Playground (in Sol Lain Plgd)",
+  "categories": "Arts & Crafts | Games | Best for Kids | Sports | Basketball/Netball | Sports Camps",
+  "coordinates": "40.71419906616211000, -73.98380279541016000",
+  "image": {
+   "url": "http://www.nycgovparks.org/common_images/events/6ad80f8451e59.jpg"
+  }
+ },
+ {
+  "title": "The Haunted Garden",
+  "guid": "2262325",
+  "link": {
+   "url": "http://www.nycgovparks.org/events/2026/10/31/the-haunted-garden"
+  },
+  "description": "Join Vinegar Hill Community Garden for a fun-filled afternoon of family, creativity, and community!&nbsp;Festivities include:&nbsp;Pumpkin Crafting&nbsp;Candy Giveaway&nbsp;Sweets and Treats&nbsp;Haunted Garden Walkthrough&nbsp;Explore the ",
+  "starttime": "2026-10-31T15:00:00.000",
+  "endtime": "2026-10-31T19:00:00.000",
+  "location": "Vinegar Hill Community Garden",
+  "categories": "Arts & Crafts | Halloween | Food | Gardening",
+  "coordinates": "40.70149993896500000, -73.98259735107400000"
+ },
+ {
+  "title": "Kids In Motion: Cherry Tree Park",
+  "guid": "2252422",
+  "link": {
+   "url": "http://www.nycgovparks.org/events/2026/10/27/kids-in-motion-cherry-tree-park"
+  },
+  "description": "The Kids in Motion program engages children in active, outdoors play. A NYC Parks staff member leads four to seven hours of free activities in NYC's playgrounds, including organized sports, games, fitness demos, board games, and more!Kids i",
+  "registration_description": "Registration not required.",
+  "parkids": "M215",
+  "parknames": "Cherry Tree Park",
+  "starttime": "2026-10-27T14:00:00.000",
+  "endtime": "2026-10-27T18:00:00.000",
+  "location": "Cherry Tree Park Playground (in Cherry Tree Park)",
+  "categories": "Arts & Crafts | Sports",
+  "coordinates": "40.78765167342800000, -73.94647675272200000",
+  "image": {
+   "url": "http://www.nycgovparks.org/common_images/events/6ad80f78b72b1.jpg"
+  }
+ },
+ {
+  "title": "Kids In Motion: Cherry Tree Park",
+  "guid": "2252348",
+  "link": {
+   "url": "http://www.nycgovparks.org/events/2026/10/24/kids-in-motion-cherry-tree-park"
+  },
+  "description": "The Kids in Motion program engages children in active, outdoors play. A NYC Parks staff member leads four to seven hours of free activities in NYC's playgrounds, including organized sports, games, fitness demos, board games, and more!Kids i",
+  "registration_description": "Registration not required.",
+  "parkids": "M215",
+  "parknames": "Cherry Tree Park",
+  "starttime": "2026-10-24T10:00:00.000",
+  "endtime": "2026-10-24T18:00:00.000",
+  "location": "Cherry Tree Park Playground (in Cherry Tree Park)",
+  "categories": "Arts & Crafts | Sports",
+  "coordinates": "40.78765167342800000, -73.94647675272200000",
+  "image": {
+   "url": "http://www.nycgovparks.org/common_images/events/6aaf851d5a1b9.jpg"
+  }
+ },
+ {
+  "title": "Spotlight tour: Architecture & Design",
+  "guid": "2235376",
+  "link": {
+   "url": "http://www.nycgovparks.org/events/2026/10/22/spotlight-tour-architecture-design"
+  },
+  "description": "Take a deep dive into design and architecture\u2014both on and off the park\u2014with a 90-minute specialized tour led by a High Line Docent, a knowledgeable volunteer guide. In it, you\u2019ll hear about the architectural and technological feats of the o",
+  "registration_url": {
+   "url": "https://www.eventbrite.com/e/high-line-spotlight-architecture-design-tickets-1998784008776"
+  },
+  "parkids": "M360",
+  "parknames": "The High Line",
+  "starttime": "2026-10-22T17:30:00.000",
+  "endtime": "2026-10-22T19:00:00.000",
+  "location": "The High Line",
+  "categories": "Tours",
+  "coordinates": "40.74670028686500000, -74.00569915771500000",
+  "image": {
+   "url": "http://www.nycgovparks.org/common_images/events/6a8f5f9b06738.jpg"
+  }
+ },
+ {
+  "title": "Spotlight tour: History",
+  "guid": "2235378",
+  "link": {
+   "url": "http://www.nycgovparks.org/events/2026/10/29/spotlight-tour-history"
+  },
+  "description": "Discover the story of the High Line, the park in the sky, on a free 90-minute tour. A docent will share High Line history from the early turn of the 20th century to the present day, offering an insider\u2019s perspective on the elevated structur",
+  "registration_url": {
+   "url": "https://www.eventbrite.com/e/high-line-spotlight-history-tickets-1998807825011"
+  },
+  "parkids": "M360",
+  "parknames": "The High Line",
+  "starttime": "2026-10-29T17:30:00.000",
+  "endtime": "2026-10-29T19:00:00.000",
+  "location": "The High Line",
+  "categories": "History | Tours",
+  "coordinates": "40.74670028686500000, -74.00569915771500000",
+  "image": {
+   "url": "http://www.nycgovparks.org/common_images/events/6a8f635058b19.jpg"
+  }
+ },
+ {
+  "title": "Kids in Motion: Anne Loftus Playground",
+  "guid": "2252822",
+  "link": {
+   "url": "http://www.nycgovparks.org/events/2026/10/21/kids-in-motion-anne-loftus-playground"
+  },
+  "description": "The Kids in Motion program engages children in active, outdoors play. A NYC Parks staff member leads four to seven hours of free activities in NYC's playgrounds, including organized sports, games, fitness demos, board games, and more!Kids i",
+  "registration_description": "Registration not required.",
+  "parkids": "M029",
+  "parknames": "Fort Tryon Park",
+  "starttime": "2026-10-21T14:00:00.000",
+  "endtime": "2026-10-21T18:00:00.000",
+  "location": "Anne Loftus Playground (in Fort Tryon Park)",
+  "categories": "Arts & Crafts | Games | Best for Kids | Sports",
+  "coordinates": "40.86520004272461000, -73.92880249023438000",
+  "image": {
+   "url": "http://www.nycgovparks.org/common_images/events/6ad80f7013bf1.jpg"
+  }
+ },
+ {
+  "title": "Flow Dance Cardio",
+  "instructor": "Angela Ochieng",
+  "guid": "2243952",
+  "link": {
+   "url": "http://www.nycgovparks.org/events/2026/10/27/electro-dance-cardio"
+  },
+  "description": "Get ready to ignite your energy in this heart pumping dance cardio session! This class is designed to get the entire body moving at its full potential. Let loose and have fun as we move to top hits from all the decades.",
+  "registration_url": {
+   "url": "https://nycparks.perfectmind.com/24936/Clients/BookMe4LandingPages/Class?widgetId=15f6af07-39c5-473e-b053-96653f77a406&embed=False&redirectedFromEmbededMode=False&classId=44d94a1a-fa91-40fa-8cb1-48ab509ead14&occurrenceDate=20261027"
+  },
+  "registration_description": "Registration has begun and ends on 10/27/2026.",
+  "starttime": "2026-10-27T18:00:00.000",
+  "endtime": "2026-10-27T18:45:00.000",
+  "location": "NYPL- Bloomingdale Library",
+  "categories": "Dance | Fitness | Shape Up NYC | Exercise Classes",
+  "coordinates": "40.79594421386700000, -73.96786499023400000"
+ },
+ {
+  "title": "After School Youth Recreation",
+  "guid": "2275399",
+  "link": {
+   "url": "http://www.nycgovparks.org/events/2026/10/28/after-school-youth-recreation"
+  },
+  "description": "Join us after school for fun games and active play. In this program youth ages 6 - 12 will have the opportunity to play various sports, compete against other kids while playing board games, and play an assortment of group games.",
+  "registration_description": "Registration not required.",
+  "parkids": "Q401",
+  "parknames": "Lost Battalion Hall Recreation Center",
+  "starttime": "2026-10-28T14:30:00.000",
+  "endtime": "2026-10-28T16:00:00.000",
+  "location": "Classroom A - Small (in Lost Battalion Hall Recreation Center)",
+  "categories": "Fitness | Games | Best for Kids | Sports | Recreation Center Programming",
+  "coordinates": "40.73192412829800000, -73.86552882391800000"
+ },
+ {
+  "title": "Kids in Motion: Anne Loftus Playground",
+  "guid": "2252337",
+  "link": {
+   "url": "http://www.nycgovparks.org/events/2026/10/31/kids-in-motion-anne-loftus-playground"
+  },
+  "description": "The Kids in Motion program engages children in active, outdoors play. A NYC Parks staff member leads four to seven hours of free activities in NYC's playgrounds, including organized sports, games, fitness demos, board games, and more!Kids i",
+  "registration_description": "Registration not required.",
+  "parkids": "M029",
+  "parknames": "Fort Tryon Park",
+  "starttime": "2026-10-31T10:00:00.000",
+  "endtime": "2026-10-31T18:00:00.000",
+  "location": "Anne Loftus Playground (in Fort Tryon Park)",
+  "categories": "Arts & Crafts | Games | Best for Kids | Sports",
+  "coordinates": "40.86520004272461000, -73.92880249023438000",
+  "image": {
+   "url": "http://www.nycgovparks.org/common_images/events/6aaf8520e1db1.jpg"
+  }
+ },
+ {
+  "title": "Cardio Sculpt",
+  "instructor": "Zarina Noor",
+  "guid": "2231558",
+  "link": {
+   "url": "http://www.nycgovparks.org/events/2026/10/21/cardio-sculpt"
+  },
+  "description": "This cardio workout consists of functional movement exercises designed to make daily activities easier to perform. Meets at the athletic courts.",
+  "registration_url": {
+   "url": "https://nycparks.perfectmind.com/24936/Clients/BookMe4LandingPages/Class?widgetId=15f6af07-39c5-473e-b053-96653f77a406&embed=False&redirectedFromEmbededMode=False&classId=9df3f0d8-8d0c-4eef-8c4c-bb11b3a6f47a&occurrenceDate=20261021"
+  },
+  "registration_description": "Registration has begun and ends on 10/21/2026.",
+  "parkids": "Q340",
+  "parknames": "Torsney Playground",
+  "starttime": "2026-10-21T09:00:00.000",
+  "endtime": "2026-10-21T10:00:00.000",
+  "location": "Athletic Courts (in Torsney Playground)",
+  "categories": "Fitness | Shape Up NYC | Outdoor Fitness | Exercise Classes",
+  "coordinates": "40.74733661799600000, -73.92111921438200000"
+ },
+ {
+  "title": "Yoga en Espa&#241;ol (Yoga in Spanish)",
+  "instructor": "Lucia Pinzon",
+  "guid": "2244320",
+  "link": {
+   "url": "http://www.nycgovparks.org/events/2026/11/02/yoga-en-espaol-yoga-in-spanish"
+  },
+  "description": "Con\u00e9ctate, equilibra y desaf\u00edate con Yoga en espa\u00f1ol. Esta clase de Vinyasa Yoga incluye flujos de intensidad media que te llevar\u00e1n desde el saludo al sol hasta una postura m\u00e1xima final. Ven y conc\u00e9ntrate en las inversiones y la respiraci\u00f3n",
+  "registration_url": {
+   "url": "https://nycparks.perfectmind.com/24936/Clients/BookMe4LandingPages/Class?widgetId=15f6af07-39c5-473e-b053-96653f77a406&embed=False&redirectedFromEmbededMode=False&classId=f8a5bec9-6518-4fb1-a0ab-73a8dd7e8578&occurrenceDate=20261102"
+  },
+  "registration_description": "Registration has begun and ends on 11/2/2026.",
+  "starttime": "2026-11-02T10:00:00.000",
+  "endtime": "2026-11-02T11:00:00.000",
+  "location": "New York Public Library - Morningside Heights Branch",
+  "categories": "Fitness | Shape Up NYC | Yoga & Pilates Classes",
+  "coordinates": "40.80614471435500000, -73.96482849121100000"
+ },
+ {
+  "title": "Movie Under the Stars: Frankenweenie (2012)",
+  "guid": "2271731",
+  "link": {
+   "url": "http://www.nycgovparks.org/events/2026/10/28/movie-under-the-stars-frankenweenie-2012"
+  },
+  "description": "Grab a blanket and come enjoy a movie in a neighborhood park or playground! This summer, NYC Parks and The Mayor\u2019s Office of Media and Entertainment will host family-friendly movie showings across the five boroughs.When a car hits young Vic",
+  "registration_url": {
+   "url": "https://nycparks.perfectmind.com/24936/Clients/BookMe4LandingPages/Class?widgetId=15f6af07-39c5-473e-b053-96653f77a406&embed=False&redirectedFromEmbededMode=False&classId=10509735-856d-4e9e-a01a-7c5e4b66bde9&occurrenceDate=20261028"
+  },
+  "registration_description": "Registration has begun and ends on 10/28/2026.",
+  "starttime": "2026-10-28T19:00:00.000",
+  "endtime": "2026-10-28T20:30:00.000",
+  "categories": "Film | Best for Kids | Free Summer Movies | Movies Under the Stars",
+  "image": {
+   "url": "http://www.nycgovparks.org/common_images/events/6ac67cf67d544.jpg"
+  }
+ },
+ {
+  "title": "Candlelight Ghost Tours",
+  "guid": "2220279",
+  "link": {
+   "url": "http://www.nycgovparks.org/events/2026/10/24/candlelight-ghost-tours"
+  },
+  "description": "Doors slam, floorboards creak, voices call into the dead of night. Venture into \u201cManhattan\u2019s Most Haunted House\u201d by flickering candlelight to hear chilling \u2013 and true \u2013 tales of decades of otherworldly activity in the house, the results of ",
+  "registration_url": {
+   "url": "https://www.zeffy.com/en-US/ticketing/candlelight-ghost-tours--2026-2"
+  },
+  "parkids": "M318",
+  "parknames": "Merchant's House Museum",
+  "starttime": "2026-10-24T18:30:00.000",
+  "endtime": "2026-10-24T22:00:00.000",
+  "contact_phone": "212 777 1089",
+  "location": "Merchant's House Museum",
+  "categories": "Education | History | Tours",
+  "coordinates": "40.72769927978515600, -73.99230194091797000"
+ },
+ {
+  "title": "Cardio Sculpt",
+  "instructor": "Zarina Noor",
+  "guid": "2284161",
+  "link": {
+   "url": "http://www.nycgovparks.org/events/2026/11/03/cardio-sculpt"
+  },
+  "description": "This cardio workout consists of functional movement exercises designed to make daily activities easier to perform. Please bring a yoga mat!",
+  "registration_url": {
+   "url": "https://nycparks.perfectmind.com/24936/Clients/BookMe4LandingPages/Class?widgetId=15f6af07-39c5-473e-b053-96653f77a406&embed=False&redirectedFromEmbededMode=False&classId=8d99968a-0fff-4c7a-b384-360fc29e64db&occurrenceDate=20261103"
+  },
+  "registration_description": "Registration has begun and ends on 11/3/2026.",
+  "parkids": "Q104",
+  "parknames": "Queensbridge Park",
+  "starttime": "2026-11-03T11:00:00.000",
+  "endtime": "2026-11-03T12:00:00.000",
+  "location": "Queensbridge Park House (in Queensbridge Park)",
+  "categories": "Fitness | Shape Up NYC | Exercise Classes",
+  "coordinates": "40.75504599459200000, -73.94957822561300000"
+ },
+ {
+  "title": "Juniper Valley Park Fall Festival",
+  "guid": "2267794",
+  "link": {
+   "url": "http://www.nycgovparks.org/events/2026/10/24/juniper-valley-park-fall-festival"
+  },
+  "description": "Join NYC Parks and Council Member Phil Wong for a day of fun Halloween activities including inflatables, crafts, games, music, pumpkin picking and more. All participants are encouraged to wear your Halloween Costumes!",
+  "registration_description": "Registration not required.",
+  "parkids": "Q102",
+  "parknames": "Juniper Valley Park",
+  "starttime": "2026-10-24T11:30:00.000",
+  "endtime": "2026-10-24T14:30:00.000",
+  "location": "Multipurpose Play Area (Hard Top) (in Juniper Valley Park)",
+  "categories": "Arts & Crafts | Festivals | Games | Best for Kids | Halloween | Fall Festivals",
+  "coordinates": "40.72094014042300000, -73.87688255310100000",
+  "image": {
+   "url": "http://www.nycgovparks.org/common_images/events/6ac14586b6a7e.jpg"
+  }
+ }
+]

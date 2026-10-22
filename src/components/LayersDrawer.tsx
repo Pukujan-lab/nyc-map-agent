@@ -1,5 +1,4 @@
 import { Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Drawer } from "vaul";
 import { FEATURES } from "@/features";
 import { useFeatureToggles } from "@/lib/featureToggles";
 import { isFlagId, useFlags } from "@/lib/flags";
@@ -13,7 +12,7 @@ import { setTransitFocusOff } from "@/lib/map/transitFocus";
 import { useDataView } from "@/lib/store/DataViewContext";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { usePanel, type PanelChip } from "@/lib/store/PanelContext";
-import { THEMES, setTheme, useTheme, type ThemeId } from "@/lib/theme";
+import { CHOICES, THEMES, setTheme, useAutoPhase, useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
 /** A labelled filter chip: filled ink when on, outlined when off. No icons. */
@@ -24,7 +23,7 @@ export function Pill({ on, onClick, children, className }: { on?: boolean; onCli
       aria-pressed={on}
       onClick={onClick}
       className={cn(
-        "h-9 rounded-full border px-3.5 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "h-9 rounded-full border px-[var(--sp-4)] text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         on ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-foreground hover:bg-muted",
         className,
       )}
@@ -37,7 +36,7 @@ export function Pill({ on, onClick, children, className }: { on?: boolean; onCli
 function Section({ title, note, children, hidden }: { title: string; note?: string; children: ReactNode; hidden?: boolean }) {
   if (hidden) return null;
   return (
-    <section className="space-y-2.5" aria-label={title}>
+    <section className="space-y-[var(--sp-3)]" aria-label={title}>
       <h3 className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
         {title}
         {note ? <span className="ml-1 font-normal normal-case tracking-normal">· {note}</span> : null}
@@ -82,6 +81,7 @@ export function LayersDrawer({
   open,
   onOpenChange,
   isDesktop,
+  hudActive,
   boundaries,
   onOpenControls,
   onOpenSources,
@@ -89,6 +89,8 @@ export function LayersDrawer({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   isDesktop: boolean;
+  /** Follow / Navigate HUD on top: the phone drawer must not cover it. */
+  hudActive?: boolean;
   boundaries: NtaBoundary[] | null;
   onOpenControls: () => void;
   onOpenSources: () => void;
@@ -101,6 +103,7 @@ export function LayersDrawer({
   const places = usePlaces();
   const opts = useMapOptions();
   const theme = useTheme();
+  const phase = useAutoPhase();
   const shared = useSharedLocation();
   const hood = useNeighborhood(boundaries);
   const [q, setQ] = useState("");
@@ -162,7 +165,7 @@ export function LayersDrawer({
 
   const body = (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-start justify-between gap-3 px-5 pt-3">
+      <div className="flex items-start justify-between gap-[var(--sp-3)] px-[var(--sp-4)] pt-[var(--sp-3)]">
         <div className="min-w-0">
           <h2 className="truncate font-serif text-[26px] leading-tight">
             Exploring <em>{hood}</em>
@@ -173,7 +176,7 @@ export function LayersDrawer({
           Done
         </button>
       </div>
-      <div className="px-5 pb-1 pt-3">
+      <div className="px-[var(--sp-4)] pb-[var(--sp-1)] pt-[var(--sp-3)]">
         <label className="sr-only" htmlFor="layers-search">Search filters</label>
         <input
           id="layers-search"
@@ -183,9 +186,9 @@ export function LayersDrawer({
           className="h-10 w-full rounded-full border border-input bg-card px-4 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
       </div>
-      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-3">
+      <div className="min-h-0 flex-1 space-y-[var(--sp-5)] overflow-y-auto overscroll-contain px-[var(--sp-4)] pb-[var(--sp-6)] pt-[var(--sp-3)]">
         <Section title="Getting around" hidden={!around.some((a) => match(a.label))}>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-[var(--sp-2)]">
             {around.filter((a) => match(a.label)).map((a) =>
               a.primary ? (
                 <button key={a.id} type="button" onClick={a.onClick} className="h-11 rounded-full bg-acc text-[14px] font-semibold text-acc-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
@@ -208,13 +211,13 @@ export function LayersDrawer({
         )}
 
         <Section title="Layers" hidden={!layerChips.some((c) => match(c.label))}>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-[var(--sp-2)]">
             {layerChips.filter((c) => match(c.label)).map((c) => <Pill key={c.id} on={c.active} onClick={c.onToggle}>{c.label}</Pill>)}
           </div>
         </Section>
 
         <Section title="Places" note="hidden until chosen" hidden={!placeItems.length}>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-[var(--sp-2)]">
             {placeItems.map((c) => {
               const n = c.subs.filter((s) => places.has(s.id)).length;
               return (
@@ -238,7 +241,7 @@ export function LayersDrawer({
                   {c.subs.every((s) => places.has(s.id)) ? "None" : "All"}
                 </button>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-[var(--sp-2)]">
                 {c.subs.filter((s) => !q.trim() || match(s.label) || match(c.label)).map((s) => (
                   <Pill key={s.id} on={places.has(s.id)} onClick={() => togglePlace(s.id)}>{s.label}</Pill>
                 ))}
@@ -249,39 +252,43 @@ export function LayersDrawer({
         </Section>
 
         <Section title="Transit lines" note={opts.routes.length ? `${opts.routes.length} picked` : "all, muted"} hidden={!routeItems.length && !match("stations only")}>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-[var(--sp-2)]">
             {routeItems.map((r) => (
               <Pill key={r} on={opts.routes.includes(r)} onClick={() => toggleRoute(r)} className="h-9 w-11 px-0">{r}</Pill>
             ))}
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-[var(--sp-2)]">
             <Pill on={opts.stationsOnly} onClick={() => setOptions({ stationsOnly: !opts.stationsOnly })}>Stations only (hide vehicles)</Pill>
             {opts.routes.length ? <Pill onClick={() => setOptions({ routes: [] })}>Show all lines</Pill> : null}
           </div>
         </Section>
 
-        <Section title="Map detail" hidden={!!q.trim() && !["streets", "street names", "buildings", "theme", "ivory", "ink", "mta", "map detail"].some(match)}>
-          <div className="flex flex-wrap gap-2">
+        <Section title="Map detail" hidden={!!q.trim() && !["streets", "street names", "buildings", "theme", "auto", "dusk", "night", "ivory", "ink", "mta", "neon", "map detail"].some(match)}>
+          <div className="flex flex-wrap gap-[var(--sp-2)]">
             <Pill on={opts.streets === "simple"} onClick={() => setOptions({ streets: "simple" })}>Simple streets</Pill>
             <Pill on={opts.streets === "full"} onClick={() => setOptions({ streets: "full" })}>Detailed streets</Pill>
             <Pill on={opts.streetNames} onClick={() => setOptions({ streetNames: !opts.streetNames })}>Street names</Pill>
-            <Pill on={opts.buildings} onClick={() => setOptions({ buildings: !opts.buildings })}>Buildings</Pill>
+            <Pill on={opts.buildings === "flat"} onClick={() => setOptions({ buildings: "flat" })}>Flat buildings</Pill>
+            <Pill on={opts.buildings === "3d"} onClick={() => setOptions({ buildings: "3d" })}>3D buildings</Pill>
           </div>
+          <p className="text-[13px] text-muted-foreground">Rotate: right-drag or Ctrl+drag</p>
           <div className="text-[13px] text-muted-foreground">Theme</div>
-          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Theme">
-            {(Object.keys(THEMES) as ThemeId[]).map((id) => (
-              <Pill key={id} on={theme === id} onClick={() => setTheme(id)}>{THEMES[id].label}</Pill>
+          <div className="flex flex-wrap gap-[var(--sp-2)]" role="radiogroup" aria-label="Theme">
+            {CHOICES.map((id) => (
+              <Pill key={id} on={theme === id} onClick={() => setTheme(id)}>
+                {id === "auto" ? `Auto${theme === "auto" && phase ? ` · ${phase[0].toUpperCase()}${phase.slice(1)}` : " (time of day)"}` : THEMES[id].label}
+              </Pill>
             ))}
           </div>
         </Section>
 
         <Section title="Advanced" hidden={!advanced.some((a) => match(a.label)) && !match("advanced")}>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-[var(--sp-2)]">
             {advanced.filter((a) => match(a.label) || match("advanced")).map((a) => <Pill key={a.label} on={a.on} onClick={a.onClick}>{a.label}</Pill>)}
           </div>
         </Section>
       </div>
-      <div className="grid grid-cols-2 gap-2 border-t border-border px-5 py-3">
+      <div className="grid grid-cols-2 gap-[var(--sp-2)] border-t border-border px-[var(--sp-4)] py-[var(--sp-3)]">
         <button type="button" onClick={clearAll} className="h-11 rounded-full border border-border bg-card text-[14px] font-semibold">Clear all</button>
         <button type="button" onClick={() => onOpenChange(false)} className="h-11 rounded-full bg-acc text-[14px] font-semibold text-acc-foreground">Show map</button>
       </div>
@@ -291,21 +298,32 @@ export function LayersDrawer({
   if (isDesktop) {
     if (!open) return null;
     return (
-      <div role="dialog" aria-label="Layers and filters" className="absolute left-4 top-[7.25rem] z-40 flex max-h-[calc(100%-8.5rem)] w-[360px] flex-col overflow-hidden rounded-[22px] border border-border bg-card text-card-foreground shadow-2xl">
+      <div role="dialog" aria-label="Layers and filters" data-testid="layers-drawer" className="absolute left-[var(--edge)] top-[calc(var(--edge)+var(--topbar-h)+var(--sp-3))] z-40 flex max-h-[calc(100%-var(--edge)*2-var(--topbar-h)-var(--sp-3))] w-[360px] flex-col overflow-hidden rounded-[22px] border border-border bg-card text-card-foreground shadow-2xl">
         <div className="mx-auto mt-2 h-1 w-8 shrink-0 rounded-full bg-muted-foreground/30" />
         {body}
       </div>
     );
   }
   return (
-    <Drawer.Root open={open} onOpenChange={onOpenChange}>
-      <Drawer.Portal>
-        <Drawer.Content aria-describedby={undefined} className="fixed inset-x-0 bottom-0 z-50 flex max-h-[82%] flex-col rounded-t-[22px] border border-border bg-card pb-[env(safe-area-inset-bottom)] text-card-foreground shadow-2xl outline-none">
-          <Drawer.Title className="sr-only">Layers and filters</Drawer.Title>
-          <div className="mx-auto mt-2 h-1.5 w-10 shrink-0 rounded-full bg-muted-foreground/30" />
-          {body}
-        </Drawer.Content>
-      </Drawer.Portal>
-    </Drawer.Root>
+    // Non-modal bottom sheet: the map stays usable (and visible to screen
+    // readers) behind it; an empty-map tap or a feature tap closes it. A plain
+    // panel rather than vaul, whose Root always mounts a modal Radix dialog.
+    open ? (
+      <div
+        role="dialog"
+        aria-modal="false"
+        aria-label="Layers and filters"
+        data-testid="layers-drawer"
+        className={cn(
+          "fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-[22px] border border-border bg-card pb-[max(var(--sp-2),env(safe-area-inset-bottom))] text-card-foreground shadow-2xl outline-none",
+          // Leaves the top of the map free to tap; with Follow / Navigate on,
+          // it stops further short so it never covers their HUD.
+          hudActive ? "max-h-[50%]" : "max-h-[60%]",
+        )}
+      >
+        <div className="mx-auto mt-2 h-1.5 w-10 shrink-0 rounded-full bg-muted-foreground/30" />
+        {body}
+      </div>
+    ) : null
   );
 }

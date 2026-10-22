@@ -1,0 +1,19 @@
+{
+  "schema": "server-management.project.v1",
+  "project": "nyc-map-agent",
+  "repo": "https://github.com/Pukujan/nyc-map-agent",
+  "owner": "Pukujan",
+  "purpose": "NYC map application plus its continuous-deployment dashboard.",
+  "deploy_path": "/srv/nyc-map-agent",
+  "compose": "app/deploy/docker-compose.yml",
+  "overlays": ["app/deploy/docker-compose.edge.yml"],
+  "exposure": {
+    "public": ["nyc.design-bakery.com"],
+    "tailnet": [],
+    "loopback": []
+  },
+  "data": [
+    { "kind": "directory", "name": "/srv/nyc-map-agent/state", "backup": "deploy history JSONL; regenerable" }
+  ],
+  "observed": "2026-10-21"
+}

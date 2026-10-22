@@ -3,6 +3,7 @@ import { Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useAddressSuggestions } from "@/lib/api/geosearch";
 import type { NtaBoundary } from "@/lib/api/nta";
+import { neighborhoodCameraTarget } from "@/lib/map/neighborhoodJump";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { usePanel, type SearchHit } from "@/lib/store/PanelContext";
 import { cn } from "@/lib/utils";
@@ -34,7 +35,7 @@ export function PanelSearch({ boundaries }: { boundaries: NtaBoundary[] | null }
         kind: "Neighborhood",
         onSelect: () => {
           selectNta(b.ntaCode);
-          flyTo({ lon: (b.bbox[0] + b.bbox[2]) / 2, lat: (b.bbox[1] + b.bbox[3]) / 2, zoom: 13.5 });
+          flyTo(neighborhoodCameraTarget(b.bbox));
         },
       }));
     const extra = searchProviders.flatMap((provider) => provider(q)).slice(0, 5);
