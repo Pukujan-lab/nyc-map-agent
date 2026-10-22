@@ -2,7 +2,9 @@ import { useRef, useState } from "react";
 import { Switch } from "@/components/ui/switch";
 import { useFeatureToggles } from "@/lib/featureToggles";
 import { useTransitFocus } from "@/lib/map/transitFocus";
-import { setQuickLayer, useQuickLayer } from "@/lib/quickLayers";
+import { setQuickLayer, useQuickLayer, type QuickId } from "@/lib/quickLayers";
+
+type Row = [string, boolean, (v: boolean) => void];
 import { useMapState } from "@/lib/store/MapStateContext";
 
 /**
@@ -10,29 +12,28 @@ import { useMapState } from "@/lib/store/MapStateContext";
  * street level) and its compact quick drawer: plain on/off switches, outside
  * the main panel. Tap the button again or swipe the drawer right to close.
  */
+function useRow(id: QuickId, label: string): Row {
+  return [label, useQuickLayer(id), (v) => setQuickLayer(id, v)];
+}
+
 export function QuickLayers() {
   const [open, setOpen] = useState(false);
   const { restrooms, setRestrooms } = useMapState();
   const [focus, setFocus] = useTransitFocus();
   const [on, toggle] = useFeatureToggles();
-  const businesses = useQuickLayer("businesses");
-  const health = useQuickLayer("health");
-  const parksPlaces = useQuickLayer("parksPlaces");
-  const citibike = useQuickLayer("citibike");
-  const art = useQuickLayer("streetArt");
-  const xray = useQuickLayer("xray");
   const x0 = useRef<number | null>(null);
-  const rows: Array<[string, boolean, (v: boolean) => void]> = [
-    ["Businesses", businesses, (v) => setQuickLayer("businesses", v)],
-    ["Street art", art, (v) => setQuickLayer("streetArt", v)],
+  const t = (id: "events" | "parking", label: string): Row => [label, on.has(id), () => toggle(id)];
+  const rows: Row[] = [
+    useRow("businesses", "Businesses"),
+    useRow("streetArt", "Street art"),
     ["Transit Focus", focus, setFocus],
-    ["X-ray", xray, (v) => setQuickLayer("xray", v)],
+    useRow("xray", "X-ray"),
     ["Restrooms", restrooms, setRestrooms],
-    ["Events", on.has("events"), () => toggle("events")],
-    ["Parking", on.has("parking"), () => toggle("parking")],
-    ["Health", health, (v) => setQuickLayer("health", v)],
-    ["Parks & places", parksPlaces, (v) => setQuickLayer("parksPlaces", v)],
-    ["Citi Bike", citibike, (v) => setQuickLayer("citibike", v)],
+    t("events", "Events"),
+    t("parking", "Parking"),
+    useRow("health", "Health"),
+    useRow("parksPlaces", "Parks & places"),
+    useRow("citibike", "Citi Bike"),
   ];
   return (
     <div className="absolute right-[var(--edge)] top-[calc(env(safe-area-inset-top)+var(--edge)+var(--topbar-h)+var(--sp-2))] lg:top-[calc(env(safe-area-inset-top)+var(--edge))] z-40 flex flex-col items-end gap-[var(--sp-2)]">
