@@ -218,7 +218,7 @@ export function MapView({
   } | null>(null);
   /** "W 44 St at 8 Av": the nearest corner sign while walking. */
   const [corner, setCorner] = useState<string | null>(null);
-  const { showPanel } = usePanel();
+  const { showPanel, closeAll } = usePanel();
   // The hover card is a mouse affordance; on touch / narrow screens the sheet
   // already shows the same numbers.
   const canHover = useMediaQuery("(hover: hover) and (pointer: fine) and (min-width: 1024px)");
@@ -641,14 +641,18 @@ export function MapView({
       // Clicks stay live at street level: picking the block underfoot opens
       // its details like it does overhead.
       const picked = pickAt(event.point.x, event.point.y, event.lngLat);
-      if (!picked) return;
+      if (!picked) {
+        // An empty-map tap closes the drawer and the sheet.
+        closeAll();
+        return;
+      }
       if (picked.kind === "block") {
         selectBlock({ key: picked.datum.key, ntaCode: picked.datum.ntaCode });
       } else {
         selectNta(picked.datum.ntaCode);
       }
     },
-    [pickAt, selectBlock, selectNta, routePicking, setRoutePoint, showPanel, city3d, walking, areaAt],
+    [pickAt, selectBlock, selectNta, routePicking, setRoutePoint, showPanel, closeAll, city3d, walking, areaAt],
   );
 
   const handleMoveEnd = useCallback(() => {

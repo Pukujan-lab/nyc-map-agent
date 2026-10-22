@@ -1,5 +1,4 @@
 import { Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Drawer } from "vaul";
 import { FEATURES } from "@/features";
 import { useFeatureToggles } from "@/lib/featureToggles";
 import { isFlagId, useFlags } from "@/lib/flags";
@@ -82,6 +81,7 @@ export function LayersDrawer({
   open,
   onOpenChange,
   isDesktop,
+  hudActive,
   boundaries,
   onOpenControls,
   onOpenSources,
@@ -89,6 +89,8 @@ export function LayersDrawer({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   isDesktop: boolean;
+  /** Follow / Navigate HUD on top: the phone drawer must not cover it. */
+  hudActive?: boolean;
   boundaries: NtaBoundary[] | null;
   onOpenControls: () => void;
   onOpenSources: () => void;
@@ -296,21 +298,32 @@ export function LayersDrawer({
   if (isDesktop) {
     if (!open) return null;
     return (
-      <div role="dialog" aria-label="Layers and filters" className="absolute left-[var(--edge)] top-[calc(var(--edge)+var(--topbar-h)+var(--sp-3))] z-40 flex max-h-[calc(100%-var(--edge)*2-var(--topbar-h)-var(--sp-3))] w-[360px] flex-col overflow-hidden rounded-[22px] border border-border bg-card text-card-foreground shadow-2xl">
+      <div role="dialog" aria-label="Layers and filters" data-testid="layers-drawer" className="absolute left-[var(--edge)] top-[calc(var(--edge)+var(--topbar-h)+var(--sp-3))] z-40 flex max-h-[calc(100%-var(--edge)*2-var(--topbar-h)-var(--sp-3))] w-[360px] flex-col overflow-hidden rounded-[22px] border border-border bg-card text-card-foreground shadow-2xl">
         <div className="mx-auto mt-2 h-1 w-8 shrink-0 rounded-full bg-muted-foreground/30" />
         {body}
       </div>
     );
   }
   return (
-    <Drawer.Root open={open} onOpenChange={onOpenChange}>
-      <Drawer.Portal>
-        <Drawer.Content aria-describedby={undefined} className="fixed inset-x-0 bottom-0 z-50 flex max-h-[82%] flex-col rounded-t-[22px] border border-border bg-card pb-[max(var(--sp-2),env(safe-area-inset-bottom))] text-card-foreground shadow-2xl outline-none">
-          <Drawer.Title className="sr-only">Layers and filters</Drawer.Title>
-          <div className="mx-auto mt-2 h-1.5 w-10 shrink-0 rounded-full bg-muted-foreground/30" />
-          {body}
-        </Drawer.Content>
-      </Drawer.Portal>
-    </Drawer.Root>
+    // Non-modal bottom sheet: the map stays usable (and visible to screen
+    // readers) behind it; an empty-map tap or a feature tap closes it. A plain
+    // panel rather than vaul, whose Root always mounts a modal Radix dialog.
+    open ? (
+      <div
+        role="dialog"
+        aria-modal="false"
+        aria-label="Layers and filters"
+        data-testid="layers-drawer"
+        className={cn(
+          "fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-[22px] border border-border bg-card pb-[max(var(--sp-2),env(safe-area-inset-bottom))] text-card-foreground shadow-2xl outline-none",
+          // Leaves the top of the map free to tap; with Follow / Navigate on,
+          // it stops further short so it never covers their HUD.
+          hudActive ? "max-h-[50%]" : "max-h-[60%]",
+        )}
+      >
+        <div className="mx-auto mt-2 h-1.5 w-10 shrink-0 rounded-full bg-muted-foreground/30" />
+        {body}
+      </div>
+    ) : null
   );
 }
