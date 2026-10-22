@@ -8,7 +8,7 @@ import type { NtaBoundary } from "@/lib/api/nta";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { usePanel, type SheetSnap } from "@/lib/store/PanelContext";
 import { cn } from "@/lib/utils";
-import { PanelSearch } from "./PanelSearch";
+import { PanelSearch, type PanelSearchHandle } from "./PanelSearch";
 import { FEATURES } from "@/features";
 import { LayersDrawer } from "./LayersDrawer";
 
@@ -42,7 +42,7 @@ function FeatureTopBar() {
  * is in the LayersDrawer.
  */
 function TopBar({ boundaries, status, onLayers }: { boundaries: NtaBoundary[] | null; status?: ReactNode; onLayers: () => void }) {
-  const { setChatOpen } = useMapState();
+  const searchRef = useRef<PanelSearchHandle>(null);
   const { chips } = usePanel();
   const transit = chips.find((c) => c.id === "transit");
   // The alert/weather row is a real slot: publish the bar's measured height as
@@ -63,10 +63,10 @@ function TopBar({ boundaries, status, onLayers }: { boundaries: NtaBoundary[] | 
     <div ref={ref} data-testid="topbar" className="space-y-[var(--sp-2)]">
       <div className="flex items-center gap-[var(--sp-2)] rounded-full border border-border bg-card p-[var(--sp-1)] shadow-lg">
         <div className="relative min-w-0 flex-1">
-          <PanelSearch boundaries={boundaries} />
+          <PanelSearch ref={searchRef} boundaries={boundaries} />
           {status}
         </div>
-        <button type="button" onClick={() => setChatOpen(true)} className="h-9 shrink-0 rounded-full bg-primary px-[var(--sp-4)] text-[14px] font-semibold text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <button type="button" onClick={() => searchRef.current?.ask()} className="h-9 shrink-0 rounded-full bg-primary px-[var(--sp-4)] text-[14px] font-semibold text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           Ask
         </button>
       </div>
@@ -198,7 +198,7 @@ export function MapPanel({
   if (isDesktop) {
     return (
       <>
-        <div className="absolute left-[var(--edge)] top-[var(--edge)] z-40 w-[360px]">{top}</div>
+        <div className="absolute left-[var(--edge)] top-[var(--edge)] z-40 w-[clamp(360px,46vw,720px)]">{top}</div>
         {drawer}
         {chip}
         {showSheet ? (

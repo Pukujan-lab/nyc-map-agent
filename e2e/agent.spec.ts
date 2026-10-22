@@ -52,3 +52,33 @@ test("smart mode: trip question draws the route, opens the trip card and plays t
   await bar.getByRole("button", { name: "Close preview" }).click();
   await expect(bar).toBeHidden();
 });
+
+test("a question in the desktop search bar is asked inside Ask the map", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockNetwork(page);
+  let asked = "";
+  await page.route("**/api/agent", async (route) => {
+    const body = route.request().postDataJSON() as { messages: Array<{ content: string }> };
+    asked = body.messages.at(-1)?.content ?? "";
+    await route.fulfill({
+      contentType: "application/x-ndjson",
+      body: nd([
+        { type: "text", text: "Take the A train toward the Rockaway peninsula." },
+        { type: "done", model: "mock", usage: { inputTokens: 0, outputTokens: 0 } },
+      ]),
+    });
+  });
+
+  await page.goto("/");
+  await expect(page.locator("canvas.maplibregl-canvas").first()).toBeVisible();
+  const box = await page.getByTestId("topbar").boundingBox();
+  expect(box?.width ?? 0).toBeGreaterThan(600);
+
+  const q = "how do i get from my place to rockaway beach";
+  await page.getByPlaceholder("Search neighborhoods, addresses, stations").fill(q);
+  await page.getByRole("button", { name: "Ask", exact: true }).click();
+  await expect(page.getByText(q, { exact: true })).toBeVisible();
+  await expect(page.getByText("Take the A train toward the Rockaway peninsula.")).toBeVisible();
+  expect(asked).toBe(q);
+  await expect(page.locator('input[placeholder="Search neighborhoods, addresses, stations"]')).toHaveValue("");
+});
