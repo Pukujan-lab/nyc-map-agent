@@ -42,10 +42,3 @@ export function nearestCorner(signs: CornerSign[], lng: number, lat: number, max
   }
   return best ? cornerLabel(best.a, best.b) : null;
 }
-
-/** 1 near the camera, fading to 0 between `near` and `far` metres. */
-export function distanceFade(d: number, near = 60, far = 260): number {
-  if (d <= near) return 1;
-  if (d >= far) return 0;
-  return 1 - (d - near) / (far - near);
-}

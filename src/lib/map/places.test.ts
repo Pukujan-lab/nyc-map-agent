@@ -11,8 +11,8 @@ describe("places", () => {
     expect(classesFor(new Set(["coffee.cafe", "food.bar"]))).toEqual(["bar", "beer", "cafe"]);
     expect(classesFor(new Set())).toEqual([]);
   });
-  it("offers the six requested categories", () => {
-    expect(PLACE_CATEGORIES.map((c) => c.label)).toEqual(["Food", "Coffee", "Things to do", "Shopping", "Parks", "Restrooms"]);
+  it("offers the requested categories plus Health and Citi Bike", () => {
+    expect(PLACE_CATEGORIES.map((c) => c.label)).toEqual(["Food", "Coffee", "Things to do", "Shopping", "Parks", "Health", "Citi Bike", "Restrooms"]);
   });
   it("targets only the basemap place-icon layers", () => {
     expect(["poi_r1", "poi_r7", "poi_r20"].every((id) => POI_LAYERS.test(id))).toBe(true);
