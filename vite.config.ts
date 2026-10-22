@@ -65,6 +65,9 @@ export default defineConfig(({ mode }) => {
     worker: {
       format: "es",
     },
+    // Evergreen browsers only (WebGL2 map, ES modules): skip down-levelling
+    // optional chaining, class fields, ??= etc. Smaller bundle, same behaviour.
+    build: { target: "es2022" },
     server: {
       host: true,
       proxy: proxyTarget ? { "/api": { target: proxyTarget, changeOrigin: true } } : undefined,
