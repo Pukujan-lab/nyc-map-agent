@@ -550,7 +550,9 @@ export default function TransitLayer() {
     };
     sync();
     map.on("moveend", sync);
-    return () => map.off("moveend", sync);
+    return () => {
+      map.off("moveend", sync);
+    };
   }, [map, three, xrayOn]);
   useEffect(() => {
     if (!three) return;
