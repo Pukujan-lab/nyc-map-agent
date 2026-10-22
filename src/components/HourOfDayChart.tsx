@@ -1,65 +1,73 @@
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import { ChartContainer, type ChartConfig } from "@/components/ui/chart";
+import { useState } from "react";
 import { formatCount, formatHour } from "@/lib/format";
 
-const config: ChartConfig = {
-  incidents: { label: "Incidents", color: "hsl(var(--primary))" },
-};
+/**
+ * 24 bars, incidents by hour of day. Plain SVG: the chart library it replaces
+ * (recharts + d3 + lodash) cost ~90 kB of JS for this one picture.
+ */
+const W = 320;
+const H = 176;
+const LEFT = 30;
+const BOTTOM = 16;
+const TOP = 6;
+
+function niceMax(v: number): number {
+  if (v <= 0) return 1;
+  const p = 10 ** Math.floor(Math.log10(v));
+  return [1, 2, 2.5, 5, 10].map((m) => m * p).find((m) => m >= v) ?? v;
+}
 
 export function HourOfDayChart({ hours }: { hours: number[] }) {
-  const data = hours.map((value, hour) => ({ hour, value }));
-
+  const [hover, setHover] = useState<number | null>(null);
+  const max = niceMax(Math.max(0, ...hours));
+  const plotW = W - LEFT - 2;
+  const plotH = H - TOP - BOTTOM;
+  const bw = plotW / 24;
+  const y = (v: number) => TOP + plotH - (v / max) * plotH;
+  const ticks = [0, max / 2, max];
+  const h = hover ?? -1;
   return (
-    <ChartContainer config={config} className="h-[176px] w-full">
-      <BarChart data={data} margin={{ top: 6, right: 2, bottom: 0, left: -24 }}>
-        <CartesianGrid
-          vertical={false}
-          stroke="hsl(var(--border))"
-          strokeDasharray="3 3"
-        />
-        <XAxis
-          dataKey="hour"
-          interval={0}
-          tickLine={false}
-          axisLine={false}
-          tickFormatter={(value: number) =>
-            value % 3 === 0 ? formatHour(value) : ""
-          }
-          tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }}
-        />
-        <YAxis
-          tickLine={false}
-          axisLine={false}
-          width={44}
-          tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }}
-        />
-        <Tooltip
-          cursor={{ fill: "hsl(var(--muted))", opacity: 0.45 }}
-          contentStyle={{
-            background: "hsl(var(--popover))",
-            border: "1px solid hsl(var(--border))",
-            borderRadius: 8,
-            fontSize: 11,
-            color: "hsl(var(--popover-foreground))",
-          }}
-          formatter={(value) => [formatCount(Number(value)), "incidents"]}
-          labelFormatter={(value) =>
-            `${formatHour(Number(value))}–${formatHour((Number(value) + 1) % 24)}`
-          }
-        />
-        <Bar
-          dataKey="value"
-          fill="var(--color-incidents)"
-          radius={[2, 2, 0, 0]}
-        />
-      </BarChart>
-    </ChartContainer>
+    <div className="relative h-[176px] w-full text-[9px]">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        className="h-full w-full"
+        role="img"
+        aria-label="Incidents by hour of day"
+        onMouseLeave={() => setHover(null)}
+      >
+        {ticks.map((t) => (
+          <g key={t}>
+            <line x1={LEFT} x2={W} y1={y(t)} y2={y(t)} stroke="hsl(var(--border))" strokeDasharray="3 3" />
+            <text x={LEFT - 4} y={y(t) + 3} textAnchor="end" fill="hsl(var(--muted-foreground))" fontSize={9}>
+              {formatCount(t)}
+            </text>
+          </g>
+        ))}
+        {hours.map((v, i) => {
+          const x = LEFT + i * bw;
+          return (
+            <g key={i} onMouseEnter={() => setHover(i)}>
+              <rect x={x} y={TOP} width={bw} height={plotH} fill={i === h ? "hsl(var(--muted))" : "transparent"} opacity={0.45} />
+              <rect x={x + bw * 0.1} y={y(v)} width={bw * 0.8} height={Math.max(0, TOP + plotH - y(v))} rx={1.5} fill="hsl(var(--primary))" />
+              {i % 3 === 0 ? (
+                <text x={x + bw / 2} y={H - 4} textAnchor="middle" fill="hsl(var(--muted-foreground))" fontSize={9}>
+                  {formatHour(i)}
+                </text>
+              ) : null}
+            </g>
+          );
+        })}
+      </svg>
+      {hover !== null ? (
+        <div
+          className="pointer-events-none absolute top-1 rounded-lg border border-border bg-popover px-2 py-1 text-[11px] text-popover-foreground shadow"
+          style={{ left: `${Math.min(70, ((LEFT + hover * bw) / W) * 100)}%` }}
+        >
+          <div>{`${formatHour(hover)}–${formatHour((hover + 1) % 24)}`}</div>
+          <div className="tabular-nums">{formatCount(hours[hover] ?? 0)} incidents</div>
+        </div>
+      ) : null}
+    </div>
   );
 }
