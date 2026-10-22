@@ -25,7 +25,7 @@ import { useSpeech } from "@/lib/voice/useSpeech";
 import { executeCommand, type ExecutorContext } from "./executor";
 import type { Trip, TripMode } from "./schema";
 import { askAgent } from "./stream";
-import { TripSummary } from "./TripSummary";
+import { TripSummary, selectAlternative } from "./TripSummary";
 import { showTrip } from "./tripLayer";
 import { sharedCoords, startSharing, stopSharing, useSharedLocation } from "@/lib/geo/sharedLocation";
 import { usePlayer, type Speed } from "./usePlayer";
@@ -67,7 +67,7 @@ export default function AgentOverlay() {
     showTrip: (t) => { setTrip(t); const m = getMapInstance(); if (m) showTrip(m, t); },
     openTrip: (t) => {
       setTrip(t);
-      showPanel({ id: `agent:trip:${t.id}`, title: `To ${t.destination.label}`, subtitle: `${t.departIso.slice(11)} → ${t.arriveIso.slice(11)}`, summary: <TripSummary trip={t} compact />, details: <TripSummary trip={t} bodyOnly /> });
+      showPanel({ id: `agent:trip:${t.id}`, title: `To ${t.destination.label}`, subtitle: `${t.departIso.slice(11)} → ${t.arriveIso.slice(11)}`, summary: <TripSummary trip={t} compact onSelect={(alt) => ctxRef.current.openTrip(selectAlternative(t, alt))} />, details: <TripSummary trip={t} bodyOnly /> });
     },
     enterStreetView: (lon, lat) => startWalk({ lon, lat }),
     playFlythrough: (t, speed) => { setTrip(t); setChatOpen(false); player.start(t, speed); },
@@ -200,7 +200,7 @@ export default function AgentOverlay() {
         )}
         {trip ? (
           <div className="rounded-lg border p-3">
-            <TripSummary trip={trip} mapTime={mapTime} />
+            <TripSummary trip={trip} mapTime={mapTime} onSelect={(alt) => ctx.showTrip(selectAlternative(trip, alt))} />
             <Button size="sm" className="mt-3 w-full gap-2" onClick={() => ctx.playFlythrough(trip, 10)}><Play className="h-4 w-4" /> Preview trip</Button>
           </div>
         ) : null}

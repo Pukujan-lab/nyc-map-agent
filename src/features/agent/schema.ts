@@ -46,6 +46,15 @@ export const rideLeg = z.object({
   underground: z.boolean(),
   /** "gtfs-shape" when the transit feature supplies one, else "straight-line" (stub). */
   geometrySource: z.enum(["gtfs-shape", "straight-line"]),
+  /** Vehicle type; bus/rail/ferry legs come from the OTP planner. */
+  mode: z.enum(["subway", "bus", "rail", "ferry", "tram"]).default("subway"),
+  /** Boarding and alighting stop names, and stops ridden (alighting stop included). */
+  fromStop: z.string().optional(),
+  toStop: z.string().optional(),
+  numStops: z.number().int().nonnegative().optional(),
+  /** Route colour from GTFS, "#RRGGBB". */
+  color: z.string().optional(),
+  headsign: z.string().optional(),
 });
 
 export const driveLeg = walkLeg.extend({ kind: z.literal("drive") });
@@ -72,7 +81,7 @@ export const contextNote = z.object({
   at: lngLat.optional(),
 });
 
-export const trip = z.object({
+export const tripBase = z.object({
   id: z.string(),
   mode: tripMode.default("transit"),
   origin: z.object({ label: z.string(), at: lngLat }),
@@ -91,7 +100,12 @@ export const trip = z.object({
   exitAdvice: z.string().nullable().default(null),
   context: z.array(contextNote).default([]),
   stubbed: z.array(z.string()).default([]),
+  /** "otp" when OpenTripPlanner planned it, "fallback" for the built-in subway router. */
+  planner: z.enum(["otp", "fallback"]).optional(),
 });
+/** A trip plus up to two alternative itineraries (themselves without alternatives). */
+export const trip = tripBase.extend({ alternatives: z.array(tripBase).max(4).default([]) });
+export type TripCore = z.infer<typeof tripBase>;
 export type Trip = z.infer<typeof trip>;
 
 /** Structured map commands the model returns and the client executes. Keep it small. */

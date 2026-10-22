@@ -1,0 +1,178 @@
+{
+  "server": {
+    "apiProcessingTimeout": "10s"
+  },
+  "routingDefaults": {
+    "numItineraries": 5,
+    "searchWindow": "PT1H",
+    "walkSpeed": 1.33,
+    "transferSlack": "PT1M",
+    "waitReluctance": 0.9
+  },
+  "updaters": [
+    {
+      "type": "stop-time-updater",
+      "feedId": "SUBWAY",
+      "frequency": "PT30S",
+      "backwardsDelayPropagationType": "REQUIRED_NO_DATA",
+      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs"
+    },
+    {
+      "type": "stop-time-updater",
+      "feedId": "SUBWAY",
+      "frequency": "PT30S",
+      "backwardsDelayPropagationType": "REQUIRED_NO_DATA",
+      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-ace"
+    },
+    {
+      "type": "stop-time-updater",
+      "feedId": "SUBWAY",
+      "frequency": "PT30S",
+      "backwardsDelayPropagationType": "REQUIRED_NO_DATA",
+      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-bdfm"
+    },
+    {
+      "type": "stop-time-updater",
+      "feedId": "SUBWAY",
+      "frequency": "PT30S",
+      "backwardsDelayPropagationType": "REQUIRED_NO_DATA",
+      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-g"
+    },
+    {
+      "type": "stop-time-updater",
+      "feedId": "SUBWAY",
+      "frequency": "PT30S",
+      "backwardsDelayPropagationType": "REQUIRED_NO_DATA",
+      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-jz"
+    },
+    {
+      "type": "stop-time-updater",
+      "feedId": "SUBWAY",
+      "frequency": "PT30S",
+      "backwardsDelayPropagationType": "REQUIRED_NO_DATA",
+      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-nqrw"
+    },
+    {
+      "type": "stop-time-updater",
+      "feedId": "SUBWAY",
+      "frequency": "PT30S",
+      "backwardsDelayPropagationType": "REQUIRED_NO_DATA",
+      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-l"
+    },
+    {
+      "type": "stop-time-updater",
+      "feedId": "SUBWAY",
+      "frequency": "PT30S",
+      "backwardsDelayPropagationType": "REQUIRED_NO_DATA",
+      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-si"
+    },
+    {
+      "type": "stop-time-updater",
+      "feedId": "BX",
+      "frequency": "PT60S",
+      "backwardsDelayPropagationType": "REQUIRED_NO_DATA",
+      "url": "https://gtfsrt.prod.obanyc.com/tripUpdates?key=${MTA_BUSTIME_KEY}"
+    },
+    {
+      "type": "stop-time-updater",
+      "feedId": "B",
+      "frequency": "PT60S",
+      "backwardsDelayPropagationType": "REQUIRED_NO_DATA",
+      "url": "https://gtfsrt.prod.obanyc.com/tripUpdates?key=${MTA_BUSTIME_KEY}"
+    },
+    {
+      "type": "stop-time-updater",
+      "feedId": "M",
+      "frequency": "PT60S",
+      "backwardsDelayPropagationType": "REQUIRED_NO_DATA",
+      "url": "https://gtfsrt.prod.obanyc.com/tripUpdates?key=${MTA_BUSTIME_KEY}"
+    },
+    {
+      "type": "stop-time-updater",
+      "feedId": "Q",
+      "frequency": "PT60S",
+      "backwardsDelayPropagationType": "REQUIRED_NO_DATA",
+      "url": "https://gtfsrt.prod.obanyc.com/tripUpdates?key=${MTA_BUSTIME_KEY}"
+    },
+    {
+      "type": "stop-time-updater",
+      "feedId": "SI",
+      "frequency": "PT60S",
+      "backwardsDelayPropagationType": "REQUIRED_NO_DATA",
+      "url": "https://gtfsrt.prod.obanyc.com/tripUpdates?key=${MTA_BUSTIME_KEY}"
+    },
+    {
+      "type": "stop-time-updater",
+      "feedId": "BUSCO",
+      "frequency": "PT60S",
+      "backwardsDelayPropagationType": "REQUIRED_NO_DATA",
+      "url": "https://gtfsrt.prod.obanyc.com/tripUpdates?key=${MTA_BUSTIME_KEY}"
+    },
+    {
+      "type": "stop-time-updater",
+      "feedId": "LIRR",
+      "frequency": "PT60S",
+      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/lirr%2Fgtfs-lirr"
+    },
+    {
+      "type": "stop-time-updater",
+      "feedId": "MNR",
+      "frequency": "PT60S",
+      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/mnr%2Fgtfs-mnr"
+    },
+    {
+      "type": "real-time-alerts",
+      "feedId": "SUBWAY",
+      "frequency": "PT2M",
+      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys%2Fsubway-alerts"
+    },
+    {
+      "type": "real-time-alerts",
+      "feedId": "LIRR",
+      "frequency": "PT2M",
+      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys%2Flirr-alerts"
+    },
+    {
+      "type": "real-time-alerts",
+      "feedId": "MNR",
+      "frequency": "PT2M",
+      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys%2Fmnr-alerts"
+    },
+    {
+      "type": "real-time-alerts",
+      "feedId": "BX",
+      "frequency": "PT2M",
+      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys%2Fbus-alerts"
+    },
+    {
+      "type": "real-time-alerts",
+      "feedId": "B",
+      "frequency": "PT2M",
+      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys%2Fbus-alerts"
+    },
+    {
+      "type": "real-time-alerts",
+      "feedId": "M",
+      "frequency": "PT2M",
+      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys%2Fbus-alerts"
+    },
+    {
+      "type": "real-time-alerts",
+      "feedId": "Q",
+      "frequency": "PT2M",
+      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys%2Fbus-alerts"
+    },
+    {
+      "type": "real-time-alerts",
+      "feedId": "SI",
+      "frequency": "PT2M",
+      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys%2Fbus-alerts"
+    },
+    {
+      "type": "real-time-alerts",
+      "feedId": "BUSCO",
+      "frequency": "PT2M",
+      "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys%2Fbus-alerts"
+    }
+  ]
+}

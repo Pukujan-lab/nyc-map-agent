@@ -4,12 +4,13 @@ import { command, type AgentCommand, type LngLatTuple, type Trip } from "../../.
 import { elevatorStatus, geocode, hazardsAt, routeWalk, weatherAt, type Place } from "./services";
 import { buildDriveTrip } from "./drive/trip";
 import type { DriveRouter } from "./drive/router";
-import { buildTrip, tripBrief, type TripDeps } from "./trip";
+import { tripBrief } from "./trip";
+import { planTrip, type PlanDeps } from "./plan";
 
 export interface ToolContext {
   location: { lon: number; lat: number } | null;
   emit: (c: AgentCommand) => void;
-  deps?: TripDeps & { driveRouter?: DriveRouter };
+  deps?: PlanDeps & { driveRouter?: DriveRouter };
   /** Driving sub-module flag (agentDrive). */
   drive?: boolean;
 }
@@ -21,7 +22,8 @@ export const args = {
   transit_plan: z.object({
     from: z.string().default("here"),
     to: z.string().min(2),
-    depart: z.string().regex(/^\d{4}-\d\d-\d\dT\d\d:\d\d/).describe("Local New York time, e.g. 2026-10-22T09:00"),
+    depart: z.string().regex(/^\d{4}-\d\d-\d\dT\d\d:\d\d/).describe("Local New York time, e.g. 2026-10-22T09:00: leave at, or arrive by when arriveBy is true"),
+    arriveBy: z.boolean().default(false).describe("true when the user must arrive by that time"),
   }),
   weather_forecast: z.object({ place: z.string().default("here"), time: z.string().regex(/^\d{4}-\d\d-\d\dT\d\d/) }),
   hazards: z.object({ place: z.string().default("here") }),
@@ -68,12 +70,13 @@ export function makeTools(ctx: ToolContext) {
       },
     }),
     transit_plan: tool({
-      description: "Door-to-door subway trip at a time: walk, best entrance, lines, transfer, recommended exit, weather, planned work, elevator outages, ETA. Returns a tripId for map tools.",
+      description: "Door-to-door public transit search across subway, bus (incl. SBS), LIRR, Metro-North, ferry and SIR: the best itinerary plus up to 2 alternatives (each with depart/arrive, legs, stops), weather, planned work, elevator outages, recommended exit. Returns a tripId for map tools.",
       inputSchema: args.transit_plan,
-      execute: async ({ from, to, depart }) => {
+      execute: async ({ from, to, depart, arriveBy }) => {
         const [o, d] = await Promise.all([resolve(from), resolve(to)]);
-        const t = await buildTrip(o, d, depart, ctx.deps);
+        const t = await planTrip(o, d, depart, arriveBy, ctx.deps);
         trips.set(t.id, t);
+        for (const a of t.alternatives) trips.set(a.id, { ...a, alternatives: [] });
         return tripBrief(t);
       },
     }),
