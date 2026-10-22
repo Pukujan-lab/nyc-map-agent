@@ -17,6 +17,7 @@ import { representativePoint } from "../src/lib/datasets/fetchSource";
 import { SOURCES, type GeometrySource, type GridSource, type SourceConfig } from "../src/lib/datasets/registry";
 import { octoQuery } from "../api/_lib/octo";
 import { collectEvents, upsertEvents } from "../server/features/events/ingest";
+import { collectPlaceToilets, replacePlaceToilets } from "../server/features/place-toilets/ingest";
 import { loadEnv } from "./env";
 
 const SOCRATA = "https://data.cityofnewyork.us/resource";
@@ -315,6 +316,30 @@ async function main() {
     } catch (err) {
       failed++;
       console.error(`events: FAILED ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  if (!only.length || only.includes("place-toilets")) {
+    const started = new Date().toISOString();
+    try {
+      const post = async (url: string, body: URLSearchParams): Promise<unknown> => {
+        for (let attempt = 0; ; attempt++) {
+          const res = await fetch(url, { method: "POST", body, headers: { "User-Agent": "nyc-map-agent nightly ingest (nyc.design-bakery.com)" } });
+          if (res.ok) return res.json();
+          if (attempt >= 3 || (res.status < 500 && res.status !== 429)) throw new Error(`${new URL(url).host} ${res.status}`);
+          await new Promise((r) => setTimeout(r, 5000 * 2 ** attempt));
+        }
+      };
+      const { places, elements } = await collectPlaceToilets(post);
+      await replacePlaceToilets(places, (sql, params) => octoQuery(sql, params));
+      const anyone = places.filter((p) => p.access === "anyone").length;
+      console.log(`place-toilets: ${places.length} kept of ${elements} OSM elements (${anyone} anyone, ${places.length - anyone} customers only)`);
+      await octoQuery(
+        "INSERT INTO core.ingest_runs (source_id, started_at, finished_at, rows, status) VALUES ('place-toilets', $1, now(), $2, 'ok')",
+        [started, places.length],
+      );
+    } catch (err) {
+      failed++;
+      console.error(`place-toilets: FAILED ${err instanceof Error ? err.message : String(err)}`);
     }
   }
   if (failed) process.exit(1);

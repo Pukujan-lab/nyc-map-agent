@@ -25,6 +25,7 @@ export const FLAGS = {
   transit: { tier: "basic", default: true, label: "Live transit" },
   places: { tier: "basic", default: true, label: "Places" },
   restrooms: { tier: "basic", default: true, label: "Public restrooms" },
+  placeToilets: { tier: "basic", default: true, label: "Restrooms: shops & cafés with toilets (chip off until chosen)" },
   storefronts: { tier: "basic", default: true, label: "Storefront signs" },
   schools: { tier: "basic", default: true, label: "School buildings" },
   signs: { tier: "basic", default: true, label: "Street signs" },
