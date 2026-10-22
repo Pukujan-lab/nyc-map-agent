@@ -237,11 +237,16 @@ export function createVehicleLayer() {
   const local = new THREE.Matrix4().makeTranslation(origin.x, origin.y, origin.z).scale(new THREE.Vector3(s, -s, s));
 
   const make = (geom: THREE.BufferGeometry, ghost: boolean) => {
-    const mat = new THREE.MeshLambertMaterial(ghost ? { transparent: true, opacity: 0.35, depthTest: false, depthWrite: false } : {});
+    // Ghosts glow: unlit, full route colour, drawn through the ground and buildings.
+    const mat = ghost
+      ? new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.8, depthTest: false, depthWrite: false })
+      : new THREE.MeshLambertMaterial({});
     const mesh = new THREE.InstancedMesh(geom, mat, CAP);
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     mesh.frustumCulled = false;
     mesh.count = 0;
+    // Create the colour buffer up front so the first compiled shader already reads it.
+    mesh.setColorAt(0, new THREE.Color(1, 1, 1));
     scene.add(mesh);
     return mesh;
   };
@@ -251,6 +256,7 @@ export function createVehicleLayer() {
     bus: make(bodyGeometry(12, 2.6, 3.2), false),
   };
   const ghosts = make(bodyGeometry(20, 3, 3.8), true);
+  ghosts.renderOrder = 3;
   /** Loaded glTF parts per mode, one InstancedMesh each; empty until the model arrives. */
   const models: Record<VehicleMode, THREE.InstancedMesh[]> = { subway: [], rail: [], bus: [] };
   let last: VehicleInstance[] = [];
@@ -370,6 +376,26 @@ export function createVehicleLayer() {
     g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
     return g;
   }
+  // ---- Street-level X-ray: a semi-transparent ground disc around the walker. ----
+  const veil = new THREE.Mesh(
+    new THREE.CircleGeometry(1, 64),
+    new THREE.MeshBasicMaterial({ color: "#0b1220", transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide }),
+  );
+  veil.renderOrder = 2;
+  veil.frustumCulled = false;
+  veil.visible = false;
+  scene.add(veil);
+  /**
+   * Dim the ground within `radius` m of `center` so underground ghosts read through it (null hides).
+   * While it is up the layer draws on a cleared depth buffer: the street-level pavement would
+   * otherwise hide everything below it. The veil sits just above the 0.5 m block ground.
+   */
+  function setGroundVeil(center: [number, number] | null, radius = 600) {
+    veil.visible = Boolean(center);
+    if (center) { veil.position.copy(toLocal(center[0], center[1], 1.0)); veil.scale.set(radius, radius, 1); }
+    map?.triggerRepaint();
+  }
+
   /** Show one station's insides around `center` (null clears). */
   function setXray(center: [number, number] | null, prims: XrayPrim[] = []) {
     if (xray) { scene.remove(xray); for (const o of xray.children as THREE.Mesh[]) { o.geometry.dispose(); (o.material as THREE.Material).dispose(); } xray = null; }
@@ -423,6 +449,7 @@ export function createVehicleLayer() {
       if (!renderer) return;
       camera.projectionMatrix = new THREE.Matrix4().fromArray(args.defaultProjectionData.mainMatrix as unknown as number[]).multiply(local);
       renderer.resetState();
+      if (veil.visible) renderer.clearDepth();
       renderer.render(scene, camera);
     },
   };
@@ -463,7 +490,7 @@ export function createVehicleLayer() {
     if (ghosts.instanceColor) ghosts.instanceColor.needsUpdate = true;
     map?.triggerRepaint();
   }
-  return { layer, update, setStructure, setEntrances, setXray };
+  return { layer, update, setStructure, setEntrances, setXray, setGroundVeil };
 }
 
 /* ------------------------------------------------------------------------ */
