@@ -1,6 +1,6 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { buildStreetContext, closeAsk, openAsk } from "@/features/agent/streetContext";
-import { followedTrain } from "@/features/transit/follow";
+import { buildStreetContext, closeAsk, openAsk } from "@/lib/agent/streetContext";
+import { followedTrain } from "@/lib/transit/follow";
 import { setMapInstance } from "@/lib/map/mapInstance";
 import { RestroomDetails } from "@/components/RestroomCard";
 import { usePanel, usePanelChip } from "@/lib/store/PanelContext";

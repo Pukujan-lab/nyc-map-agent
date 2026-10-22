@@ -38,8 +38,8 @@ import { formatCount, formatDate } from "@/lib/format";
 import type { BlockDatum } from "@/lib/layers";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { cn } from "@/lib/utils";
-import { buildStreetContext, closeAsk, openAsk } from "@/features/agent/streetContext";
-import { useFollowed } from "@/features/transit/follow";
+import { buildStreetContext, closeAsk, openAsk } from "@/lib/agent/streetContext";
+import { useFollowed } from "@/lib/transit/follow";
 
 interface StreetViewSheetProps {
   /** The block whose surroundings we photograph. */

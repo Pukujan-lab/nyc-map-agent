@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { StaticSystem } from "@/features/transit/model";
 import { requestBody } from "./schema";
-import { buildStreetContext, nearestStop } from "./streetContext";
+import { buildStreetContext, nearestStop } from "@/lib/agent/streetContext";
 import { FATAL_MIC, shouldListen } from "./useHandsFree";
 
 const sys = {

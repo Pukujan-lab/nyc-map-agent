@@ -23,7 +23,7 @@ import { useMapState } from "@/lib/store/MapStateContext";
 import { useFlag } from "@/lib/flags";
 import { usePanel, usePanelChip, usePanelMode, usePanelSearch, type SearchProvider } from "@/lib/store/PanelContext";
 import { setFollowed, useFollowed } from "./follow";
-import { publishSubway } from "@/features/agent/streetContext";
+import { publishSubway } from "@/lib/agent/streetContext";
 
 const stopFollow = () => setFollowed(null);
 import { SYSTEM_LABELS } from "./model";

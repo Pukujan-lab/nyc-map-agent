@@ -31,7 +31,7 @@ import { sharedCoords, startSharing, stopSharing, useSharedLocation } from "@/li
 import { usePlayer, type Speed } from "./usePlayer";
 import { useWakePhrase } from "./useWakePhrase";
 import { useHandsFree } from "./useHandsFree";
-import { closeAsk, useAskRequest } from "./streetContext";
+import { closeAsk, useAskRequest } from "@/lib/agent/streetContext";
 
 interface Msg { id: string; role: "user" | "assistant"; content: string }
 
