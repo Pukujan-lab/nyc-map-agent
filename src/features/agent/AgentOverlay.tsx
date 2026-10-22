@@ -314,20 +314,17 @@ export default function AgentOverlay() {
 /** The one slim preview bar: play/pause, speed, skip leg, close. No tooltips. */
 function PlaybackBar(p: { playing: boolean; speed: Speed; callout: string; step: string; onToggle: () => void; onSpeed: (s: Speed) => void; onSkip: () => void; onClose: () => void }) {
   return (
-    <div className="pointer-events-auto fixed bottom-4 left-1/2 z-40 flex w-[min(560px,calc(100vw-2rem))] -translate-x-1/2 items-center gap-1 rounded-full border bg-card/95 px-2 py-1 shadow-lg backdrop-blur-md" role="region" aria-label="Trip preview">
+    <div className="pointer-events-auto fixed bottom-4 left-1/2 z-[70] flex w-[min(560px,calc(100vw-2rem))] -translate-x-1/2 items-center gap-1 rounded-full border bg-card/95 px-2 py-1 shadow-lg backdrop-blur-md" role="region" aria-label="Trip preview">
       <Button size="icon" variant="ghost" className="h-8 w-8 rounded-full" aria-label={p.playing ? "Pause preview" : "Play preview"} onClick={p.onToggle}>
         {p.playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
       </Button>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button size="sm" variant="ghost" className="h-8 rounded-full px-2 text-xs tabular-nums" aria-label={`Speed ${p.speed}x`}>{p.speed}x</Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
-          <DropdownMenuRadioGroup value={String(p.speed)} onValueChange={(v) => p.onSpeed(Number(v) as Speed)}>
-            {[2, 10, 30].map((s) => <DropdownMenuRadioItem key={s} value={String(s)}>{s}x</DropdownMenuRadioItem>)}
-          </DropdownMenuRadioGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <div className="flex items-center" role="group" aria-label="Playback speed">
+        {([2, 10, 30] as const).map((s) => (
+          <Button key={s} type="button" size="sm" variant={p.speed === s ? "default" : "ghost"} className="h-8 rounded-full px-2 text-xs tabular-nums" aria-pressed={p.speed === s} onClick={() => p.onSpeed(s)}>
+            {s}x
+          </Button>
+        ))}
+      </div>
       <Button size="icon" variant="ghost" className="h-8 w-8 rounded-full" aria-label="Skip to next leg" onClick={p.onSkip}><SkipForward className="h-4 w-4" /></Button>
       <div className="min-w-0 flex-1 truncate px-1 text-sm" aria-live="polite">{p.callout}</div>
       <Badge variant="secondary" className="tabular-nums">{p.step}</Badge>

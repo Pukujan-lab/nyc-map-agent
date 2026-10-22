@@ -80,9 +80,13 @@ export function buildTimeline(trip: Trip): Segment[] {
   return segs.filter((s) => s.coords.length >= 2);
 }
 
-/** Wall-clock seconds for a segment at a speed, kept watchable. */
+/**
+ * Wall-clock seconds for one leg. The ceiling and floor scale with the speed:
+ * a flat 45s cap made 2x and 10x the same length on a subway ride.
+ */
 export function wallSeconds(seg: Segment, speed: number): number {
-  return Math.min(45, Math.max(3, seg.realS / speed));
+  const pace = 10 / speed;
+  return Math.min(45 * pace, Math.max(3 * pace, seg.realS / speed));
 }
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;

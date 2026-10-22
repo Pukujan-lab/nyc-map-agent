@@ -47,6 +47,8 @@ test("smart mode: trip question draws the route, opens the trip card and plays t
   await page.getByRole("button", { name: "Send" }).click();
   const bar = page.getByRole("region", { name: "Trip preview" });
   await expect(bar).toBeVisible();
+  await bar.getByRole("button", { name: "2x", exact: true }).click();
+  await expect(bar.getByRole("button", { name: "2x", exact: true })).toHaveAttribute("aria-pressed", "true");
   await bar.getByRole("button", { name: "Pause preview" }).click();
   await bar.getByRole("button", { name: "Skip to next leg" }).click();
   await bar.getByRole("button", { name: "Close preview" }).click();

@@ -15,6 +15,8 @@ export function usePlayer(onCallout?: (text: string) => void) {
   const st = useRef(state);
   st.current = state;
   const elapsed = useRef(0);
+  /** Speed the elapsed clock was counted at, so a dial change keeps the camera and changes the rate. */
+  const playedSpeed = useRef<Speed>(state.speed);
   const lastCallout = useRef("");
   const styledSeg = useRef(-1);
   const say = useRef(onCallout);
@@ -22,6 +24,7 @@ export function usePlayer(onCallout?: (text: string) => void) {
 
   const start = useCallback((trip: Trip, speed: Speed) => {
     elapsed.current = 0;
+    playedSpeed.current = speed;
     lastCallout.current = "";
     styledSeg.current = -1;
     setState({ active: true, playing: true, speed, seg: 0, segs: buildTimeline(trip), callout: "" });
@@ -47,6 +50,15 @@ export function usePlayer(onCallout?: (text: string) => void) {
       const seg = s.segs[s.seg];
       const map = getMapInstance();
       if (!seg || !map) return;
+      if (playedSpeed.current !== s.speed) {
+        // Keep the camera where it is and change how fast the rest of the leg plays.
+        if (!reduced) {
+          const prevTotal = wallSeconds(seg, playedSpeed.current);
+          const nextTotal = wallSeconds(seg, s.speed);
+          elapsed.current = prevTotal > 0 ? elapsed.current * (nextTotal / prevTotal) : 0;
+        }
+        playedSpeed.current = s.speed;
+      }
       elapsed.current += (now - prev) / 1000;
       prev = now;
       const total = reduced ? 3 : wallSeconds(seg, s.speed);
