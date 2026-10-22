@@ -40,6 +40,8 @@ export const PLACE_CATEGORIES: PlaceCategory[] = [
     { id: "parks.play", label: "Playgrounds", classes: ["playground"] },
     { id: "parks.dog", label: "Dog parks", classes: ["dog_park"] },
   ] },
+  { id: "health", label: "Health", subs: [{ id: "health.care", label: "Hospitals and clinics", classes: ["hospital", "doctors", "dentist"] }] },
+  { id: "citibike", label: "Citi Bike", subs: [{ id: "citibike.dock", label: "Citi Bike docks", classes: ["bicycle_rental"] }] },
   { id: "restrooms", label: "Restrooms", subs: [{ id: "rest.toilets", label: "Public toilets", classes: ["toilets"] }] },
 ];
 
@@ -79,14 +81,29 @@ export function usePlaces(): Set<string> {
 
 const original = new WeakMap<MapLibreMap, Map<string, FilterSpecification | undefined>>();
 
-/** Businesses switch: on with nothing chosen shows food, coffee and shops;
- * off strips those categories from any saved choice. */
-const BIZ = new Set(["food", "coffee", "shopping"]);
-export function withBusinesses(chosen: ReadonlySet<string>, on: boolean): Set<string> {
-  const biz = (id: string) => BIZ.has(id.split(".")[0] === "shop" ? "shopping" : id.split(".")[0]);
-  if (!on) return new Set([...chosen].filter((id) => !biz(id)));
-  if ([...chosen].some(biz)) return new Set(chosen);
-  return new Set([...chosen, ...PLACE_CATEGORIES.filter((c) => BIZ.has(c.id)).flatMap((c) => c.subs.map((s) => s.id))]);
+/** Quick Layers groups over the basemap POIs. A group switched on with none
+ * of its subcategories chosen shows all of them; switched off strips them. */
+export const QUICK_PLACE_GROUPS = {
+  businesses: ["food", "coffee", "shopping"],
+  health: ["health"],
+  parksPlaces: ["parks", "todo"],
+  citibike: ["citibike"],
+} as const;
+export type QuickPlaceGroup = keyof typeof QUICK_PLACE_GROUPS;
+const CAT_OF = new Map(PLACE_CATEGORIES.flatMap((c) => c.subs.map((s) => [s.id, c.id] as const)));
+export function withQuickPlaces(chosen: ReadonlySet<string>, on: Partial<Record<QuickPlaceGroup, boolean>>): Set<string> {
+  let out = new Set(chosen);
+  for (const [g, cats] of Object.entries(QUICK_PLACE_GROUPS) as [QuickPlaceGroup, readonly string[]][]) {
+    const inGroup = (id: string) => cats.includes(CAT_OF.get(id) ?? "");
+    if (!on[g]) out = new Set([...out].filter((id) => !inGroup(id)));
+    else if (![...out].some(inGroup)) for (const c of PLACE_CATEGORIES) if (cats.includes(c.id)) c.subs.forEach((s) => out.add(s.id));
+  }
+  return out;
+}
+/** Is the style's POI visibility out of step with this choice? */
+export function placesStale(map: MapLibreMap, chosen: ReadonlySet<string>): boolean {
+  const want = classesFor(chosen).length ? "visible" : "none";
+  return (map.getStyle()?.layers ?? []).some((l) => POI_LAYERS.test(l.id) && (map.getLayoutProperty(l.id, "visibility") ?? "visible") !== want);
 }
 export function applyPlaces(map: MapLibreMap, chosen: ReadonlySet<string>): void {
   const classes = classesFor(chosen);

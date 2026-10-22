@@ -16,6 +16,9 @@ export function QuickLayers() {
   const [focus, setFocus] = useTransitFocus();
   const [on, toggle] = useFeatureToggles();
   const businesses = useQuickLayer("businesses");
+  const health = useQuickLayer("health");
+  const parksPlaces = useQuickLayer("parksPlaces");
+  const citibike = useQuickLayer("citibike");
   const art = useQuickLayer("streetArt");
   const xray = useQuickLayer("xray");
   const x0 = useRef<number | null>(null);
@@ -27,9 +30,12 @@ export function QuickLayers() {
     ["Restrooms", restrooms, setRestrooms],
     ["Events", on.has("events"), () => toggle("events")],
     ["Parking", on.has("parking"), () => toggle("parking")],
+    ["Health", health, (v) => setQuickLayer("health", v)],
+    ["Parks & places", parksPlaces, (v) => setQuickLayer("parksPlaces", v)],
+    ["Citi Bike", citibike, (v) => setQuickLayer("citibike", v)],
   ];
   return (
-    <div className="absolute right-[var(--edge)] top-[calc(env(safe-area-inset-top)+var(--edge))] z-40 flex flex-col items-end gap-[var(--sp-2)]">
+    <div className="absolute right-[var(--edge)] top-[calc(env(safe-area-inset-top)+var(--edge)+var(--topbar-h)+var(--sp-2))] lg:top-[calc(env(safe-area-inset-top)+var(--edge))] z-40 flex flex-col items-end gap-[var(--sp-2)]">
       <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="h-9 rounded-full border border-border bg-card px-[var(--sp-4)] text-[13px] font-semibold text-foreground shadow-md">
         Layers
       </button>

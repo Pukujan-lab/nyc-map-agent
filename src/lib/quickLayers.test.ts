@@ -13,13 +13,13 @@ describe("quick layers store", () => {
   });
 });
 
-import { withBusinesses } from "@/lib/map/places";
-describe("withBusinesses", () => {
-  it("off strips business places, keeps others", () => {
-    expect([...withBusinesses(new Set(["food.restaurant", "parks.park"]), false)]).toEqual(["parks.park"]);
+import { withQuickPlaces } from "@/lib/map/places";
+describe("withQuickPlaces", () => {
+  it("off strips a group, keeps groups that are on", () => {
+    expect([...withQuickPlaces(new Set(["food.restaurant", "parks.park", "health.care"]), { parksPlaces: true })]).toEqual(["parks.park"]);
   });
   it("on with no choice adds food, coffee and shops", () => {
-    const s = withBusinesses(new Set(), true);
+    const s = withQuickPlaces(new Set(), { businesses: true });
     expect(s.has("coffee.cafe") && s.has("shop.grocery") && !s.has("parks.park")).toBe(true);
   });
 });

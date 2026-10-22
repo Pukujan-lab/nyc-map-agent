@@ -6,9 +6,9 @@ import { useSyncExternalStore } from "react";
  * localStorage; any module can read it (`getQuickLayer`) or subscribe
  * (`useQuickLayer`). Transit Focus, Restrooms and Events keep their own stores.
  */
-export type QuickId = "businesses" | "streetArt" | "xray";
+export type QuickId = "businesses" | "streetArt" | "xray" | "health" | "parksPlaces" | "citibike";
 const KEY = "nma.quickLayers";
-const DEFAULTS: Record<QuickId, boolean> = { businesses: false, streetArt: true, xray: false };
+const DEFAULTS: Record<QuickId, boolean> = { businesses: false, streetArt: true, xray: false, health: false, parksPlaces: false, citibike: false };
 
 function load(): Record<QuickId, boolean> {
   try {

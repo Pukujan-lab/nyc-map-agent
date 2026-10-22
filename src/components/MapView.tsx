@@ -10,7 +10,7 @@ import { useFeatureToggles } from "@/lib/featureToggles";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { MapCompass } from "./MapCompass";
 import { applyReadable } from "@/lib/map/readable";
-import { applyPlaces, usePlaces, withBusinesses } from "@/lib/map/places";
+import { applyPlaces, placesStale, usePlaces, withQuickPlaces } from "@/lib/map/places";
 import { useMapOptions } from "@/lib/map/mapOptions";
 import { applyBuildings } from "@/lib/map/buildings";
 import { applyMapTheme, buildingEdge, setThemeCoords, usePalette } from "@/lib/theme";
@@ -236,6 +236,9 @@ export function MapView({
   const analyticsFlags = useFlags();
   const analytics = analyticsFlags.noise || analyticsFlags.crashes || analyticsFlags.dataLayers;
   const businesses = useQuickLayer("businesses");
+  const health = useQuickLayer("health");
+  const parksPlaces = useQuickLayer("parksPlaces");
+  const citibike = useQuickLayer("citibike");
   const storefrontsOn = useFlag("storefronts") && businesses;
   usePanelChip(schoolsOn ? { id: "schools", label: "Schools", active: schoolIcons, onToggle: toggleSchools } : null);
   const restroomsMod = useRef<typeof import("@/lib/map/restrooms") | null>(null);
@@ -451,16 +454,29 @@ export function MapView({
       if (/^highway-name-major$/.test(l.id)) map.setLayoutProperty(l.id, "visibility", opts.streetNames ? "visible" : "none");
       // Transit-first open: neighbourhood / quarter names only with the analytics on.
       if (l.id === "label_other") map.setLayoutProperty(l.id, "visibility", analytics ? "visible" : "none");
-      // Bus stop icons only from zoom 16, where a stop is a place you can walk to.
+      // Bus stop icons only from zoom 15, where a stop is a place you can walk to.
       if (l.id === "poi_transit") {
-        const busFade = ["step", ["zoom"], ["case", ["==", ["get", "class"], "bus"], 0, 1], 16, 1];
+        const busFade = ["step", ["zoom"], ["case", ["==", ["get", "class"], "bus"], 0, 1], 15, 1];
         map.setPaintProperty(l.id, "icon-opacity", busFade as never);
-        map.setPaintProperty(l.id, "text-opacity", busFade as never);
+        // Stop names only up close (17+): at 15–16 the icon alone marks the stop.
+        const busText = ["step", ["zoom"], ["case", ["==", ["get", "class"], "bus"], 0, 1], 17, 1];
+        map.setPaintProperty(l.id, "text-opacity", busText as never);
       }
     }
-    applyPlaces(map, withBusinesses(places, businesses));
+    const shownPlaces = withQuickPlaces(places, { businesses, health, parksPlaces, citibike });
+    applyPlaces(map, shownPlaces);
+    // Block tiles and the 3D city restyle the basemap after this runs; keep
+    // its POIs to the person's choice instead of the style's defaults.
+    const keep = () => {
+      if (placesStale(map, shownPlaces)) applyPlaces(map, shownPlaces);
+      if (!analytics && map.getLayer("label_other") && map.getLayoutProperty("label_other", "visibility") !== "none") map.setLayoutProperty("label_other", "visibility", "none");
+    };
+    map.on("styledata", keep);
     applyBuildings(map, flatBuildings, t.building, buildingEdge(t));
-  }, [ready, styleEpoch, transitFocus, places, businesses, opts, t, flatBuildings, analytics]);
+    return () => {
+      map.off("styledata", keep);
+    };
+  }, [ready, styleEpoch, transitFocus, places, businesses, health, parksPlaces, citibike, opts, t, flatBuildings, analytics]);
 
   const handleLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
