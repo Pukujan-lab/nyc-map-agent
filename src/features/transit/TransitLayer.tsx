@@ -17,7 +17,7 @@ import {
   type SystemId,
   type Vehicle,
 } from "./model";
-import { alertedRoutes, useAlerts, useBusRoute, useBuses, useStarred, useTransitData, useTransitMeta, useTransitToggles, useXrayData } from "./hooks";
+import { alertedRoutes, useAlerts, useBusRoute, useBuses, useStarred, useTransitData, useTransitMeta, useTransitToggles, useXrayData, useSegmentHistory } from "./hooks";
 import { useXray, xrayPrims } from "./xray";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { useFlag } from "@/lib/flags";
@@ -96,6 +96,8 @@ export default function TransitLayer() {
   const rail = (["subway", "lirr", "mnr"] as SystemId[]).filter((s) => on.has(s));
   const busOn = on.has("bus") && meta.data?.bus === true;
   const data = useTransitData(rail);
+  const subwayRoutes = useMemo(() => [...new Set((data.subway?.live?.trips ?? []).map((t) => t.route))].sort(), [data.subway?.live]);
+  const history = useSegmentHistory(subwayRoutes);
   const buses = useBuses(busOn);
   const alerts = useAlerts(rail.length > 0 || panelOpen);
   const stars = useStarred();
@@ -250,7 +252,7 @@ export default function TransitLayer() {
         const st = data[s]?.stat, lv = data[s]?.live;
         if (!st || !lv) continue;
         for (const trip of lv.trips) {
-          const est = estimateTrain(st, trip, now, liveProgress);
+          const est = estimateTrain(st, trip, now, liveProgress, s === "subway" ? history : undefined);
           const v = est && s !== "subway" ? { ...est, grade: "grade" as const } : est;
           if (v && (inView(v) || v.key === selectedKey)) out.push(v);
         }
@@ -266,7 +268,7 @@ export default function TransitLayer() {
     tick();
     const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
-  }, [map, rail.join(","), data, buses.data, selectedKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [map, rail.join(","), data, buses.data, selectedKey, history]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Tween displayed positions and headings toward the targets (~20 fps).
   useEffect(() => {
