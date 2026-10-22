@@ -1,4 +1,5 @@
 /** Compose one door-to-door trip from the thin services + the transit planner. */
+import { formatStreetText } from "../../../src/lib/streetName";
 import type { Leg, LngLatTuple, Trip } from "../../../src/features/agent/schema";
 import { elevatorStatus, hazardsAt, reverseGeocode, routeWalk, serviceAlerts, stationServiceChanges, weatherAt, type WalkResult } from "./services";
 import { sameStation, type ServiceChange } from "../../../src/lib/transit/serviceChanges";
@@ -82,7 +83,7 @@ export async function buildTrip(
 
   if (!plan) {
     const w = await safe(routeWalk(origin.at, destination.at), straight(origin.at, destination.at));
-    legs.push(walkLeg("walk", `Walk to ${destination.label}`, w));
+    legs.push(walkLeg("walk", `Walk to ${formatStreetText(destination.label)}`, w));
   } else {
     const first = plan.rides[0];
     const last = plan.rides[plan.rides.length - 1];
@@ -107,7 +108,7 @@ export async function buildTrip(
       legs.push({ kind: "ride", route: r.route, label: `${r.route} train ${r.from.name} → ${r.to.name}`, coords: r.coords, durationS: r.durationS, stops: r.stops, underground: !/elevated|viaduct|embankment/i.test(r.from.structure), geometrySource: r.geometrySource });
     });
     legs.push({ kind: "exit", station: ref(last.to), portal: exit, label: `Use the ${exit.label} at ${last.to.name}` });
-    legs.push(walkLeg("walk", `Walk to ${destination.label}`, w2));
+    legs.push(walkLeg("walk", `Walk to ${formatStreetText(destination.label)}`, w2));
     exitAdvice = `Use the ${exit.label} at ${last.to.name}.${exit.elevatorOnly ? " It is elevator-only." : ""}${exit.outage ? ` Heads up: ${exit.outage}.` : ""}`;
     alerts = await safe(serviceAlerts(routes, Math.floor(depart.getTime() / 1000)), []);
   }
