@@ -60,9 +60,9 @@
     "limit": "16 kB"
   },
   {
-    "name": "shared 3D layer: threeLayer + three (vehicles, hydrants, street signs, storefronts, street furniture; lazy)",
+    "name": "shared 3D layer: threeLayer + three (vehicles, hydrants, street signs, storefronts, street furniture, street art; lazy)",
     "path": ".size-build/assets/threeLayer-*.js",
-    "limit": "133 kB"
+    "limit": "135 kB"
   },
   {
     "name": "all JS",
