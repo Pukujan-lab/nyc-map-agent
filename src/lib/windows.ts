@@ -1,4 +1,5 @@
-import { format, subDays, subMonths } from "date-fns";
+/** Local calendar date as yyyy-MM-dd (date-fns' format was ~3 kB for this one pattern). */
+const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 export type WindowId = "90d" | "12mo";
 
@@ -24,9 +25,14 @@ export interface WindowBounds {
  * done on plain dates and never converted through UTC.
  */
 export function windowBounds(id: WindowId, now: Date = new Date()): WindowBounds {
-  const start = id === "90d" ? subDays(now, 90) : subMonths(now, 12);
-  const startDate = format(start, "yyyy-MM-dd");
-  const endDate = format(now, "yyyy-MM-dd");
+  const start = new Date(now);
+  if (id === "90d") start.setDate(start.getDate() - 90);
+  else {
+    start.setFullYear(start.getFullYear() - 1);
+    if (start.getMonth() !== now.getMonth()) start.setDate(0); // Feb 29 -> Feb 28, like date-fns subMonths
+  }
+  const startDate = ymd(start);
+  const endDate = ymd(now);
   return {
     id,
     startIso: `${startDate}T00:00:00`,

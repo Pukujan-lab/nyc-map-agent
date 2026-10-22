@@ -26,7 +26,7 @@ export function useHandsFree(s: HandsFreeState & { error: string | null; start: 
   useEffect(() => {
     if (!listen) return;
     // A short gap so the tail of the spoken answer is not picked up.
-    const t = window.setTimeout(start, 350);
+    const t = window.setTimeout(start, 250);
     return () => window.clearTimeout(t);
   }, [listen, start]);
   useEffect(() => {
