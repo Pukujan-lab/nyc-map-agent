@@ -82,7 +82,7 @@ Heavy code is reached only through dynamic `import()` so each feature is its own
 | Street level photos | live | Mapillary Graph API | direct | — | `VITE_MAPILLARY_TOKEN` (client token) | Mapillary, CC BY-SA 4.0 |
 | Textured 3D city | live | Octo files / R2 PMTiles | `/api/city-tiles` (Range) | immutable parts | `VITE_CITY_TILES_URL`, `OCTO_*` | building data NYC Open Data; textures in repo |
 | Street signs | live | DCP LION → `signs` layer in city PMTiles; Grab3D GLB | `/api/city-tiles` | as tiles | `LION_URL` | LION: NYC DCP; model CC0 (public/models/LICENSE.md) |
-| Chat / voice | live | InferHub DeepSeek (server only); Web Speech API | server handler | none | `INFERHUB_API_KEY`, `VITE_AGENT_MODE` | — |
+| Chat / voice | live | InferHub DeepSeek (server only); Web Speech API | server handler | none | `INFERHUB_API_KEY`, `INFERHUB_MODEL`, `INFERHUB_MODEL_FALLBACKS`, `VITE_AGENT_MODE` | — |
 | Live transit (#56) | in flight | MTA GTFS-rt (subway, LIRR, MNR), MTA Bus Time SIRI, MTA service alerts, MTA elevator/escalator status | via proxy `/api/transit/*` | 15–30 s edge cache; static GTFS nightly | `MTA_BUS_TIME_KEY` (GTFS-rt is keyless) | MTA Data Feed terms; attribute "Data: MTA" |
 | POI / schools / sights / storefronts / historic (#55, #67) | in flight | OSM (Overpass/extract), NYC Open Data (DOE schools, LPC landmarks), Wikidata, Wikipedia | `/api/places/*` | nightly ingest into Octo | — | OSM ODbL; Wikidata CC0; Wikipedia CC BY-SA 4.0 (attribute + link) |
 | Real blocks (#50, #59) | in flight | DCP tax blocks / MapPLUTO | Octo | nightly | `OCTO_*` | NYC DCP |

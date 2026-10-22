@@ -4,6 +4,8 @@
  */
 import { z } from "zod";
 import type { LngLatTuple } from "../../../src/features/agent/schema";
+import { bestCandidate, matchLandmark, matchStation, type GeoCandidate } from "./places";
+import { openDataEntrances, type Station } from "./transit";
 
 const UA = { "User-Agent": "nyc-map-agent (github.com/Pukujan/nyc-map-agent)" };
 export const OSRM_FOOT_URL = (process.env.VITE_OSRM_URL ?? "https://routing.openstreetmap.de/routed-foot").replace(/\/$/, "");
@@ -16,13 +18,28 @@ async function getJson(url: string, timeoutMs = 10000): Promise<unknown> {
 
 /* ---------- geocode: NYC Planning GeoSearch (same service as src/lib/api/geosearch.ts) ---------- */
 const geoSchema = z.object({
-  features: z.array(z.object({ geometry: z.object({ coordinates: z.tuple([z.number(), z.number()]) }), properties: z.object({ label: z.string() }) })),
+  features: z.array(z.object({ geometry: z.object({ coordinates: z.tuple([z.number(), z.number()]) }), properties: z.object({ label: z.string(), confidence: z.number().optional() }) })),
 });
 export interface Place { label: string; at: LngLatTuple }
-export async function geocode(text: string): Promise<Place | null> {
-  const data = geoSchema.parse(await getJson(`https://geosearch.planninglabs.nyc/v2/search?${new URLSearchParams({ text, size: "1" })}`));
-  const f = data.features[0];
-  return f ? { label: f.properties.label.replace(/, USA$/, ""), at: f.geometry.coordinates } : null;
+interface GeocodeDeps { stations?: () => Promise<Station[]>; geosearch?: (text: string) => Promise<GeoCandidate[]> }
+
+async function geosearchCandidates(text: string): Promise<GeoCandidate[]> {
+  const data = geoSchema.parse(await getJson(`https://geosearch.planninglabs.nyc/v2/search?${new URLSearchParams({ text, size: "5" })}`));
+  return data.features.map((f) => ({ label: f.properties.label.replace(/, USA$/, ""), at: f.geometry.coordinates, confidence: f.properties.confidence ?? 0 }));
+}
+
+/** Curated landmarks, then GTFS station names, then GeoSearch (highest confidence). */
+export async function geocode(text: string, deps: GeocodeDeps = {}): Promise<Place | null> {
+  const lm = matchLandmark(text);
+  if (lm) return { label: lm.label, at: lm.at };
+  try {
+    const st = matchStation(text, await (deps.stations ?? (() => openDataEntrances.stations()))());
+    if (st) return { label: `${st.name} station`, at: st.at };
+  } catch {
+    // Station list unavailable: fall through to GeoSearch.
+  }
+  const best = bestCandidate(await (deps.geosearch ?? geosearchCandidates)(text));
+  return best ? { label: best.label, at: best.at } : null;
 }
 export async function reverseGeocode([lon, lat]: LngLatTuple): Promise<string | null> {
   try {
