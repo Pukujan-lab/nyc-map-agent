@@ -246,7 +246,7 @@ export function MapView({
   const [corner, setCorner] = useState<string | null>(null);
   /** "Grand Street & Essex Street": street underfoot and nearest cross street, throttled. */
   const [streetHere, setStreetHere] = useState<string | null>(null);
-  const { showPanel, closeAll, content: panelContent, minimized: panelMinimized, drawerOpen } = usePanel();
+  const { showPanel, emptyMapTap, content: panelContent, minimized: panelMinimized, drawerOpen } = usePanel();
   // The hover card is a mouse affordance; on touch / narrow screens the sheet
   // already shows the same numbers.
   const canHover = useMediaQuery("(hover: hover) and (pointer: fine) and (min-width: 1024px)");
@@ -635,7 +635,8 @@ export function MapView({
       }
       // Tap priority: transit (train, bus, station, entrance) first, then
       // restrooms, then events and other feature pins; analytics areas last
-      // and only in Advanced. An empty tap closes the panels.
+      // and only in Advanced. An empty tap closes a details sheet. The layers
+      // drawer stays open; a train or bus tap closes that.
       const clicked = mapRef.current?.getMap();
       const hitsAny = (ids: string[]) => {
         const live = ids.filter((id) => clicked?.getLayer(id));
@@ -712,8 +713,9 @@ export function MapView({
           }
         }
         // Street level never opens the neighbourhood / complaints card: a
-        // tap on a facade or the pavement just clears the panels.
-        closeAll();
+        // tap on a facade or the pavement clears a details sheet. The layers
+        // drawer stays open.
+        emptyMapTap();
         return;
       }
       const school = city3dMod.current?.schoolAt(event.target, event.point.x, event.point.y);
@@ -724,8 +726,8 @@ export function MapView({
       // Neighbourhood / block complaint picks are analytics: Advanced only.
       const picked = analytics ? pickAt(event.point.x, event.point.y, event.lngLat) : null;
       if (!picked) {
-        // An empty-map tap closes the drawer and the sheet.
-        closeAll();
+        // An empty-map tap closes a details sheet. The layers drawer stays open.
+        emptyMapTap();
         return;
       }
       if (picked.kind === "block") {
@@ -734,7 +736,7 @@ export function MapView({
         selectNta(picked.datum.ntaCode);
       }
     },
-    [pickAt, selectBlock, selectNta, routePicking, setRoutePoint, showPanel, closeAll, city3d, walking, analytics],
+    [pickAt, selectBlock, selectNta, routePicking, setRoutePoint, showPanel, emptyMapTap, city3d, walking, analytics],
   );
 
   const handleMoveEnd = useCallback(() => {

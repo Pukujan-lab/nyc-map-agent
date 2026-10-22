@@ -17,8 +17,8 @@ describe("panel slot", () => {
     expect(run(s, "closeDrawer")).toEqual({ drawerOpen: false, sheet: true, minimized: false });
   });
 
-  it("an empty tap closes the drawer and the sheet", () => {
-    expect(run(EMPTY_SLOT, "showSheet", "openDrawer", "emptyTap")).toEqual(EMPTY_SLOT);
+  it("an empty tap leaves the layers drawer open and closes a details sheet", () => {
+    expect(run(EMPTY_SLOT, "showSheet", "openDrawer", "emptyTap")).toEqual({ drawerOpen: true, sheet: true, minimized: false });
     expect(run(EMPTY_SLOT, "showSheet", "emptyTap")).toEqual(EMPTY_SLOT);
   });
 

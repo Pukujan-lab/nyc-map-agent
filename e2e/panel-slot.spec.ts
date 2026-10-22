@@ -3,7 +3,7 @@ import { mockNetwork } from "./mocks";
 
 /**
  * The primary panel slot (UI plan, build step 2): one panel at a time, a
- * feature tap closes the drawer, an empty tap closes everything, and Esc /
+ * feature tap closes the drawer, an empty tap leaves the drawer open, and Esc /
  * Back close the top panel before they stop Follow.
  */
 
@@ -86,7 +86,7 @@ test("minimize turns the sheet into a labelled peek chip that restores", async (
   await expect(sheet(page)).toBeVisible();
 });
 
-test("an empty map tap closes the drawer and the sheet", async ({ page }) => {
+test("an empty map tap leaves the layers drawer open", async ({ page }) => {
   await open(page);
   await layers(page).click();
   await expect(drawer(page)).toBeVisible();
@@ -94,7 +94,16 @@ test("an empty map tap closes the drawer and the sheet", async ({ page }) => {
   const bar = (await layers(page).boundingBox())!;
   const canvas = (await page.locator("canvas.maplibregl-canvas").first().boundingBox())!;
   await page.mouse.click(canvas.x + 8, bar.y + bar.height + 24);
-  await expect(drawer(page)).toHaveCount(0);
+  await expect(drawer(page)).toBeVisible();
+});
+
+test("an empty map tap closes a details sheet", async ({ page }) => {
+  await open(page);
+  await openPlace(page);
+  await expect(sheet(page)).toBeVisible();
+  const bar = (await layers(page).boundingBox())!;
+  const canvas = (await page.locator("canvas.maplibregl-canvas").first().boundingBox())!;
+  await page.mouse.click(canvas.x + 8, bar.y + bar.height + 24);
   await expect(sheet(page)).toHaveCount(0);
 });
 
