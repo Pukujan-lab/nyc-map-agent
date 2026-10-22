@@ -7,12 +7,9 @@ import {
   ChevronUp,
   MapPin,
   MessageCircleQuestion,
-  X,
-  ScanEye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { WALK_IDLE, type WalkInput } from "@/lib/map/walk";
-import { setStreetXray, useStreetXray } from "@/lib/transit/streetXray";
 
 interface WalkControlsProps {
   /** The block underfoot, so the strip reports what you are walking through. */
@@ -72,10 +69,8 @@ export function WalkControls({
   place,
   corner = null,
   onInput,
-  onExit,
   onAsk,
 }: WalkControlsProps) {
-  const xray = useStreetXray();
   const pad = (label: string, icon: typeof ChevronUp, input: WalkInput) => (
     <HoldButton
       label={label}
@@ -110,40 +105,18 @@ export function WalkControls({
                 </span>
               </>
             ) : null}
-            <Button
-              type="button"
-              size="sm"
-              variant={xray ? "default" : "secondary"}
-              aria-pressed={xray}
-              aria-label={xray ? "Hide underground trains" : "X-ray: show underground trains"}
-              data-testid="walk-xray"
-              className="ml-auto h-7 shrink-0 gap-1 rounded-full px-2.5 text-[11px]"
-              onClick={() => setStreetXray(!xray)}
-            >
-              <ScanEye className="h-3.5 w-3.5" aria-hidden="true" /> X-ray
-            </Button>
             {onAsk ? (
               <Button
                 type="button"
                 size="sm"
                 variant="secondary"
                 aria-label="Ask about this spot"
-                className="h-7 shrink-0 gap-1 rounded-full px-2.5 text-[11px]"
+                className="ml-auto h-7 shrink-0 gap-1 rounded-full px-2.5 text-[11px]"
                 onClick={onAsk}
               >
                 <MessageCircleQuestion className="h-3.5 w-3.5" aria-hidden="true" /> Ask
               </Button>
             ) : null}
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              aria-label="Leave street level and return to the overhead map"
-              className="h-7 w-7 shrink-0 rounded-full"
-              onClick={onExit}
-            >
-              <X className="h-3.5 w-3.5" />
-            </Button>
           </div>
           <div className="flex items-center gap-1.5 pr-1 text-[11px] text-muted-foreground">
             {place?.detail ? (
@@ -155,7 +128,7 @@ export function WalkControls({
               </span>
             ) : null}
             <span className="hidden sm:inline">
-              W/S move · A/D look · Shift run · Esc to exit
+              W/S move · A/D look · Shift run · Esc or Top to leave
             </span>
             <span className="sm:hidden">Use the pad</span>
           </div>

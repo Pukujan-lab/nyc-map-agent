@@ -24,15 +24,12 @@ test("map loads, search opens a panel, street level toggles, no console errors",
   await page.getByRole("option", { name: /Greenpoint/ }).first().click();
   await expect(page.getByText("Greenpoint").first()).toBeVisible();
 
-  // Street level on from the Layers & filters drawer, then off from the walk bar.
-  const openLayers = () => page.getByRole("button", { name: "Layers & filters", exact: true }).click();
-  await openLayers();
-  await page.getByRole("button", { name: "Street view", exact: true }).click();
-  const leave = page.getByRole("button", { name: "Leave street level and return to the overhead map" });
-  await expect(leave).toBeVisible();
-  await leave.click();
-  await openLayers();
-  await expect(page.getByRole("button", { name: "Street view", exact: true })).toHaveAttribute("aria-pressed", "false");
+  // Street level on from the view switcher, then back up with Top.
+  await page.getByTestId("view-switcher").getByRole("button", { name: "Street", exact: true }).click();
+  await expect(page.getByTestId("street-minimap")).toBeVisible({ timeout: 15_000 });
+  await page.getByTestId("view-switcher").getByRole("button", { name: "Top", exact: true }).click();
+  await expect(page.getByTestId("street-minimap")).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByTestId("view-switcher").getByRole("button", { name: "Street", exact: true })).toHaveAttribute("aria-pressed", "false");
 
   expect(errors, errors.join("\n")).toEqual([]);
 });

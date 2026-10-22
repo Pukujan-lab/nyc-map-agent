@@ -9,6 +9,7 @@ import { useFlags } from "@/lib/flags";
 import { useFeatureToggles } from "@/lib/featureToggles";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { MapCompass } from "./MapCompass";
+import { ViewSwitcher } from "./ViewSwitcher";
 import { applyReadable } from "@/lib/map/readable";
 import { applyPlaces, usePlaces } from "@/lib/map/places";
 import { useMapOptions } from "@/lib/map/mapOptions";
@@ -1325,7 +1326,8 @@ export function MapView({
           center.lng - (back * Math.sin(rad)) / (111_320 * cosLat),
           center.lat - (back * Math.cos(rad)) / 111_320,
         );
-        map.jumpTo(map.calculateCameraOptionsFromTo(eye, heightM, center, 0));
+        // One scene, smooth moves between levels.
+        map.easeTo({ ...map.calculateCameraOptionsFromTo(eye, heightM, center, 0), duration: reducedMotion ? 0 : 900 });
         setTilted(pitch > 0);
       };
       if (walking) {
@@ -1424,6 +1426,7 @@ export function MapView({
           {FEATURES.map((f) => (f.MapLayer ? <f.MapLayer key={f.id} /> : null))}
         </Suspense>
         {walking ? null : <MapCompass />}
+        <ViewSwitcher />
       </MapLibreMap>
 
 
