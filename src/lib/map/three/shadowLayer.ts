@@ -70,11 +70,12 @@ export function createShadowLayer(): CustomLayerInterface {
   scene.add(sun, sun.target);
 
   // ShadowMaterial draws only where shadow falls; depth-tested against MapLibre's extrusions.
-  // MapLibre draws extrusions offscreen, so their depth is not in the shared buffer:
-  // a depth-only pass of the proxies resolves visibility first, then the shadow
+  // A depth-only pass of the proxies resolves visibility first, then the shadow
   // pass draws on the nearest surface only (LessEqual on the same geometry).
-  const depthOnly = new THREE.MeshBasicMaterial({ colorWrite: false });
-  const receive = new THREE.ShadowMaterial({ transparent: true, depthWrite: false, depthFunc: THREE.LessEqualDepth });
+  // The proxies sit on MapLibre's own extrusions, so their depth is the same
+  // surface: it stays valid for the layers drawn after this one.
+  const depthOnly = new THREE.MeshBasicMaterial({ colorWrite: false, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+  const receive = new THREE.ShadowMaterial({ transparent: true, depthWrite: false, depthFunc: THREE.LessEqualDepth, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
   const groundMat = new THREE.ShadowMaterial({ transparent: true, depthWrite: false });
   // Trees and vehicles already have their own look; they only cast.
   const castOnly = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
@@ -276,10 +277,7 @@ export function createShadowLayer(): CustomLayerInterface {
         .multiply(new THREE.Matrix4().set(1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1));
       camera.projectionMatrix = new THREE.Matrix4().fromArray(args.defaultProjectionData.mainMatrix as unknown as number[]).multiply(toMerc);
       renderer.resetState();
-      renderer.clearDepth();
       renderer.render(scene, camera);
-      // Leave no proxy depth behind for the layers drawn after this one.
-      renderer.clearDepth();
     },
   };
 }
