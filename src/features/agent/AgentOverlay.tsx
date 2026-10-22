@@ -43,7 +43,7 @@ const MODES: Array<{ id: TripMode; label: string; Icon: typeof Bus }> = [
 ];
 
 export default function AgentOverlay() {
-  const { chatOpen, setChatOpen, flyTo, startWalk } = useMapState();
+  const { chatOpen, setChatOpen, flyTo, startWalk, chatSeed, clearSeed } = useMapState();
   const { showPanel, closeAll } = usePanel();
   // One panel at a time (#225): opening Ask closes the drawer and any sheet.
   useEffect(() => {
@@ -116,6 +116,15 @@ export default function AgentOverlay() {
       if (spoken) speech.speak(spokenSummary(spoken), { bargeIn: handsFree });
     }
   }, [busy, messages, mode, setChatOpen, speech, askReq, handsFree, closeAll]);
+
+  // ChatPanel is unmounted while this overlay replaces it, so the top bar's
+  // question has to be sent from here or Ask the map opens on the examples.
+  useEffect(() => {
+    if (!chatSeed) return;
+    const text = chatSeed.text;
+    clearSeed();
+    void send(text);
+  }, [chatSeed, clearSeed, send]);
 
   const turnOffHandsFree = useCallback(() => setHandsFree(false), []);
   useHandsFree({ on: handsFree, supported: speech.sttSupported, listening: speech.listening, busy, speaking: speech.speaking, error: speech.error, start: speech.startListening, stop: speech.stopListening, turnOff: turnOffHandsFree });
