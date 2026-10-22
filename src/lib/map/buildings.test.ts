@@ -12,3 +12,13 @@ describe("calm buildings", () => {
     expect(isFootprint({ id: "water", type: "fill", "source-layer": "water" })).toBe(false);
   });
 });
+
+describe("building contrast (#2)", () => {
+  it("every theme keeps footprints visibly darker than the land, with a darker edge", async () => {
+    const { THEMES, DUSK, buildingEdge, contrastRatio } = await import("@/lib/theme");
+    for (const p of [THEMES.ivory, THEMES.mta, THEMES.ink, THEMES.neon, DUSK]) {
+      expect(contrastRatio(p.land, p.building)).toBeGreaterThanOrEqual(1.15);
+      expect(contrastRatio(p.land, buildingEdge(p))).toBeGreaterThanOrEqual(1.6);
+    }
+  });
+});

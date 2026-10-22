@@ -9,10 +9,10 @@ import SunCalc from "suncalc";
  * repaint the basemap's own background, water and park layers to match.
  */
 export const THEMES = {
-  ivory: { label: "Ivory", land: "#F2F1ED", water: "#CFE0EE", park: "#DCEFE3", street: "#FFFFFF", major: "#FBFBF9", label_: "#8a8f98", building: "#EAE8E2", bus: "#5F6B7A", busExpress: "#7A6A5C", dark: false },
-  ink: { label: "Ink", land: "#141414", water: "#1D2523", park: "#1C2620", street: "#2A2A29", major: "#333331", label_: "#8a8883", building: "#1B1B1A", bus: "#8C96A3", busExpress: "#A3927F", dark: true },
-  mta: { label: "MTA muted", land: "#F4F4F2", water: "#D9ECE4", park: "#D9EAD2", street: "#FFFFFF", major: "#FAFAFA", label_: "#7d7d7d", building: "#ECECE9", bus: "#4E6E91", busExpress: "#7C6A8E", dark: false },
-  neon: { label: "Neon", land: "#221D4A", water: "#1B2550", park: "#1E3A3A", street: "#3B3475", major: "#4A4290", label_: "#D4CEF5", building: "#2A2458", bus: "#8B7FD1", busExpress: "#C46FA8", dark: true },
+  ivory: { label: "Ivory", land: "#F2F1ED", water: "#CFE0EE", park: "#DCEFE3", street: "#FFFFFF", major: "#FBFBF9", label_: "#8a8f98", building: "#DCD8CD", bus: "#5F6B7A", busExpress: "#7A6A5C", dark: false },
+  ink: { label: "Ink", land: "#141414", water: "#1D2523", park: "#1C2620", street: "#2A2A29", major: "#333331", label_: "#8a8883", building: "#2F2F2D", bus: "#8C96A3", busExpress: "#A3927F", dark: true },
+  mta: { label: "MTA muted", land: "#F4F4F2", water: "#D9ECE4", park: "#D9EAD2", street: "#FFFFFF", major: "#FAFAFA", label_: "#7d7d7d", building: "#DCDCD6", bus: "#4E6E91", busExpress: "#7C6A8E", dark: false },
+  neon: { label: "Neon", land: "#221D4A", water: "#1B2550", park: "#1E3A3A", street: "#3B3475", major: "#4A4290", label_: "#D4CEF5", building: "#352E6E", bus: "#8B7FD1", busExpress: "#C46FA8", dark: true },
 } as const;
 export type ThemeId = keyof typeof THEMES;
 export type Palette = { label: string; land: string; water: string; park: string; street: string; major: string; label_: string; building: string; bus: string; busExpress: string; dark: boolean };
@@ -22,8 +22,8 @@ export type Palette = { label: string; land: string; water: string; park: string
  * side of sunset / sunrise, and a lighter, bluer Night (Google-Maps-night-nav-like).
  * Sun times come from suncalc, on the device, for NYC or the shared location; no network.
  */
-export const DUSK: Palette = { label: "Dusk", land: "#EDE3D6", water: "#B9C7D3", park: "#CFDCC8", street: "#F8F1E7", major: "#F4EADC", label_: "#7f746d", building: "#DDD2C4", bus: "#6A6470", busExpress: "#85705E", dark: false };
-export const NIGHT: Palette = { label: "Night", land: "#1F2A36", water: "#142131", park: "#22392F", street: "#33424F", major: "#415264", label_: "#A9B8C8", building: "#273340", bus: "#A4B4C8", busExpress: "#C8AE92", dark: true };
+export const DUSK: Palette = { label: "Dusk", land: "#EDE3D6", water: "#B9C7D3", park: "#CFDCC8", street: "#F8F1E7", major: "#F4EADC", label_: "#7f746d", building: "#D0C3B1", bus: "#6A6470", busExpress: "#85705E", dark: false };
+export const NIGHT: Palette = { label: "Night", land: "#1F2A36", water: "#142131", park: "#22392F", street: "#33424F", major: "#415264", label_: "#A9B8C8", building: "#2E3B4A", bus: "#A4B4C8", busExpress: "#C8AE92", dark: true };
 export const DAY: Palette = THEMES.ivory;
 export type ThemeChoice = ThemeId | "auto";
 export const CHOICES: ThemeChoice[] = ["auto", "ivory", "ink", "mta", "neon"];
@@ -55,6 +55,19 @@ function hex(c: string): [number, number, number] {
 export function mixHex(a: string, b: string, t: number): string {
   const x = hex(a), y = hex(b), k = Math.min(1, Math.max(0, t));
   return "#" + x.map((v, i) => Math.round(v + (y[i] - v) * k).toString(16).padStart(2, "0")).join("").toUpperCase();
+}
+/** Footprint edge: the building tint pushed toward ink (light themes) or ivory (dark). Pure. */
+export function buildingEdge(p: Pick<Palette, "building" | "dark">): string {
+  return mixHex(p.building, p.dark ? "#F2F1ED" : "#1A1A1A", p.dark ? 0.14 : 0.2);
+}
+/** WCAG relative-luminance contrast ratio of two #rrggbb colours. Pure. */
+export function contrastRatio(a: string, b: string): number {
+  const lum = (c: string) => {
+    const [r, g, bl] = hex(c).map((v) => { const x = v / 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+  };
+  const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m);
+  return (x + 0.05) / (y + 0.05);
 }
 export function mixPalette(a: Palette, b: Palette, t: number): Palette {
   const out = { ...(t < 0.5 ? a : b) };
@@ -138,6 +151,9 @@ export function setTheme(id: ThemeChoice): void {
 }
 
 const subscribe = (l: () => void) => { listeners.add(l); return () => listeners.delete(l); };
+/** Non-React access for map features (daylight): the current pick and its changes. */
+export function getThemeChoice(): ThemeChoice { return choice; }
+export function subscribeTheme(l: () => void): () => void { listeners.add(l); return () => { listeners.delete(l); }; }
 /** The user's pick: auto, ivory, ink, mta or neon. */
 export function useTheme(): ThemeChoice {
   return useSyncExternalStore(subscribe, () => choice, () => choice);

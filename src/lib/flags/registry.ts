@@ -36,7 +36,7 @@ export const FLAGS = {
   weather: { tier: "basic", default: true, label: "Live weather" },
   traffic: { tier: "basic", default: true, label: "Live traffic (DOT sensor corridors)" },
   parking: { tier: "basic", default: true, label: "Parking garages and street rules" },
-  hazards: { tier: "basic", default: true, label: "Weather alerts and street flooding" },
+  hazards: { tier: "advanced", default: true, label: "Weather alerts and street flooding" },
   crashes: { tier: "advanced", default: true, label: "Classic crashes layer" },
   combined: { tier: "advanced", default: true, label: "Noise + crashes" },
   dataLayers: { tier: "advanced", default: true, label: "Data / analytics layers" },

@@ -1,8 +1,8 @@
 import type { Map as MapLibreMap } from "maplibre-gl";
 
 /**
- * Calm buildings (#174): flat 2D footprints in a tint barely darker than the
- * land, no outlines and no extrusion; the density-shaded block fills go plain.
+ * Calm buildings (#174): flat 2D footprints in a tint clearly darker than the
+ * land with a thin darker edge, no outlines and no extrusion; the density-shaded block fills go plain.
  * 3D (extruded basemap buildings, textured city, skyline) is kept for when
  * the person picks Map detail > 3D buildings. Originals are restored exactly.
  */
@@ -19,7 +19,7 @@ export function isFootprint(l: Layer): boolean {
 
 const saved = new WeakMap<MapLibreMap, Map<string, { vis: unknown; min?: number; max?: number; color: unknown; outline: unknown }>>();
 
-export function applyBuildings(map: MapLibreMap, flat: boolean, tint: string): void {
+export function applyBuildings(map: MapLibreMap, flat: boolean, tint: string, edge: string = tint): void {
   let store = saved.get(map);
   if (!store) { store = new Map<string, { vis: unknown; min?: number; max?: number; color: unknown; outline: unknown }>(); saved.set(map, store); }
   for (const l of (map.getStyle()?.layers ?? []) as Layer[]) {
@@ -31,16 +31,18 @@ export function applyBuildings(map: MapLibreMap, flat: boolean, tint: string): v
         vis: map.getLayoutProperty(l.id, "visibility"),
         min: l.minzoom,
         max: l.maxzoom,
-        color: foot ? map.getPaintProperty(l.id, "fill-color") : undefined,
+        color: foot ? map.getPaintProperty(l.id, "fill-color") : l.type === "fill-extrusion" ? map.getPaintProperty(l.id, "fill-extrusion-color") : undefined,
         outline: foot ? map.getPaintProperty(l.id, "fill-outline-color") : undefined,
       });
     }
     const o = store.get(l.id)!;
     if (hide) map.setLayoutProperty(l.id, "visibility", flat ? "none" : ((o.vis as "visible" | "none" | undefined) ?? "visible"));
+    // 3D: extrusions take the theme's building tint so they read against the land (#2).
+    if (hide && l.type === "fill-extrusion" && !flat) map.setPaintProperty(l.id, "fill-extrusion-color", tint);
     if (foot) {
       map.setLayerZoomRange(l.id, flat ? 13 : (o.min ?? 0), flat ? 24 : (o.max ?? 24));
       map.setPaintProperty(l.id, "fill-color", flat ? tint : o.color);
-      map.setPaintProperty(l.id, "fill-outline-color", flat ? tint : o.outline);
+      map.setPaintProperty(l.id, "fill-outline-color", flat ? edge : o.outline);
     }
   }
 }

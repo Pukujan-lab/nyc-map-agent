@@ -13,3 +13,12 @@ describe("transit focus", () => {
     expect(g.coordinates[0][0]).toEqual([-180, -85]);
   });
 });
+
+describe("Focus veil (dim, never bright)", () => {
+  it("is darker than the land in every theme", async () => {
+    const { focusVeil } = await import("./transitFocus");
+    const { THEMES, contrastRatio } = await import("@/lib/theme");
+    const lum = (c: string) => contrastRatio(c, "#000000");
+    for (const p of Object.values(THEMES)) expect(lum(focusVeil(p))).toBeLessThanOrEqual(lum(p.land));
+  });
+});

@@ -77,3 +77,12 @@ describe("pins", () => {
     expect(lines.features).toHaveLength(1);
   });
 });
+
+describe("event pins (#5)", () => {
+  it("are at least 6 px at city zoom, bigger than a bus stop", async () => {
+    const { PIN_RADIUS } = await import("./eventsLayers");
+    const stops = PIN_RADIUS.slice(3) as readonly number[];
+    const at12 = stops[stops.indexOf(12) + 1];
+    expect(at12).toBeGreaterThanOrEqual(6);
+  });
+});
