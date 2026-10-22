@@ -8,9 +8,11 @@ import {
   MapPin,
   MessageCircleQuestion,
   X,
+  ScanEye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { WALK_IDLE, type WalkInput } from "@/lib/map/walk";
+import { setStreetXray, useStreetXray } from "@/lib/transit/streetXray";
 
 interface WalkControlsProps {
   /** The block underfoot, so the strip reports what you are walking through. */
@@ -73,6 +75,7 @@ export function WalkControls({
   onExit,
   onAsk,
 }: WalkControlsProps) {
+  const xray = useStreetXray();
   const pad = (label: string, icon: typeof ChevronUp, input: WalkInput) => (
     <HoldButton
       label={label}
@@ -107,13 +110,25 @@ export function WalkControls({
                 </span>
               </>
             ) : null}
+            <Button
+              type="button"
+              size="sm"
+              variant={xray ? "default" : "secondary"}
+              aria-pressed={xray}
+              aria-label={xray ? "Hide underground trains" : "X-ray: show underground trains"}
+              data-testid="walk-xray"
+              className="ml-auto h-7 shrink-0 gap-1 rounded-full px-2.5 text-[11px]"
+              onClick={() => setStreetXray(!xray)}
+            >
+              <ScanEye className="h-3.5 w-3.5" aria-hidden="true" /> X-ray
+            </Button>
             {onAsk ? (
               <Button
                 type="button"
                 size="sm"
                 variant="secondary"
                 aria-label="Ask about this spot"
-                className="ml-auto h-7 shrink-0 gap-1 rounded-full px-2.5 text-[11px]"
+                className="h-7 shrink-0 gap-1 rounded-full px-2.5 text-[11px]"
                 onClick={onAsk}
               >
                 <MessageCircleQuestion className="h-3.5 w-3.5" aria-hidden="true" /> Ask
@@ -124,7 +139,7 @@ export function WalkControls({
               size="icon"
               variant="ghost"
               aria-label="Leave street level and return to the overhead map"
-              className={onAsk ? "h-7 w-7 shrink-0 rounded-full" : "ml-auto h-7 w-7 shrink-0 rounded-full"}
+              className="h-7 w-7 shrink-0 rounded-full"
               onClick={onExit}
             >
               <X className="h-3.5 w-3.5" />

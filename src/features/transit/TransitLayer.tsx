@@ -25,6 +25,7 @@ import { usePanel, usePanelChip, usePanelMode, usePanelSearch, type SearchProvid
 import { setFollowed, useFollowed } from "./follow";
 import { publishSubway } from "@/lib/agent/streetContext";
 import { publishLiveDots } from "@/lib/transit/liveVehicles";
+import { setStreetXray, useStreetXray } from "@/lib/transit/streetXray";
 
 const stopFollow = () => setFollowed(null);
 import { SYSTEM_LABELS } from "./model";
@@ -41,6 +42,19 @@ const VEHICLE_CREDITS = "3D vehicles: R142 by yarankepang, XD40 by kieranfarr, P
 const TRANSIT_CLICK_LAYERS = ["transit-bullet", "transit-bus-badge", "transit-bus-badge-full", "transit-bus-badge-selected", "transit-vehicle-2d", "transit-vehicle-hit", "transit-access", "transit-entrance", "transit-station"];
 
 const MAX_VEHICLES = 400;
+/** Street level: live vehicles within this distance of the walker. */
+const STREET_RADIUS_M = 600;
+/** Street-level X-ray draws underground trains this far below the ground plane. */
+const STREET_XRAY_DEPTH_M = -12;
+/** Where the walker stands: at street level the map centre sits at most ~10 m ahead of the eye. */
+function streetEye(map: MaplibreMap): { lon: number; lat: number } {
+  const c = map.getCenter();
+  return { lon: c.lng, lat: c.lat };
+}
+function metresApart(a: { lon: number; lat: number }, b: { lon: number; lat: number }) {
+  const k = 111_320;
+  return Math.hypot((a.lon - b.lon) * k * Math.cos((a.lat * Math.PI) / 180), (a.lat - b.lat) * k);
+}
 const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 const ICONS: Record<string, { node: JSX.Element; sdf: boolean }> = {
   "transit-arrow": { node: <Navigation2 fill="#fff" color="#fff" strokeWidth={1.5} size={48} />, sdf: true },
@@ -245,9 +259,14 @@ export default function TransitLayer() {
     if (!map) return;
     const tick = () => {
       const now = Date.now() / 1000;
+      // Street level: the viewport bounds at max zoom and pitch are a few metres
+      // wide, so cull by distance from the walker instead.
+      const eye = walking ? streetEye(map) : null;
       const b = map.getBounds();
       const padLon = (b.getEast() - b.getWest()) * 0.2, padLat = (b.getNorth() - b.getSouth()) * 0.2;
-      const inView = (v: Vehicle) => v.lon > b.getWest() - padLon && v.lon < b.getEast() + padLon && v.lat > b.getSouth() - padLat && v.lat < b.getNorth() + padLat;
+      const inView = eye
+        ? (v: Vehicle) => metresApart(eye, v) <= STREET_RADIUS_M
+        : (v: Vehicle) => v.lon > b.getWest() - padLon && v.lon < b.getEast() + padLon && v.lat > b.getSouth() - padLat && v.lat < b.getNorth() + padLat;
       const out: Vehicle[] = [];
       for (const s of rail) {
         const st = data[s]?.stat, lv = data[s]?.live;
@@ -262,14 +281,14 @@ export default function TransitLayer() {
         const v: Vehicle = { key: `bus:${bus.id}`, system: "bus", route: bus.route, label: bus.route, color: "#0039A6", lon: bus.lon, lat: bus.lat, bearing: bus.bearing ?? 0, grade: "grade", dir: bus.dir, nextStop: bus.next ?? undefined };
         if (inView(v) || v.key === selectedKey) out.push(v);
       }
-      const c = map.getCenter();
-      out.sort((a, z) => Math.hypot(a.lon - c.lng, a.lat - c.lat) - Math.hypot(z.lon - c.lng, z.lat - c.lat));
+      const c = eye ?? { lon: map.getCenter().lng, lat: map.getCenter().lat };
+      out.sort((a, z) => Math.hypot(a.lon - c.lon, a.lat - c.lat) - Math.hypot(z.lon - c.lon, z.lat - c.lat));
       targets.current = out.slice(0, MAX_VEHICLES);
     };
     tick();
     const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
-  }, [map, rail.join(","), data, buses.data, selectedKey, history]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [map, rail.join(","), data, buses.data, selectedKey, history, walking]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Tween displayed positions and headings toward the targets (~20 fps).
   useEffect(() => {
@@ -293,6 +312,10 @@ export default function TransitLayer() {
     return () => cancelAnimationFrame(raf);
   }, []);
 
+  // Dev-only: lets headless QA read the drawn vehicles.
+  useEffect(() => {
+    if (import.meta.env.DEV) Object.assign(window, { __vehicles: () => [...display.current.values()] });
+  }, []);
   // 3D click targets only need ~1 Hz accuracy; re-tiling them every frame is wasted work.
   const [hitFc, setHitFc] = useState<GeoJSON.FeatureCollection>(EMPTY);
   useEffect(() => {
@@ -411,14 +434,40 @@ export default function TransitLayer() {
     const id = window.setTimeout(push, 1200); // the three layer loads on the first tilt
     return () => window.clearTimeout(id);
   }, [xrayStation, three]);
+  // Street level hides underground trains unless X-ray is on; then they glow below a see-through ground.
+  const streetXray = useStreetXray();
   useEffect(() => {
     if (!three) return;
     v3d.current?.update(
       vehicles
-        .filter((v) => !(walking && v.grade === "underground")) // street level shows entrances instead
-        .map((v) => ({ lon: v.lon, lat: v.lat, bearing: v.bearing, z: v.z ?? 0, color: v.system === "bus" ? "#f8fafc" : v.color, kind: v.system === "bus" ? "bus" : v.system === "subway" ? "subway" : "rail", ghost: v.grade === "underground" })),
+        // The followed (boarded) train always draws, whatever its grade.
+        .filter((v) => v.key === followedKey || !(walking && !streetXray && v.grade === "underground"))
+        .map((v) => {
+          const ghost = v.grade === "underground";
+          return { lon: v.lon, lat: v.lat, bearing: v.bearing, z: ghost && walking ? STREET_XRAY_DEPTH_M : v.z ?? 0, color: v.system === "bus" ? "#f8fafc" : v.color, kind: v.system === "bus" ? "bus" : v.system === "subway" ? "subway" : "rail", ghost };
+        }),
     );
-  }, [vehicles, three, walking]);
+  }, [vehicles, three, walking, streetXray, followedKey]);
+  useEffect(() => {
+    if (!map || !walking || !streetXray) { v3d.current?.setGroundVeil(null); return; }
+    const sync = () => {
+      const v = v3d.current;
+      if (!v) return;
+      // Draw after the street-level city layer, whose pavement would otherwise paint over the glow.
+      const ids = map.getLayersOrder();
+      if (map.getLayer(v.layer.id) && ids[ids.length - 1] !== v.layer.id) map.moveLayer(v.layer.id);
+      const e = streetEye(map);
+      v.setGroundVeil([e.lon, e.lat], STREET_RADIUS_M);
+    };
+    sync();
+    const late = window.setTimeout(sync, 1200); // the three layer loads on the first tilt
+    map.on("move", sync);
+    return () => { window.clearTimeout(late); map.off("move", sync); v3d.current?.setGroundVeil(null); };
+  }, [map, walking, streetXray]);
+  useEffect(() => { if (!walking) setStreetXray(false); }, [walking]);
+  // Riding an underground train: X-ray turns on by itself so the train you boarded stays in view.
+  const followedUnder = following && vehicles.find((v) => v.key === followedKey)?.grade === "underground";
+  useEffect(() => { if (followedUnder && walking) setStreetXray(true); }, [followedUnder, walking]);
 
   // Follow mode: ease the camera onto the tweened vehicle; drag or Esc exits.
   const followed = following ? vehicles.find((v) => v.key === selectedKey) : undefined;
@@ -475,7 +524,9 @@ export default function TransitLayer() {
 
   if (!enabled || (!rail.length && !busOn)) return null;
 
-  const hide2d = three;
+  // Route bullets stay on in every view but street level: symbols draw above the 3D
+  // buildings, so a train is never lost behind a tower or under the ground when tilted.
+  const hide2d = walking;
   const bulletAlpha = (opts.routes.length ? ["case", ["in", ["get", "route"], ["literal", [...opts.routes]]], 1, 0.35] : 1) as number;
   return (
     <>
@@ -532,7 +583,7 @@ export default function TransitLayer() {
         <Layer id="transit-access" type="symbol" minzoom={11}
           layout={{ "icon-image": "transit-access", "icon-size": ["interpolate", ["linear"], ["zoom"], 11, 0.35, 16, 0.6], "icon-offset": [-18, -18], "icon-allow-overlap": true }} />
       </Source>
-      <Source id="transit-vehicle-hits" type="geojson" data={hide2d ? hitFc : EMPTY}>
+      <Source id="transit-vehicle-hits" type="geojson" data={three ? hitFc : EMPTY}>
         <Layer id="transit-vehicle-hit" type="circle" paint={{ "circle-radius": 14, "circle-opacity": 0, "circle-pitch-alignment": "map" }} />
       </Source>
       <Source id="transit-bus-route" type="geojson" data={busRouteFc}>
@@ -557,7 +608,7 @@ export default function TransitLayer() {
           paint={{ "icon-opacity": bulletAlpha }} />
         <Layer id="transit-bullet" type="symbol" filter={["==", ["get", "system"], "subway"]}
           layout={{ "icon-image": ["get", "bullet"], "icon-allow-overlap": true, "icon-ignore-placement": true, "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.55, 14, 0.75, 17, 0.95] }}
-          paint={{ "icon-opacity": bulletAlpha }} />
+          paint={{ "icon-opacity": ["*", bulletAlpha, ["case", ["==", ["get", "grade"], "underground"], 0.7, 1]] as unknown as number }} />
         {/* Buses: SQUARE badges, so they never read as round subway bullets. Zoomed out
             only the borough prefix (all shown, so each heading notch has its badge); from z15 or for the
             selected route the badge widens to the full route, with collision detection. */}
@@ -569,7 +620,7 @@ export default function TransitLayer() {
           layout={{ "icon-image": ["get", "badge"], "icon-allow-overlap": true, "icon-ignore-placement": true, "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.3, 14, 0.45] }}
           paint={{ "icon-opacity": selBusRoute ? 0.4 : 0.85 }} />
         <Layer id="transit-bus-badge-full" type="symbol" minzoom={15} filter={["all", ["==", ["get", "system"], "bus"], ["!=", ["get", "route"], selBusRoute]]}
-          layout={{ "icon-image": ["get", "badgeFull"], "icon-allow-overlap": false, "icon-padding": 1, "icon-size": ["interpolate", ["linear"], ["zoom"], 15, 0.55, 18, 0.75] }}
+          layout={{ "icon-image": ["get", "badgeFull"], "icon-allow-overlap": false, "icon-ignore-placement": true, "icon-padding": 1, "icon-size": ["interpolate", ["linear"], ["zoom"], 15, 0.55, 18, 0.75] }}
           paint={{ "icon-opacity": selBusRoute ? 0.45 : 1 }} />
         <Layer id="transit-bus-badge-selected" type="symbol" filter={["all", ["==", ["get", "system"], "bus"], ["==", ["get", "route"], selBusRoute]]}
           layout={{ "icon-image": ["get", "badgeFull"], "icon-allow-overlap": true, "symbol-sort-key": 1, "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.5, 16, 0.75] }} />
