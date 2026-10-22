@@ -1,9 +1,9 @@
 /**
- * "Grand St & Essex St": the street you stand on and the nearest cross street,
+ * "Grand Street & Essex Street": the street you stand on and the nearest cross street,
  * from the basemap's named OSM street centrelines (`transportation_name`).
  * Pure, no three.js, so it stays in the main chunk.
  */
-import { titleStreet } from "./corner";
+import { formatStreetName } from "@/lib/streetName";
 
 export interface NamedLine {
   name: string;
@@ -19,21 +19,6 @@ function segDist(px: number, py: number, ax: number, ay: number, bx: number, by:
   const l2 = dx * dx + dy * dy;
   const t = l2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l2)) : 0;
   return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
-}
-
-/** Shortened sign form: "Grand Street" → "Grand St", "Essex Avenue" → "Essex Av". */
-export function shortStreet(name: string): string {
-  const s = name
-    .replace(/\bStreet\b/gi, "St")
-    .replace(/\bAvenue\b/gi, "Av")
-    .replace(/\bBoulevard\b/gi, "Blvd")
-    .replace(/\bPlace\b/gi, "Pl")
-    .replace(/\bRoad\b/gi, "Rd")
-    .replace(/\bDrive\b/gi, "Dr")
-    .replace(/\bEast\b(?=\s+\d)/g, "E")
-    .replace(/\bWest\b(?=\s+\d)/g, "W")
-    .trim();
-  return /[a-z]/.test(s) ? s : titleStreet(s);
 }
 
 /**
@@ -63,7 +48,7 @@ export function streetPosition(
   if (!ranked.length || ranked[0][1] > maxM) return null;
   const street = ranked[0][0];
   const cross = ranked.find(([n, d]) => n !== street && d <= crossM)?.[0] ?? null;
-  return { street: shortStreet(street), cross: cross ? shortStreet(cross) : null };
+  return { street: formatStreetName(street), cross: cross ? formatStreetName(cross) : null };
 }
 
 /** "Grand St & Essex St" or just "Grand St". */

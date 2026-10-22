@@ -141,6 +141,7 @@ import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 import { WalkControls } from "./WalkControls";
 import { StreetMiniMap } from "./StreetMiniMap";
 import { nearestCorner, type CornerSign } from "@/lib/map/corner";
+import { formatStreetPair } from "@/lib/streetName";
 import { parseAt, streetLabel, streetPosition, type NamedLine } from "@/lib/map/streetPos";
 import { MAX_HEIGHT_M, pitchForHeight, STREET_LEVEL_M } from "@/lib/map/cameraHeight";
 import { hoverBlocked } from "@/lib/map/hover";
@@ -239,7 +240,7 @@ export function MapView({
   } | null>(null);
   /** "W 44 St at 8 Av": the nearest corner sign while walking. */
   const [corner, setCorner] = useState<string | null>(null);
-  /** "Grand St & Essex St": street underfoot and nearest cross street, throttled. */
+  /** "Grand Street & Essex Street": street underfoot and nearest cross street, throttled. */
   const [streetHere, setStreetHere] = useState<string | null>(null);
   const { showPanel, closeAll, content: panelContent, minimized: panelMinimized, drawerOpen } = usePanel();
   // The hover card is a mouse affordance; on touch / narrow screens the sheet
@@ -1052,7 +1053,8 @@ export function MapView({
         if (p.a && p.b) signs.push({ lng: f.geometry.coordinates[0], lat: f.geometry.coordinates[1], a: p.a, b: p.b });
       }
       const { lng, lat } = map.getCenter();
-      setCorner(nearestCorner(signs, lng, lat));
+      const label = nearestCorner(signs, lng, lat);
+      setCorner(label ? formatStreetPair(label) : null);
     };
     // Sign tiles arrive after the walk starts; a custom layer repaints every
     // frame, so "idle" may never fire — listen for the source instead.
