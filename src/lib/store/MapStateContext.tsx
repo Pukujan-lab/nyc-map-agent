@@ -140,7 +140,8 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
   const eco = searchParams.get("eco") === "1";
   // Eco mode drops the textured city (its facades and props are the heaviest draw).
   const city3d = !eco && (city3dParam === "1" || (city3dParam === null && walking));
-  const restrooms = searchParams.get("restrooms") === "1";
+  // Restrooms are on by default (transit-first open, #first-open); restrooms=0 turns them off.
+  const restrooms = searchParams.get("restrooms") !== "0";
   const [walkRequest, setWalkRequest] = useState<WalkRequest | null>(null);
   const [selectedNtaCode, setSelectedNtaCode] = useState<string | null>(null);
   const [selectedBlockKey, setSelectedBlockKey] = useState<string | null>(null);

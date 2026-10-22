@@ -23,3 +23,13 @@ describe("flags", () => {
     expect(f.feedHealth).toBe(false);
   });
 });
+
+describe("transit-first first open", () => {
+  it("keeps flood alerts and analytics behind Advanced", () => {
+    const simple = resolveFlags({ advancedMode: false });
+    for (const id of ["hazards", "noise", "crashes", "combined", "dataLayers"] as const) expect(simple[id]).toBe(false);
+    expect(simple.transit).toBe(true);
+    expect(simple.restrooms).toBe(true);
+    expect(resolveFlags({ advancedMode: true }).hazards).toBe(true);
+  });
+});

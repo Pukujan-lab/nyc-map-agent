@@ -6,8 +6,8 @@ import { EventSheet } from "./EventSheet";
 import { formatWhen, getWindow, isHappeningNow, subscribeWindow } from "./window";
 
 /**
- * Events as small ink pins (white ring), with a chartreuse dot on the ones
- * happening now; closed blocks also get a thin dashed ink line. Mounted only
+ * Events as ivory pins with a thick ink ring — bigger than bus stops and
+ * readable at city zoom — filled chartreuse when happening now; closed blocks also get a thin dashed ink line. Mounted only
  * while the Events chip is on (MapView, `on=events`). Tap opens the event sheet
  * through the public pushPanel API. No hover tooltip.
  */
@@ -16,6 +16,9 @@ const SRC_LINES = "events-lines";
 const EVENT_LAYERS = ["events-pin", "events-now"] as const;
 const INK = "#121212";
 const CHARTREUSE = "#c6f702";
+const IVORY = "#F2F1ED";
+/** Pin radius by zoom: ~6 px at city zoom (bus stops are ~4), 10 px close up. */
+export const PIN_RADIUS = ["interpolate", ["linear"], ["zoom"], 10, 5, 12, 6.5, 16, 10] as const;
 const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 
 /** Pins (with `now`) and block lines for MapLibre. */
@@ -57,21 +60,22 @@ export function mount(map: MapLibreMap): () => void {
     id: "events-pin",
     type: "circle",
     source: SRC_PINS,
-    minzoom: 11,
+    minzoom: 10,
     paint: {
-      "circle-color": INK,
-      "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 3, 16, 6],
-      "circle-stroke-color": "#ffffff",
-      "circle-stroke-width": 1.5,
+      "circle-color": ["case", ["==", ["get", "now"], true], CHARTREUSE, IVORY],
+      "circle-radius": PIN_RADIUS as never,
+      "circle-stroke-color": INK,
+      "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 10, 2, 16, 3],
     },
   });
   map.addLayer({
     id: "events-now",
     type: "circle",
     source: SRC_PINS,
-    minzoom: 11,
+    minzoom: 10,
     filter: ["==", ["get", "now"], true],
-    paint: { "circle-color": CHARTREUSE, "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 1.2, 16, 2.5] },
+    // Happening now: a small ink centre on the chartreuse pin, so it reads without colour too.
+    paint: { "circle-color": INK, "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 1.5, 16, 3] },
   });
 
   const onClick = (e: MapLayerMouseEvent) => {

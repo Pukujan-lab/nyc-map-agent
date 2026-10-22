@@ -12,6 +12,14 @@ export interface Sun {
 }
 
 /** Sun position for NYC from suncalc; night ramps from +6° (golden hour) to -6° (civil dusk). */
+/**
+ * An explicit theme (Ivory, Ink, MTA, Neon) wins over the clock: only Auto lets
+ * daylight darken the map. An explicit Lighting pick (day / night) still applies. Pure.
+ */
+export function effectiveLighting(mode: LightingMode, theme: string): LightingMode {
+  return mode === "auto" && theme !== "auto" ? "day" : mode;
+}
+
 export function sunFor(date: Date, mode: LightingMode): Sun {
   const pos = SunCalc.getPosition(date, NYC.lat, NYC.lon);
   const altitudeDeg = (pos.altitude * 180) / Math.PI;
