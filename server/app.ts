@@ -88,8 +88,14 @@ export const MOUNTED_PATHS = routes.map(([path]) => path);
 
 // Smart-mode agent (POST, NDJSON stream; body validated by zod in the handler). Skips gzip above.
 // The handler validates the body itself (zod) so it can stream; the route adds docs.
-app.openapi(toV1Route(AGENT_ROUTE), ((c: Context) => agent.POST(c.req.raw)) as never);
-app.openapi(legacyAlias(AGENT_ROUTE), ((c: Context) => agent.POST(c.req.raw)) as never);
+// The route's body validator has already read c.req.raw, so the handler gets a
+// fresh Request rebuilt from Hono's cached JSON (reading c.req.raw again 400s).
+const agentHandler = async (c: Context) => {
+  const body: unknown = await c.req.json().catch(() => null);
+  return agent.POST(new Request(c.req.url, { method: "POST", headers: c.req.raw.headers, body: JSON.stringify(body), signal: c.req.raw.signal }));
+};
+app.openapi(toV1Route(AGENT_ROUTE), agentHandler as never);
+app.openapi(legacyAlias(AGENT_ROUTE), agentHandler as never);
 
 const docConfig = { openapi: "3.1.0", info: API_INFO };
 app.doc31("/api/v1/openapi.json", docConfig);

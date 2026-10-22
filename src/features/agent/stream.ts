@@ -23,11 +23,18 @@ export async function* readEvents(body: ReadableStream<Uint8Array>): AsyncGenera
   }
 }
 
+/** Plain words for a failed request; the raw status stays out of the UI. */
+export function friendlyError(status: number): string {
+  if (status === 400) return "Sorry, I couldn't understand that request. Try rephrasing it.";
+  if (status === 429) return "I'm getting a lot of questions right now. Try again in a moment.";
+  return "The assistant is unavailable right now. Try again in a moment.";
+}
+
 export async function* askAgent(req: AgentRequest, signal?: AbortSignal): AsyncGenerator<StreamEvent> {
   const base = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
   const res = await fetch(`${base}/api/agent`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(req), signal });
   if (!res.ok || !res.body) {
-    yield { type: "error", message: `The assistant returned ${res.status}.` };
+    yield { type: "error", message: friendlyError(res.status) };
     return;
   }
   yield* readEvents(res.body);
