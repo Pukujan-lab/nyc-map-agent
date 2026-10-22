@@ -1,6 +1,6 @@
 import { ArrowLeft } from "lucide-react";
 import { useFlags } from "@/lib/flags";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { peekChipLabel } from "@/lib/store/panelSlot";
 import { Drawer } from "vaul";
 import { Button } from "@/components/ui/button";
@@ -27,7 +27,7 @@ function FeatureTopBar() {
   const bars = FEATURES.filter((f) => f.TopBar && flags[f.id]);
   if (!bars.length) return null;
   return (
-    <div className="flex min-h-0 items-center justify-between gap-3 px-1 empty:hidden">
+    <div data-testid="feature-topbar" className="flex h-8 w-fit max-w-full items-center gap-3 rounded-full border border-border bg-card px-[var(--sp-3)] shadow-md empty:hidden">
       {bars.map((f) => {
         const Bar = f.TopBar!;
         return <Bar key={f.id} />;
@@ -45,8 +45,22 @@ function TopBar({ boundaries, status, onLayers }: { boundaries: NtaBoundary[] | 
   const { setChatOpen } = useMapState();
   const { chips } = usePanel();
   const transit = chips.find((c) => c.id === "transit");
+  // The alert/weather row is a real slot: publish the bar's measured height as
+  // --topbar-h so the sheet, the drawer and the status chip sit below it.
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const root = document.documentElement;
+    const ro = new ResizeObserver(() => root.style.setProperty("--topbar-h", `${Math.ceil(el.getBoundingClientRect().height)}px`));
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      root.style.removeProperty("--topbar-h");
+    };
+  }, []);
   return (
-    <div className="space-y-[var(--sp-2)]">
+    <div ref={ref} data-testid="topbar" className="space-y-[var(--sp-2)]">
       <div className="flex items-center gap-[var(--sp-2)] rounded-full border border-border bg-card p-[var(--sp-1)] shadow-lg">
         <div className="relative min-w-0 flex-1">
           <PanelSearch boundaries={boundaries} />

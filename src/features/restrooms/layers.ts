@@ -105,10 +105,11 @@ export function installRestrooms(map: MapLibreMap): void {
     id: RESTROOMS_LAYER,
     type: "symbol",
     source: SOURCE,
-    minzoom: 11,
+    // Neighbourhood zoom and closer only, small: the city view stays clean.
+    minzoom: 14,
     layout: {
       "icon-image": ICON,
-      "icon-size": ["interpolate", ["linear"], ["zoom"], 11, 0.6, 16, 1],
+      "icon-size": ["interpolate", ["linear"], ["zoom"], 14, 0.45, 17, 0.75],
       "icon-allow-overlap": true,
       "icon-ignore-placement": true,
     },
