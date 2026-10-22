@@ -15,7 +15,8 @@
  * Pure TypeScript, no map dependency, so it is unit-tested directly.
  */
 export type LonLat = [number, number];
-export type RouteGeom = { route: string; lines: LonLat[][]; stops: Array<{ id: string; lon: number; lat: number }> };
+/** `offsets[i][j]`: metres right of vertex j to the travel lane (street-centerline snapped shapes). */
+export type RouteGeom = { route: string; lines: LonLat[][]; offsets?: number[][]; stops: Array<{ id: string; lon: number; lat: number }> };
 export type BusReport = { id: string; route: string; lon: number; lat: number; bearing: number | null; t: number };
 export type BusFrame = { lon: number; lat: number; bearing: number; alpha: number };
 /** Learned speeds/dwell (PR 2); any field may be missing, then defaults apply. */
@@ -48,17 +49,19 @@ export function defaultSpeed(route: string): number {
 }
 
 type Stop = { id: string; s: number };
-export type Shape = { x: Float64Array; y: Float64Array; cum: Float64Array; len: number; lon0: number; lat0: number; kx: number; stops: Stop[] };
+export type Shape = { x: Float64Array; y: Float64Array; cum: Float64Array; off: Float64Array; len: number; lon0: number; lat0: number; kx: number; stops: Stop[] };
 const KY = 111_320;
 
-export function buildShape(line: LonLat[], stops: RouteGeom["stops"] = []): Shape {
+export function buildShape(line: LonLat[], stops: RouteGeom["stops"] = [], offsets?: number[]): Shape {
   const lat0 = line[0][1], lon0 = line[0][0], kx = KY * Math.cos((lat0 * Math.PI) / 180);
   const n = line.length, x = new Float64Array(n), y = new Float64Array(n), cum = new Float64Array(n);
   for (let i = 0; i < n; i++) {
     x[i] = (line[i][0] - lon0) * kx; y[i] = (line[i][1] - lat0) * KY;
     if (i) cum[i] = cum[i - 1] + Math.hypot(x[i] - x[i - 1], y[i] - y[i - 1]);
   }
-  const shape: Shape = { x, y, cum, len: cum[n - 1], lon0, lat0, kx, stops: [] };
+  const off = new Float64Array(n);
+  if (offsets?.length === n) off.set(offsets);
+  const shape: Shape = { x, y, cum, off, len: cum[n - 1], lon0, lat0, kx, stops: [] };
   for (const st of stops) {
     const p = project(shape, st.lon, st.lat);
     if (p.d < STOP_SNAP_M) shape.stops.push({ id: st.id, s: p.s });
@@ -82,19 +85,39 @@ export function project(sh: Shape, lon: number, lat: number): { s: number; d: nu
   return best;
 }
 
-export function pointAt(sh: Shape, s: number): BusFrame {
+function xyAt(sh: Shape, s: number): [number, number, number] {
   s = Math.max(0, Math.min(sh.len, s));
   let lo = 1, hi = sh.cum.length - 1;
   while (lo < hi) { const m = (lo + hi) >> 1; if (sh.cum[m] < s) lo = m + 1; else hi = m; }
   const i = lo, seg = sh.cum[i] - sh.cum[i - 1], u = seg ? (s - sh.cum[i - 1]) / seg : 0;
-  const dx = sh.x[i] - sh.x[i - 1], dy = sh.y[i] - sh.y[i - 1];
+  return [sh.x[i - 1] + u * (sh.x[i] - sh.x[i - 1]), sh.y[i - 1] + u * (sh.y[i] - sh.y[i - 1]), sh.off[i - 1] + u * (sh.off[i] - sh.off[i - 1])];
+}
+const TANGENT_M = 10;
+/**
+ * Point at distance `s`: heading is the shape's tangent in the direction of
+ * travel (chord over ±10 m, so it does not snap at vertices), and the point
+ * sits `off` metres to the right of the (centerline) shape, in the travel lane.
+ */
+export function pointAt(sh: Shape, s: number): BusFrame {
+  const [x, y, off] = xyAt(sh, s);
+  const a = xyAt(sh, Math.max(0, Math.min(sh.len - 2 * TANGENT_M, s - TANGENT_M))), b = xyAt(sh, Math.min(sh.len, Math.max(2 * TANGENT_M, s + TANGENT_M)));
+  let tx = b[0] - a[0], ty = b[1] - a[1];
+  const tl = Math.hypot(tx, ty) || 1; tx /= tl; ty /= tl;
+  // right of travel (bearing clockwise from north): (ty, -tx)
   return {
-    lon: sh.lon0 + (sh.x[i - 1] + u * dx) / sh.kx,
-    lat: sh.lat0 + (sh.y[i - 1] + u * dy) / KY,
-    bearing: ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360,
+    lon: sh.lon0 + (x + off * ty) / sh.kx,
+    lat: sh.lat0 + (y - off * tx) / KY,
+    bearing: ((Math.atan2(tx, ty) * 180) / Math.PI + 360) % 360,
     alpha: 1,
   };
 }
+
+/** Shortest-arc heading interpolation (2D slerp). */
+export function slerpBearing(from: number, to: number, k: number): number {
+  const d = ((to - from + 540) % 360) - 180;
+  return (from + d * k + 360) % 360;
+}
+const HEADING_TAU_S = 0.5;
 
 /** Distance covered after `t` s on a leg of length L, starting at speed v0, cruising at v, braking to 0 at the end. Returns [distance, legTime]. */
 export function legMotion(L: number, v: number, v0: number, t: number): [number, number] {
@@ -137,7 +160,7 @@ const clamp = (x: number, a: number, b: number) => Math.max(a, Math.min(b, x));
 
 type State = {
   route: string; shape: number; s: number; t: number; v: number; moving: boolean; dwellLeft: number;
-  disp: number; at: number; alpha: number; fade: "none" | "out" | "in";
+  disp: number; at: number; alpha: number; fade: "none" | "out" | "in"; hdg?: number;
 };
 
 export class BusEstimator {
@@ -150,7 +173,11 @@ export class BusEstimator {
   setRoute(g: RouteGeom) {
     if (this.shapes.has(g.route) || !g.lines.length) return;
     const out: Shape[] = [];
-    for (const l of g.lines) { if (l.length < 2) continue; out.push(buildShape(l, g.stops), buildShape([...l].reverse(), g.stops)); }
+    g.lines.forEach((l, i) => {
+      if (l.length < 2) return;
+      const off = g.offsets?.[i];
+      out.push(buildShape(l, g.stops, off), buildShape([...l].reverse(), g.stops, off && [...off].reverse()));
+    });
     this.shapes.set(g.route, out);
   }
 
@@ -186,7 +213,7 @@ export class BusEstimator {
     if (atStop && !moving) dwellLeft = (this.hist?.dwell?.(b.route, atStop.id) ?? DWELL_S) / 2;
     const fresh: State = { route: b.route, shape: best, s: bestP.s, t: b.t, v, moving, dwellLeft, disp: bestP.s, at: nowS, alpha: 1, fade: "none" };
     if (prev && prev.route === b.route && prev.shape === best) {
-      fresh.disp = prev.disp; fresh.at = prev.at; fresh.alpha = prev.alpha; fresh.fade = prev.fade;
+      fresh.disp = prev.disp; fresh.at = prev.at; fresh.alpha = prev.alpha; fresh.fade = prev.fade; fresh.hdg = prev.hdg;
     } else if (prev) {
       fresh.disp = prev.disp; fresh.at = prev.at; fresh.alpha = prev.alpha; fresh.fade = "out"; // switched shape: fade across
       (fresh as State & { oldShape?: [string, number] }).oldShape = [prev.route, prev.shape];
@@ -197,6 +224,16 @@ export class BusEstimator {
 
   /** Where to draw a bus now. Undefined when it has no snapped state (caller falls back to raw GPS). */
   frame(id: string, nowS = Date.now() / 1000): BusFrame | undefined {
+    const st0 = this.state.get(id);
+    const dt = st0 ? Math.max(0, Math.min(1, nowS - st0.at)) : 0;
+    const f = this.rawFrame(id, nowS);
+    if (!f || !st0) return f;
+    // Smooth the heading through turns; a fresh bus (or one re-snapped after a fade) takes the tangent as is.
+    st0.hdg = st0.hdg === undefined || st0.alpha < 0.05 ? f.bearing : slerpBearing(st0.hdg, f.bearing, 1 - Math.exp(-dt / HEADING_TAU_S));
+    return { ...f, bearing: st0.hdg };
+  }
+
+  private rawFrame(id: string, nowS: number): BusFrame | undefined {
     const st = this.state.get(id) as (State & { oldShape?: [string, number] }) | undefined;
     if (!st) return undefined;
     const sh = this.shapes.get(st.route)?.[st.shape];

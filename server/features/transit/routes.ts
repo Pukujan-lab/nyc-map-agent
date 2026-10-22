@@ -12,6 +12,7 @@
  */
 import GtfsRealtimeBindings from "gtfs-realtime-bindings";
 import { json } from "../../../api/_lib/http";
+import { conflate, loadCenterlines } from "./conflate";
 
 const { FeedMessage } = GtfsRealtimeBindings.transit_realtime;
 const MTA = "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/";
@@ -235,7 +236,11 @@ async function loadBusRoute(key: string, route: string) {
     if (!lines.length) continue;
     const id = `${agency}_${route}`;
     const stops = (d.data?.references?.stops ?? []).filter((s) => !s.routeIds || s.routeIds.includes(id)).map((s) => ({ id: s.id, name: s.name, lon: s.lon, lat: s.lat }));
-    return { route, lines, stops };
+    // Snap to street centerlines and attach the right-hand lane offset (m) per vertex.
+    const pts = lines.flat();
+    const bbox: [number, number, number, number] = [Math.min(...pts.map((p) => p[0])), Math.min(...pts.map((p) => p[1])), Math.max(...pts.map((p) => p[0])), Math.max(...pts.map((p) => p[1]))];
+    const snapped = conflate(lines, await loadCenterlines(bbox));
+    return { route, lines: snapped.lines, offsets: snapped.offsets, stops };
   }
   return { route, lines: [], stops: [] };
 }

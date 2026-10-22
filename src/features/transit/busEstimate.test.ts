@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BusEstimator, buildShape, deadReckon, legMotion, project, type LonLat, type RouteGeom } from "./busEstimate";
+import { BusEstimator, buildShape, deadReckon, legMotion, pointAt, project, slerpBearing, type LonLat, type RouteGeom } from "./busEstimate";
 
 // A straight 2 km line heading north along a meridian, stops every 400 m.
 const LAT0 = 40.7, LON0 = -73.99, M = 1 / 111_320;
@@ -118,5 +118,28 @@ describe("BusEstimator", () => {
     const e = mk();
     expect(e.report({ id: "x", route: "Q99", ...at(0), bearing: 0, t: 0 })).toBe(false);
     expect(e.frame("x")).toBeUndefined();
+  });
+});
+
+describe("lane placement and heading", () => {
+  it("offsets the bus to the right of travel and heads along the shape", () => {
+    const sh = buildShape(line, [], line.map(() => 3));
+    const p = pointAt(sh, 500);
+    expect(p.bearing).toBeCloseTo(0, 3); // heading north, the direction of travel
+    expect((p.lon - LON0) * 111_320 * Math.cos((LAT0 * Math.PI) / 180)).toBeCloseTo(3, 1); // 3 m east = right
+    const rev = buildShape([...line].reverse(), [], line.map(() => 3));
+    const q = pointAt(rev, 500);
+    expect(q.bearing).toBeCloseTo(180, 3);
+    expect((q.lon - LON0) * 111_320 * Math.cos((LAT0 * Math.PI) / 180)).toBeCloseTo(-3, 1);
+  });
+  it("slerps heading through a turn instead of snapping", () => {
+    expect(slerpBearing(350, 10, 0.5)).toBeCloseTo(0, 6);
+    const turn: LonLat[] = [[LON0, LAT0], [LON0, LAT0 + 200 * M], [LON0 + 200 * M / Math.cos((LAT0 * Math.PI) / 180), LAT0 + 200 * M]];
+    const e = new BusEstimator(); e.setRoute({ route: "M2", lines: [turn], stops: [] });
+    e.report({ id: "t", route: "M2", lon: LON0, lat: LAT0 + 190 * M, bearing: 0, t: 0 }, 0);
+    let prev = e.frame("t", 0)!.bearing, maxStep = 0;
+    for (let t = 1 / 15; t < 10; t += 1 / 15) { const b = e.frame("t", t)!.bearing; maxStep = Math.max(maxStep, Math.abs(((b - prev + 540) % 360) - 180)); prev = b; }
+    expect(prev).toBeGreaterThan(80);
+    expect(maxStep).toBeLessThan(15);
   });
 });

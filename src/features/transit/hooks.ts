@@ -92,7 +92,7 @@ export function useBuses(enabled: boolean) {
 
 export type BusCall = { id: string; name: string; eta: number | null; away: string };
 export type BusTrip = { found: boolean; route?: string; destination?: string; dir?: string; calls?: BusCall[] };
-export type BusRoute = { route: string; lines: Array<Array<[number, number]>>; stops: Array<{ id: string; name: string; lon: number; lat: number }> };
+export type BusRoute = { route: string; lines: Array<Array<[number, number]>>; offsets?: number[][]; stops: Array<{ id: string; name: string; lon: number; lat: number }> };
 /** One bus's headsign and upcoming stops with ETAs (SIRI), while its sheet is open. */
 export function useBusTrip(vehicle: string | undefined) {
   return useQuery({
