@@ -26,6 +26,7 @@ export function QuickLayers() {
     ["X-ray", xray, (v) => setQuickLayer("xray", v)],
     ["Restrooms", restrooms, setRestrooms],
     ["Events", on.has("events"), () => toggle("events")],
+    ["Parking", on.has("parking"), () => toggle("parking")],
   ];
   return (
     <div className="absolute right-[var(--edge)] top-[calc(env(safe-area-inset-top)+var(--edge))] z-40 flex flex-col items-end gap-[var(--sp-2)]">

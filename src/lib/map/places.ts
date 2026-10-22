@@ -79,6 +79,15 @@ export function usePlaces(): Set<string> {
 
 const original = new WeakMap<MapLibreMap, Map<string, FilterSpecification | undefined>>();
 
+/** Businesses switch: on with nothing chosen shows food, coffee and shops;
+ * off strips those categories from any saved choice. */
+const BIZ = new Set(["food", "coffee", "shopping"]);
+export function withBusinesses(chosen: ReadonlySet<string>, on: boolean): Set<string> {
+  const biz = (id: string) => BIZ.has(id.split(".")[0] === "shop" ? "shopping" : id.split(".")[0]);
+  if (!on) return new Set([...chosen].filter((id) => !biz(id)));
+  if ([...chosen].some(biz)) return new Set(chosen);
+  return new Set([...chosen, ...PLACE_CATEGORIES.filter((c) => BIZ.has(c.id)).flatMap((c) => c.subs.map((s) => s.id))]);
+}
 export function applyPlaces(map: MapLibreMap, chosen: ReadonlySet<string>): void {
   const classes = classesFor(chosen);
   let store = original.get(map);

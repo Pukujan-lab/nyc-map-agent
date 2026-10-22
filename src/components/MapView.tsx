@@ -10,7 +10,7 @@ import { useFeatureToggles } from "@/lib/featureToggles";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { MapCompass } from "./MapCompass";
 import { applyReadable } from "@/lib/map/readable";
-import { applyPlaces, usePlaces } from "@/lib/map/places";
+import { applyPlaces, usePlaces, withBusinesses } from "@/lib/map/places";
 import { useMapOptions } from "@/lib/map/mapOptions";
 import { applyBuildings } from "@/lib/map/buildings";
 import { applyMapTheme, buildingEdge, setThemeCoords, usePalette } from "@/lib/theme";
@@ -458,9 +458,9 @@ export function MapView({
         map.setPaintProperty(l.id, "text-opacity", busFade as never);
       }
     }
-    applyPlaces(map, places);
+    applyPlaces(map, withBusinesses(places, businesses));
     applyBuildings(map, flatBuildings, t.building, buildingEdge(t));
-  }, [ready, styleEpoch, transitFocus, places, opts, t, flatBuildings, analytics]);
+  }, [ready, styleEpoch, transitFocus, places, businesses, opts, t, flatBuildings, analytics]);
 
   const handleLoad = useCallback(() => {
     const map = mapRef.current?.getMap();

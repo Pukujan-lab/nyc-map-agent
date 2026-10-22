@@ -8,7 +8,7 @@ import { useSyncExternalStore } from "react";
  */
 export type QuickId = "businesses" | "streetArt" | "xray";
 const KEY = "nma.quickLayers";
-const DEFAULTS: Record<QuickId, boolean> = { businesses: true, streetArt: true, xray: false };
+const DEFAULTS: Record<QuickId, boolean> = { businesses: false, streetArt: true, xray: false };
 
 function load(): Record<QuickId, boolean> {
   try {
