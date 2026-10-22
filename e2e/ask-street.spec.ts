@@ -20,19 +20,20 @@ test("street level: Ask opens a compact sheet and sends the spot as context; han
       start() {
         (w as { __starts?: number }).__starts = ((w as { __starts?: number }).__starts ?? 0) + 1;
         this.onstart?.();
-        setTimeout(() => {
-          const r = Object.assign([{ transcript: "which exit for the 1 train" }], { isFinal: true });
-          this.onresult?.({ resultIndex: 0, results: [r] });
-          this.onend?.();
-        }, 900);
+        // A mid-sentence pause of 800 ms must not end the turn.
+        const a = Object.assign([{ transcript: "which exit" }], { isFinal: true });
+        const b = Object.assign([{ transcript: " for the 1 train" }], { isFinal: true });
+        setTimeout(() => this.onresult?.({ resultIndex: 0, results: [a] }), 300);
+        setTimeout(() => this.onresult?.({ resultIndex: 1, results: [a, b] }), 1100);
       }
       stop() { this.onend?.(); }
-      abort() {}
+      abort() { this.onend = null; }
     }
     w.webkitSpeechRecognition = Rec;
     w.SpeechRecognition = Rec;
     const synth = {
-      cancel() {}, getVoices: () => [],
+      speaking: false, paused: false, pause() {}, resume() {},
+      cancel() {}, getVoices: () => [], addEventListener() {}, removeEventListener() {},
       speak(u: { text: string; onstart?: () => void; onend?: () => void }) {
         (w as { __said: string[] }).__said.push(u.text);
         u.onstart?.();
