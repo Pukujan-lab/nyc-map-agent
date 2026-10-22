@@ -6,7 +6,8 @@
  * - One panel at a time. Opening a details sheet closes the drawer.
  * - Opening the drawer hides the sheet until the drawer closes.
  * - A minimized sheet becomes a labelled peek chip; tapping it restores.
- * - An empty-map tap closes the drawer and the sheet.
+ * - An empty-map tap leaves the layers drawer open and closes a details sheet.
+ *   A train or bus tap closes the drawer.
  * - Esc and Back close the top panel first, then stop the active mode.
  */
 export interface SlotState {
@@ -47,7 +48,8 @@ export function slotReducer(s: SlotState, a: SlotAction): SlotState {
     case "restore":
       return s.sheet ? { drawerOpen: false, sheet: true, minimized: false } : s;
     case "emptyTap":
-      return s.drawerOpen || s.sheet ? EMPTY_SLOT : s;
+      if (s.drawerOpen) return s;
+      return s.sheet ? { ...s, sheet: false, minimized: false } : s;
     case "dismissTop":
       if (s.drawerOpen) return { ...s, drawerOpen: false };
       if (s.sheet) return { ...s, sheet: false, minimized: false };
