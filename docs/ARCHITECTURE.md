@@ -75,6 +75,7 @@ Heavy code is reached only through dynamic `import()` so each feature is its own
 | Data registry layers | live | `src/lib/datasets/registry.ts` sources | `/api/sources`, `/api/blocks` | s-maxage 15m default | `OCTO_*` | NYC Open Data |
 | Street stats | live | `marts.street_stats` | `/api/street` | s-maxage 15m | `OCTO_*` | NYC Open Data |
 | Restrooms | live | Socrata `i7jb-7jku` → `core.restrooms` | `/api/restrooms` | s-maxage 1h | `OCTO_*` | NYC Open Data |
+| Shops & cafés with toilets | live | OpenStreetMap via Overpass (`toilets=yes` on restaurant/cafe/fast_food/bar/pub and `shop=*`) → `core.place_toilets` (nightly replace) | `/api/place-toilets` | s-maxage 1h | — | © OpenStreetMap contributors, ODbL 1.0 |
 | Events | live | Socrata `tvpp-9vvx` (permitted events) + `w3wp-dpdi` (NYC Parks events), placed on CSCL `inkn-q76z` / GeoSearch → `core.street_events` (nightly upsert) | `/api/events` | s-maxage 15m | `OCTO_*`, `SOCRATA_*` | NYC Open Data Terms of Use |
 | Directions | live | OSRM (routing.openstreetmap.de, FOSSGIS) | direct | TanStack staleTime ∞ | `VITE_OSRM_URL` | © OSM contributors; FOSSGIS usage policy |
 | Address search | live | NYC Planning GeoSearch (Pelias) | direct | staleTime 5m | — | NYC DCP, open data |

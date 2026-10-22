@@ -28,7 +28,7 @@
       "path": "docs/ARCHITECTURE.md",
       "related": [],
       "reviewed_commit": "uncommitted",
-      "reviewed_sha256": "fa4787a0a98aac39c826c56dacad899e9a65d86f262e176f33a44b3df8dcb6c9",
+      "reviewed_sha256": "6e47689eb6d7101479612f75bd2841569a1a7adc1d7928cc96dc27eb530656ee",
       "summary": "Modular monolith layout, features and module boundaries.",
       "tasks": [],
       "title": "Architecture"

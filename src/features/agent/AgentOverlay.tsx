@@ -1,5 +1,6 @@
-import { Bus, Car, Footprints, Mic, MicOff, MoreVertical, Pause, Play, Send, SkipForward, X } from "lucide-react";
+import { Bus, Car, Footprints, Headphones, Mic, MicOff, MoreVertical, Pause, Play, Send, SkipForward, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,6 +30,8 @@ import { showTrip } from "./tripLayer";
 import { sharedCoords, startSharing, stopSharing, useSharedLocation } from "@/lib/geo/sharedLocation";
 import { usePlayer, type Speed } from "./usePlayer";
 import { useWakePhrase } from "./useWakePhrase";
+import { useHandsFree } from "./useHandsFree";
+import { closeAsk, useAskRequest } from "@/lib/agent/streetContext";
 
 interface Msg { id: string; role: "user" | "assistant"; content: string }
 
@@ -52,6 +55,9 @@ export default function AgentOverlay() {
   const [mapTime, setMapTime] = useState<string | null>(null);
   const shared = useSharedLocation();
   const abort = useRef<AbortController | null>(null);
+  const [handsFree, setHandsFree] = useState(false);
+  const askReq = useAskRequest();
+  const compact = askReq !== null;
 
   const speech = useSpeech({ onFinalTranscript: (t) => void send(t) });
   const player = usePlayer((text) => speech.speak(text));
@@ -74,7 +80,7 @@ export default function AgentOverlay() {
     const q = text.trim();
     if (!q || busy) return;
     setInput("");
-    setChatOpen(true);
+    if (!askReq) setChatOpen(true);
     const history: Msg[] = [...messages, { id: crypto.randomUUID(), role: "user", content: q }];
     const reply: Msg = { id: crypto.randomUUID(), role: "assistant", content: "" };
     setMessages([...history, reply]);
@@ -85,7 +91,7 @@ export default function AgentOverlay() {
     const location = sharedCoords();
     let spoken = "";
     try {
-      for await (const ev of askAgent({ messages: history.map(({ role, content }) => ({ role, content })), location, mode, now: new Date().toISOString() }, abort.current.signal)) {
+      for await (const ev of askAgent({ messages: history.map(({ role, content }) => ({ role, content })), location, mode, now: new Date().toISOString(), ...(askReq ? { context: askReq.context } : {}) }, abort.current.signal)) {
         if (ev.type === "text") {
           spoken += ev.text;
           setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, content: x.content + ev.text } : x)));
@@ -101,7 +107,16 @@ export default function AgentOverlay() {
       setBusy(false);
       if (spoken) speech.speak(spoken);
     }
-  }, [busy, messages, mode, setChatOpen, speech]);
+  }, [busy, messages, mode, setChatOpen, speech, askReq]);
+
+  const turnOffHandsFree = useCallback(() => setHandsFree(false), []);
+  useHandsFree({ on: handsFree, supported: speech.sttSupported, listening: speech.listening, busy, speaking: speech.speaking, error: speech.error, start: speech.startListening, stop: speech.stopListening, turnOff: turnOffHandsFree });
+  const toggleHandsFree = () => {
+    if (handsFree) { setHandsFree(false); speech.stopListening(); return; }
+    speech.setMuted(false);
+    speech.clearError();
+    setHandsFree(true);
+  };
 
   useWakePhrase(wake && speech.sttSupported, speech.listening || busy || speech.speaking, (t) => void send(t));
   useEffect(() => () => abort.current?.abort(), []);
@@ -112,7 +127,19 @@ export default function AgentOverlay() {
   const body = (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2 border-b py-3 pl-4 pr-12">
-        <div className="flex-1 text-sm font-semibold">Ask the map</div>
+        <div className="flex-1 text-sm font-semibold">{compact ? "Ask about this spot" : "Ask the map"}</div>
+        <Button
+          type="button"
+          variant={handsFree ? "default" : "secondary"}
+          size="sm"
+          className="h-7 gap-1 rounded-full px-2.5 text-xs"
+          aria-pressed={handsFree}
+          disabled={!speech.sttSupported}
+          title={speech.sttSupported ? undefined : "Voice input is not available in this browser"}
+          onClick={toggleHandsFree}
+        >
+          <Headphones className="h-3.5 w-3.5" /> Hands-free
+        </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="secondary" size="sm" className="h-7 gap-1 rounded-full px-2.5 text-xs" aria-label={`Trip mode: ${mode}`}>
@@ -146,6 +173,15 @@ export default function AgentOverlay() {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      {handsFree || speech.listening || (speech.speaking && handsFree) ? (
+        <div className="flex items-center gap-2 border-b bg-muted/50 px-4 py-1.5 text-xs" role="status" data-testid="voice-status">
+          <span className={cn("h-2 w-2 rounded-full", speech.listening ? "animate-pulse bg-destructive" : "bg-muted-foreground")} />
+          <span>{speech.listening ? "Listening" : speech.speaking ? "Speaking (mic off)" : busy ? "Thinking…" : "Hands-free on"}</span>
+          <span className="ml-auto text-muted-foreground">Nothing is recorded or saved.</span>
+        </div>
+      ) : null}
+      {speech.error && handsFree ? <p className="border-b px-4 py-1.5 text-xs text-muted-foreground">{speech.error}</p> : null}
 
       <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3" aria-live="polite">
         {messages.length === 0 ? (
@@ -213,6 +249,25 @@ export default function AgentOverlay() {
       </form>
     </div>
   );
+
+  if (compact) {
+    const slot = typeof document === "undefined" ? null : document.getElementById("ask-street-slot");
+    const panel = (
+      <div
+        role="dialog"
+        aria-modal="false"
+        aria-label="Ask about this spot"
+        data-testid="ask-compact"
+        className="pointer-events-auto absolute bottom-3 left-1/2 z-[60] flex h-[min(46vh,420px)] w-[min(440px,calc(100vw-1.5rem))] -translate-x-1/2 flex-col overflow-hidden rounded-xl border bg-card/95 shadow-xl backdrop-blur-md"
+      >
+        <Button type="button" variant="ghost" size="icon" className="absolute right-1.5 top-1.5 z-10 h-8 w-8" aria-label="Close Ask" onClick={() => { setHandsFree(false); speech.stopListening(); closeAsk(); }}>
+          <X className="h-4 w-4" />
+        </Button>
+        {body}
+      </div>
+    );
+    return slot ? createPortal(panel, slot) : <div className="fixed inset-x-0 bottom-0 z-[60] h-0">{panel}</div>;
+  }
 
   return (
     <>

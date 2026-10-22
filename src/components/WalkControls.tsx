@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronUp,
   MapPin,
+  MessageCircleQuestion,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,8 @@ interface WalkControlsProps {
   /** Fires on press and release; the map reads it every frame. */
   onInput: (input: WalkInput) => void;
   onExit: () => void;
+  /** Opens the assistant as a compact sheet with this spot as context. */
+  onAsk?: () => void;
 }
 
 function HoldButton({
@@ -68,6 +71,7 @@ export function WalkControls({
   corner = null,
   onInput,
   onExit,
+  onAsk,
 }: WalkControlsProps) {
   const pad = (label: string, icon: typeof ChevronUp, input: WalkInput) => (
     <HoldButton
@@ -103,12 +107,24 @@ export function WalkControls({
                 </span>
               </>
             ) : null}
+            {onAsk ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                aria-label="Ask about this spot"
+                className="ml-auto h-7 shrink-0 gap-1 rounded-full px-2.5 text-[11px]"
+                onClick={onAsk}
+              >
+                <MessageCircleQuestion className="h-3.5 w-3.5" aria-hidden="true" /> Ask
+              </Button>
+            ) : null}
             <Button
               type="button"
               size="icon"
               variant="ghost"
               aria-label="Leave street level and return to the overhead map"
-              className="ml-auto h-7 w-7 shrink-0 rounded-full"
+              className={onAsk ? "h-7 w-7 shrink-0 rounded-full" : "ml-auto h-7 w-7 shrink-0 rounded-full"}
               onClick={onExit}
             >
               <X className="h-3.5 w-3.5" />
