@@ -45,9 +45,10 @@ export function StreetMiniMap({ main, getEye, onExit }: {
       mini.addSource(DOTS, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       mini.addLayer({ id: DOTS, type: "circle", source: DOTS, paint: {
         "circle-radius": ["case", ["get", "bus"], 3, 4],
-        "circle-color": ["case", ["get", "under"], "rgba(0,0,0,0)", ["get", "color"]],
-        "circle-stroke-color": ["case", ["get", "under"], ["get", "color"], "#ffffff"],
-        "circle-stroke-width": ["case", ["get", "under"], 2, 1],
+        "circle-color": ["get", "color"],
+        "circle-opacity": ["case", ["get", "under"], 0, 1],
+        "circle-stroke-color": ["get", "color"],
+        "circle-stroke-width": 2,
       } });
     });
     const sync = () => {
@@ -68,8 +69,7 @@ export function StreetMiniMap({ main, getEye, onExit }: {
     const mini = miniRef.current;
     const src = mini?.getSource<GeoJSONSource>(DOTS);
     if (!mini || !src) return;
-    const e = getEye();
-    const c = e ? { lon: e.lon, lat: e.lat } : { lon: mini.getCenter().lng, lat: mini.getCenter().lat };
+    const c = getEye() ?? { lon: mini.getCenter().lng, lat: mini.getCenter().lat };
     src.setData(dotsNear(dots, c.lon, c.lat, DOTS_RADIUS_M));
   }, [dots, getEye]);
 
