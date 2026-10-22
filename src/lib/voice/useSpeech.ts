@@ -1,4 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { startBargeIn } from "./bargeIn";
+import { speakQueued } from "./tts";
+
+/** Silence after the last heard word that ends a turn. Long enough for mid-sentence pauses. */
+const END_OF_TURN_MS = 1300;
 
 /**
  * Minimal Web Speech API surface. The DOM lib does not ship these types
@@ -61,7 +66,7 @@ export interface UseSpeechResult {
   clearError: () => void;
   startListening: () => void;
   stopListening: () => void;
-  speak: (text: string) => void;
+  speak: (text: string, opts?: { bargeIn?: boolean }) => void;
   stopSpeaking: () => void;
   speaking: boolean;
   muted: boolean;
@@ -80,6 +85,10 @@ export function useSpeech({
 
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const finalRef = useRef("");
+  const interimRef = useRef("");
+  const silenceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelSpeechRef = useRef<(() => void) | null>(null);
+  const stopBargeRef = useRef<(() => void) | null>(null);
   const callbackRef = useRef(onFinalTranscript);
   callbackRef.current = onFinalTranscript;
 
@@ -93,11 +102,14 @@ export function useSpeech({
 
     const recognition = new Ctor();
     recognition.lang = "en-US";
-    recognition.continuous = false;
+    // Continuous + our own silence window: Chrome's non-continuous mode ends the
+    // turn at the first short pause, which cut people off mid-sentence.
+    recognition.continuous = true;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
 
     finalRef.current = "";
+    interimRef.current = "";
     setInterim("");
     setError(null);
 
@@ -111,7 +123,11 @@ export function useSpeech({
         else interimText += transcript;
       }
       if (finalText) finalRef.current = `${finalRef.current} ${finalText}`.trim();
-      setInterim(`${finalRef.current} ${interimText}`.trim());
+      interimRef.current = interimText.trim();
+      const heard = `${finalRef.current} ${interimText}`.trim();
+      setInterim(heard);
+      if (silenceRef.current) clearTimeout(silenceRef.current);
+      if (heard) silenceRef.current = setTimeout(() => recognition.stop(), END_OF_TURN_MS);
     };
 
     recognition.onerror = (event) => {
@@ -128,11 +144,14 @@ export function useSpeech({
     };
 
     recognition.onend = () => {
+      if (silenceRef.current) clearTimeout(silenceRef.current);
       recognitionRef.current = null;
       setListening(false);
       setInterim("");
-      const transcript = finalRef.current.trim();
+      // Keep words still marked interim when the engine ends the session.
+      const transcript = `${finalRef.current} ${interimRef.current}`.replace(/\s+/g, " ").trim();
       finalRef.current = "";
+      interimRef.current = "";
       if (transcript) callbackRef.current(transcript);
     };
 
@@ -151,39 +170,49 @@ export function useSpeech({
     recognitionRef.current?.stop();
   }, []);
 
-  const speak = useCallback(
-    (text: string) => {
-      if (muted) return;
-      if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-      const synth = window.speechSynthesis;
-      synth.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 1.02;
-      utterance.pitch = 1;
-      const voices = synth.getVoices();
-      const preferred =
-        voices.find(
-          (voice) =>
-            voice.lang === "en-US" && /google|samantha|natural|aria/i.test(voice.name),
-        ) ?? voices.find((voice) => voice.lang.startsWith("en"));
-      if (preferred) utterance.voice = preferred;
-      utterance.onstart = () => setSpeaking(true);
-      utterance.onend = () => setSpeaking(false);
-      utterance.onerror = () => setSpeaking(false);
-      synth.speak(utterance);
-    },
-    [muted],
-  );
-
   const stopSpeaking = useCallback(() => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    window.speechSynthesis.cancel();
+    stopBargeRef.current?.();
+    stopBargeRef.current = null;
+    cancelSpeechRef.current?.();
+    cancelSpeechRef.current = null;
+    if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
     setSpeaking(false);
   }, []);
+
+  const speak = useCallback(
+    (text: string, opts?: { bargeIn?: boolean }) => {
+      if (muted) return;
+      if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+      stopSpeaking();
+      // Never let the recognizer hear our own voice (and drop anything half-heard).
+      finalRef.current = "";
+      interimRef.current = "";
+      recognitionRef.current?.abort();
+      setSpeaking(true);
+      const cancel = speakQueued(window.speechSynthesis, text, () => {
+        if (cancelSpeechRef.current === cancel) cancelSpeechRef.current = null;
+        stopBargeRef.current?.();
+        stopBargeRef.current = null;
+        setSpeaking(false);
+      });
+      cancelSpeechRef.current = cancel;
+      if (opts?.bargeIn) {
+        // Only in hands-free (tap-started): an echo-cancelled detector so talking over the answer stops it.
+        void startBargeIn(() => { if (cancelSpeechRef.current === cancel) stopSpeaking(); }).then((stop) => {
+          if (cancelSpeechRef.current === cancel) stopBargeRef.current = stop;
+          else stop();
+        });
+      }
+    },
+    [muted, stopSpeaking],
+  );
 
   useEffect(() => {
     return () => {
       recognitionRef.current?.abort();
+      if (silenceRef.current) clearTimeout(silenceRef.current);
+      stopBargeRef.current?.();
+      cancelSpeechRef.current?.();
       if (typeof window !== "undefined" && "speechSynthesis" in window) {
         window.speechSynthesis.cancel();
       }

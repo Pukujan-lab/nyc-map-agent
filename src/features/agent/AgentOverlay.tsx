@@ -22,6 +22,7 @@ import { usePanel } from "@/lib/store/PanelContext";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { cn } from "@/lib/utils";
 import { useSpeech } from "@/lib/voice/useSpeech";
+import { spokenSummary } from "@/lib/voice/tts";
 import { executeCommand, type ExecutorContext } from "./executor";
 import type { Trip, TripMode } from "./schema";
 import { askAgent } from "./stream";
@@ -105,9 +106,11 @@ export default function AgentOverlay() {
       setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, content: x.content || "The assistant is unavailable right now." } : x)));
     } finally {
       setBusy(false);
-      if (spoken) speech.speak(spoken);
+      // Short spoken answer; the full detail stays on screen. In hands-free the
+      // person can talk over it to interrupt.
+      if (spoken) speech.speak(spokenSummary(spoken), { bargeIn: handsFree });
     }
-  }, [busy, messages, mode, setChatOpen, speech, askReq]);
+  }, [busy, messages, mode, setChatOpen, speech, askReq, handsFree]);
 
   const turnOffHandsFree = useCallback(() => setHandsFree(false), []);
   useHandsFree({ on: handsFree, supported: speech.sttSupported, listening: speech.listening, busy, speaking: speech.speaking, error: speech.error, start: speech.startListening, stop: speech.stopListening, turnOff: turnOffHandsFree });
@@ -176,8 +179,8 @@ export default function AgentOverlay() {
 
       {handsFree || speech.listening || (speech.speaking && handsFree) ? (
         <div className="flex items-center gap-2 border-b bg-muted/50 px-4 py-1.5 text-xs" role="status" data-testid="voice-status">
-          <span className={cn("h-2 w-2 rounded-full", speech.listening ? "animate-pulse bg-destructive" : "bg-muted-foreground")} />
-          <span>{speech.listening ? "Listening" : speech.speaking ? "Speaking (mic off)" : busy ? "Thinking…" : "Hands-free on"}</span>
+          <span className={cn("h-2 w-2 rounded-full", speech.listening ? "animate-pulse bg-destructive" : busy || speech.speaking ? "animate-pulse bg-primary" : "bg-muted-foreground")} />
+          <span>{speech.listening ? (speech.interim ? `Listening: “${speech.interim}”` : "Listening") : busy ? "Thinking…" : speech.speaking ? (handsFree ? "Speaking (talk to interrupt)" : "Speaking") : "Hands-free on"}</span>
           <span className="ml-auto text-muted-foreground">Nothing is recorded or saved.</span>
         </div>
       ) : null}
