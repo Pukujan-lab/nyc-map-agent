@@ -239,6 +239,52 @@
           },
           "now": {
             "type": "string"
+          },
+          "context": {
+            "type": "object",
+            "properties": {
+              "source": {
+                "type": "string",
+                "enum": [
+                  "street-view"
+                ]
+              },
+              "lon": {
+                "type": "number"
+              },
+              "lat": {
+                "type": "number"
+              },
+              "heading": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "nearestStation": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "nearestEntrance": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "followedTrain": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "source",
+              "lon",
+              "lat"
+            ]
           }
         },
         "required": [
