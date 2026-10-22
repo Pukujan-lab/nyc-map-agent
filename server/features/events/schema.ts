@@ -2,7 +2,7 @@ import { z } from "@hono/zod-openapi";
 
 /**
  * Shapes for the Events layer: the two NYC Open Data payloads we read, the
- * normalised event we store in core.events, and the /api/events query and
+ * normalised event we store in core.street_events, and the /api/events query and
  * response. Source payloads are parsed with zod at ingest so a renamed column
  * fails loudly instead of landing nulls.
  */
@@ -54,7 +54,7 @@ export type EventGeometry = z.infer<typeof EventGeometry>;
 
 const EventSource = z.enum(["nyc-permitted-events", "nyc-parks-events"]);
 
-/** One normalised event, as stored in core.events and served by /api/events. */
+/** One normalised event, as stored in core.street_events and served by /api/events. */
 export const Event = z
   .object({
     id: z.string(),

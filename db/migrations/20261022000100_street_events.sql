@@ -2,8 +2,9 @@
 -- Events layer: NYC permitted events (NYC Open Data tvpp-9vvx) and NYC Parks public
 -- events (w3wp-dpdi), normalised by server/features/events/ingest.ts and upserted
 -- nightly. location is a GeoJSON Point or LineString; lon/lat is its first point,
--- used for the bbox filter in /api/events.
-CREATE TABLE IF NOT EXISTS core.events (
+-- used for the bbox filter in /api/events. (Not core.events: that is the 311 noise /
+-- crash event view from the layered schemas.)
+CREATE TABLE core.street_events (
   id           text PRIMARY KEY,
   title        text NOT NULL,
   kind         text NOT NULL CHECK (kind IN ('fair', 'market', 'popup', 'show', 'parks', 'closure', 'other')),
@@ -17,7 +18,7 @@ CREATE TABLE IF NOT EXISTS core.events (
   url          text,
   refreshed_at timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS events_time_idx ON core.events (start_at, end_at);
+CREATE INDEX IF NOT EXISTS street_events_time_idx ON core.street_events (start_at, end_at);
 
 -- migrate:down
-DROP TABLE IF EXISTS core.events;
+DROP TABLE IF EXISTS core.street_events;

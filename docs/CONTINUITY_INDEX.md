@@ -1,6 +1,6 @@
 # Continuity Document Index
 
-<!-- continuity:documents-index {"catalog_sha256":"ce033fdf9f4d5ba32675d523b483ab6784d13c5f9f11fe534c558607ac8d0de0","schema":"project-continuity.documents-index.v1"} -->
+<!-- continuity:documents-index {"catalog_sha256":"688ba614f5c94de43fa8249550898212cc1d35079221f26797202b63a12d6997","schema":"project-continuity.documents-index.v1"} -->
 
 > Generated from `.continuity/documents.json`. Edit the JSON inventory, then run `continuity docs render`; do not edit this view directly.
 > Freshness below compares local file bytes; after `git fetch origin`, use `continuity docs find` for cached remote freshness.
@@ -34,8 +34,8 @@
 - File: [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md)
 - Local content status: **CURRENT**
 - Last reviewed at commit: `uncommitted`
-- Reviewed SHA-256: `e1bce825d1bac780d60c20a9c1a7938f017fee4efbc46d133b535dbb20d09109`
-- Current SHA-256: `e1bce825d1bac780d60c20a9c1a7938f017fee4efbc46d133b535dbb20d09109`
+- Reviewed SHA-256: `fa4787a0a98aac39c826c56dacad899e9a65d86f262e176f33a44b3df8dcb6c9`
+- Current SHA-256: `fa4787a0a98aac39c826c56dacad899e9a65d86f262e176f33a44b3df8dcb6c9`
 - Summary: Modular monolith layout, features and module boundaries.
 - Search terms: none
 - Neighboring records: none

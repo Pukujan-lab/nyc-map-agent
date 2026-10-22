@@ -8,7 +8,7 @@ export { Query };
 /**
  * GET /api/events?bbox=&from=&to=&kind= : street fairs, markets, pop-ups,
  * outdoor shows, Parks events and event street closures overlapping the time
- * window (default now → +7 days), from core.events (refreshed nightly).
+ * window (default now → +7 days), from core.street_events (refreshed nightly).
  */
 interface Row {
   id: string;
@@ -39,7 +39,7 @@ export async function GET(request: Request): Promise<Response> {
       `SELECT id, title, kind, to_char(start_at AT TIME ZONE 'America/New_York', 'YYYY-MM-DD"T"HH24:MI:SS') AS start_at,
               to_char(end_at AT TIME ZONE 'America/New_York', 'YYYY-MM-DD"T"HH24:MI:SS') AS end_at,
               location, address, source, url
-       FROM core.events
+       FROM core.street_events
        WHERE start_at < $2::timestamptz AND end_at >= $1::timestamptz
          AND ($3::text[] IS NULL OR kind = ANY($3::text[]))
          AND ($4::float8 IS NULL OR (lon BETWEEN $4 AND $6 AND lat BETWEEN $5 AND $7))
