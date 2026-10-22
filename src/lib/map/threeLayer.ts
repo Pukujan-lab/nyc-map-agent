@@ -11,6 +11,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { cornerOffset, crossingsNear, dirOf, streetBearingAt, toLocal, type NamedStreet } from "./signPlacement";
 import { eyeOrCenter, kioskSources, setPickTargets, type PickTarget } from "./streetPick";
 import { LANDMARKS } from "./landmarks";
+import { atlasCell, facadeCategory } from "./storefrontCategory";
 import maplibregl, { type CustomLayerInterface, type CustomRenderMethodInput, type Map as MaplibreMap } from "maplibre-gl";
 // Default import: also loads under Node (CJS) for scripts/make-landmarks.ts.
 const { MercatorCoordinate } = maplibregl;
@@ -1359,7 +1360,21 @@ export const SIGN_COLORS: Record<string, string> = {
 
 export interface StorefrontSign {
   name: string; cat: string; brg: number; sw: number; fl: number; lng: number; lat: number;
-  main?: number; dir?: string;
+  main?: number; dir?: string; kind?: string; w?: number;
+}
+
+// ---- Brand logos for the sign bands (server: OSM brand:wikidata → Wikidata P154, re-hosted in R2) ----
+
+const logos = new Map<string, HTMLImageElement | null>();
+/** A loaded logo image, or undefined while it loads (onLoad fires once ready), or null if none. */
+function logoFor(s: StorefrontSign, onLoad: () => void): HTMLImageElement | null | undefined {
+  const key = `${s.name}@${s.lng.toFixed(5)},${s.lat.toFixed(5)}`;
+  if (logos.has(key)) return logos.get(key);
+  logos.set(key, null);
+  const img = new Image();
+  img.onload = () => { logos.set(key, img); onLoad(); };
+  img.src = `/api/v1/storefronts/logo?${new URLSearchParams({ name: s.name, lon: s.lng.toFixed(5), lat: s.lat.toFixed(5) })}`;
+  return undefined;
 }
 
 /** Signs from the loaded tiles, nearest first, deduplicated across tile edges. */
@@ -1395,7 +1410,7 @@ export function directoryAt(map: MapLibreMap, lng: number, lat: number): Storefr
   return signsNear(map, lng, lat, 25).find((s) => s.main === 1) ?? null;
 }
 
-function drawSlot(g: CanvasRenderingContext2D, i: number, s: StorefrontSign) {
+function drawSlot(g: CanvasRenderingContext2D, i: number, s: StorefrontSign, logo?: HTMLImageElement | null) {
   const x = (i % 2) * 512, y = Math.floor(i / 2) * 32;
   g.fillStyle = SIGN_COLORS[s.cat] ?? SIGN_COLORS.service;
   g.fillRect(x, y, 512, 32);
@@ -1406,10 +1421,19 @@ function drawSlot(g: CanvasRenderingContext2D, i: number, s: StorefrontSign) {
   g.textAlign = "center";
   g.textBaseline = "middle";
   const text = s.main ? s.name.toUpperCase() : s.name;
+  // A brand logo sits on a white tile at the left of the band, the name beside it.
+  const pad = logo ? 34 : 0;
+  if (logo) {
+    g.fillStyle = "#fff";
+    g.fillRect(x + 4, y + 3, 26, 26);
+    const k = Math.min(24 / logo.width, 24 / logo.height);
+    g.drawImage(logo, x + 17 - (logo.width * k) / 2, y + 16 - (logo.height * k) / 2, logo.width * k, logo.height * k);
+    g.fillStyle = "#fff";
+  }
   let size = 22;
   do g.font = `600 ${size}px "Helvetica Neue", Arial, sans-serif`;
-  while (g.measureText(text).width > 480 && (size -= 1) > 10);
-  g.fillText(text, x + 256, y + 17);
+  while (g.measureText(text).width > 480 - pad && (size -= 1) > 10);
+  g.fillText(text, x + 256 + pad / 2, y + 17);
 }
 
 export function createStorefrontLayer(): CustomLayerInterface {
@@ -1440,6 +1464,23 @@ export function createStorefrontLayer(): CustomLayerInterface {
   mesh.frustumCulled = false;
   mesh.count = 0;
   scene.add(mesh);
+  // Ground-floor shop fronts behind the bands: one atlas (5 x 2 categories),
+  // one instanced draw, a per-shop tint so a block never looks cloned.
+  const facadeTex = new THREE.TextureLoader().load("/textures/storefront-atlas.png", () => map?.triggerRepaint());
+  facadeTex.encoding = THREE.sRGBEncoding;
+  const cell = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 2), 2);
+  const facadeGeo = new THREE.PlaneGeometry(1, 1);
+  facadeGeo.setAttribute("cell", cell);
+  const facadeMat = new THREE.MeshBasicMaterial({ map: facadeTex, side: THREE.DoubleSide });
+  facadeMat.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nattribute vec2 cell;")
+      .replace("#include <uv_vertex>", "#include <uv_vertex>\nvUv = vec2((cell.x + uv.x) / 5.0, 1.0 - (cell.y + 1.0 - uv.y) / 2.0);");
+  };
+  const facades = new THREE.InstancedMesh(facadeGeo, facadeMat, MAX);
+  facades.frustumCulled = false;
+  facades.count = 0;
+  scene.add(facades);
   let origin = new MercatorCoordinate(0, 0, 0);
   let scale = 1;
   let shown = "";
@@ -1451,6 +1492,7 @@ export function createStorefrontLayer(): CustomLayerInterface {
   const refresh = () => {
     if (map.getZoom() < STOREFRONT_MIN_ZOOM) {
       mesh.count = 0;
+      facades.count = 0;
       shown = "";
       return;
     }
@@ -1462,17 +1504,19 @@ export function createStorefrontLayer(): CustomLayerInterface {
     // grows to stay about 14 px tall and readable (#67).
     const mpp = (78_271.517 * Math.cos((map.getCenter().lat * Math.PI) / 180)) / 2 ** map.getZoom();
     const grow = Math.min(6, Math.max(1, (mpp * 14) / PLATE_H));
-    const key = `${grow.toFixed(1)}|` + signs.map((s) => `${s.lng},${s.lat}`).join("|");
+    const c = map.getCenter();
+    const logoOf = (s: StorefrontSign) => (s.main || s.name === "Directory" ? null : logoFor(s, () => { shown = ""; refresh(); }));
+    const key = `${grow.toFixed(1)}|` + signs.map((s) => `${s.lng},${s.lat},${logoOf(s) ? 1 : 0}`).join("|");
     if (key === shown) return;
     shown = key;
-    const c = map.getCenter();
     origin = MercatorCoordinate.fromLngLat(c, 0);
     scale = origin.meterInMercatorCoordinateUnits();
     const kx = 111_320 * Math.cos((c.lat * Math.PI) / 180);
     g.clearRect(0, 0, canvas.width, canvas.height);
     const m = new THREE.Matrix4();
+    let nf = 0;
     signs.forEach((s, i) => {
-      drawSlot(g, i, s);
+      drawSlot(g, i, s, logoOf(s));
       uv.setXY(i, i % 2, Math.floor(i / 2));
       const b = (s.brg * Math.PI) / 180;
       const n = new THREE.Vector3(Math.sin(b), Math.cos(b), 0);
@@ -1485,7 +1529,22 @@ export function createStorefrontLayer(): CustomLayerInterface {
         .addScaledVector(t, (s.dx ?? 0) * grow);
       m.makeBasis(t.clone().multiplyScalar(w), new THREE.Vector3(0, 0, h), n).setPosition(pos);
       mesh.setMatrixAt(i, m);
+      // Ground-floor shop front under a ground-floor band (not the directory board).
+      if (!s.fl && !s.dx && s.name !== "Directory" && grow < 1.5) {
+        const fw = Math.min(Math.max(s.sw + 1.2, 3), Math.max(3, s.w ?? 8), 8);
+        const [cx, cy] = atlasCell(facadeCategory(s.kind, s.cat));
+        cell.setXY(nf, cx, cy);
+        const fpos = new THREE.Vector3((s.lng - c.lng) * kx, (s.lat - c.lat) * 111_320, 1.45).addScaledVector(n, 0.06);
+        m.makeBasis(t.clone().multiplyScalar(fw), new THREE.Vector3(0, 0, 2.9), n).setPosition(fpos);
+        facades.setMatrixAt(nf, m);
+        facades.setColorAt(nf, new THREE.Color().setScalar(0.92 + ((i * 7) % 17) / 100)); // ±8%, so a block never looks cloned
+        nf++;
+      }
     });
+    facades.count = nf;
+    facades.instanceMatrix.needsUpdate = true;
+    if (facades.instanceColor) facades.instanceColor.needsUpdate = true;
+    cell.needsUpdate = true;
     mesh.count = signs.length;
     mesh.instanceMatrix.needsUpdate = true;
     uv.needsUpdate = true;
@@ -1514,6 +1573,9 @@ export function createStorefrontLayer(): CustomLayerInterface {
       geometry.dispose();
       material.dispose();
       atlas.dispose();
+      facadeGeo.dispose();
+      facadeMat.dispose();
+      facadeTex.dispose();
     },
     render(_gl, args) {
       // Animated layers (weather, hazards) keep the map from ever going idle,
@@ -1523,7 +1585,7 @@ export function createStorefrontLayer(): CustomLayerInterface {
         lastCheck = now;
         refresh();
       }
-      if (!mesh.count) return;
+      if (!mesh.count && !facades.count) return;
       const l = new THREE.Matrix4().makeTranslation(origin.x, origin.y, origin.z ?? 0).scale(new THREE.Vector3(scale, -scale, scale));
       camera.projectionMatrix = new THREE.Matrix4().fromArray(args.defaultProjectionData.mainMatrix as unknown as number[]).multiply(l);
       renderer.resetState();
