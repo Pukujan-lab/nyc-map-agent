@@ -1,6 +1,7 @@
 import { liveProgress } from "./monotonic";
+import { BusEstimator } from "./busEstimate";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { flushSync } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { Layer, Source, useMap } from "react-map-gl/maplibre";
 import type { Map as MaplibreMap, MapLayerMouseEvent } from "maplibre-gl";
@@ -17,21 +18,24 @@ import {
   type SystemId,
   type Vehicle,
 } from "./model";
-import { alertedRoutes, useAlerts, useBusRoute, useBuses, useStarred, useTransitData, useTransitMeta, useTransitToggles, useXrayData, useSegmentHistory } from "./hooks";
+import { alertedRoutes, useAlerts, useBusRoute, useBusShapes, useBuses, useStarred, useTransitData, useTransitMeta, useTransitToggles, useXrayData, useSegmentHistory } from "./hooks";
 import { useXray, xrayPrims } from "./xray";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { useFlag } from "@/lib/flags";
 import { usePanel, usePanelChip, usePanelMode, usePanelSearch, type SearchProvider } from "@/lib/store/PanelContext";
 import { setFollowed, useFollowed } from "./follow";
 import { publishSubway } from "@/lib/agent/streetContext";
+import { publishLiveDots } from "@/lib/transit/liveVehicles";
 import { setStreetXray, useStreetXray } from "@/lib/transit/streetXray";
 
 const stopFollow = () => setFollowed(null);
 import { SYSTEM_LABELS } from "./model";
 import { StationDetails, VehicleDetails } from "./TransitCard";
 import { TransitStatusDetails } from "./TransitStatus";
+import { alertGeometry, setAlertFocus, stationChanges, useAlertFocus } from "./alertFocus";
+import { LinesDrawer } from "./LinesDrawer";
 import { lineOpacity, useMapOptions } from "@/lib/map/mapOptions";
-import { NOTCH_ICON, addBulletImage, stationRowId, bulletId, busBadgeId, busPrefix } from "@/lib/transit/bullets";
+import { NOTCH_ICON, addBulletImage, lineColor as lineColorOf, stationRowId, bulletId, busBadgeId, busPrefix } from "@/lib/transit/bullets";
 import { usePalette } from "@/lib/theme";
 import { FOCUS_OPACITY, FOCUS_VEIL_ID, WORLD, focusVeil, useTransitFocus } from "@/lib/map/transitFocus";
 
@@ -60,6 +64,23 @@ const ICONS: Record<string, { node: JSX.Element; sdf: boolean }> = {
   "transit-access": { node: <Accessibility color="#2563eb" strokeWidth={2.5} size={40} />, sdf: false },
   "transit-wrench": { node: <Wrench color="#f59e0b" strokeWidth={2.5} size={40} />, sdf: false },
 };
+
+/** Skipped-station markers (#253): a full cross-out, or a half strike for one direction. */
+function addSkipIcons(map: MaplibreMap) {
+  for (const [id, half] of [["transit-skip-x", false], ["transit-skip-half", true]] as const) {
+    if (map.hasImage(id)) continue;
+    const ctx = document.createElement("canvas").getContext("2d");
+    if (!ctx) return;
+    ctx.canvas.width = ctx.canvas.height = 40;
+    ctx.beginPath(); ctx.arc(20, 20, 15, 0, Math.PI * 2);
+    ctx.fillStyle = "#ffffff"; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = "#111111"; ctx.stroke();
+    ctx.lineCap = "round"; ctx.lineWidth = 4; ctx.strokeStyle = "#d4183d";
+    ctx.beginPath(); ctx.moveTo(9, 31); ctx.lineTo(31, 9); ctx.stroke();
+    if (!half) { ctx.beginPath(); ctx.moveTo(9, 9); ctx.lineTo(31, 31); ctx.stroke(); }
+    map.addImage(id, ctx.getImageData(0, 0, 40, 40), { pixelRatio: 2 });
+  }
+}
 
 function addIcon(map: MaplibreMap, id: string) {
   const def = ICONS[id];
@@ -121,6 +142,16 @@ export default function TransitLayer() {
   const following = followedKey !== null && followedKey === selectedKey;
   useEffect(() => { if (followedKey && followedKey !== selectedKey) setFollowed(null); }, [followedKey, selectedKey]);
   const display = useRef(new Map<string, Vehicle>());
+  // Buses: snapped to their route shape and dead-reckoned between 30 s GPS reports.
+  const busEst = useRef(new BusEstimator());
+  const [busRoutes, setBusRoutes] = useState<string[]>([]);
+  const busShapes = useBusShapes(busRoutes);
+  useEffect(() => {
+    for (const g of busShapes) busEst.current.setRoute(g);
+    const list = buses.data?.buses ?? [];
+    for (const b of list) busEst.current.report(b);
+    busEst.current.retain(new Set(list.map((b) => b.id)));
+  }, [buses.data, busShapes]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
 
   const openStation = useCallback(
@@ -157,8 +188,11 @@ export default function TransitLayer() {
     if (!map) return;
     const missing = (e: { id: string }) => { addIcon(map, e.id); addBulletImage(map, e.id); };
     Object.keys(ICONS).forEach((id) => addIcon(map, id));
+    const skipIcons = () => addSkipIcons(map);
+    skipIcons();
     map.on("styleimagemissing", missing);
-    return () => { map.off("styleimagemissing", missing); };
+    map.on("styledata", skipIcons);
+    return () => { map.off("styleimagemissing", missing); map.off("styledata", skipIcons); };
   }, [map]);
 
   const statics = rail.map((s) => data[s]?.stat).filter((s): s is StaticSystem => Boolean(s));
@@ -206,11 +240,20 @@ export default function TransitLayer() {
         if (!st || seen.has(key)) continue;
         seen.add(key);
         if (a.kind === "planned") points.push({ type: "Feature", properties: { id: a.id }, geometry: st.geometry });
-        if (a.reroute) skips.push({ type: "Feature", properties: { ...st.properties }, geometry: st.geometry });
       }
       for (const r of a.routes) {
         const c = shapeSlice(sys, r, a.stops);
         if (c) segs.push({ type: "Feature", properties: { id: a.id }, geometry: { type: "LineString", coordinates: c } });
+      }
+    }
+    // Skipped stations (direction-aware): full cross when skipped both ways, half strike + label for one direction.
+    const sub = statics.find((s) => s.system === "subway");
+    if (sub) {
+      for (const [id, c] of stationChanges(alerts.data?.alerts ?? [], sub)) {
+        const st = stationPos.get(`subway:${id}`);
+        if (!st || !c.skips.length) continue;
+        const both = c.skips.some((k) => k.end === null);
+        skips.push({ type: "Feature", properties: { ...st.properties, icon: both ? "transit-skip-x" : "transit-skip-half", label: both ? "Skipped" : `Skipped ${c.skips[0].toward}-bound` }, geometry: st.geometry });
       }
     }
     const accessSeen = new Set<string>();
@@ -225,6 +268,44 @@ export default function TransitLayer() {
     const fc = (features: GeoJSON.Feature[]): GeoJSON.FeatureCollection => ({ type: "FeatureCollection", features });
     return { points: fc(points), segs: fc(segs), skips: fc(skips), access: fc(access) };
   }, [alerts.data, stations, staticKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Alert focus (#253): fly to the affected stretch, dim the rest, Back restores the camera.
+  const alertFocus = useAlertFocus();
+  const alertGeo = useMemo(() => {
+    const sub = statics.find((s) => s.system === "subway");
+    return alertFocus && sub ? alertGeometry(alertFocus, sub) : null;
+  }, [alertFocus, staticKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const alertFc = useMemo(() => {
+    const fc = (features: GeoJSON.Feature[]): GeoJSON.FeatureCollection => ({ type: "FeatureCollection", features });
+    const oneWay = alertFocus?.changes?.find((c) => c.kind === "skip" && c.toward)?.toward ?? null;
+    const line = (coords: GeoJSON.Position[], route: string): GeoJSON.Feature => ({ type: "Feature", properties: { route, color: lineColorOf(route) }, geometry: { type: "LineString", coordinates: coords } });
+    return {
+      affected: fc((alertGeo?.affected ?? []).map((x) => line(x.coords, x.route))),
+      reroute: fc((alertGeo?.reroute ?? []).map((x) => line(x.coords, alertFocus?.routes[0] ?? x.route))),
+      skipped: fc((alertGeo?.skipped ?? []).map((x) => ({ type: "Feature", properties: { name: oneWay ? `${x.name} · ${oneWay}-bound skipped` : x.name, icon: oneWay ? "transit-skip-half" : "transit-skip-x" }, geometry: { type: "Point", coordinates: x.coord } }))),
+    };
+  }, [alertGeo, alertFocus]);  
+  const savedCam = useRef<{ center: [number, number]; zoom: number; bearing: number; pitch: number } | null>(null);
+  useEffect(() => {
+    if (!map) return;
+    if (alertGeo?.bounds) {
+      if (!savedCam.current) { const c = map.getCenter(); savedCam.current = { center: [c.lng, c.lat], zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() }; }
+      const wide = window.innerWidth >= 768;
+      map.fitBounds(alertGeo.bounds, { padding: wide ? { top: 90, bottom: 60, left: 440, right: 80 } : { top: 90, bottom: Math.round(window.innerHeight * 0.45), left: 30, right: 30 }, maxZoom: 15.5, duration: 900, bearing: 0, pitch: 0 });
+    } else if (!alertFocus && savedCam.current) {
+      map.easeTo({ ...savedCam.current, duration: 700 });
+      savedCam.current = null;
+    }
+  }, [map, alertGeo, alertFocus]);
+  // The alert card owns the focus: once it leaves the panel (Back, Esc, another pick), clear it.
+  const shownAlert = useRef<string | null>(null);
+  useEffect(() => {
+    if (!alertFocus) { shownAlert.current = null; return; }
+    const want = `transit:alert:${alertFocus.id}`;
+    if (content?.id === want) shownAlert.current = want;
+    else if (shownAlert.current === want) setAlertFocus(null);
+  }, [content?.id, alertFocus]);
+  const openLines = useCallback(() => showPanel({ id: "transit:lines", title: "Lines", subtitle: "Tap lines to show only those", details: <LinesDrawer /> }), [showPanel]);
 
   const searchStations = useCallback<SearchProvider>(
     (q) => {
@@ -280,6 +361,8 @@ export default function TransitLayer() {
         const v: Vehicle = { key: `bus:${bus.id}`, system: "bus", route: bus.route, label: bus.route, color: "#0039A6", lon: bus.lon, lat: bus.lat, bearing: bus.bearing ?? 0, grade: "grade", dir: bus.dir, nextStop: bus.next ?? undefined };
         if (inView(v) || v.key === selectedKey) out.push(v);
       }
+      const routes = [...new Set(out.filter((v) => v.system === "bus").map((v) => v.route))].sort().slice(0, 80);
+      setBusRoutes((prev) => (prev.join() === routes.join() ? prev : routes));
       const c = eye ?? { lon: map.getCenter().lng, lat: map.getCenter().lat };
       out.sort((a, z) => Math.hypot(a.lon - c.lon, a.lat - c.lat) - Math.hypot(z.lon - c.lon, z.lat - c.lat));
       targets.current = out.slice(0, MAX_VEHICLES);
@@ -297,7 +380,12 @@ export default function TransitLayer() {
       if (t - last < 66) return;
       last = t;
       const next = new Map<string, Vehicle>();
+      const nowS = Date.now() / 1000;
       for (const v of targets.current) {
+        if (v.system === "bus") {
+          const f = busEst.current.frame(v.key.slice(4), nowS);
+          if (f) { next.set(v.key, { ...v, lon: f.lon, lat: f.lat, bearing: f.bearing, alpha: f.alpha }); continue; }
+        }
         const d = display.current.get(v.key);
         if (!d || Math.hypot(d.lon - v.lon, d.lat - v.lat) > 0.01) { next.set(v.key, v); continue; }
         let db = ((v.bearing - d.bearing + 540) % 360) - 180;
@@ -323,6 +411,14 @@ export default function TransitLayer() {
     return () => window.clearInterval(id);
   }, [three]);
   const theme = usePalette();
+  // Street level: publish the drawn vehicles once a second for the mini map.
+  useEffect(() => {
+    if (!walking) { publishLiveDots([]); return; }
+    const push = () => publishLiveDots([...display.current.values()].map((v) => ({ key: v.key, lon: v.lon, lat: v.lat, color: v.system === "bus" ? theme.bus : v.color, bus: v.system === "bus", underground: v.grade === "underground" })));
+    push();
+    const id = window.setInterval(push, 1000);
+    return () => { window.clearInterval(id); publishLiveDots([]); };
+  }, [walking, theme.bus]);
   const [hoverStation, setHoverStation] = useState("");
   const openStationId = content?.id.startsWith("transit:station:") ? content.id.split(":").pop() ?? "" : "";
   useEffect(() => {
@@ -347,7 +443,7 @@ export default function TransitLayer() {
         badge = busBadgeId(p.text, c); // the tiny prefix badge stays plain; the "!" rides the full badge
         badgeFull = busBadgeId(v.route, c, alert);
       }
-      return { type: "Feature", properties: { key: v.key, color: v.color, bearing: v.bearing, grade: v.grade, label: v.label, system: v.system, route: v.route, bullet, badge, badgeFull }, geometry: { type: "Point", coordinates: [v.lon, v.lat] } };
+      return { type: "Feature", properties: { key: v.key, color: v.color, bearing: v.bearing, grade: v.grade, label: v.label, system: v.system, route: v.route, bullet, badge, badgeFull, alpha: v.alpha ?? 1 }, geometry: { type: "Point", coordinates: [v.lon, v.lat] } };
     }),
   }), [vehicles, alerted, theme]);
   const selBusRoute = (selectedKey?.startsWith("bus:") ? vehicles.find((v) => v.key === selectedKey)?.route : undefined) ?? "";
@@ -518,15 +614,24 @@ export default function TransitLayer() {
   // Route bullets stay on in every view but street level: symbols draw above the 3D
   // buildings, so a train is never lost behind a tower or under the ground when tilted.
   const hide2d = walking;
-  const bulletAlpha = (opts.routes.length ? ["case", ["in", ["get", "route"], ["literal", [...opts.routes]]], 1, 0.35] : 1) as number;
+  const bulletAlpha = (alertFocus ? ["case", ["in", ["get", "route"], ["literal", alertFocus.routes]], 1, 0.15] : opts.routes.length ? ["case", ["in", ["get", "route"], ["literal", [...opts.routes]]], 1, 0.15] : 1) as number;
+  const dimLines = (alertFocus ? 0.12 : lineAlpha);
+  // Isolated lines: their stations stay, the rest fade.
+  const stationAlpha = (opts.routes.length ? ["case", ["any", ...opts.routes.map((r) => ["in", ` ${r} `, ["concat", " ", ["get", "routes"], " "]])], 1, 0.15] : 1) as number;
+  const linesButton = typeof document !== "undefined" ? createPortal(
+    <button type="button" onClick={openLines} data-testid="lines-button"
+      className="fixed right-3 top-1/2 z-30 h-9 -translate-y-1/2 rounded-full border border-border bg-card px-4 text-[13px] font-semibold text-foreground shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      Lines{opts.routes.length ? ` · ${opts.routes.length}` : ""}
+    </button>, document.body) : null;
   return (
     <>
+      {linesButton}
       <Source id="transit-lines" type="geojson" data={lines}>
         <Layer id="transit-line-under" type="line" filter={["==", ["get", "grade"], "underground"]}
           paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 16, 2.5], "line-opacity": 0.45, "line-dasharray": [2, 2] }} />
         <Layer id="transit-line" type="line" filter={three ? ["==", ["get", "grade"], "grade"] : ["!=", ["get", "grade"], "underground"]}
           layout={{ "line-cap": "round", "line-join": "round" }}
-          paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, focus ? 1.8 : 1.5, 16, focus ? 4.8 : 4], "line-opacity": lineAlpha }} />
+          paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, focus ? 1.8 : 1.5, 16, focus ? 4.8 : 4], "line-opacity": dimLines }} />
       </Source>
       {focus ? (
         <Source id={FOCUS_VEIL_ID} type="geojson" data={WORLD}>
@@ -547,7 +652,7 @@ export default function TransitLayer() {
       </Source>
       <Source id="transit-stations" type="geojson" data={stations}>
         <Layer id="transit-station" type="circle" minzoom={11}
-          paint={{ "circle-color": "#ffffff", "circle-stroke-color": "#6b6a66", "circle-stroke-width": 1, "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 1.5, 16, 4] }} />
+          paint={{ "circle-color": "#ffffff", "circle-stroke-color": "#6b6a66", "circle-stroke-width": 1, "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 1.5, 16, 4], "circle-opacity": stationAlpha, "circle-stroke-opacity": stationAlpha }} />
         {/* Name + route bullets: every station from z15, or the hovered / open one at any zoom.
             Collision detection drops overlapping labels so they never pile up. */}
         <Layer id="transit-station-label" type="symbol" minzoom={11}
@@ -567,9 +672,32 @@ export default function TransitLayer() {
           layout={{ "icon-image": "transit-wrench", "icon-size": ["interpolate", ["linear"], ["zoom"], 11, 0.35, 16, 0.6], "icon-offset": [18, -18], "icon-allow-overlap": true }} />
       </Source>
       <Source id="transit-skips" type="geojson" data={work.skips}>
-        <Layer id="transit-skip" type="circle" minzoom={11}
-          paint={{ "circle-color": "rgba(0,0,0,0)", "circle-stroke-color": "#f59e0b", "circle-stroke-width": 2.5, "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 5, 16, 11] }} />
+        <Layer id="transit-skip" type="symbol" minzoom={11}
+          layout={{ "icon-image": ["get", "icon"], "icon-size": ["interpolate", ["linear"], ["zoom"], 11, 0.5, 16, 0.9], "icon-allow-overlap": true,
+            "text-field": ["step", ["zoom"], "", 13.5, ["get", "label"]], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-anchor": "left", "text-offset": [1.1, 0], "text-optional": true }}
+          paint={{ "text-color": "#d4183d", "text-halo-color": theme.land, "text-halo-width": 1.6 }} />
       </Source>
+      {alertFocus ? (
+        <>
+          <Source id="transit-alert-veil" type="geojson" data={WORLD}>
+            <Layer id="transit-alert-veil" type="fill" beforeId="transit-line-under" paint={{ "fill-color": focusVeil(theme), "fill-opacity": 0.55 }} />
+          </Source>
+          <Source id="transit-alert-affected" type="geojson" data={alertFc.affected}>
+            <Layer id="transit-alert-affected" type="line" layout={{ "line-cap": "round", "line-join": "round" }}
+              paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 5, 16, 11], "line-opacity": 0.95 }} />
+          </Source>
+          <Source id="transit-alert-reroute" type="geojson" data={alertFc.reroute}>
+            <Layer id="transit-alert-reroute" type="line" layout={{ "line-join": "round" }}
+              paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 3, 16, 7], "line-dasharray": [1.4, 1.2] }} />
+          </Source>
+          <Source id="transit-alert-skipped" type="geojson" data={alertFc.skipped}>
+            <Layer id="transit-alert-skipped" type="symbol"
+              layout={{ "icon-image": ["get", "icon"], "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.6, 16, 1], "icon-allow-overlap": true,
+                "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-anchor": "left", "text-offset": [1.2, 0], "text-optional": true }}
+              paint={{ "text-color": theme.dark ? "#f2f1ed" : "#111111", "text-halo-color": theme.land, "text-halo-width": 1.6 }} />
+          </Source>
+        </>
+      ) : null}
       <Source id="transit-access" type="geojson" data={work.access}>
         <Layer id="transit-access" type="symbol" minzoom={11}
           layout={{ "icon-image": "transit-access", "icon-size": ["interpolate", ["linear"], ["zoom"], 11, 0.35, 16, 0.6], "icon-offset": [-18, -18], "icon-allow-overlap": true }} />
@@ -606,15 +734,16 @@ export default function TransitLayer() {
         <Layer id="transit-bus-notch" type="symbol" filter={["==", ["get", "system"], "bus"]}
           layout={{ "icon-image": NOTCH_ICON, "icon-rotate": ["get", "bearing"], "icon-rotation-alignment": "map", "icon-allow-overlap": true, "icon-ignore-placement": true,
             "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.3, 14, 0.45, 15, 0.55, 18, 0.75], "icon-offset": [0, -17] }}
-          paint={{ "icon-opacity": ["interpolate", ["linear"], ["zoom"], 12.5, 0, 13.5, 0.8] }} />
+          paint={{ "icon-opacity": ["interpolate", ["linear"], ["zoom"], 12.5, 0, 13.5, ["*", 0.8, ["get", "alpha"]]] }} />
         <Layer id="transit-bus-badge" type="symbol" maxzoom={15} filter={["all", ["==", ["get", "system"], "bus"], ["!=", ["get", "route"], selBusRoute]]}
           layout={{ "icon-image": ["get", "badge"], "icon-allow-overlap": true, "icon-ignore-placement": true, "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.3, 14, 0.45] }}
-          paint={{ "icon-opacity": selBusRoute ? 0.4 : 0.85 }} />
+          paint={{ "icon-opacity": ["*", selBusRoute ? 0.4 : 0.85, ["get", "alpha"]] }} />
         <Layer id="transit-bus-badge-full" type="symbol" minzoom={15} filter={["all", ["==", ["get", "system"], "bus"], ["!=", ["get", "route"], selBusRoute]]}
           layout={{ "icon-image": ["get", "badgeFull"], "icon-allow-overlap": false, "icon-ignore-placement": true, "icon-padding": 1, "icon-size": ["interpolate", ["linear"], ["zoom"], 15, 0.55, 18, 0.75] }}
-          paint={{ "icon-opacity": selBusRoute ? 0.45 : 1 }} />
+          paint={{ "icon-opacity": ["*", selBusRoute ? 0.45 : 1, ["get", "alpha"]] }} />
         <Layer id="transit-bus-badge-selected" type="symbol" filter={["all", ["==", ["get", "system"], "bus"], ["==", ["get", "route"], selBusRoute]]}
-          layout={{ "icon-image": ["get", "badgeFull"], "icon-allow-overlap": true, "symbol-sort-key": 1, "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.5, 16, 0.75] }} />
+          layout={{ "icon-image": ["get", "badgeFull"], "icon-allow-overlap": true, "symbol-sort-key": 1, "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.5, 16, 0.75] }}
+          paint={{ "icon-opacity": ["get", "alpha"] }} />
       </Source>
     </>
   );

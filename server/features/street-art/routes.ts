@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { fail, json, parseQuery } from "../../../api/_lib/http";
 import { cached, getJson } from "../../lib/ttlCache";
-import { snapBbox, licenseOk } from "../storefronts/logic";
+import { licenseOk, snapBbox } from "../../lib/osm";
 import { artQuery, commonsFile, wallSlab } from "./logic";
 
 /**

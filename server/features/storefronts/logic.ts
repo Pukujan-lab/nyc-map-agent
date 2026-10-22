@@ -8,23 +8,9 @@ export function brandsQuery(b: { west: number; south: number; east: number; nort
   return `[out:json][timeout:20];(nwr["brand:wikidata"]["shop"](${box});nwr["brand:wikidata"]["amenity"](${box}););out center tags 400;`;
 }
 
-/** Snap a bbox outward to a 0.005° grid so nearby requests share one cache entry. */
-export function snapBbox(b: { west: number; south: number; east: number; north: number }, step = 0.005) {
-  const f = (v: number) => Math.floor(v / step) * step;
-  const c = (v: number) => Math.ceil(v / step) * step;
-  const r = (v: number) => Math.round(v * 1e4) / 1e4;
-  return { west: r(f(b.west)), south: r(f(b.south)), east: r(c(b.east)), north: r(c(b.north)) };
-}
+export { licenseOk, snapBbox } from "../../lib/osm";
 
 export const QID = /^Q[1-9]\d{0,10}$/;
-
-/** Commons licenses we re-host: public domain and the CC0 / CC BY / CC BY-SA family. */
-export function licenseOk(short: string | undefined | null): boolean {
-  if (!short) return false;
-  const s = short.toLowerCase();
-  if (/\bnc\b|\bnd\b|non-?commercial|no-?deriv|fair use|non-free/.test(s)) return false;
-  return /public domain|^pd\b|pd-|cc0|cc[- ]by(-sa)?|cc by(-sa)?/.test(s);
-}
 
 /** Wikidata entity JSON → the first P154 (logo image) Commons file name, or null. */
 export function logoFile(entity: unknown, qid: string): string | null {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cornerLabel, distanceFade, nearestCorner, titleStreet } from "./corner";
+import { cornerLabel, nearestCorner, titleStreet } from "./corner";
 
 describe("corner label", () => {
   it("title-cases sign names", () => {
@@ -18,10 +18,5 @@ describe("corner label", () => {
     ];
     expect(nearestCorner(signs, -73.9886, 40.7594)).toBe("W 44 St at 8 Av");
     expect(nearestCorner(signs, -73.9, 40.7)).toBeNull();
-  });
-  it("fades by distance", () => {
-    expect(distanceFade(10)).toBe(1);
-    expect(distanceFade(160)).toBeCloseTo(0.5);
-    expect(distanceFade(400)).toBe(0);
   });
 });

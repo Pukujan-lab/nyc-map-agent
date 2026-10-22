@@ -93,6 +93,22 @@ function streetLines(map: MaplibreMapInstance): Array<Array<[number, number]>> {
   return lines;
 }
 
+/** Named street centrelines (OSM via the basemap's `transportation_name`). */
+function namedStreetLines(map: MaplibreMapInstance): NamedLine[] {
+  if (!map.getSource("openmaptiles")) return [];
+  const out: NamedLine[] = [];
+  for (const f of map.querySourceFeatures("openmaptiles", { sourceLayer: "transportation_name" })) {
+    const p = f.properties ?? {};
+    if (!STREET_CLASSES.has(String(p.class)) || p.brunnel === "tunnel") continue;
+    const name = String(p["name:en"] ?? p.name ?? "");
+    if (!name) continue;
+    const g = f.geometry;
+    if (g.type === "LineString") out.push({ name, coords: g.coordinates as Array<[number, number]> });
+    else if (g.type === "MultiLineString") for (const c of g.coordinates) out.push({ name, coords: c as Array<[number, number]> });
+  }
+  return out;
+}
+
 /** The walker's eye: where they stand, which way they face, how far they look up or down. */
 interface Eye {
   lon: number;
@@ -127,6 +143,8 @@ import { useQuickLayer } from "@/lib/quickLayers";
 import { QuickLayers } from "./QuickLayers";
 import { StreetMiniMap } from "./StreetMiniMap";
 import { nearestCorner, type CornerSign } from "@/lib/map/corner";
+import { formatStreetPair } from "@/lib/streetName";
+import { parseAt, streetLabel, streetPosition, type NamedLine } from "@/lib/map/streetPos";
 import { MAX_HEIGHT_M, pitchForHeight, STREET_LEVEL_M } from "@/lib/map/cameraHeight";
 import { hoverBlocked } from "@/lib/map/hover";
 import { FEATURES } from "@/features";
@@ -224,6 +242,8 @@ export function MapView({
   } | null>(null);
   /** "W 44 St at 8 Av": the nearest corner sign while walking. */
   const [corner, setCorner] = useState<string | null>(null);
+  /** "Grand Street & Essex Street": street underfoot and nearest cross street, throttled. */
+  const [streetHere, setStreetHere] = useState<string | null>(null);
   const { showPanel, closeAll, content: panelContent, minimized: panelMinimized, drawerOpen } = usePanel();
   // The hover card is a mouse affordance; on touch / narrow screens the sheet
   // already shows the same numbers.
@@ -276,13 +296,12 @@ export function MapView({
   const walkPad = useRef<WalkInput>(WALK_IDLE);
 
   const viewState = useMemo(
-    () => ({
-      longitude: HOME_VIEW.lon,
-      latitude: HOME_VIEW.lat,
-      zoom: initialZoom(),
-      pitch: 0,
-      bearing: 0,
-    }),
+    () => {
+      const at = typeof window === "undefined" ? null : parseAt(new URLSearchParams(window.location.search).get("at"));
+      return at
+        ? { longitude: at.lon, latitude: at.lat, zoom: 18, pitch: 0, bearing: at.bearing }
+        : { longitude: HOME_VIEW.lon, latitude: HOME_VIEW.lat, zoom: initialZoom(), pitch: 0, bearing: 0 };
+    },
     [],
   );
 
@@ -1068,7 +1087,8 @@ export function MapView({
         if (p.a && p.b) signs.push({ lng: f.geometry.coordinates[0], lat: f.geometry.coordinates[1], a: p.a, b: p.b });
       }
       const { lng, lat } = map.getCenter();
-      setCorner(nearestCorner(signs, lng, lat));
+      const label = nearestCorner(signs, lng, lat);
+      setCorner(label ? formatStreetPair(label) : null);
     };
     // Sign tiles arrive after the walk starts; a custom layer repaints every
     // frame, so "idle" may never fire — listen for the source instead.
@@ -1080,6 +1100,39 @@ export function MapView({
     map.on("sourcedata", onData);
     return () => {
       map.off("moveend", update);
+      map.off("sourcedata", onData);
+    };
+  }, [ready, walking]);
+
+  // The header names the street underfoot and the cross street, ~3x a second
+  // at most, and only when the eye actually moved.
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!ready || !walking || !map) {
+      setStreetHere(null);
+      return;
+    }
+    let last = "";
+    const update = () => {
+      const eye = eyeRef.current;
+      const c = eye ? { lng: eye.lon, lat: eye.lat } : map.getCenter();
+      const key = `${c.lng.toFixed(5)},${c.lat.toFixed(5)}`;
+      if (key === last) return;
+      last = key;
+      const label = streetLabel(streetPosition(namedStreetLines(map), c.lng, c.lat));
+      setStreetHere((prev) => (prev === label ? prev : label));
+    };
+    update();
+    const id = window.setInterval(update, 350);
+    const onData = (e: { sourceId?: string; isSourceLoaded?: boolean }) => {
+      if (e.sourceId === "openmaptiles" && e.isSourceLoaded) {
+        last = "";
+        update();
+      }
+    };
+    map.on("sourcedata", onData);
+    return () => {
+      window.clearInterval(id);
       map.off("sourcedata", onData);
     };
   }, [ready, walking]);
@@ -1465,6 +1518,7 @@ export function MapView({
       {walking ? (
         <WalkControls
           place={walkPlace}
+          street={streetHere}
           corner={corner}
           onInput={(input) => {
             walkPad.current = input;

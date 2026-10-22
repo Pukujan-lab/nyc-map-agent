@@ -12,6 +12,8 @@
  */
 import GtfsRealtimeBindings from "gtfs-realtime-bindings";
 import { json } from "../../../api/_lib/http";
+import { conflate, loadCenterlines } from "./conflate";
+import { slimAlert, type MercuryAlert, type SlimAlert } from "./alerts";
 
 const { FeedMessage } = GtfsRealtimeBindings.transit_realtime;
 const MTA = "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/";
@@ -111,16 +113,6 @@ async function loadBuses(key: string) {
   return { at: Math.round(Date.now() / 1000), buses };
 }
 
-type MercuryAlert = {
-  id: string;
-  alert: {
-    active_period?: Array<{ start?: number; end?: number }>;
-    informed_entity?: Array<{ agency_id?: string; route_id?: string; stop_id?: string }>;
-    header_text?: { translation?: Array<{ text: string; language: string }> };
-    "transit_realtime.mercury_alert"?: { alert_type?: string };
-  };
-};
-
 async function loadAlerts() {
   const get = (path: string) => fetch(`${MTA}${path}`, { signal: AbortSignal.timeout(10_000) }).then((r) => r.json());
   const [alertsRes, eneRes, equipRes] = await Promise.allSettled([
@@ -129,29 +121,11 @@ async function loadAlerts() {
     cached("equipment", () => get("nyct%2Fnyct_ene_equipments.json")),
   ]);
   const now = Date.now() / 1000;
-  const alerts = [];
+  const alerts: SlimAlert[] = [];
   if (alertsRes.status === "fulfilled") {
     for (const e of (alertsRes.value as { entity: MercuryAlert[] }).entity ?? []) {
-      const a = e.alert;
-      const active = (a.active_period ?? []).some((p) => (p.start ?? 0) <= now && (!p.end || p.end >= now));
-      if (!active) continue;
-      const type = a["transit_realtime.mercury_alert"]?.alert_type ?? "";
-      const text = a.header_text?.translation?.find((t) => t.language === "en")?.text ?? "";
-      const planned = /^planned/i.test(type) || /maintenance|track work|repairs|construction/i.test(text);
-      const kind = planned ? "planned" : /delay|reduced/i.test(type) ? "delay" : "notice";
-      // Reroutes / skipped stops: the informed stops are the ones affected.
-      const reroute = /reroute|detour|skipped|express to local|local to express|suspend/i.test(type) || /running via|skip|bypass/i.test(text);
-      const ents = a.informed_entity ?? [];
-      alerts.push({
-        id: e.id,
-        kind,
-        type,
-        reroute,
-        text,
-        agency: ents[0]?.agency_id ?? "",
-        routes: [...new Set(ents.map((x) => x.route_id).filter(Boolean))],
-        stops: [...new Set(ents.map((x) => x.stop_id).filter(Boolean))],
-      });
+      const a = slimAlert(e, now);
+      if (a) alerts.push(a);
     }
   }
   // Elevator / escalator outages, placed by the equipment list's GTFS stop ids.
@@ -235,7 +209,11 @@ async function loadBusRoute(key: string, route: string) {
     if (!lines.length) continue;
     const id = `${agency}_${route}`;
     const stops = (d.data?.references?.stops ?? []).filter((s) => !s.routeIds || s.routeIds.includes(id)).map((s) => ({ id: s.id, name: s.name, lon: s.lon, lat: s.lat }));
-    return { route, lines, stops };
+    // Snap to street centerlines and attach the right-hand lane offset (m) per vertex.
+    const pts = lines.flat();
+    const bbox: [number, number, number, number] = [Math.min(...pts.map((p) => p[0])), Math.min(...pts.map((p) => p[1])), Math.max(...pts.map((p) => p[0])), Math.max(...pts.map((p) => p[1]))];
+    const snapped = conflate(lines, await loadCenterlines(bbox));
+    return { route, lines: snapped.lines, offsets: snapped.offsets, stops };
   }
   return { route, lines: [], stops: [] };
 }

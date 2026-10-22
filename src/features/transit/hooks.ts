@@ -1,3 +1,4 @@
+import type { ServiceChange } from "@/lib/transit/serviceChanges";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -92,7 +93,7 @@ export function useBuses(enabled: boolean) {
 
 export type BusCall = { id: string; name: string; eta: number | null; away: string };
 export type BusTrip = { found: boolean; route?: string; destination?: string; dir?: string; calls?: BusCall[] };
-export type BusRoute = { route: string; lines: Array<Array<[number, number]>>; stops: Array<{ id: string; name: string; lon: number; lat: number }> };
+export type BusRoute = { route: string; lines: Array<Array<[number, number]>>; offsets?: number[][]; stops: Array<{ id: string; name: string; lon: number; lat: number }> };
 /** One bus's headsign and upcoming stops with ETAs (SIRI), while its sheet is open. */
 export function useBusTrip(vehicle: string | undefined) {
   return useQuery({
@@ -103,6 +104,21 @@ export function useBusTrip(vehicle: string | undefined) {
     retry: false,
   });
 }
+/** Shapes and stops for the routes of buses near the view, for the motion estimator (shares the bus-route cache). */
+export function useBusShapes(routes: string[]): BusRoute[] {
+  const qs = useQueries({
+    queries: routes.map((route) => ({
+      queryKey: ["transit", "bus-route", route],
+      queryFn: () => getJson<BusRoute>(`${API_BASE}/api/transit/bus-route?${new URLSearchParams({ route })}`),
+      staleTime: 6 * 3600_000,
+      retry: 1,
+    })),
+  });
+  const ready = qs.filter((q) => q.data).map((q) => q.data!);
+  const key = ready.map((r) => r.route).join(",");
+  return useMemo(() => ready, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+}
+
 /** A bus route's shape and stops, fetched on demand when the route is selected. */
 export function useBusRoute(route: string | undefined) {
   return useQuery({
@@ -117,7 +133,11 @@ export function useBusRoute(route: string | undefined) {
 export function alertedRoutes(alerts: TransitAlert[] | undefined): Set<string> {
   return new Set((alerts ?? []).filter((a) => a.kind === "delay" || (a.reroute && a.kind !== "planned")).flatMap((a) => a.routes));
 }
-export type TransitAlert = { id: string; kind: "planned" | "delay" | "notice"; type: string; reroute: boolean; text: string; agency: string; routes: string[]; stops: string[] };
+export type TransitAlert = {
+  id: string; kind: "planned" | "delay" | "notice"; type: string; reroute: boolean; text: string; agency: string; routes: string[]; stops: string[];
+  /** Added in #253; optional so older cached payloads still parse. */
+  description?: string; start?: number; end?: number; period?: string; direction?: string; directionIds?: number[]; via?: string[]; skipNames?: string[]; changes?: ServiceChange[];
+};
 export type Outage = { id: string; station: string; routes: string[]; stops: string[]; equipment: "Elevator" | "Escalator"; serving: string; reason: string; since: string; back: string; ada: "yes" | "no" | "not-ada"; alternative: string };
 export function useAlerts(enabled: boolean) {
   return useQuery({
