@@ -11,7 +11,7 @@ import { applyReadable } from "@/lib/map/readable";
 import { applyPlaces, usePlaces } from "@/lib/map/places";
 import { useMapOptions } from "@/lib/map/mapOptions";
 import { applyBuildings } from "@/lib/map/buildings";
-import { applyMapTheme, setThemeCoords, usePalette } from "@/lib/theme";
+import { applyMapTheme, buildingEdge, setThemeCoords, usePalette } from "@/lib/theme";
 import { sharedCoords } from "@/lib/geo/sharedLocation";
 
 setThemeCoords(sharedCoords);
@@ -123,6 +123,7 @@ import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 import { WalkControls } from "./WalkControls";
 import { nearestCorner, type CornerSign } from "@/lib/map/corner";
 import { MAX_HEIGHT_M, pitchForHeight, STREET_LEVEL_M } from "@/lib/map/cameraHeight";
+import { hoverBlocked } from "@/lib/map/hover";
 import { FEATURES } from "@/features";
 
 /**
@@ -218,7 +219,7 @@ export function MapView({
   } | null>(null);
   /** "W 44 St at 8 Av": the nearest corner sign while walking. */
   const [corner, setCorner] = useState<string | null>(null);
-  const { showPanel, closeAll } = usePanel();
+  const { showPanel, closeAll, content: panelContent, minimized: panelMinimized, drawerOpen } = usePanel();
   // The hover card is a mouse affordance; on touch / narrow screens the sheet
   // already shows the same numbers.
   const canHover = useMediaQuery("(hover: hover) and (pointer: fine) and (min-width: 1024px)");
@@ -367,12 +368,12 @@ export function MapView({
         name,
         // Quiet blocks say nothing rather than "No records" at every step.
         detail:
-          block && block.value > 0
+          analytics && block && block.value > 0
             ? `${formatCount(block.value)} ${model.view?.unit ?? LAYER_METRICS[layer].unit} in this block`
             : "",
       };
     },
-    [blockByKey, ntaIndex, nameByCode, layer, model.view],
+    [blockByKey, ntaIndex, nameByCode, layer, model.view, analytics],
   );
 
   /**
@@ -431,7 +432,9 @@ export function MapView({
   const opts = useMapOptions();
   const t = usePalette();
   // Flat pale footprints unless the person picked 3D buildings in Map detail (#174).
-  const flatBuildings = opts.buildings !== "3d";
+  // Street level always gets real buildings: a flat footprint seen from 1.7 m is
+  // invisible, which left walking with only sky and ground.
+  const flatBuildings = opts.buildings !== "3d" && !walking;
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!map || !ready) return;
@@ -439,6 +442,8 @@ export function MapView({
     applyReadable(map, opts.streets === "simple" || transitFocus, { street: t.street, major: t.major, label: t.label_ });
     for (const l of map.getStyle()?.layers ?? []) {
       if (/^highway-name-major$/.test(l.id)) map.setLayoutProperty(l.id, "visibility", opts.streetNames ? "visible" : "none");
+      // Transit-first open: neighbourhood / quarter names only with the analytics on.
+      if (l.id === "label_other") map.setLayoutProperty(l.id, "visibility", analytics ? "visible" : "none");
       // Bus stop icons only from zoom 16, where a stop is a place you can walk to.
       if (l.id === "poi_transit") {
         const busFade = ["step", ["zoom"], ["case", ["==", ["get", "class"], "bus"], 0, 1], 16, 1];
@@ -447,8 +452,8 @@ export function MapView({
       }
     }
     applyPlaces(map, places);
-    applyBuildings(map, flatBuildings, t.building);
-  }, [ready, styleEpoch, transitFocus, places, opts, t, flatBuildings]);
+    applyBuildings(map, flatBuildings, t.building, buildingEdge(t));
+  }, [ready, styleEpoch, transitFocus, places, opts, t, flatBuildings, analytics]);
 
   const handleLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
@@ -458,6 +463,13 @@ export function MapView({
     setMapInstance(map);
     setStyleEpoch((epoch) => epoch + 1);
     setReady(true);
+    // Phones: the credits start folded behind the "i" toggle (MapLibre opens
+    // compact attribution on load); one tap shows them, as the licence asks.
+    if (window.innerWidth < 768) {
+      const attrib = map.getContainer().querySelector(".maplibregl-ctrl-attrib");
+      attrib?.classList.remove("maplibregl-compact-show");
+      attrib?.removeAttribute("open");
+    }
     const blockTiles = () =>
       void installBlockTiles(map).then((swapped) => swapped && setStyleEpoch((epoch) => epoch + 1));
     blockTiles();
@@ -544,11 +556,19 @@ export function MapView({
     [scale, blockByKey, neighborhoodById, areaAt],
   );
 
+  // An open sheet or drawer owns the attention: no hover card over or beside it.
+  const sheetOpen = hoverBlocked({ drawerOpen, content: !!panelContent, minimized: panelMinimized, selected: !!(selectedNtaCode || selectedBlockKey) });
+  useEffect(() => {
+    if (sheetOpen) setHover(null);
+  }, [sheetOpen]);
+  const handleMoveStart = useCallback(() => setHover(null), []);
+
   const handleMouseMove = useCallback(
     (event: MapLayerMouseEvent) => {
       // At eye level a hover card would sit on top of the street you are
       // walking down, and the pavement underfoot is the whole point.
-      if (walking || !canHover) return;
+      // Complaint / noise hover cards are analytics: Advanced (or a saved view) only.
+      if (walking || !canHover || sheetOpen || !analytics) return;
       const picked = pickAt(event.point.x, event.point.y, event.lngLat);
       const map = mapRef.current?.getMap();
       if (map) {
@@ -559,7 +579,7 @@ export function MapView({
         return { ...picked, x: event.point.x, y: event.point.y };
       });
     },
-    [pickAt, walking, canHover],
+    [pickAt, walking, canHover, sheetOpen, analytics],
   );
 
   const handleClick = useCallback(
@@ -569,6 +589,16 @@ export function MapView({
         setRoutePoint(routePicking, { lon: event.lngLat.lng, lat: event.lngLat.lat });
         return;
       }
+      // Tap priority: transit (train, bus, station, entrance) first, then
+      // restrooms, then events and other feature pins; analytics areas last
+      // and only in Advanced. An empty tap closes the panels.
+      const clicked = mapRef.current?.getMap();
+      const hitsAny = (ids: string[]) => {
+        const live = ids.filter((id) => clicked?.getLayer(id));
+        return !!clicked && live.length > 0 && clicked.queryRenderedFeatures([event.point.x, event.point.y], { layers: live }).length > 0;
+      };
+      const transitIds = FEATURES.filter((f) => f.id === "transit").flatMap((f) => f.clickLayers ?? []);
+      if (hitsAny(transitIds)) return;
       const hit = restroomsMod.current?.restroomAt(event.target, event.point.x, event.point.y);
       if (hit) {
         showPanel({
@@ -594,10 +624,8 @@ export function MapView({
         });
         return;
       }
-      // Feature layers (transit stations, vehicles…) open their own panel.
-      const clicked = mapRef.current?.getMap();
-      const own = FEATURES.flatMap((f) => f.clickLayers ?? []).filter((id) => clicked?.getLayer(id));
-      if (clicked && own.length && clicked.queryRenderedFeatures([event.point.x, event.point.y], { layers: own }).length) return;
+      // Other feature layers (events, parking…) open their own panel.
+      if (hitsAny(FEATURES.filter((f) => f.id !== "transit").flatMap((f) => f.clickLayers ?? []))) return;
       // Eye level: cast the camera ray through the tap and open whatever it
       // hits first (landmark model, storefront, building), like overhead.
       if (walking) {
@@ -623,24 +651,18 @@ export function MapView({
             return;
           }
         }
-        // Anything else the ray hits (a facade, the pavement) opens the block
-        // or neighborhood it stands in, from the hit point rather than the
-        // ground far behind the facade that the click's lngLat would give.
-        if (hit) {
-          const area = areaAt({ lng: hit.lng, lat: hit.lat });
-          if (area?.kind === "block") selectBlock({ key: area.datum.key, ntaCode: area.datum.ntaCode });
-          else if (area) selectNta(area.datum.ntaCode);
-          if (area || hit.kind === "building") return;
-        }
+        // Street level never opens the neighbourhood / complaints card: a
+        // tap on a facade or the pavement just clears the panels.
+        closeAll();
+        return;
       }
       const school = city3dMod.current?.schoolAt(event.target, event.point.x, event.point.y);
       if (school) {
         showPanel({ id: `school:${school}`, title: school, subtitle: "School · NYC DOE (LCGMS)" });
         return;
       }
-      // Clicks stay live at street level: picking the block underfoot opens
-      // its details like it does overhead.
-      const picked = pickAt(event.point.x, event.point.y, event.lngLat);
+      // Neighbourhood / block complaint picks are analytics: Advanced only.
+      const picked = analytics ? pickAt(event.point.x, event.point.y, event.lngLat) : null;
       if (!picked) {
         // An empty-map tap closes the drawer and the sheet.
         closeAll();
@@ -652,7 +674,7 @@ export function MapView({
         selectNta(picked.datum.ntaCode);
       }
     },
-    [pickAt, selectBlock, selectNta, routePicking, setRoutePoint, showPanel, closeAll, city3d, walking, areaAt],
+    [pickAt, selectBlock, selectNta, routePicking, setRoutePoint, showPanel, closeAll, city3d, walking, analytics],
   );
 
   const handleMoveEnd = useCallback(() => {
@@ -1388,6 +1410,8 @@ export function MapView({
         onLoad={handleLoad}
         onError={handleError}
         onMouseMove={handleMouseMove}
+        onMoveStart={handleMoveStart}
+        onMouseOut={handleMoveStart}
         onClick={handleClick}
         onMoveEnd={handleMoveEnd}
         style={{ position: "absolute", inset: 0 }}
@@ -1410,7 +1434,7 @@ export function MapView({
         />
       ) : null}
 
-      {hover && !walking && canHover ? (
+      {hover && !walking && canHover && !sheetOpen && analytics ? (
         <div
           className="pointer-events-none absolute z-20 max-w-[220px] rounded-lg border border-border bg-card/95 px-3 py-2 text-xs shadow-xl backdrop-blur"
           style={{

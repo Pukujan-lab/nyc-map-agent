@@ -1,14 +1,24 @@
 import { useSyncExternalStore } from "react";
+import { mixHex } from "@/lib/theme";
 
 /**
- * Transit Focus: a pale veil drawn just under the transit layers, so the
+ * Transit Focus: a dim, grey veil drawn just under the transit layers, so the
  * street map and every layer below it fade while subway and bus lines,
  * stations and vehicles stay at full strength. Turning it off removes the
  * veil, which restores the map exactly. The choice is kept in localStorage.
  */
 export const FOCUS_KEY = "nma.transitFocus";
 export const FOCUS_VEIL_ID = "transit-focus-veil";
-export const FOCUS_OPACITY = 0.72;
+export const FOCUS_OPACITY = 0.6;
+
+/**
+ * The veil colour for a theme: a neutral grey a step darker than the land, so
+ * Focus dims and desaturates the basemap and never washes it out (Ivory) or
+ * lifts it (Ink, where it goes near-black). Pure.
+ */
+export function focusVeil(p: { land: string; dark: boolean }): string {
+  return p.dark ? "#0A0A0A" : mixHex(p.land, "#8E8E8A", 0.4);
+}
 
 /** One polygon covering the whole Web Mercator world. */
 export const WORLD: GeoJSON.FeatureCollection = {

@@ -31,7 +31,7 @@ import { TransitStatusDetails } from "./TransitStatus";
 import { lineOpacity, useMapOptions } from "@/lib/map/mapOptions";
 import { NOTCH_ICON, addBulletImage, stationRowId, bulletId, busBadgeId, busPrefix } from "@/lib/transit/bullets";
 import { usePalette } from "@/lib/theme";
-import { FOCUS_OPACITY, FOCUS_VEIL_ID, WORLD, useTransitFocus } from "@/lib/map/transitFocus";
+import { FOCUS_OPACITY, FOCUS_VEIL_ID, WORLD, focusVeil, useTransitFocus } from "@/lib/map/transitFocus";
 
 /** Layers a click on the map should hand to transit instead of the area pick. */
 /** CC BY 4.0 credits for the 3D vehicle models (public/models/LICENSE.md), shown while they can be on screen. */
@@ -473,12 +473,12 @@ export default function TransitLayer() {
           paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 16, 2.5], "line-opacity": 0.45, "line-dasharray": [2, 2] }} />
         <Layer id="transit-line" type="line" filter={three ? ["==", ["get", "grade"], "grade"] : ["!=", ["get", "grade"], "underground"]}
           layout={{ "line-cap": "round", "line-join": "round" }}
-          paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1.5, 16, 4], "line-opacity": lineAlpha }} />
+          paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, focus ? 1.8 : 1.5, 16, focus ? 4.8 : 4], "line-opacity": lineAlpha }} />
       </Source>
       {focus ? (
         <Source id={FOCUS_VEIL_ID} type="geojson" data={WORLD}>
           <Layer id={FOCUS_VEIL_ID} type="fill" beforeId="transit-line-under"
-            paint={{ "fill-color": "#f8fafc", "fill-opacity": FOCUS_OPACITY }} />
+            paint={{ "fill-color": focusVeil(theme), "fill-opacity": FOCUS_OPACITY }} />
         </Source>
       ) : null}
       <Source id="transit-work-segs" type="geojson" data={work.segs}>

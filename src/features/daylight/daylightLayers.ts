@@ -1,7 +1,8 @@
 import type { Map as MapLibreMap } from "maplibre-gl";
 import { getAmbient, subscribeAmbient } from "@/lib/ambient";
 import { SOURCE_IDS } from "@/lib/map/style";
-import { categoryOf, css, mix, NIGHT, parseColor, shade, skyColors, sunFor, type Rgba, type Sun } from "./palette";
+import { getThemeChoice, subscribeTheme } from "@/lib/theme";
+import { categoryOf, css, effectiveLighting, mix, NIGHT, parseColor, shade, skyColors, sunFor, type Rgba, type Sun } from "./palette";
 
 /**
  * Time-of-day lighting: recolours the basemap (fill, line, extrusion, labels),
@@ -148,8 +149,9 @@ export function mount(map: MapLibreMap): () => void {
 
   const apply = (force = false) => {
     const a = getAmbient();
-    const sun = sunFor(new Date(), a.lighting);
-    const key = `${sun.night.toFixed(2)}|${a.weather}|${a.walking}|${a.eco}|${a.lighting}`;
+    const lighting = effectiveLighting(a.lighting, getThemeChoice());
+    const sun = sunFor(new Date(), lighting);
+    const key = `${sun.night.toFixed(2)}|${a.weather}|${a.walking}|${a.eco}|${lighting}`;
     void facades(sun).catch(() => {});
     if (!force && key === lastKey) return;
     lastKey = key;
@@ -161,11 +163,13 @@ export function mount(map: MapLibreMap): () => void {
 
   apply(true);
   const unsub = subscribeAmbient(() => apply(true));
+  const unsubTheme = subscribeTheme(() => apply(true));
   const timer = window.setInterval(() => apply(), 5_000);
   const onStyle = () => apply(true);
   map.on("style.load", onStyle);
   return () => {
     unsub();
+    unsubTheme();
     window.clearInterval(timer);
     map.off("style.load", onStyle);
     if (map.getLayer(GLOW_LAYER)) map.removeLayer(GLOW_LAYER);
