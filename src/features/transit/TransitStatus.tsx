@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { arrivalsAt, minutesUntil, SYSTEM_LABELS, RAIL_SYSTEMS, type SystemId } from "./model";
 import { useAlerts, useNow, useStarred, useTransitData } from "./hooks";
 import { OutageRow, RouteBullet } from "./TransitCard";
+import { AlertRow } from "./AlertCard";
 
 const AGENCY: Record<string, SystemId> = { MTASBWY: "subway", LI: "lirr", MNR: "mnr" };
 
@@ -68,7 +69,7 @@ export function TransitStatusDetails() {
                     {a.routes.slice(0, 8).map((r) => <RouteBullet key={r} system={AGENCY[a.agency] ?? "bus"} route={r} data={data} />)}
                     <span className="text-xs text-muted-foreground">{a.type}</span>
                   </div>
-                  <p className="mt-0.5">{a.text}</p>
+                  <div className="mt-1"><AlertRow alert={a} /></div>
                 </div>
               </div>
             ))}
