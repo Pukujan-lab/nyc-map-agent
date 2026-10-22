@@ -41,6 +41,7 @@ export const FLAGS = {
   combined: { tier: "advanced", default: true, label: "Noise + crashes" },
   dataLayers: { tier: "advanced", default: true, label: "Data / analytics layers" },
   feedHealth: { tier: "advanced", default: true, label: "Feed health" },
+  events: { tier: "basic", default: true, label: "Events (street fairs, markets, pop-ups; layer off until chosen)" },
 } as const satisfies Record<string, FlagMeta>;
 
 export type FlagId = keyof typeof FLAGS;

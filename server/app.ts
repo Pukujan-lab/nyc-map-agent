@@ -24,6 +24,7 @@ import * as traffic from "./features/traffic/routes";
 import * as parking from "./features/parking/routes";
 import * as agent from "./features/agent/routes";
 import * as transit from "./features/transit/routes";
+import * as events from "./features/events/routes";
 
 type Handler = { GET: (request: Request) => Promise<Response> };
 
@@ -47,6 +48,7 @@ const routes: Array<[string, Handler]> = [
   ["/api/parking", parking],
   ["/api/transit", transit],
   ["/api/transit/:system", transit],
+  ["/api/events", events],
 ];
 
 export const app = new OpenAPIHono({
