@@ -15,6 +15,8 @@ import { WALK_IDLE, type WalkInput } from "@/lib/map/walk";
 interface WalkControlsProps {
   /** The block underfoot, so the strip reports what you are walking through. */
   place: { name: string; detail: string } | null;
+  /** Street underfoot and cross street, e.g. "Grand St & Essex St". */
+  street?: string | null;
   /** Nearest intersection, e.g. "W 44 St at 8 Av"; null when no corner is near. */
   corner?: string | null;
   /** Fires on press and release; the map reads it every frame. */
@@ -68,6 +70,7 @@ function HoldButton({
  */
 export function WalkControls({
   place,
+  street = null,
   corner = null,
   onInput,
   onExit,
@@ -97,6 +100,20 @@ export function WalkControls({
               aria-hidden="true"
             />
             <span className="text-[11px] font-medium">Street level</span>
+            {street ? (
+              <>
+                <span aria-hidden="true" className="text-[11px] text-muted-foreground">
+                  ·
+                </span>
+                <span
+                  data-testid="walk-street"
+                  aria-live="polite"
+                  className="max-w-[44vw] truncate text-[11px] font-semibold sm:max-w-none"
+                >
+                  {street}
+                </span>
+              </>
+            ) : null}
             {place ? (
               <>
                 <span aria-hidden="true" className="text-[11px] text-muted-foreground">

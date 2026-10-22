@@ -93,6 +93,22 @@ function streetLines(map: MaplibreMapInstance): Array<Array<[number, number]>> {
   return lines;
 }
 
+/** Named street centrelines (OSM via the basemap's `transportation_name`). */
+function namedStreetLines(map: MaplibreMapInstance): NamedLine[] {
+  if (!map.getSource("openmaptiles")) return [];
+  const out: NamedLine[] = [];
+  for (const f of map.querySourceFeatures("openmaptiles", { sourceLayer: "transportation_name" })) {
+    const p = f.properties ?? {};
+    if (!STREET_CLASSES.has(String(p.class)) || p.brunnel === "tunnel") continue;
+    const name = String(p["name:en"] ?? p.name ?? "");
+    if (!name) continue;
+    const g = f.geometry;
+    if (g.type === "LineString") out.push({ name, coords: g.coordinates as Array<[number, number]> });
+    else if (g.type === "MultiLineString") for (const c of g.coordinates) out.push({ name, coords: c as Array<[number, number]> });
+  }
+  return out;
+}
+
 /** The walker's eye: where they stand, which way they face, how far they look up or down. */
 interface Eye {
   lon: number;
@@ -125,6 +141,7 @@ import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 import { WalkControls } from "./WalkControls";
 import { StreetMiniMap } from "./StreetMiniMap";
 import { nearestCorner, type CornerSign } from "@/lib/map/corner";
+import { streetLabel, streetPosition, type NamedLine } from "@/lib/map/streetPos";
 import { MAX_HEIGHT_M, pitchForHeight, STREET_LEVEL_M } from "@/lib/map/cameraHeight";
 import { hoverBlocked } from "@/lib/map/hover";
 import { FEATURES } from "@/features";
@@ -222,6 +239,8 @@ export function MapView({
   } | null>(null);
   /** "W 44 St at 8 Av": the nearest corner sign while walking. */
   const [corner, setCorner] = useState<string | null>(null);
+  /** "Grand St & Essex St": street underfoot and nearest cross street, throttled. */
+  const [streetHere, setStreetHere] = useState<string | null>(null);
   const { showPanel, closeAll, content: panelContent, minimized: panelMinimized, drawerOpen } = usePanel();
   // The hover card is a mouse affordance; on touch / narrow screens the sheet
   // already shows the same numbers.
@@ -1050,6 +1069,39 @@ export function MapView({
     };
   }, [ready, walking]);
 
+  // The header names the street underfoot and the cross street, ~3x a second
+  // at most, and only when the eye actually moved.
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!ready || !walking || !map) {
+      setStreetHere(null);
+      return;
+    }
+    let last = "";
+    const update = () => {
+      const eye = eyeRef.current;
+      const c = eye ? { lng: eye.lon, lat: eye.lat } : map.getCenter();
+      const key = `${c.lng.toFixed(5)},${c.lat.toFixed(5)}`;
+      if (key === last) return;
+      last = key;
+      const label = streetLabel(streetPosition(namedStreetLines(map), c.lng, c.lat));
+      setStreetHere((prev) => (prev === label ? prev : label));
+    };
+    update();
+    const id = window.setInterval(update, 350);
+    const onData = (e: { sourceId?: string; isSourceLoaded?: boolean }) => {
+      if (e.sourceId === "openmaptiles" && e.isSourceLoaded) {
+        last = "";
+        update();
+      }
+    };
+    map.on("sourcedata", onData);
+    return () => {
+      window.clearInterval(id);
+      map.off("sourcedata", onData);
+    };
+  }, [ready, walking]);
+
   // Entering walk mode is a camera move, not a mode flag: eye level is the
   // steepest pitch the map allows, at a zoom where buildings have height.
   useEffect(() => {
@@ -1430,6 +1482,7 @@ export function MapView({
       {walking ? (
         <WalkControls
           place={walkPlace}
+          street={streetHere}
           corner={corner}
           onInput={(input) => {
             walkPad.current = input;
