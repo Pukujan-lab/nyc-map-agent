@@ -10,6 +10,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { distanceFade } from "./corner";
 import { LANDMARKS } from "./landmarks";
+import { setShadowCasters } from "./three/sun";
 import maplibregl, { type CustomLayerInterface, type CustomRenderMethodInput, type Map as MaplibreMap } from "maplibre-gl";
 // Default import: also loads under Node (CJS) for scripts/make-landmarks.ts.
 const { MercatorCoordinate } = maplibregl;
@@ -457,6 +458,8 @@ export function createVehicleLayer() {
   /** Push the tweened vehicles (already culled and capped by the caller). */
   function update(vehicles: VehicleInstance[]) {
     last = vehicles;
+    // Trains and buses cast sun shadows (three/shadowLayer.ts).
+    setShadowCasters(vehicles.filter((v) => !v.ghost).map((v) => ({ lon: v.lon, lat: v.lat, bearing: v.bearing, z: v.z, length: VEHICLE_MODELS[v.kind].length, width: v.kind === "bus" ? 2.6 : 3, height: v.kind === "bus" ? 3.2 : 3.7 })));
     const n: Record<VehicleMode, number> = { subway: 0, rail: 0, bus: 0 };
     let g = 0;
     for (const v of vehicles) {

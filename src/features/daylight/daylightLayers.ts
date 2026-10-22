@@ -1,6 +1,7 @@
 import type { Map as MapLibreMap } from "maplibre-gl";
 import { getAmbient, subscribeAmbient } from "@/lib/ambient";
 import { SOURCE_IDS } from "@/lib/map/style";
+import { sunDate } from "@/lib/map/three/sun";
 import { getThemeChoice, subscribeTheme } from "@/lib/theme";
 import { categoryOf, css, effectiveLighting, mix, NIGHT, parseColor, shade, skyColors, sunFor, type Rgba, type Sun } from "./palette";
 
@@ -150,7 +151,7 @@ export function mount(map: MapLibreMap): () => void {
   const apply = (force = false) => {
     const a = getAmbient();
     const lighting = effectiveLighting(a.lighting, getThemeChoice());
-    const sun = sunFor(new Date(), lighting);
+    const sun = sunFor(sunDate(), lighting);
     const key = `${sun.night.toFixed(2)}|${a.weather}|${a.walking}|${a.eco}|${lighting}`;
     void facades(sun).catch(() => {});
     if (!force && key === lastKey) return;

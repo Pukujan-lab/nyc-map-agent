@@ -1,4 +1,5 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useShadows } from "@/lib/map/three/sun";
 import { buildStreetContext, closeAsk, openAsk } from "@/lib/agent/streetContext";
 import { followedTrain } from "@/lib/transit/follow";
 import { setMapInstance } from "@/lib/map/mapInstance";
@@ -908,6 +909,24 @@ export function MapView({
       cleanups.forEach((c) => c());
     };
   }, [ready, styleEpoch, mountedKey]);
+
+  // Sun shadows (3D map and street view): lazy three.js chunk, on/off from the Layers drawer.
+  const shadowsOn = useShadows();
+  useEffect(() => {
+    if (!ready) return;
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    let cancelled = false;
+    void import("@/lib/map/three/shadowLayer").then(({ createShadowLayer, SHADOWS_LAYER }) => {
+      if (cancelled) return;
+      if (shadowsOn && !map.getLayer(SHADOWS_LAYER)) map.addLayer(createShadowLayer());
+      if (!shadowsOn && map.getLayer(SHADOWS_LAYER)) map.removeLayer(SHADOWS_LAYER);
+      map.triggerRepaint();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, styleEpoch, shadowsOn]);
 
   useEffect(() => setAmbient({ eco }), [eco]);
 

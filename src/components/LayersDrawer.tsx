@@ -9,6 +9,7 @@ import { onMapInstance } from "@/lib/map/mapInstance";
 import { SUBWAY_ROUTES, setOptions, useMapOptions } from "@/lib/map/mapOptions";
 import { PLACE_CATEGORIES, setPlaces, usePlaces } from "@/lib/map/places";
 import { setTransitFocusOff } from "@/lib/map/transitFocus";
+import { setShadows, useShadows } from "@/lib/map/three/sun";
 import { useDataView } from "@/lib/store/DataViewContext";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { usePanel, type PanelChip } from "@/lib/store/PanelContext";
@@ -153,9 +154,11 @@ export function LayersDrawer({
       : { id: "loc", label: shared.status === "asking" ? "Finding you…" : "My location", onClick: () => void startSharing().then((c) => { if (c) flyTo({ lon: c.lon, lat: c.lat, zoom: 16 }); }) },
   );
 
+  const shadows = useShadows();
   const placeItems = PLACE_CATEGORIES.filter((c) => match(c.label) || c.subs.some((s) => match(s.label)));
   const routeItems = SUBWAY_ROUTES.filter((r) => !q.trim() || match(`${r} train`) || match("subway") || match("lines"));
   const advanced = [
+    { label: shadows ? "Shadows: on" : "Shadows: off", on: shadows, onClick: () => setShadows(!shadows) },
     { label: "Filters and settings…", onClick: () => { onOpenChange(false); onOpenControls(); } },
     ...(flags.dataLayers ? [{ label: "Data layers…", onClick: () => { onOpenChange(false); onOpenSources(); } }] : []),
     ...(flags.city3d ? [{ label: city3d ? "Textured 3D city: on" : "Textured 3D city: off", on: city3d, onClick: () => setCity3d(!city3d) }] : []),
