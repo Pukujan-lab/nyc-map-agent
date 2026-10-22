@@ -1,8 +1,9 @@
 /** Compose one door-to-door trip from the thin services + the transit planner. */
 import { formatStreetText } from "../../../src/lib/streetName";
 import type { Leg, LngLatTuple, Trip } from "../../../src/features/agent/schema";
-import { elevatorStatus, hazardsAt, reverseGeocode, routeWalk, serviceAlerts, weatherAt, type WalkResult } from "./services";
-import { distM, octant, openDataEntrances, stubPlanner, type Entrance, type Station, type StationEntrances, type TransitPlanner } from "./transit";
+import { elevatorStatus, hazardsAt, reverseGeocode, routeWalk, serviceAlerts, stationServiceChanges, weatherAt, type WalkResult } from "./services";
+import { sameStation, type ServiceChange } from "../../../src/lib/transit/serviceChanges";
+import { distM, octant, openDataEntrances, stubPlanner, type AvoidStop, type Entrance, type Station, type StationEntrances, type TransitPlanner } from "./transit";
 
 export const TZ = "America/New_York";
 
@@ -40,7 +41,22 @@ async function portalFor(st: Station, ents: Entrance[], toward: LngLatTuple, mod
   return { lon: at[0], lat: at[1], type, elevatorOnly, outage, label: `${dir} ${word}${street ? ` on ${street}` : ""}${elevatorOnly ? " (elevator)" : ""}` };
 }
 
-export interface TripDeps { planner?: TransitPlanner; entrances?: StationEntrances }
+export interface TripDeps { planner?: TransitPlanner; entrances?: StationEntrances; changes?: ServiceChange[] }
+
+const MIDTOWN: LngLatTuple = [-73.985, 40.758];
+/** Does a ride from → to head toward the alert's direction label ("Flushing", "Manhattan")? Unknown labels count as yes. */
+function headsToward(label: string, route: string, from: LngLatTuple, to: LngLatTuple, stations: Station[]): boolean {
+  const target = /manhattan/i.test(label) ? MIDTOWN : stations.find((s) => s.routes.includes(route) && s.name.toLowerCase().startsWith(label.toLowerCase()))?.at;
+  return target ? distM(to, target) < distM(from, target) : true;
+}
+/** Planner predicate: a station is avoided only for the route and direction an active skip names. */
+export function avoidFor(changes: ServiceChange[], stations: Station[]): AvoidStop {
+  return (st, route, from, to) => changes.some((c) => c.kind === "skip" && c.route === route.replace(/X$/, "") && c.names.some((n) => sameStation(n, st.name)) && (!c.toward || headsToward(c.toward, route, from.at, to.at, stations)));
+}
+/** Platform-change notices that apply to boarding `route` at `st` heading from → to. */
+export function platformNotes(changes: ServiceChange[], st: Station, route: string, from: Station, to: Station, stations: Station[]): string[] {
+  return changes.filter((c) => c.kind === "platform" && c.route === route.replace(/X$/, "") && c.names.some((n) => sameStation(n, st.name)) && (!c.toward || headsToward(c.toward, route, from.at, to.at, stations))).map((c) => c.notice);
+}
 
 export async function buildTrip(
   origin: { label: string; at: LngLatTuple },
@@ -52,8 +68,10 @@ export async function buildTrip(
   const planner = deps.planner ?? stubPlanner(entrancesSrc);
   const depart = nyLocalToDate(departLocal);
   const stubbed = ["transit_plan: MTA open-data stations + straight-line ride (live transit #56 not merged; GTFS shapes/realtime pending)"];
+  const changes = deps.changes ?? await safe(stationServiceChanges(Math.floor(depart.getTime() / 1000)), [] as ServiceChange[]);
+  const allStations = changes.length ? await safe(entrancesSrc.stations(), [] as Station[]) : [];
   const [plan, weather, hazards] = await Promise.all([
-    safe(planner.plan(origin.at, destination.at, depart), null),
+    safe(planner.plan(origin.at, destination.at, depart, avoidFor(changes, allStations)), null),
     safe(weatherAt(origin.at, toNyLocal(depart)), null),
     safe(hazardsAt(origin.at), [] as string[]),
   ]);
@@ -80,9 +98,13 @@ export async function buildTrip(
     ]);
     const ref = (s: Station) => ({ id: s.id, name: s.name, lon: s.at[0], lat: s.at[1] });
     legs.push(walkLeg("walk", `Walk to ${first.from.name}`, w1));
-    legs.push({ kind: "enter", station: ref(first.from), portal: enter, label: `Enter ${first.from.name} at the ${enter.label}` });
+    const note = (r: (typeof plan.rides)[number]) => {
+      const n = platformNotes(changes, r.from, r.route, r.from, r.to, allStations);
+      return n.length ? `. ${n.join(". ")}` : "";
+    };
+    legs.push({ kind: "enter", station: ref(first.from), portal: enter, label: `Enter ${first.from.name} at the ${enter.label}${note(first)}` });
     plan.rides.forEach((r, i) => {
-      if (i > 0) legs.push(walkLeg("transfer", `Transfer to the ${r.route} at ${r.from.name}`, straight(plan.rides[i - 1].to.at, r.from.at)));
+      if (i > 0) legs.push(walkLeg("transfer", `Transfer to the ${r.route} at ${r.from.name}${note(r)}`, straight(plan.rides[i - 1].to.at, r.from.at)));
       legs.push({ kind: "ride", route: r.route, label: `${r.route} train ${r.from.name} → ${r.to.name}`, coords: r.coords, durationS: r.durationS, stops: r.stops, underground: !/elevated|viaduct|embankment/i.test(r.from.structure), geometrySource: r.geometrySource });
     });
     legs.push({ kind: "exit", station: ref(last.to), portal: exit, label: `Use the ${exit.label} at ${last.to.name}` });

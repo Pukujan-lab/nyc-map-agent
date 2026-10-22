@@ -8,6 +8,8 @@ import { useAlerts, useBusRoute, useBusTrip, useBuses, useNow, useStarred, useTr
 import { setFollowed, useFollowed } from "./follow";
 import { useSharedLocation } from "@/lib/geo/sharedLocation";
 import { getXray, setXray, useXray } from "./xray";
+import { AlertRow } from "./AlertCard";
+import { stationChanges } from "./alertFocus";
 
 type Data = Partial<Record<SystemId, { stat?: StaticSystem; live?: LiveSystem }>>;
 
@@ -42,6 +44,7 @@ export function StationDetails({ system, id }: { system: SystemId; id: string })
   const routes = [...new Set(String(st?.stations.features.find((f) => f.properties.id === id)?.properties.routes ?? "").split(/[\s,]+/).filter(Boolean))];
   const doors = system === "subway" ? (st?.entrances?.features ?? []).filter((f) => f.properties.id === id) : [];
   const lineAlerts = (alerts?.alerts ?? []).filter((a) => a.kind === "delay" && a.routes.some((r) => routes.includes(r)));
+  const change = system === "subway" && st ? stationChanges(alerts?.alerts ?? [], st).get(id) : undefined;
   return (
     <div className="space-y-3 text-sm">
       {routes.length ? (
@@ -49,6 +52,18 @@ export function StationDetails({ system, id }: { system: SystemId; id: string })
           {routes.map((r) => <RouteBullet key={r} system={system} route={r} data={data} />)}
         </div>
       ) : null}
+      {change?.skips.map((k) => (
+        <div key={`${k.alertId}|${k.route}`} data-testid="station-skip" className="flex items-center gap-2 rounded-md border-2 border-[#d4183d] px-2 py-1.5 text-xs font-semibold">
+          <RouteBullet system={system} route={k.route} data={data} />
+          <span><s>{k.end === null ? "Skipped both directions" : `Skipped ${k.toward}-bound`}</s>{k.end === null ? "" : ` · ${k.other}-bound stops`}</span>
+        </div>
+      ))}
+      {change?.platform.map((p) => (
+        <div key={`${p.alertId}|${p.route}`} data-testid="station-platform" className="flex items-center gap-2 rounded-md border-2 border-[hsl(var(--acc))] bg-[hsl(var(--acc)/0.2)] px-2 py-1.5 text-xs font-semibold">
+          <RouteBullet system={system} route={p.route} data={data} />
+          <span>Platform change: {p.notice}</span>
+        </div>
+      ))}
       <Button size="sm" variant="outline" aria-pressed={isStarred(starKey)} onClick={() => toggle(starKey)}>
         <Star className="mr-1.5 h-4 w-4" fill={isStarred(starKey) ? "currentColor" : "none"} />
         {isStarred(starKey) ? "Starred" : "Star station"}
@@ -116,12 +131,7 @@ function RouteAlerts({ route }: { route: string }) {
   return (
     <div className="space-y-1.5">
       <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Alerts and detours</div>
-      {list.slice(0, 4).map((a) => (
-        <div key={a.id} className="rounded-md border px-2 py-1.5 text-xs">
-          <span className="mr-1 font-semibold">{a.reroute ? "Detour" : a.kind === "delay" ? "Delay" : a.kind === "planned" ? "Planned work" : "Notice"}</span>
-          {a.text}
-        </div>
-      ))}
+      {list.slice(0, 6).map((a) => <AlertRow key={a.id} alert={a} />)}
     </div>
   );
 }

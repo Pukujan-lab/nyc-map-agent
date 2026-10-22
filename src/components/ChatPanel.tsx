@@ -20,6 +20,7 @@ import type { ExecuteContext } from "@/lib/agent/execute";
 import { useAgent } from "@/lib/agent/useAgent";
 import type { NtaBoundary } from "@/lib/api/nta";
 import type { AggregateResult } from "@/lib/geo/types";
+import { usePanel } from "@/lib/store/PanelContext";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 import { useSpeech } from "@/lib/voice/useSpeech";
@@ -53,6 +54,11 @@ export function ChatPanel({
     setLayer,
     flyTo,
   } = useMapState();
+  const { closeAll } = usePanel();
+  // One panel at a time (#225): opening Ask closes the drawer and any sheet.
+  useEffect(() => {
+    if (chatOpen) closeAll();
+  }, [chatOpen, closeAll]);
   const reducedMotion = usePrefersReducedMotion();
   const { label: windowLabel } = windowBounds(windowId);
 
@@ -270,7 +276,7 @@ export function ChatPanel({
   return (
     <Sheet open={chatOpen} onOpenChange={setChatOpen}>
       <SheetContent
-        side={isDesktop ? "right" : "bottom"}
+        side={isDesktop ? "left" : "bottom"}
         className={
           isDesktop
             ? "flex h-full w-full flex-col overflow-hidden p-0 sm:max-w-[420px]"

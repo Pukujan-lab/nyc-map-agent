@@ -3,6 +3,7 @@
  * Each returns plain data; the AI SDK tools in tools.ts call these.
  */
 import { formatStreetText } from "../../../src/lib/streetName";
+import { serviceChanges, type ServiceChange } from "../../../src/lib/transit/serviceChanges";
 import { z } from "zod";
 import type { LngLatTuple } from "../../../src/features/agent/schema";
 import { bestCandidate, matchLandmark, matchStation, type GeoCandidate } from "./places";
@@ -135,4 +136,23 @@ export async function serviceAlerts(routes: string[], atEpochS: number): Promise
     if (active && text) out.add(text.replace(/\s+/g, " ").slice(0, 220));
   }
   return [...out].slice(0, 5);
+}
+
+/* ---------- station skips and platform changes (#253) ---------- */
+const changeSchema = z.object({
+  entity: z.array(z.object({ id: z.string().default(""), alert: z.object({
+    active_period: z.array(z.object({ start: z.number().optional(), end: z.number().optional() })).default([]),
+    informed_entity: z.array(z.object({ route_id: z.string().optional() })).default([]),
+    header_text: z.object({ translation: z.array(z.object({ text: z.string(), language: z.string().optional() })) }).optional(),
+  }) })),
+});
+/** Active direction-aware skips and platform changes at a time (subway alerts feed). */
+export async function stationServiceChanges(atEpochS: number): Promise<ServiceChange[]> {
+  const data = changeSchema.parse(await getJson("https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys%2Fsubway-alerts.json"));
+  return data.entity.flatMap(({ id, alert }) => {
+    const active = alert.active_period.length === 0 || alert.active_period.some((p) => (p.start ?? 0) <= atEpochS && atEpochS <= (p.end ?? Infinity));
+    const text = alert.header_text?.translation.find((t) => !t.language || t.language === "en")?.text;
+    if (!active || !text) return [];
+    return serviceChanges({ id, text, routes: [...new Set(alert.informed_entity.map((e) => e.route_id).filter((r): r is string => Boolean(r)))] });
+  });
 }
