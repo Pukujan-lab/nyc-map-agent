@@ -8,6 +8,7 @@ export const MART_ORDER = [
   "marts.nta_month",
   "marts.block_window",
   "marts.street_stats",
+  "marts.transit_segment_hourly",
 ];
 
 async function main() {

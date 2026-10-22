@@ -12,6 +12,7 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "db:status": "tsx scripts/migrate.ts status",
     "db:refresh": "tsx scripts/refresh-marts.ts",
+    "transit:observe": "tsx scripts/transit-observe.ts",
     "ingest": "tsx scripts/ingest.ts && tsx scripts/refresh-marts.ts",
     "build:city-tiles": "tsx scripts/build-city-tiles.ts",
     "load:areas": "tsx scripts/load-areas.ts",
