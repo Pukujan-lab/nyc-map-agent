@@ -105,6 +105,36 @@ jobs:
       - name: Clean workspace (persistent runner)
         if: always()
         run: find "$GITHUB_WORKSPACE" -mindepth 1 -delete || true
+  migrations:
+    # Round trip every migration (up, down to zero, up) on a throwaway Postgres
+    # and fail on schema drift. See scripts/ci/migration-roundtrip.sh.
+    runs-on: [self-hosted, linux, x64, gravebuster]
+    timeout-minutes: 10
+    container: { image: postgres:16.4-bookworm }
+    services:
+      pg:
+        image: postgres:16.4-bookworm
+        env:
+          POSTGRES_PASSWORD: ci-throwaway
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 2s --health-timeout 5s --health-retries 30
+    env:
+      DATABASE_URL: postgres://postgres:ci-throwaway@pg:5432/postgres?sslmode=disable
+      DBMATE_VERSION: 2.28.0
+      DBMATE_SHA256: 4a3814fdb7253348d6b3cd60a2e315fba69e1a3a794a31ec75af2ca6019c835c
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install dbmate (pinned, checksum-verified)
+        run: |
+          apt-get update -qq && apt-get install -y -qq curl ca-certificates >/dev/null
+          curl -fsSL -o /usr/local/bin/dbmate "https://github.com/amacneil/dbmate/releases/download/v${DBMATE_VERSION}/dbmate-linux-amd64"
+          echo "${DBMATE_SHA256}  /usr/local/bin/dbmate" | sha256sum -c -
+          chmod +x /usr/local/bin/dbmate
+      - name: Migrations up / down / up, fail on drift
+        run: OUT_DIR=$RUNNER_TEMP scripts/ci/migration-roundtrip.sh
+      - name: Clean workspace (persistent runner)
+        if: always()
+        run: find "$GITHUB_WORKSPACE" -mindepth 1 -delete || true
   e2e:
     runs-on: [self-hosted, linux, x64, gravebuster]
     timeout-minutes: 20
