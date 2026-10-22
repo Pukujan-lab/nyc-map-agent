@@ -5,7 +5,7 @@ import { useMediaQuery } from "@/lib/useMediaQuery";
 /**
  * Bottom-right map orientation control (Layout A dropped the rail's compass).
  * Desktop: a compass with a labeled N that turns with the bearing (tap: north
- * up and flat), rotate left / right 15°, and a Tilt toggle (flat / 60°).
+ * up and flat) and rotate left / right 15°. Tilt lives in the view switcher (Mid / Up / Top).
  * Phones: only the compass, and only once the map has been rotated.
  * Right-drag, Ctrl/Cmd+drag and Shift+arrows still rotate and tilt.
  */
@@ -40,9 +40,6 @@ export function MapCompass() {
         <>
           <button type="button" className={btn} onClick={() => map.easeTo({ bearing: map.getBearing() - ROTATE_STEP })}>Rotate left</button>
           <button type="button" className={btn} onClick={() => map.easeTo({ bearing: map.getBearing() + ROTATE_STEP })}>Rotate right</button>
-          <button type="button" className={btn} aria-pressed={cam.pitch > 0.5} onClick={() => map.easeTo({ pitch: cam.pitch > 0.5 ? 0 : TILT_PITCH })}>
-            {cam.pitch > 0.5 ? "Tilt: 3D" : "Tilt: flat"}
-          </button>
         </>
       ) : null}
       <button
