@@ -7,12 +7,33 @@ const subs = new Set<() => void>();
 export type FollowSnap = { center: [number, number]; zoom: number; bearing: number; pitch: number };
 let snap: FollowSnap | null = null;
 let restoreOnStop = false;
+/** Quiet stop for the trip preview. Must not call setFollowed. */
+let onLeavePreview: (() => void) | null = null;
+
+/** The trip preview registers this so locking onto a vehicle takes the camera back. */
+export function bindPreviewRelease(fn: (() => void) | null) {
+  onLeavePreview = fn;
+}
 
 export function setFollowed(key: string | null) {
   // Drag and Esc release the camera where it is. The Stop button sets the flag first.
   if (key === null && !restoreOnStop) snap = null;
+  // A new vehicle owns the camera, so a playing trip preview lets go without gliding home.
+  if (key !== null && key !== followed) onLeavePreview?.();
   followed = key;
   subs.forEach((f) => f());
+}
+
+/**
+ * Heading for the follow camera. A sample that flips more than 150° is kept
+ * back until it has repeated `hold` times, so one noisy bus heading cannot spin the view.
+ */
+export function stableHeading(prev: number | null, next: number, streak: number, hold = 4): { bearing: number; streak: number } {
+  if (prev === null || !Number.isFinite(next)) return { bearing: Number.isFinite(next) ? next : (prev ?? 0), streak: 0 };
+  const turn = ((next - prev + 540) % 360) - 180;
+  if (Math.abs(turn) <= 150) return { bearing: next, streak: 0 };
+  if (streak + 1 >= hold) return { bearing: next, streak: 0 };
+  return { bearing: prev, streak: streak + 1 };
 }
 
 /** Keep the first view. A later train tap must not overwrite it with the chase camera. */
