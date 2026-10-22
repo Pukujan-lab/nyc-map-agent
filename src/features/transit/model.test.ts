@@ -11,8 +11,8 @@ const sys: StaticSystem = {
 };
 
 describe("transit model", () => {
-  it("interpolates between the passed and next stop", () => {
-    const v = estimateTrain(sys, { id: "t", route: "G", dir: 0, stops: [["AN", 100], ["BN", 200]] }, 150)!;
+  it("is half way between stops mid-way through the travel time after its dwell", () => {
+    const v = estimateTrain(sys, { id: "t", route: "G", dir: 0, stops: [["AN", 100], ["BN", 200]] }, 165)!;
     expect(v.lat).toBeCloseTo(40.705, 4);
     expect(v.bearing).toBeCloseTo(0, 0);
     expect(v.grade).toBe("underground");

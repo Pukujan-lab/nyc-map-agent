@@ -195,7 +195,14 @@ export function VehicleDetails({ vehicleKey }: { vehicleKey: string }) {
       {system === "bus" ? <BusDetails id={tripId} route={v?.route ?? ""} /> : (
         <>
           {v ? <div className="text-muted-foreground">{directionLabel(v.system, v.nextStop ?? "", v.dir)}</div> : <div className="text-muted-foreground">No longer in the live feed.</div>}
-          {v?.nextStop ? (
+          {v?.stopped ? (
+            <div className="font-medium">
+              {v.stopped.kind === "at" ? <>At {stopName(data, v.system, v.stopped.stop)}</>
+                : v.stopped.kind === "departs" ? <>Departs {stopName(data, v.system, v.stopped.stop)} in <span className="tabular-nums">{minutesUntil(v.stopped.t, now)}</span> min</>
+                : <>Arrived at {stopName(data, v.system, v.stopped.stop)}</>}
+            </div>
+          ) : null}
+          {v?.nextStop && v.stopped?.kind !== "arrived" ? (
             <div>
               Next stop <span className="font-medium">{stopName(data, v.system, v.nextStop)}</span>
               {v.eta ? <span className="tabular-nums text-muted-foreground"> · {minutesUntil(v.eta, now)} min</span> : null}
