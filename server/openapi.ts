@@ -13,6 +13,7 @@ import { Query as HazardsQuery } from "./features/hazards/routes";
 import { NearQuery as ParkingNearQuery } from "./features/parking/routes";
 import { AlongQuery as TrafficAlongQuery } from "./features/traffic/routes";
 import { Query as WeatherQuery } from "./features/weather/routes";
+import { EventsResponse, Query as EventsQuery } from "./features/events/schema";
 
 const Json = z.record(z.unknown()).openapi("Json");
 const ApiError = z.object({ error: z.string(), issues: z.array(z.string()).optional() }).openapi("ApiError");
@@ -102,6 +103,13 @@ export const ROUTES = {
     z.object({ vehicle: z.string().max(40).optional(), route: z.string().max(8).optional() }),
     z.object({ system: z.enum(["subway", "lirr", "mnr", "bus", "alerts", "bus-trip", "bus-route"]).openapi({ param: { name: "system", in: "path" }, example: "subway" }) }),
   ),
+  "/api/events": createRoute({
+    method: "get",
+    path: "/api/events",
+    summary: "NYC pop-up events, street fairs, markets, outdoor shows, Parks events and event closures (GeoJSON), refreshed nightly",
+    request: { query: EventsQuery },
+    responses: { 200: { description: "OK", content: { "application/json": { schema: EventsResponse } } }, ...errors },
+  }),
 } as const;
 
 /**
