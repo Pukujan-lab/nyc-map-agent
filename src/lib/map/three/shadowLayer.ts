@@ -70,7 +70,11 @@ export function createShadowLayer(): CustomLayerInterface {
   scene.add(sun, sun.target);
 
   // ShadowMaterial draws only where shadow falls; depth-tested against MapLibre's extrusions.
-  const receive = new THREE.ShadowMaterial({ transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+  // MapLibre draws extrusions offscreen, so their depth is not in the shared buffer:
+  // a depth-only pass of the proxies resolves visibility first, then the shadow
+  // pass draws on the nearest surface only (LessEqual on the same geometry).
+  const depthOnly = new THREE.MeshBasicMaterial({ colorWrite: false });
+  const receive = new THREE.ShadowMaterial({ transparent: true, depthWrite: false, depthFunc: THREE.LessEqualDepth });
   const groundMat = new THREE.ShadowMaterial({ transparent: true, depthWrite: false });
   // Trees and vehicles already have their own look; they only cast.
   const castOnly = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
@@ -82,6 +86,7 @@ export function createShadowLayer(): CustomLayerInterface {
   scene.add(ground);
 
   let buildings: THREE.Mesh | null = null;
+  let occluder: THREE.Mesh | null = null;
   let props: THREE.Mesh | null = null;
   const vehicles = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), castOnly, 400);
   vehicles.castShadow = true;
@@ -171,14 +176,19 @@ export function createShadowLayer(): CustomLayerInterface {
     }
     const t = map.getSource("city3d") ? collect("city3d", "props", "height", "base", Math.min(radius, 350), seen) : [];
     for (const old of [buildings, props]) if (old) { scene.remove(old); old.geometry.dispose(); }
-    buildings = new THREE.Mesh(extrude(b), receive);
+    if (occluder) scene.remove(occluder);
+    const geo = extrude(b);
+    occluder = new THREE.Mesh(geo, depthOnly);
+    occluder.frustumCulled = false;
+    occluder.renderOrder = 0;
+    buildings = new THREE.Mesh(geo, receive);
     buildings.castShadow = buildings.receiveShadow = true;
     buildings.frustumCulled = false;
     buildings.renderOrder = 2;
     props = new THREE.Mesh(extrude(t), castOnly);
     props.castShadow = true;
     props.frustumCulled = false;
-    scene.add(buildings, props);
+    scene.add(occluder, buildings, props);
     map.triggerRepaint();
   };
 
@@ -253,7 +263,7 @@ export function createShadowLayer(): CustomLayerInterface {
       ground.scale.set(radius * 1.3, 1, radius * 1.3);
       // Shadow tint: cooler and lighter at golden hour (the sky fills more).
       const [r, g, b] = light.color;
-      const tint = new THREE.Color(0.12 * (1 - r + 0.3), 0.14 * (1 - g + 0.4), 0.22 * (1 - b + 0.5) + 0.1);
+      const tint = new THREE.Color(0.04, 0.05 + 0.03 * (1 - g), 0.1 + 0.12 * (1 - b));
       for (const mat of [receive, groundMat]) {
         mat.color.copy(tint);
         mat.opacity = MAX_OPACITY * light.strength;
@@ -266,7 +276,10 @@ export function createShadowLayer(): CustomLayerInterface {
         .multiply(new THREE.Matrix4().set(1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1));
       camera.projectionMatrix = new THREE.Matrix4().fromArray(args.defaultProjectionData.mainMatrix as unknown as number[]).multiply(toMerc);
       renderer.resetState();
+      renderer.clearDepth();
       renderer.render(scene, camera);
+      // Leave no proxy depth behind for the layers drawn after this one.
+      renderer.clearDepth();
     },
   };
 }
