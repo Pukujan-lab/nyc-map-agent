@@ -121,6 +121,7 @@ export function LayersDrawer({
   };
   if (registered.has("transit")) add(registered.get("transit")!);
   if (flags.restrooms) add({ id: "restrooms", label: "Restrooms", active: restrooms, onToggle: () => setRestrooms(!restrooms) });
+  if (registered.has("restroomShops")) add(registered.get("restroomShops")!);
   for (const f of FEATURES) if (f.chip && flags[f.id]) add({ id: f.chip.id, label: f.chip.label, active: toggledOn.has(f.chip.id), onToggle: () => toggle(f.chip!.id) });
   for (const c of chips) add(c);
 

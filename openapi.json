@@ -184,6 +184,140 @@
           "features"
         ]
       },
+      "PlaceToilet": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "osm:node/123"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "description": "OSM amenity (restaurant, cafe, fast_food, bar, pub) or 'shop'"
+          },
+          "access": {
+            "type": "string",
+            "enum": [
+              "anyone",
+              "customers"
+            ],
+            "description": "anyone = toilets:access yes|permissive|public; customers = customers or untagged"
+          },
+          "accessTagged": {
+            "type": "boolean",
+            "description": "false when OSM has no toilets:access tag"
+          },
+          "wheelchair": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "changingTable": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "fee": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "openstreetmap"
+            ]
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "access",
+          "accessTagged",
+          "wheelchair",
+          "changingTable",
+          "fee",
+          "source",
+          "url"
+        ]
+      },
+      "PlaceToiletsResponse": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "FeatureCollection"
+            ]
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "Feature"
+                  ]
+                },
+                "id": {
+                  "type": "string"
+                },
+                "geometry": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "Point"
+                      ]
+                    },
+                    "coordinates": {
+                      "type": "array",
+                      "prefixItems": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "coordinates"
+                  ]
+                },
+                "properties": {
+                  "$ref": "#/components/schemas/PlaceToilet"
+                }
+              },
+              "required": [
+                "type",
+                "id",
+                "geometry",
+                "properties"
+              ]
+            }
+          }
+        },
+        "required": [
+          "type",
+          "features"
+        ]
+      },
       "AgentRequest": {
         "type": "object",
         "properties": {
@@ -239,6 +373,52 @@
           },
           "now": {
             "type": "string"
+          },
+          "context": {
+            "type": "object",
+            "properties": {
+              "source": {
+                "type": "string",
+                "enum": [
+                  "street-view"
+                ]
+              },
+              "lon": {
+                "type": "number"
+              },
+              "lat": {
+                "type": "number"
+              },
+              "heading": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "nearestStation": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "nearestEntrance": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "followedTrain": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "source",
+              "lon",
+              "lat"
+            ]
           }
         },
         "required": [
@@ -2781,6 +2961,81 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/EventsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/place-toilets": {
+      "get": {
+        "summary": "Restaurants, cafés, bars and shops with a toilet, labelled anyone / customers only (OpenStreetMap, ODbL; GeoJSON, refreshed nightly)",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaceToiletsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/place-toilets": {
+      "get": {
+        "summary": "Restaurants, cafés, bars and shops with a toilet, labelled anyone / customers only (OpenStreetMap, ODbL; GeoJSON, refreshed nightly) (alias of /api/v1/place-toilets)",
+        "deprecated": true,
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaceToiletsResponse"
                 }
               }
             }

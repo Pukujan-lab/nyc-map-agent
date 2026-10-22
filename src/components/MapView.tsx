@@ -1,4 +1,6 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { buildStreetContext, closeAsk, openAsk } from "@/lib/agent/streetContext";
+import { followedTrain } from "@/lib/transit/follow";
 import { setMapInstance } from "@/lib/map/mapInstance";
 import { RestroomDetails } from "@/components/RestroomCard";
 import { usePanel, usePanelChip } from "@/lib/store/PanelContext";
@@ -1430,7 +1432,16 @@ export function MapView({
           onInput={(input) => {
             walkPad.current = input;
           }}
-          onExit={stopWalk}
+          onExit={() => {
+            closeAsk();
+            stopWalk();
+          }}
+          onAsk={() => {
+            const m = mapRef.current?.getMap();
+            if (!m) return;
+            const c = m.getCenter();
+            openAsk(buildStreetContext({ lon: c.lng, lat: c.lat, heading: m.getBearing(), followedTrain: followedTrain() }));
+          }}
         />
       ) : null}
 
