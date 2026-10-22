@@ -20,8 +20,10 @@ import { alertedRoutes, useAlerts, useBusRoute, useBuses, useStarred, useTransit
 import { useXray, xrayPrims } from "./xray";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { useFlag } from "@/lib/flags";
-import { usePanel, usePanelChip, usePanelSearch, type SearchProvider } from "@/lib/store/PanelContext";
+import { usePanel, usePanelChip, usePanelMode, usePanelSearch, type SearchProvider } from "@/lib/store/PanelContext";
 import { setFollowed, useFollowed } from "./follow";
+
+const stopFollow = () => setFollowed(null);
 import { SYSTEM_LABELS } from "./model";
 import { StationDetails, VehicleDetails } from "./TransitCard";
 import { TransitStatusDetails } from "./TransitStatus";
@@ -412,12 +414,12 @@ export default function TransitLayer() {
   }, [map, followed, three]);
   useEffect(() => {
     if (!map || !following) return;
+    // Esc and Back go through the panel slot (top panel first, then Follow).
     const stop = () => setFollowed(null);
-    const key = (e: KeyboardEvent) => { if (e.key === "Escape") stop(); };
     map.on("dragstart", stop);
-    window.addEventListener("keydown", key);
-    return () => { map.off("dragstart", stop); window.removeEventListener("keydown", key); };
+    return () => { map.off("dragstart", stop); };
   }, [map, following]);
+  usePanelMode("follow", following ? stopFollow : null);
 
   // Clicks on transit features.
   useEffect(() => {
@@ -429,7 +431,8 @@ export default function TransitLayer() {
       if (f.layer.id.startsWith("transit-vehicle") || f.layer.id === "transit-bullet" || f.layer.id.startsWith("transit-bus-badge")) {
         const key = String(f.properties.key);
         const [system] = key.split(":");
-        showPanel({ id: `transit:vehicle:${key}`, title: `${SYSTEM_LABELS[system as SystemId] ?? "Bus"} ${f.properties.label ?? ""}`.trim(), subtitle: "Live vehicle", details: <VehicleDetails vehicleKey={key} /> });
+        const label = String(f.properties.label ?? "").trim();
+        showPanel({ id: `transit:vehicle:${key}`, title: `${SYSTEM_LABELS[system as SystemId] ?? "Bus"} ${label}`.trim(), subtitle: "Live vehicle", peek: label ? `${label} · live` : undefined, details: <VehicleDetails vehicleKey={key} /> });
       } else {
         // Entrances carry the station's GTFS id, so they open the same card.
         const system = (f.layer.id === "transit-entrance" ? "subway" : f.properties.system) as SystemId;
