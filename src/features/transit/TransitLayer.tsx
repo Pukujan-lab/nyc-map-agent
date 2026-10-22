@@ -27,7 +27,7 @@ import { usePanel, usePanelChip, usePanelMode, usePanelSearch, type SearchProvid
 import { followRig, rememberFollowOrigin, setFollowMode, setFollowed, takeFollowRestore, useFollowMode, useFollowed } from "./follow";
 import { publishSubway } from "@/lib/agent/streetContext";
 import { publishLiveDots } from "@/lib/transit/liveVehicles";
-import { setStreetXray, useStreetXray } from "@/lib/transit/streetXray";
+import { XRAY_VEIL_M, setStreetXray, useStreetXray, xrayVeilDisc } from "@/lib/transit/streetXray";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 
 const stopFollow = () => setFollowed(null);
@@ -59,8 +59,6 @@ function onRaisedTrack(cells: Set<string>, p: GeoJSON.Position): boolean {
 const STREET_RADIUS_M = 600;
 /** X-ray draws underground trains this far below the ground plane. */
 const XRAY_DEPTH_M = -12;
-/** X-ray ground veil radius for the overhead levels: wider as you rise. */
-const veilRadius = (zoom: number) => Math.min(6000, Math.max(800, 1500 * 2 ** (16 - zoom)));
 /** Where the walker stands: at street level the map centre sits at most ~10 m ahead of the eye. */
 function streetEye(map: MaplibreMap): { lon: number; lat: number } {
   const c = map.getCenter();
@@ -539,6 +537,21 @@ export default function TransitLayer() {
   // Underground trains draw in 3D only with X-ray on (their route bullets always show);
   // then they glow below a see-through ground and buildings, at every level.
   const xrayOn = useStreetXray();
+  const flatVeilKey = useRef("");
+  const [flatVeil, setFlatVeil] = useState(EMPTY);
+  useEffect(() => {
+    if (!map || three || !xrayOn) return;
+    const sync = () => {
+      const e = streetEye(map);
+      const key = `${e.lon.toFixed(3)},${e.lat.toFixed(3)}`;
+      if (key === flatVeilKey.current) return;
+      flatVeilKey.current = key;
+      setFlatVeil(xrayVeilDisc(e.lon, e.lat));
+    };
+    sync();
+    map.on("moveend", sync);
+    return () => map.off("moveend", sync);
+  }, [map, three, xrayOn]);
   useEffect(() => {
     if (!three) return;
     v3d.current?.update(
@@ -560,7 +573,7 @@ export default function TransitLayer() {
       const ids = map.getLayersOrder();
       if (map.getLayer(v.layer.id) && ids[ids.length - 1] !== v.layer.id) map.moveLayer(v.layer.id);
       const e = streetEye(map);
-      v.setGroundVeil([e.lon, e.lat], walking ? STREET_RADIUS_M : veilRadius(map.getZoom()));
+      v.setGroundVeil([e.lon, e.lat], XRAY_VEIL_M);
     };
     sync();
     const late = window.setTimeout(sync, 1200); // the three layer loads on the first tilt
@@ -678,7 +691,7 @@ export default function TransitLayer() {
       </Source>
       {xrayOn && !three ? (
         // Top-down X-ray: the ground and buildings fade so the tunnels below read through.
-        <Source id="transit-xray-veil" type="geojson" data={WORLD}>
+        <Source id="transit-xray-veil" type="geojson" data={flatVeil}>
           <Layer id="transit-xray-veil" type="fill" beforeId="transit-line-under" paint={{ "fill-color": "#0b1220", "fill-opacity": 0.55 }} />
         </Source>
       ) : null}
