@@ -17,6 +17,11 @@ export function isFootprint(l: Layer): boolean {
   return l.type === "fill" && l["source-layer"] === "building";
 }
 
+/** Flat applies at street level too. Only Map detail > 3D buildings extrudes and loads the textured city. */
+export function wantsFlatBuildings(choice: "flat" | "3d"): boolean {
+  return choice !== "3d";
+}
+
 const saved = new WeakMap<MapLibreMap, Map<string, { vis: unknown; min?: number; max?: number; color: unknown; outline: unknown }>>();
 
 export function applyBuildings(map: MapLibreMap, flat: boolean, tint: string, edge: string = tint): void {
