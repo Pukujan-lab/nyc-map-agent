@@ -15,7 +15,7 @@ test("map loads, search opens a panel, street level toggles, no console errors",
   await page.goto("/");
 
   // Map loads: the MapLibre canvas is up and our neighbourhood data arrived.
-  await expect(page.locator("canvas.maplibregl-canvas")).toBeVisible();
+  await expect(page.locator("canvas.maplibregl-canvas").first()).toBeVisible();
   await page.waitForResponse((r) => r.url().includes("/api/aggregate"));
 
   // Search a neighbourhood and open its panel.
