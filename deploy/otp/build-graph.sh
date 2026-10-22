@@ -2,7 +2,7 @@
 # Weekly OTP graph rebuild: fetch NYC OSM + MTA/NYC Ferry GTFS, build graph.obj
 # in a one-shot OTP container, swap it in atomically, restart the otp service.
 # SIR ships inside gtfs_subway.zip. The env file supplies MTA_BUSTIME_KEY
-# (router-config.json substitutes ${MTA_BUSTIME_KEY}). Run on gravebuster (cron: Sun 04:10 New York). See docs/OTP.md.
+# (router-config.json substitutes ${MTA_BUSTIME_KEY}). Run on gravebuster (cron: Sun 08:10 UTC). See docs/OTP.md.
 set -euo pipefail
 ROOT=${OTP_ROOT:-/srv/nyc-map-agent/otp}
 APP=${APP_DIR:-/srv/nyc-map-agent/app}

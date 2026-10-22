@@ -43,10 +43,11 @@ docker compose -p nyc-map-agent up -d --no-deps otp
 | LIRR, MNR | `gtfslirr.zip`, `gtfsmnr.zip` |
 | FERRY | NYC Ferry (connexionz) |
 
-Weekly rebuild: host crontab on gravebuster, Sunday 04:10 New York:
+Weekly rebuild: host crontab on gravebuster (host clock is UTC), Sunday 08:10 UTC
+(04:10 New York in EDT, 03:10 in EST). A build takes about 5 minutes:
 
 ```
-10 4 * * 0 /srv/nyc-map-agent/app/deploy/otp/build-graph.sh >> /srv/nyc-map-agent/otp/build.log 2>&1 # nyc-map-otp-weekly
+10 8 * * 0 /bin/bash /srv/nyc-map-agent/app/deploy/otp/build-graph.sh >> /srv/nyc-map-agent/otp/build.log 2>&1 # nyc-map-otp-weekly
 ```
 
 (The nightly-ingest workflow runs inside a node container without the host
@@ -60,6 +61,13 @@ paths, so the rebuild lives in cron.)
   substitutes from the container environment (the `.env` file); it is never in git.
 - LIRR and Metro-North trip updates, every 60 s.
 - Service alerts (camsys subway, bus, LIRR, MNR), every 2 min.
+
+Known gaps: the NYCT subway GTFS-rt trip ids do not match the static feed's
+trip ids (OTP logs `TRIP_NOT_FOUND`, 0% applied, even with `fuzzyTripMatching`),
+and most Metro-North updates do not match either, so those legs use scheduled
+times. Bus (Bus Time) and LIRR updates apply. Each bus feed also logs
+`TRIP_NOT_FOUND` for the other boroughs' trips in the shared Bus Time feed; that
+is expected. Service alerts apply for every feed.
 
 ## Checks
 
