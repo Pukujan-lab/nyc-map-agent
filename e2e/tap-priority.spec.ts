@@ -11,12 +11,12 @@ async function open(page: Page) {
   await page.setViewportSize(DESKTOP);
   await mockNetwork(page);
   await page.goto("/");
-  await expect(page.locator("canvas.maplibregl-canvas")).toBeVisible();
+  await expect(page.locator("canvas.maplibregl-canvas").first()).toBeVisible();
   await page.waitForResponse((r) => r.url().includes("/api/aggregate"));
 }
 
 async function tapMap(page: Page, fx: number, fy: number) {
-  const box = (await page.locator("canvas.maplibregl-canvas").boundingBox())!;
+  const box = (await page.locator("canvas.maplibregl-canvas").first().boundingBox())!;
   await page.mouse.click(box.x + box.width * fx, box.y + box.height * fy);
 }
 

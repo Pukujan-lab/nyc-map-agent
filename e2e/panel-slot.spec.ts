@@ -28,7 +28,7 @@ async function open(page: Page, size = PHONE) {
     r.fulfill({ contentType: "application/json", body: JSON.stringify({ at: Math.floor(Date.now() / 1000), buses: [{ ...BUS, t: Math.floor(Date.now() / 1000) }] }) }),
   );
   await page.goto("/?transit=bus");
-  await expect(page.locator("canvas.maplibregl-canvas")).toBeVisible();
+  await expect(page.locator("canvas.maplibregl-canvas").first()).toBeVisible();
   await page.waitForResponse((r) => r.url().includes("/api/aggregate"));
 }
 
@@ -45,7 +45,7 @@ async function openPlace(page: Page) {
 
 /** Tap the map canvas at a point given as a fraction of its size. */
 async function tapMap(page: Page, fx: number, fy: number) {
-  const box = (await page.locator("canvas.maplibregl-canvas").boundingBox())!;
+  const box = (await page.locator("canvas.maplibregl-canvas").first().boundingBox())!;
   await page.mouse.click(box.x + box.width * fx, box.y + box.height * fy);
 }
 
@@ -92,7 +92,7 @@ test("an empty map tap closes the drawer and the sheet", async ({ page }) => {
   await expect(drawer(page)).toBeVisible();
   // Just under the top bar at the far left is New Jersey: no neighborhood, no vehicle.
   const bar = (await layers(page).boundingBox())!;
-  const canvas = (await page.locator("canvas.maplibregl-canvas").boundingBox())!;
+  const canvas = (await page.locator("canvas.maplibregl-canvas").first().boundingBox())!;
   await page.mouse.click(canvas.x + 8, bar.y + bar.height + 24);
   await expect(drawer(page)).toHaveCount(0);
   await expect(sheet(page)).toHaveCount(0);
@@ -109,5 +109,5 @@ test("Esc and Back close the top panel first", async ({ page }) => {
   await page.goBack();
   await expect(sheet(page)).toHaveCount(0);
   // The app is still here: Back closed a panel, it did not leave the page.
-  await expect(page.locator("canvas.maplibregl-canvas")).toBeVisible();
+  await expect(page.locator("canvas.maplibregl-canvas").first()).toBeVisible();
 });

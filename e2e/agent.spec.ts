@@ -31,7 +31,7 @@ test("smart mode: trip question draws the route, opens the trip card and plays t
   });
 
   await page.goto("/");
-  await expect(page.locator("canvas.maplibregl-canvas")).toBeVisible();
+  await expect(page.locator("canvas.maplibregl-canvas").first()).toBeVisible();
   // Location is shared only from a tap on My location; then the rail offers to stop.
   await page.getByRole("button", { name: "Layers & filters", exact: true }).click();
   await page.getByRole("button", { name: "My location" }).click();

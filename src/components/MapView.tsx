@@ -123,6 +123,7 @@ function eyeCamera(map: MaplibreMapInstance, eye: Eye): CameraOptions {
 import { useMapState } from "@/lib/store/MapStateContext";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 import { WalkControls } from "./WalkControls";
+import { StreetMiniMap } from "./StreetMiniMap";
 import { nearestCorner, type CornerSign } from "@/lib/map/corner";
 import { MAX_HEIGHT_M, pitchForHeight, STREET_LEVEL_M } from "@/lib/map/cameraHeight";
 import { hoverBlocked } from "@/lib/map/hover";
@@ -239,6 +240,7 @@ export function MapView({
   const wasWalking = useRef(false);
   /** The walker's eye pose; the camera is derived from it every frame. */
   const eyeRef = useRef<Eye | null>(null);
+  const getEye = useCallback(() => eyeRef.current, []);
 
   const {
     layer,
@@ -1443,6 +1445,9 @@ export function MapView({
             openAsk(buildStreetContext({ lon: c.lng, lat: c.lat, heading: m.getBearing(), followedTrain: followedTrain() }));
           }}
         />
+      ) : null}
+      {walking && ready && mapRef.current ? (
+        <StreetMiniMap main={mapRef.current.getMap()} getEye={getEye} onExit={stopWalk} />
       ) : null}
 
       {hover && !walking && canHover && !sheetOpen && analytics ? (
