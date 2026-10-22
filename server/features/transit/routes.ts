@@ -55,7 +55,7 @@ export type TransitTrip = {
   at?: string;
 };
 
-async function loadTrips(system: string) {
+export async function loadTrips(system: string) {
   const feeds = await Promise.allSettled(FEEDS[system].map(decode));
   const trips: TransitTrip[] = [];
   const now = Date.now() / 1000;

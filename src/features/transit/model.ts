@@ -1,5 +1,6 @@
 import { defaultDwell, motionAt } from "./dwell";
 import type { ProgressTracker } from "./monotonic";
+import { blendStops, type SegmentLookup } from "./history";
 
 /** Pure transit math: estimated train positions along GTFS shapes, arrivals, vehicle bodies. */
 export type SystemId = "subway" | "lirr" | "mnr";
@@ -85,13 +86,15 @@ function bearingOf(a: [number, number], b: [number, number]) {
  * stop we extrapolate back from the first leg (capped). Null when unplaceable.
  * One function drives 2D bullets, 3D models and the follow camera.
  */
-export function estimateTrain(sys: StaticSystem, trip: LiveTrip, now: number, tracker?: ProgressTracker): Vehicle | null {
+export function estimateTrain(sys: StaticSystem, trip: LiveTrip, now: number, tracker?: ProgressTracker, hist?: SegmentLookup): Vehicle | null {
   const shape = sys.shapes[trip.route];
   const sm = sys.stopM[trip.route];
   if (!shape || !sm) return null;
-  const pts = trip.stops
+  const livePts = trip.stops
     .map(([id, arr, dep]) => ({ id, arr, dep, m: sm[stationOf(sys.system, id)] }))
     .filter((p): p is { id: string; arr: number; dep: number | undefined; m: number } => p.m !== undefined);
+  // Blend historical segment times with live ETAs (motion only; shown ETAs stay live).
+  const pts = blendStops(livePts, now, trip.route, trip.dir, hist);
   if (!pts.length) return null;
   if (pts[0].arr - now > 30 * 60) return null; // not running yet
   const names = stationNames(sys);
@@ -108,7 +111,7 @@ export function estimateTrain(sys: StaticSystem, trip: LiveTrip, now: number, tr
   if (tracker && mo.phase !== "terminal") {
     // Never pass the first stop the feed still lists (departure unconfirmed).
     const tripFwd = Math.sign(pts[pts.length - 1].m - pts[0].m) || forward;
-    m = tracker.update({ key: `${sys.system}:${trip.id}`, route: trip.route, forward: tripFwd, m, holdM: pts[0].m, holdEta: pts[0].arr }, now);
+    m = tracker.update({ key: `${sys.system}:${trip.id}`, route: trip.route, forward: tripFwd, m, holdM: livePts[0].m, holdEta: livePts[0].arr }, now);
   }
   const stopped: Vehicle["stopped"] =
     mo.phase === "origin" ? { kind: "departs", stop: pts[0].id, t: mo.departs }
@@ -134,7 +137,7 @@ export function estimateTrain(sys: StaticSystem, trip: LiveTrip, now: number, tr
     z,
     dir: trip.dir,
     nextStop: mo.phase === "dwell" || mo.phase === "origin" ? onward.id : next.id,
-    eta: mo.phase === "dwell" || mo.phase === "origin" ? onward.arr : next.arr,
+    eta: livePts[Math.min(mo.phase === "dwell" || mo.phase === "origin" ? mo.i + 1 : nextI, livePts.length - 1)].arr,
     stopped,
   };
 }
