@@ -10,10 +10,11 @@ import { requestBody, type AskContext, type StreamEvent } from "../../../src/fea
 import { resolveFlags } from "../../../src/lib/flags/registry";
 import { makeTools, type ToolContext } from "./tools";
 import { toNyLocal } from "./trip";
+import { fallbackFetch, modelChain } from "./model-fallback";
 
 export const INFERHUB_BASE_URL = process.env.INFERHUB_BASE_URL ?? "https://api.inferhub.dev/v1";
 /** Cheap, fast, good at tool calls: ~$0.075 in / $0.30 out per M tokens (InferHub market max ask). */
-export const DEFAULT_MODEL = "deepseek/deepseek-v4.1-flash";
+export const DEFAULT_MODEL = "cb/deepseek-v4.1-flash";
 
 /**
  * The exact shared position goes to the model so "from here" directions start
@@ -49,7 +50,8 @@ export function systemPrompt(nowLocal: string, location: { lon: number; lat: num
 function defaultModel(): LanguageModel {
   const key = process.env.INFERHUB_API_KEY;
   if (!key) throw new Error("INFERHUB_API_KEY is not set on the server.");
-  return createOpenAICompatible({ name: "inferhub", baseURL: INFERHUB_BASE_URL, apiKey: key })(process.env.INFERHUB_MODEL ?? DEFAULT_MODEL);
+  const models = modelChain(process.env.INFERHUB_MODEL ?? DEFAULT_MODEL, process.env.INFERHUB_MODEL_FALLBACKS);
+  return createOpenAICompatible({ name: "inferhub", baseURL: INFERHUB_BASE_URL, apiKey: key, fetch: fallbackFetch(models) })(models[0]);
 }
 
 export async function POST(request: Request, opts: { model?: LanguageModel; deps?: ToolContext["deps"] } = {}): Promise<Response> {
