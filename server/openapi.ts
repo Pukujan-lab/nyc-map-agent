@@ -104,6 +104,7 @@ export const ROUTES = {
   "/api/street": jsonRoute("/api/street", "Street noise / crash stats", StreetQuery),
   "/api/weather": jsonRoute("/api/weather", "Current weather near a point (Open-Meteo, NWS fallback)", WeatherQuery),
   "/api/hazards": jsonRoute("/api/hazards", "Active NWS alerts for NYC and flooded FloodNet sensors", HazardsQuery),
+  "/api/ferry": jsonRoute("/api/ferry", "NYC Ferry and Staten Island Ferry routes, piers, and live or estimated vessels"),
   "/api/traffic/along": jsonRoute("/api/traffic/along", "NYC DOT traffic speeds along a line", TrafficAlongQuery),
   "/api/traffic": jsonRoute("/api/traffic", "NYC DOT real-time speed links and today's closures GeoJSON"),
   "/api/parking/near": jsonRoute("/api/parking/near", "Licensed garages and lots near a point", ParkingNearQuery),
