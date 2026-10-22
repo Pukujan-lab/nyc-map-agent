@@ -240,6 +240,7 @@ export function MapView({
   const parksPlaces = useQuickLayer("parksPlaces");
   const citibike = useQuickLayer("citibike");
   const storefrontsOn = useFlag("storefronts") && businesses;
+  const streetArtOn = useQuickLayer("streetArt");
   usePanelChip(schoolsOn ? { id: "schools", label: "Schools", active: schoolIcons, onToggle: toggleSchools } : null);
   const restroomsMod = useRef<typeof import("@/lib/map/restrooms") | null>(null);
   /** So leaving walk mode can restore the overhead camera exactly once. */
@@ -657,6 +658,15 @@ export function MapView({
           showPanel({ id: `landmark:${hit.landmark.id}`, title: hit.landmark.name, subtitle: "Landmark" });
           return;
         }
+        const art = streetArtOn ? signsMod.current?.artAt(hit?.kind === "building" ? hit.lng : event.lngLat.lng, hit?.kind === "building" ? hit.lat : event.lngLat.lat) : null;
+        if (art) {
+          showPanel({
+            id: `art:${art.id}`,
+            title: art.name ?? (art.kind === "graffiti" ? "Graffiti" : "Mural"),
+            subtitle: [art.artist, art.license ? `Image ${art.license} · Wikimedia Commons` : null, "© OpenStreetMap contributors"].filter(Boolean).join(" · "),
+          });
+          return;
+        }
         if (hit?.kind === "building") {
           if (typeof hit.props.school === "string" && hit.props.school) {
             showPanel({ id: `school:${hit.props.school}`, title: hit.props.school, subtitle: "School · NYC DOE (LCGMS)" });
@@ -697,7 +707,7 @@ export function MapView({
         selectNta(picked.datum.ntaCode);
       }
     },
-    [pickAt, selectBlock, selectNta, routePicking, setRoutePoint, showPanel, closeAll, city3d, walking, analytics],
+    [pickAt, selectBlock, selectNta, routePicking, setRoutePoint, showPanel, closeAll, city3d, walking, analytics, streetArtOn],
   );
 
   const handleMoveEnd = useCallback(() => {
@@ -937,6 +947,9 @@ export function MapView({
         if (storefrontsOn && !map.getLayer(signs.STOREFRONT_LAYER)) map.addLayer(signs.createStorefrontLayer());
         // Quick Layers > Businesses off takes the sign bands away.
         if (!storefrontsOn && map.getLayer(signs.STOREFRONT_LAYER)) map.removeLayer(signs.STOREFRONT_LAYER);
+        // Quick Layers > Street art: murals on their walls, eye level.
+        if (streetArtOn && !map.getLayer(signs.STREET_ART_LAYER)) map.addLayer(signs.createStreetArtLayer());
+        if (!streetArtOn && map.getLayer(signs.STREET_ART_LAYER)) map.removeLayer(signs.STREET_ART_LAYER);
         if (!city3dOn) {
           setCity3dVisible(map, false);
           return;
@@ -959,7 +972,7 @@ export function MapView({
       cancelled = true;
       cleanup?.();
     };
-  }, [ready, styleEpoch, city3d, schoolIcons, storefrontsOn, eco, flatBuildings]);
+  }, [ready, styleEpoch, city3d, schoolIcons, storefrontsOn, streetArtOn, eco, flatBuildings]);
 
   useEffect(() => {
     if (!ready) return;

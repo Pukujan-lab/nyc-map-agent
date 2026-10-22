@@ -1177,6 +1177,141 @@ export function createStorefrontLayer(): CustomLayerInterface {
   };
 }
 
+// ---- Street art (OSM murals / graffiti on the nearest wall; server: /api/street-art) ----
+export const STREET_ART_LAYER = "city3d-street-art";
+export const STREET_ART_MIN_ZOOM = 16;
+const ART_H = 5; // mural height on the wall, metres, from 0.4 m above the pavement
+
+export interface StreetArt { id: string; name: string | null; artist: string | null; kind: string; img: string | null; license: string | null; ring: Array<[number, number]> }
+let artworks: StreetArt[] = [];
+
+/** The mural nearest a ground point (eye-level picking), within `radius` metres. */
+export function artAt(lng: number, lat: number, radius = 10): StreetArt | null {
+  const kx = 111_320 * Math.cos((lat * Math.PI) / 180);
+  let best: StreetArt | null = null, bd = radius;
+  for (const a of artworks) {
+    const [x, y] = a.ring[0], [x2, y2] = a.ring[1];
+    const d = Math.hypot(((x + x2) / 2 - lng) * kx, ((y + y2) / 2 - lat) * 111_320);
+    if (d < bd) { bd = d; best = a; }
+  }
+  return best;
+}
+
+/** A stylised, self-drawn placeholder for murals without a free image (CC0). */
+function placeholderArt(seed: number, label: string): THREE.CanvasTexture {
+  const c = document.createElement("canvas");
+  c.width = 256;
+  c.height = 160;
+  const g = c.getContext("2d")!;
+  const hues = [12, 48, 190, 280, 330, 140];
+  g.fillStyle = `hsl(${hues[seed % 6]} 55% 30%)`;
+  g.fillRect(0, 0, 256, 160);
+  for (let i = 0; i < 9; i++) {
+    g.fillStyle = `hsl(${hues[(seed + i) % 6]} 75% ${50 + (i % 3) * 10}%)`;
+    g.beginPath();
+    g.arc(((seed * 37 + i * 61) % 256), ((seed * 17 + i * 43) % 160), 18 + ((i * 13) % 30), 0, Math.PI * 2);
+    g.fill();
+  }
+  g.fillStyle = "rgba(18,18,18,0.7)";
+  g.fillRect(0, 124, 256, 36);
+  g.fillStyle = "#F2F1ED";
+  g.font = '600 18px "Helvetica Neue", Arial, sans-serif';
+  g.textAlign = "center";
+  g.fillText(label.slice(0, 26), 128, 148);
+  const t = new THREE.CanvasTexture(c);
+  t.encoding = THREE.sRGBEncoding;
+  return t;
+}
+
+export function createStreetArtLayer(): CustomLayerInterface {
+  let map: MapLibreMap;
+  let renderer: THREE.WebGLRenderer;
+  const scene = new THREE.Scene();
+  const camera = new THREE.Camera();
+  const plane = new THREE.PlaneGeometry(1, 1);
+  const meshes = new Map<string, THREE.Mesh>();
+  const origin = MercatorCoordinate.fromLngLat([-73.99, 40.72], 0);
+  let cell = "";
+  let alive = true;
+  const loader = new THREE.TextureLoader();
+  loader.setCrossOrigin("anonymous");
+
+  const place = () => {
+    for (const a of artworks) {
+      if (meshes.has(a.id)) continue;
+      const [p, q, , r] = a.ring;
+      const kx = 111_320 * Math.cos((p[1] * Math.PI) / 180);
+      const w = Math.hypot((q[0] - p[0]) * kx, (q[1] - p[1]) * 111_320);
+      const mat = new THREE.MeshBasicMaterial({ map: placeholderArt(meshes.size, a.name ?? (a.kind === "graffiti" ? "Graffiti" : "Mural")), side: THREE.DoubleSide });
+      if (a.img) loader.load(a.img, (t) => { t.encoding = THREE.sRGBEncoding; mat.map?.dispose(); mat.map = t; mat.needsUpdate = true; map?.triggerRepaint(); });
+      const mesh = new THREE.Mesh(plane, mat);
+      const ll = MercatorCoordinate.fromLngLat([(p[0] + q[0]) / 2, (p[1] + q[1]) / 2], 0);
+      const s = ll.meterInMercatorCoordinateUnits();
+      const t = new THREE.Vector3((q[0] - p[0]) * kx, (q[1] - p[1]) * 111_320, 0).normalize();
+      const n = new THREE.Vector3((r[0] - p[0]) * kx, (r[1] - p[1]) * 111_320, 0).normalize();
+      const m = new THREE.Matrix4().makeBasis(t.multiplyScalar(w), new THREE.Vector3(0, 0, ART_H), n);
+      m.setPosition((ll.x - origin.x) / s, -(ll.y - origin.y) / s, 0.4 + ART_H / 2);
+      mesh.matrixAutoUpdate = false;
+      mesh.matrix.copy(m);
+      mesh.frustumCulled = false;
+      scene.add(mesh);
+      meshes.set(a.id, mesh);
+    }
+    map?.triggerRepaint();
+  };
+
+  const refresh = () => {
+    if (!map || map.getZoom() < STREET_ART_MIN_ZOOM) return;
+    const c = map.getCenter();
+    // ~500 m cells, snapped so the server cache and this check agree.
+    const x = Math.floor(c.lng / 0.006) * 0.006, y = Math.floor(c.lat / 0.0045) * 0.0045;
+    const key = `${x.toFixed(3)},${y.toFixed(4)}`;
+    if (key === cell) return;
+    cell = key;
+    const q = new URLSearchParams({ west: (x - 0.006).toFixed(4), south: (y - 0.0045).toFixed(4), east: (x + 0.012).toFixed(4), north: (y + 0.009).toFixed(4) });
+    fetch(`/api/v1/street-art?${q}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { features?: Array<{ properties: Omit<StreetArt, "ring">; geometry: { coordinates: Array<Array<[number, number]>> } }> } | null) => {
+        if (!alive || !j?.features) return;
+        const fresh = j.features.map((f) => ({ ...f.properties, ring: f.geometry.coordinates[0] }));
+        artworks = [...new Map([...artworks, ...fresh].map((a) => [a.id, a])).values()].slice(-80);
+        place();
+      })
+      .catch(() => {});
+  };
+
+  return {
+    id: STREET_ART_LAYER,
+    type: "custom",
+    renderingMode: "3d",
+    onAdd(m, gl) {
+      map = m;
+      renderer = sharedRenderer(m, gl);
+      map.on("moveend", refresh);
+      refresh();
+    },
+    onRemove() {
+      alive = false;
+      map.off("moveend", refresh);
+      for (const mesh of meshes.values()) {
+        const mt = mesh.material as THREE.MeshBasicMaterial;
+        mt.map?.dispose();
+        mt.dispose();
+      }
+      plane.dispose();
+      artworks = [];
+    },
+    render(_gl, args) {
+      if (!meshes.size || map.getZoom() < STREET_ART_MIN_ZOOM) return;
+      const s = origin.meterInMercatorCoordinateUnits();
+      const l = new THREE.Matrix4().makeTranslation(origin.x, origin.y, origin.z ?? 0).scale(new THREE.Vector3(s, -s, s));
+      camera.projectionMatrix = new THREE.Matrix4().fromArray(args.defaultProjectionData.mainMatrix as unknown as number[]).multiply(l);
+      renderer.resetState();
+      renderer.render(scene, camera);
+    },
+  };
+}
+
 // ---- Hero landmarks (glTF) ----
 export const LANDMARKS_3D_LAYER = "city3d-landmarks";
 export const LANDMARKS_MIN_ZOOM = 14;

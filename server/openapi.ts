@@ -11,6 +11,7 @@ import { Query as BlocksQuery } from "../api/blocks";
 import { Query as StreetQuery } from "../api/street";
 import { Query as HazardsQuery } from "./features/hazards/routes";
 import { NearQuery as ParkingNearQuery } from "./features/parking/routes";
+import { ArtBox as StreetArtQuery } from "./features/street-art/routes";
 import { BrandsBox as StorefrontBrandsQuery, LogoQuery as StorefrontLogoQuery } from "./features/storefronts/routes";
 import { AlongQuery as TrafficAlongQuery } from "./features/traffic/routes";
 import { Query as WeatherQuery } from "./features/weather/routes";
@@ -110,6 +111,7 @@ export const ROUTES = {
   "/api/parking/near": jsonRoute("/api/parking/near", "Licensed garages and lots near a point", ParkingNearQuery),
   "/api/parking/rules": jsonRoute("/api/parking/rules", "Street parking sign and meter rules near a point", ParkingNearQuery),
   "/api/storefronts/brands": jsonRoute("/api/storefronts/brands", "OSM shops and amenities with brand:wikidata in a small bbox (ODbL)", StorefrontBrandsQuery),
+  "/api/street-art": jsonRoute("/api/street-art", "OSM murals and graffiti near a small bbox, snapped to building walls, with free-licence Commons images (ODbL)", StreetArtQuery),
   "/api/storefronts/logo": jsonRoute("/api/storefronts/logo", "A brand's freely licensed Wikidata P154 logo, re-hosted via Octo files (R2)", StorefrontLogoQuery),
   "/api/parking": jsonRoute("/api/parking", "Licensed garages and lots GeoJSON (DCWP + OSM)"),
   "/api/transit-segments": createRoute({
