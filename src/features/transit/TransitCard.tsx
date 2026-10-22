@@ -5,7 +5,7 @@ import { Accessibility, Crosshair, ScanEye, Star, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { arrivalsAt, directionLabel, estimateTrain, minutesUntil, stationOf, type LiveSystem, type StaticSystem, type SystemId, type Vehicle } from "./model";
 import { useAlerts, useBusRoute, useBusTrip, useBuses, useNow, useStarred, useTransitData, type Outage } from "./hooks";
-import { setFollowed, useFollowed } from "./follow";
+import { setFollowed, stopFollowing, useFollowed } from "./follow";
 import { useSharedLocation } from "@/lib/geo/sharedLocation";
 import { getXray, setXray, useXray } from "./xray";
 import { AlertRow } from "./AlertCard";
@@ -226,7 +226,7 @@ export function VehicleDetails({ vehicleKey }: { vehicleKey: string }) {
       )}
       {v ? <RouteAlerts route={v.route} /> : null}
       <Button size="sm" variant={following ? "default" : "outline"} aria-pressed={following} disabled={!v}
-        onClick={() => setFollowed(following ? null : vehicleKey)}>
+        onClick={() => (following ? stopFollowing() : setFollowed(vehicleKey))}>
         <Crosshair className="mr-1.5 h-4 w-4" />
         {following ? "Following · drag or Esc to stop" : "Follow"}
       </Button>

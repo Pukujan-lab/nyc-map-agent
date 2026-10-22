@@ -24,10 +24,11 @@ import { useXray, xrayPrims } from "./xray";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { useFlag } from "@/lib/flags";
 import { usePanel, usePanelChip, usePanelMode, usePanelSearch, type SearchProvider } from "@/lib/store/PanelContext";
-import { followRig, setFollowMode, setFollowed, useFollowMode, useFollowed } from "./follow";
+import { followRig, rememberFollowOrigin, setFollowMode, setFollowed, takeFollowRestore, useFollowMode, useFollowed } from "./follow";
 import { publishSubway } from "@/lib/agent/streetContext";
 import { publishLiveDots } from "@/lib/transit/liveVehicles";
 import { setStreetXray, useStreetXray } from "@/lib/transit/streetXray";
+import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 
 const stopFollow = () => setFollowed(null);
 import { SYSTEM_LABELS, cellKey } from "./model";
@@ -131,6 +132,7 @@ export default function TransitLayer() {
   const { current } = useMap();
   const map = current?.getMap();
   const { tilted, walking, startWalk, stopWalk, setTilted } = useMapState();
+  const reducedMotion = usePrefersReducedMotion();
   const three = tilted || walking;
   // Dev-only: lets headless QA enter street level at a point.
   useEffect(() => {
@@ -579,6 +581,12 @@ export default function TransitLayer() {
     if (walking) stopWalk();
     setTilted(true);
   }, [following]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Snapshot the view before the chase camera moves it. Stop following eases back here.
+  useEffect(() => {
+    if (!map || !followedKey) return;
+    const c = map.getCenter();
+    rememberFollowOrigin({ center: [c.lng, c.lat], zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() });
+  }, [map, followedKey]);
   useEffect(() => {
     if (!map || !followed) return;
     const { eye, look } = followRig(followMode, followed.bearing, followed.z ?? 0);
@@ -586,6 +594,14 @@ export default function TransitLayer() {
     const cam = map.calculateCameraOptionsFromTo(at(eye[0], eye[1]), eye[2], at(look[0], look[1]), look[2]);
     map.easeTo({ ...cam, duration: 250, easing: (t) => t });
   }, [map, followed, followMode]);
+  useEffect(() => {
+    if (!map || followedKey) return;
+    const back = takeFollowRestore();
+    if (!back.restore) return;
+    const c = map.getCenter();
+    const cam = back.cam ?? { center: [c.lng, c.lat] as [number, number], zoom: Math.min(map.getZoom(), 13), bearing: 0, pitch: 0 };
+    map.easeTo({ center: cam.center, zoom: cam.zoom, bearing: cam.bearing, pitch: cam.pitch, duration: reducedMotion ? 0 : 700 });
+  }, [map, followedKey, reducedMotion]);
   useEffect(() => {
     if (!map || !following) return;
     // Esc and Back go through the panel slot (top panel first, then Follow).
