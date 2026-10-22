@@ -183,6 +183,8 @@ jobs:
       group: deploy-main
       cancel-in-progress: false
     container: { image: node:22-bookworm }
+    # The container's default shell is sh, which rejects `set -o pipefail`.
+    defaults: { run: { shell: bash } }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
