@@ -69,9 +69,19 @@ describe("flythrough timeline", () => {
   });
   it("speeds up and stays watchable", () => {
     expect(wallSeconds(segs[2], 30)).toBe(14);
-    expect(wallSeconds(segs[2], 2)).toBe(45);
+    expect(wallSeconds(segs[2], 10)).toBe(42);
+    expect(wallSeconds(segs[2], 2)).toBe(210);
     expect(wallSeconds(segs[0], 30)).toBe(4);
-    expect(wallSeconds(segs[4], 30)).toBe(3);
+    expect(wallSeconds(segs[4], 30)).toBe(2);
+  });
+  it("keeps 2x, 10x and 30x apart on a long ride", () => {
+    const ride = { ...segs[2], realS: 1800 };
+    const slow = wallSeconds(ride, 2);
+    const mid = wallSeconds(ride, 10);
+    const fast = wallSeconds(ride, 30);
+    expect(slow).toBe(225);
+    expect(mid).toBe(45);
+    expect(fast).toBe(15);
   });
   it("walks at eye level and rides lower, x-ray underground", () => {
     expect(poseAt(segs[0], 0.5).pitch).toBe(75);
