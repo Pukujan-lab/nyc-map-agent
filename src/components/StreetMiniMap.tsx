@@ -1,11 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import maplibregl, { type Map as MapLibreMap } from "maplibre-gl";
+import maplibregl, { type GeoJSONSource, type Map as MapLibreMap } from "maplibre-gl";
 import { coneRotation, miniStyle } from "@/lib/map/miniStyle";
+import { dotsNear, useLiveDots } from "@/lib/transit/liveVehicles";
+
+const DOTS = "mini-live-vehicles";
+/** Live vehicles drawn on the inset: about what it shows at z15.5. */
+const DOTS_RADIUS_M = 900;
 
 /**
  * Street-level mini map: a small north-up inset (140 px phone, 200 px desktop)
  * in the bottom-right corner, above the credits and clear of the walk pad on
  * the left. "You are here" dot plus a heading cone that turns with the camera.
+ * Live trains and buses show as line-coloured dots (underground ones hollow).
  * Tap it to leave street level at that spot; "Hide map" folds it away.
  */
 export function StreetMiniMap({ main, getEye, onExit }: {
@@ -16,6 +22,8 @@ export function StreetMiniMap({ main, getEye, onExit }: {
   const box = useRef<HTMLDivElement>(null);
   const [hidden, setHidden] = useState(false);
   const [bearing, setBearing] = useState(0);
+  const miniRef = useRef<MapLibreMap | null>(null);
+  const dots = useLiveDots();
 
   useEffect(() => {
     if (hidden || !box.current) return;
@@ -32,6 +40,17 @@ export function StreetMiniMap({ main, getEye, onExit }: {
       attributionControl: false,
       fadeDuration: 0,
     });
+    miniRef.current = mini;
+    mini.on("load", () => {
+      mini.addSource(DOTS, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      mini.addLayer({ id: DOTS, type: "circle", source: DOTS, paint: {
+        "circle-radius": ["case", ["get", "bus"], 3, 4],
+        "circle-color": ["get", "color"],
+        "circle-opacity": ["case", ["get", "under"], 0, 1],
+        "circle-stroke-color": ["get", "color"],
+        "circle-stroke-width": 2,
+      } });
+    });
     const sync = () => {
       const e = getEye();
       if (e) mini.jumpTo({ center: [e.lon, e.lat] });
@@ -41,9 +60,18 @@ export function StreetMiniMap({ main, getEye, onExit }: {
     main.on("move", sync);
     return () => {
       main.off("move", sync);
+      miniRef.current = null;
       mini.remove();
     };
   }, [main, getEye, hidden]);
+
+  useEffect(() => {
+    const mini = miniRef.current;
+    const src = mini?.getSource<GeoJSONSource>(DOTS);
+    if (!mini || !src) return;
+    const c = getEye() ?? { lon: mini.getCenter().lng, lat: mini.getCenter().lat };
+    src.setData(dotsNear(dots, c.lon, c.lat, DOTS_RADIUS_M));
+  }, [dots, getEye]);
 
   if (hidden) {
     return (
@@ -53,7 +81,7 @@ export function StreetMiniMap({ main, getEye, onExit }: {
     );
   }
   return (
-    <div data-testid="street-minimap" className="absolute bottom-[calc(var(--edge)+96px)] lg:bottom-[calc(var(--edge)+36px)] right-[var(--edge)] z-20 flex flex-col items-end gap-[var(--sp-1)]">
+    <div data-testid="street-minimap" data-vehicles={dots.length} className="absolute bottom-[calc(var(--edge)+96px)] lg:bottom-[calc(var(--edge)+36px)] right-[var(--edge)] z-20 flex flex-col items-end gap-[var(--sp-1)]">
       <button type="button" onClick={() => setHidden(true)} className="h-7 rounded-full border border-border bg-card px-[var(--sp-3)] text-[12px] font-semibold text-foreground shadow-md">
         Hide map
       </button>
