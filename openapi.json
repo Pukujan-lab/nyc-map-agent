@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "NYC Map Agent API",
-    "version": "1"
+    "version": "0.1.0"
   },
   "components": {
     "schemas": {
@@ -92,7 +92,7 @@
     "parameters": {}
   },
   "paths": {
-    "/api/aggregate": {
+    "/api/v1/aggregate": {
       "get": {
         "summary": "Precomputed noise / crash rollup",
         "parameters": [
@@ -156,7 +156,72 @@
         }
       }
     },
-    "/api/area/{block}": {
+    "/api/aggregate": {
+      "get": {
+        "summary": "Precomputed noise / crash rollup (alias of /api/v1/aggregate)",
+        "deprecated": true,
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "noise",
+                "crashes"
+              ]
+            },
+            "required": true,
+            "name": "dataset",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "90d",
+                "12mo"
+              ],
+              "default": "12mo"
+            },
+            "required": false,
+            "name": "window",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/area/{block}": {
       "get": {
         "summary": "Every source for one block",
         "parameters": [
@@ -204,7 +269,56 @@
         }
       }
     },
-    "/api/areas": {
+    "/api/area/{block}": {
+      "get": {
+        "summary": "Every source for one block (alias of /api/v1/area/{block})",
+        "deprecated": true,
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "120:340"
+            },
+            "required": true,
+            "name": "block",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/areas": {
       "get": {
         "summary": "Simplified boundary GeoJSON",
         "parameters": [
@@ -256,7 +370,60 @@
         }
       }
     },
-    "/api/block-tiles": {
+    "/api/areas": {
+      "get": {
+        "summary": "Simplified boundary GeoJSON (alias of /api/v1/areas)",
+        "deprecated": true,
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "nta",
+                "cd"
+              ],
+              "default": "nta"
+            },
+            "required": false,
+            "name": "level",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/block-tiles": {
       "get": {
         "summary": "Real NYC tax-block PMTiles",
         "responses": {
@@ -305,7 +472,57 @@
         }
       }
     },
-    "/api/blocks": {
+    "/api/block-tiles": {
+      "get": {
+        "summary": "Real NYC tax-block PMTiles (alias of /api/v1/block-tiles)",
+        "deprecated": true,
+        "responses": {
+          "200": {
+            "description": "Whole file",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "PMTiles byte range (Range header)",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blocks": {
       "get": {
         "summary": "One row per area for a source",
         "parameters": [
@@ -423,7 +640,126 @@
         }
       }
     },
-    "/api/city-tiles": {
+    "/api/blocks": {
+      "get": {
+        "summary": "One row per area for a source (alias of /api/v1/blocks)",
+        "deprecated": true,
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9-]{1,40}$"
+            },
+            "required": true,
+            "name": "source",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "90d",
+                "12mo"
+              ],
+              "default": "12mo"
+            },
+            "required": false,
+            "name": "window",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "block",
+                "nta",
+                "cd",
+                "borough"
+              ],
+              "default": "block"
+            },
+            "required": false,
+            "name": "level",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 2000
+            },
+            "required": false,
+            "name": "categories",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 2000
+            },
+            "required": false,
+            "name": "severity",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "MANHATTAN",
+                "BRONX",
+                "BROOKLYN",
+                "QUEENS",
+                "STATEN ISLAND"
+              ]
+            },
+            "required": false,
+            "name": "borough",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Z]{2}\\d{2,4}$"
+            },
+            "required": false,
+            "name": "nta",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/city-tiles": {
       "get": {
         "summary": "Citywide 3D-city PMTiles",
         "responses": {
@@ -472,7 +808,57 @@
         }
       }
     },
-    "/api/restrooms": {
+    "/api/city-tiles": {
+      "get": {
+        "summary": "Citywide 3D-city PMTiles (alias of /api/v1/city-tiles)",
+        "deprecated": true,
+        "responses": {
+          "200": {
+            "description": "Whole file",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "PMTiles byte range (Range header)",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/restrooms": {
       "get": {
         "summary": "Public restrooms GeoJSON",
         "responses": {
@@ -509,7 +895,45 @@
         }
       }
     },
-    "/api/sources": {
+    "/api/restrooms": {
+      "get": {
+        "summary": "Public restrooms GeoJSON (alias of /api/v1/restrooms)",
+        "deprecated": true,
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sources": {
       "get": {
         "summary": "Source registry metadata and freshness",
         "responses": {
@@ -546,7 +970,45 @@
         }
       }
     },
-    "/api/street": {
+    "/api/sources": {
+      "get": {
+        "summary": "Source registry metadata and freshness (alias of /api/v1/sources)",
+        "deprecated": true,
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/street": {
       "get": {
         "summary": "Street noise / crash stats",
         "parameters": [
@@ -610,7 +1072,72 @@
         }
       }
     },
-    "/api/vehicle-models/{mode}": {
+    "/api/street": {
+      "get": {
+        "summary": "Street noise / crash stats (alias of /api/v1/street)",
+        "deprecated": true,
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 80
+            },
+            "required": true,
+            "name": "name",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "MANHATTAN",
+                "BRONX",
+                "BROOKLYN",
+                "QUEENS",
+                "STATEN ISLAND"
+              ]
+            },
+            "required": false,
+            "name": "borough",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vehicle-models/{mode}": {
       "get": {
         "summary": "Live-vehicle glTF model (subway, bus, rail)",
         "responses": {
@@ -659,7 +1186,57 @@
         }
       }
     },
-    "/api/weather": {
+    "/api/vehicle-models/{mode}": {
+      "get": {
+        "summary": "Live-vehicle glTF model (subway, bus, rail) (alias of /api/v1/vehicle-models/{mode})",
+        "deprecated": true,
+        "responses": {
+          "200": {
+            "description": "Whole file",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "PMTiles byte range (Range header)",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/weather": {
       "get": {
         "summary": "Current weather near a point (Open-Meteo, NWS fallback)",
         "parameters": [
@@ -718,7 +1295,67 @@
         }
       }
     },
-    "/api/hazards": {
+    "/api/weather": {
+      "get": {
+        "summary": "Current weather near a point (Open-Meteo, NWS fallback) (alias of /api/v1/weather)",
+        "deprecated": true,
+        "parameters": [
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 39,
+              "maximum": 42
+            },
+            "required": true,
+            "name": "lat",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": -75.5,
+              "maximum": -72.5
+            },
+            "required": true,
+            "name": "lon",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/hazards": {
       "get": {
         "summary": "Active NWS alerts for NYC and flooded FloodNet sensors",
         "parameters": [
@@ -768,7 +1405,58 @@
         }
       }
     },
-    "/api/traffic/along": {
+    "/api/hazards": {
+      "get": {
+        "summary": "Active NWS alerts for NYC and flooded FloodNet sensors (alias of /api/v1/hazards)",
+        "deprecated": true,
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            },
+            "required": false,
+            "name": "mock",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/traffic/along": {
       "get": {
         "summary": "NYC DOT traffic speeds along a line",
         "parameters": [
@@ -826,7 +1514,66 @@
         }
       }
     },
-    "/api/traffic": {
+    "/api/traffic/along": {
+      "get": {
+        "summary": "NYC DOT traffic speeds along a line (alias of /api/v1/traffic/along)",
+        "deprecated": true,
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 20000
+            },
+            "required": true,
+            "name": "line",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 10,
+              "maximum": 300
+            },
+            "required": false,
+            "name": "buffer",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/traffic": {
       "get": {
         "summary": "NYC DOT real-time speed links and today's closures GeoJSON",
         "responses": {
@@ -863,7 +1610,45 @@
         }
       }
     },
-    "/api/parking/near": {
+    "/api/traffic": {
+      "get": {
+        "summary": "NYC DOT real-time speed links and today's closures GeoJSON (alias of /api/v1/traffic)",
+        "deprecated": true,
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/parking/near": {
       "get": {
         "summary": "Licensed garages and lots near a point",
         "parameters": [
@@ -932,7 +1717,77 @@
         }
       }
     },
-    "/api/parking/rules": {
+    "/api/parking/near": {
+      "get": {
+        "summary": "Licensed garages and lots near a point (alias of /api/v1/parking/near)",
+        "deprecated": true,
+        "parameters": [
+          {
+            "schema": {
+              "type": "number",
+              "minimum": -74.3,
+              "maximum": -73.6
+            },
+            "required": true,
+            "name": "lon",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 40.4,
+              "maximum": 41
+            },
+            "required": true,
+            "name": "lat",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 50,
+              "maximum": 3000
+            },
+            "required": false,
+            "name": "radius",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/parking/rules": {
       "get": {
         "summary": "Street parking sign and meter rules near a point",
         "parameters": [
@@ -1001,7 +1856,77 @@
         }
       }
     },
-    "/api/parking": {
+    "/api/parking/rules": {
+      "get": {
+        "summary": "Street parking sign and meter rules near a point (alias of /api/v1/parking/rules)",
+        "deprecated": true,
+        "parameters": [
+          {
+            "schema": {
+              "type": "number",
+              "minimum": -74.3,
+              "maximum": -73.6
+            },
+            "required": true,
+            "name": "lon",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 40.4,
+              "maximum": 41
+            },
+            "required": true,
+            "name": "lat",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 50,
+              "maximum": 3000
+            },
+            "required": false,
+            "name": "radius",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/parking": {
       "get": {
         "summary": "Licensed garages and lots GeoJSON (DCWP + OSM)",
         "responses": {
@@ -1038,7 +1963,45 @@
         }
       }
     },
-    "/api/transit": {
+    "/api/parking": {
+      "get": {
+        "summary": "Licensed garages and lots GeoJSON (DCWP + OSM) (alias of /api/v1/parking)",
+        "deprecated": true,
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/transit": {
       "get": {
         "summary": "Live transit capabilities ({ bus })",
         "responses": {
@@ -1075,7 +2038,45 @@
         }
       }
     },
-    "/api/transit/{system}": {
+    "/api/transit": {
+      "get": {
+        "summary": "Live transit capabilities ({ bus }) (alias of /api/v1/transit)",
+        "deprecated": true,
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/transit/{system}": {
       "get": {
         "summary": "Live MTA GTFS-rt (subway / lirr / mnr trips, bus positions, alerts + elevator outages), cached ~15 s; bus-trip?vehicle= (one bus's headsign + upcoming stops) and bus-route?route= (route shape + stops)",
         "parameters": [
@@ -1150,9 +2151,103 @@
         }
       }
     },
-    "/api/agent": {
+    "/api/transit/{system}": {
+      "get": {
+        "summary": "Live MTA GTFS-rt (subway / lirr / mnr trips, bus positions, alerts + elevator outages), cached ~15 s (alias of /api/v1/transit/{system})",
+        "deprecated": true,
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "subway",
+                "lirr",
+                "mnr",
+                "bus",
+                "alerts"
+              ],
+              "example": "subway"
+            },
+            "required": true,
+            "name": "system",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/agent": {
       "post": {
         "summary": "Smart-mode trip agent (NDJSON stream of text, tool and map-command events)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "One JSON StreamEvent per line",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent": {
+      "post": {
+        "summary": "Smart-mode trip agent (NDJSON stream of text, tool and map-command events) (alias of /api/v1/agent)",
+        "deprecated": true,
         "requestBody": {
           "required": true,
           "content": {

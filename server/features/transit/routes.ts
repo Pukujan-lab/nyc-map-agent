@@ -234,7 +234,7 @@ async function loadBusRoute(key: string, route: string) {
 }
 
 export async function GET(request: Request): Promise<Response> {
-  const system = new URL(request.url).pathname.replace(/^\/api\/transit\/?/, "");
+  const system = new URL(request.url).pathname.replace(/^\/api(?:\/v1)?\/transit\/?/, "");
   const busKey = process.env.MTA_BUSTIME_KEY;
   try {
     if (!system) return json({ bus: Boolean(busKey) }, { maxAge: 60, browserMaxAge: 60 });

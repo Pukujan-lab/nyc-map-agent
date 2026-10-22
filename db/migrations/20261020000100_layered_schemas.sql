@@ -174,3 +174,8 @@ DROP TABLE IF EXISTS raw.source_cells;
 DROP VIEW IF EXISTS raw.rollup_311_hourly;
 DROP VIEW IF EXISTS raw.crashes;
 DROP VIEW IF EXISTS raw.noise_311;
+
+-- Schemas last; no CASCADE, so a stray object fails loudly instead of vanishing.
+DROP SCHEMA IF EXISTS marts;
+DROP SCHEMA IF EXISTS core;
+DROP SCHEMA IF EXISTS raw;

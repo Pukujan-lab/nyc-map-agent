@@ -4,6 +4,7 @@
  * validation. CI fails if openapi.json is stale and runs oasdiff against main.
  */
 import { createRoute, z } from "@hono/zod-openapi";
+import pkg from "../package.json";
 import { Query as AggregateQuery } from "../api/aggregate";
 import { Query as AreasQuery } from "../api/areas";
 import { Query as BlocksQuery } from "../api/blocks";
@@ -102,3 +103,25 @@ export const ROUTES = {
     z.object({ system: z.enum(["subway", "lirr", "mnr", "bus", "alerts", "bus-trip", "bus-route"]).openapi({ param: { name: "system", in: "path" }, example: "subway" }) }),
   ),
 } as const;
+
+/**
+ * OpenAPI info. `version` is the package version (release-please bumps it), so
+ * the spec says which release it describes; CI (oasdiff) requires a major bump
+ * for any breaking change.
+ */
+export const API_INFO = { title: "NYC Map Agent API", version: pkg.version };
+
+/** "/api/x" -> "/api/v1/x" (the canonical, versioned path). */
+export const toV1 = (path: string): string => path.replace(/^\/api\//, "/api/v1/");
+
+type AnyRoute = ReturnType<typeof createRoute>;
+
+/** The same route at its /api/v1 path. */
+export function toV1Route<R extends AnyRoute>(route: R): R {
+  return { ...route, path: toV1(route.path) };
+}
+
+/** The unversioned /api/* alias: identical behaviour, flagged deprecated in the spec. */
+export function legacyAlias<R extends AnyRoute>(route: R): R {
+  return { ...route, deprecated: true, summary: `${route.summary ?? ""} (alias of ${toV1(route.path)})`.trim() };
+}

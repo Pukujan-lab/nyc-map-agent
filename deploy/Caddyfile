@@ -1,0 +1,13 @@
+:80 {
+	handle /deploy/api/* {
+		reverse_proxy nyc-map-cd:8081
+	}
+	handle_path /deploy* {
+		root * /srv/dashboard
+		try_files {path} /index.html
+		file_server
+	}
+	handle {
+		reverse_proxy nyc-map-web:8080
+	}
+}
