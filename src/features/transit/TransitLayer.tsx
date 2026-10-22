@@ -23,6 +23,7 @@ import { useMapState } from "@/lib/store/MapStateContext";
 import { useFlag } from "@/lib/flags";
 import { usePanel, usePanelChip, usePanelMode, usePanelSearch, type SearchProvider } from "@/lib/store/PanelContext";
 import { setFollowed, useFollowed } from "./follow";
+import { publishSubway } from "@/features/agent/streetContext";
 
 const stopFollow = () => setFollowed(null);
 import { SYSTEM_LABELS } from "./model";
@@ -146,6 +147,7 @@ export default function TransitLayer() {
 
   const statics = rail.map((s) => data[s]?.stat).filter((s): s is StaticSystem => Boolean(s));
   const staticKey = statics.map((s) => s.system).join(",");
+  publishSubway(statics.find((s) => s.system === "subway") ?? null);
   // Raised subway track (viaducts, portal ramps, bridge decks) from the height profiles.
   const raised = useMemo(() => {
     const sub = statics.find((s) => s.system === "subway");

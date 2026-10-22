@@ -10,3 +10,5 @@ export function setFollowed(key: string | null) {
 export function useFollowed(): string | null {
   return useSyncExternalStore((f) => (subs.add(f), () => subs.delete(f)), () => followed);
 }
+/** Non-hook read, for one-off snapshots such as the Ask context. */
+export const followedTrain = (): string | null => followed;

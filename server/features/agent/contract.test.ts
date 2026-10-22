@@ -44,3 +44,14 @@ describe("agent client/server contract", () => {
     for (const s of [400, 429, 500, 502]) expect(friendlyError(s)).not.toMatch(/\d{3}/);
   });
 });
+
+describe("street-view context", () => {
+  it("the route accepts a street-view context and the prompt names it", async () => {
+    const { contextLine } = await import("./routes");
+    const context = { source: "street-view" as const, lon: -73.98, lat: 40.75, heading: 90, nearestStation: "Times Sq-42 St (80 m)", nearestEntrance: null, followedTrain: null };
+    const res = await app.request("/api/v1/agent", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ messages: [{ role: "user", content: "which exit?" }], context }) });
+    expect(res.status).toBe(200);
+    await res.body?.cancel();
+    expect(contextLine(context)).toContain("facing 90 degrees; nearest station Times Sq-42 St (80 m)");
+  });
+});
