@@ -90,7 +90,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: openapi.json is up to date (every route has a spec)
         run: pnpm openapi:check
-      - name: Breaking changes vs main (oasdiff)
+      - name: Breaking changes vs main need a major bump (oasdiff)
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}
@@ -101,7 +101,7 @@ jobs:
             echo "no openapi.json on base yet; skipping"; exit 0
           fi
           curl -fsSL https://github.com/oasdiff/oasdiff/releases/download/v1.34.0/oasdiff_1.34.0_linux_amd64.tar.gz | tar xz -C "$tmp" oasdiff
-          "$tmp/oasdiff" breaking "$tmp/base.json" openapi.json --fail-on ERR --format githubactions
+          OASDIFF="$tmp/oasdiff" scripts/ci/api-breaking.sh "$tmp/base.json" openapi.json
       - name: Clean workspace (persistent runner)
         if: always()
         run: find "$GITHUB_WORKSPACE" -mindepth 1 -delete || true
