@@ -123,6 +123,8 @@ function eyeCamera(map: MaplibreMapInstance, eye: Eye): CameraOptions {
 import { useMapState } from "@/lib/store/MapStateContext";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 import { WalkControls } from "./WalkControls";
+import { useQuickLayer } from "@/lib/quickLayers";
+import { QuickLayers } from "./QuickLayers";
 import { StreetMiniMap } from "./StreetMiniMap";
 import { nearestCorner, type CornerSign } from "@/lib/map/corner";
 import { MAX_HEIGHT_M, pitchForHeight, STREET_LEVEL_M } from "@/lib/map/cameraHeight";
@@ -233,7 +235,8 @@ export function MapView({
   const schoolsOn = useFlag("schools");
   const analyticsFlags = useFlags();
   const analytics = analyticsFlags.noise || analyticsFlags.crashes || analyticsFlags.dataLayers;
-  const storefrontsOn = useFlag("storefronts");
+  const businesses = useQuickLayer("businesses");
+  const storefrontsOn = useFlag("storefronts") && businesses;
   usePanelChip(schoolsOn ? { id: "schools", label: "Schools", active: schoolIcons, onToggle: toggleSchools } : null);
   const restroomsMod = useRef<typeof import("@/lib/map/restrooms") | null>(null);
   /** So leaving walk mode can restore the overhead camera exactly once. */
@@ -916,6 +919,8 @@ export function MapView({
         if (cancelled) return;
         signsMod.current = signs;
         if (storefrontsOn && !map.getLayer(signs.STOREFRONT_LAYER)) map.addLayer(signs.createStorefrontLayer());
+        // Quick Layers > Businesses off takes the sign bands away.
+        if (!storefrontsOn && map.getLayer(signs.STOREFRONT_LAYER)) map.removeLayer(signs.STOREFRONT_LAYER);
         if (!city3dOn) {
           setCity3dVisible(map, false);
           return;
@@ -1427,6 +1432,7 @@ export function MapView({
       </MapLibreMap>
 
 
+      <QuickLayers />
       {walking ? (
         <WalkControls
           place={walkPlace}

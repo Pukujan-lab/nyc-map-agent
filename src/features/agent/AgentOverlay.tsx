@@ -43,7 +43,11 @@ const MODES: Array<{ id: TripMode; label: string; Icon: typeof Bus }> = [
 
 export default function AgentOverlay() {
   const { chatOpen, setChatOpen, flyTo, startWalk } = useMapState();
-  const { showPanel } = usePanel();
+  const { showPanel, closeAll } = usePanel();
+  // One panel at a time (#225): opening Ask closes the drawer and any sheet.
+  useEffect(() => {
+    if (chatOpen) closeAll();
+  }, [chatOpen, closeAll]);
   const isDesktop = useMediaQuery("(min-width: 1024px)");
   const driveOn = useFlag("agentDrive");
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -77,6 +81,7 @@ export default function AgentOverlay() {
   ctxRef.current = ctx;
 
   const send = useCallback(async (text: string) => {
+    closeAll();
     const q = text.trim();
     if (!q || busy) return;
     setInput("");
@@ -107,7 +112,7 @@ export default function AgentOverlay() {
       setBusy(false);
       if (spoken) speech.speak(spoken);
     }
-  }, [busy, messages, mode, setChatOpen, speech, askReq]);
+  }, [busy, messages, mode, setChatOpen, speech, askReq, closeAll]);
 
   const turnOffHandsFree = useCallback(() => setHandsFree(false), []);
   useHandsFree({ on: handsFree, supported: speech.sttSupported, listening: speech.listening, busy, speaking: speech.speaking, error: speech.error, start: speech.startListening, stop: speech.stopListening, turnOff: turnOffHandsFree });
@@ -272,7 +277,7 @@ export default function AgentOverlay() {
   return (
     <>
       <Sheet open={chatOpen} onOpenChange={setChatOpen}>
-        <SheetContent side={isDesktop ? "right" : "bottom"} className={isDesktop ? "flex h-full w-full flex-col p-0 sm:max-w-[420px]" : "flex h-[85vh] flex-col p-0"}>
+        <SheetContent side={isDesktop ? "left" : "bottom"} className={isDesktop ? "flex h-full w-full flex-col p-0 sm:max-w-[420px]" : "flex h-[85vh] flex-col p-0"}>
           <SheetTitle className="sr-only">Ask the map</SheetTitle>
           <SheetDescription className="sr-only">Voice and text trip assistant</SheetDescription>
           {body}
