@@ -6,10 +6,15 @@ import { setAmbient } from "@/lib/ambient";
 import { useFlags } from "@/lib/flags";
 import { useFeatureToggles } from "@/lib/featureToggles";
 import { useMediaQuery } from "@/lib/useMediaQuery";
+import { MapCompass } from "./MapCompass";
 import { applyReadable } from "@/lib/map/readable";
 import { applyPlaces, usePlaces } from "@/lib/map/places";
 import { useMapOptions } from "@/lib/map/mapOptions";
-import { THEMES, applyMapTheme, useTheme } from "@/lib/theme";
+import { applyBuildings } from "@/lib/map/buildings";
+import { applyMapTheme, setThemeCoords, usePalette } from "@/lib/theme";
+import { sharedCoords } from "@/lib/geo/sharedLocation";
+
+setThemeCoords(sharedCoords);
 import { useTransitFocus } from "@/lib/map/transitFocus";
 import { useFlag } from "@/lib/flags";
 import MapLibreMap, {
@@ -424,21 +429,26 @@ export function MapView({
   const [transitFocus] = useTransitFocus();
   const places = usePlaces();
   const opts = useMapOptions();
-  const theme = useTheme();
+  const t = usePalette();
+  // Flat pale footprints unless the person picked 3D buildings in Map detail (#174).
+  const flatBuildings = opts.buildings !== "3d";
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!map || !ready) return;
-    const t = THEMES[theme];
-    applyMapTheme(map, theme);
+    applyMapTheme(map, t);
     applyReadable(map, opts.streets === "simple" || transitFocus, { street: t.street, major: t.major, label: t.label_ });
     for (const l of map.getStyle()?.layers ?? []) {
       if (/^highway-name-major$/.test(l.id)) map.setLayoutProperty(l.id, "visibility", opts.streetNames ? "visible" : "none");
-      if (l.type === "fill-extrusion" && !l.id.startsWith("transit-") && !l.id.startsWith("neighborhood") && !l.id.startsWith("block")) {
-        map.setLayoutProperty(l.id, "visibility", opts.buildings ? "visible" : "none");
+      // Bus stop icons only from zoom 16, where a stop is a place you can walk to.
+      if (l.id === "poi_transit") {
+        const busFade = ["step", ["zoom"], ["case", ["==", ["get", "class"], "bus"], 0, 1], 16, 1];
+        map.setPaintProperty(l.id, "icon-opacity", busFade as never);
+        map.setPaintProperty(l.id, "text-opacity", busFade as never);
       }
     }
     applyPlaces(map, places);
-  }, [ready, styleEpoch, transitFocus, places, opts, theme]);
+    applyBuildings(map, flatBuildings, t.building);
+  }, [ready, styleEpoch, transitFocus, places, opts, t, flatBuildings]);
 
   const handleLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
@@ -855,15 +865,16 @@ export function MapView({
     let cancelled = false;
     let cleanup: (() => void) | null = null;
     // Lazy chunk: users who never turn it on never download it.
+    const city3dOn = city3d && !flatBuildings;
     import("@/lib/map/city3d")
       .then(async (mod) => {
         const { installCity3d, setCity3dVisible, city3dCoversView } = mod;
         city3dMod.current = mod;
         // Distance skyline (z11-14): on unless low-power mode; tiny and plain colour.
-        if (!eco) await mod.installSkyline(map);
+        if (!eco && !flatBuildings) await mod.installSkyline(map);
         if (cancelled) return;
-        mod.setSkylineVisible(map, !eco);
-        if (!city3d && !schoolIcons) {
+        mod.setSkylineVisible(map, !eco && !flatBuildings);
+        if (!city3dOn && !schoolIcons) {
           setCity3dVisible(map, false);
           return;
         }
@@ -875,7 +886,7 @@ export function MapView({
         if (cancelled) return;
         signsMod.current = signs;
         if (storefrontsOn && !map.getLayer(signs.STOREFRONT_LAYER)) map.addLayer(signs.createStorefrontLayer());
-        if (!city3d) {
+        if (!city3dOn) {
           setCity3dVisible(map, false);
           return;
         }
@@ -897,7 +908,7 @@ export function MapView({
       cancelled = true;
       cleanup?.();
     };
-  }, [ready, styleEpoch, city3d, schoolIcons, storefrontsOn, eco]);
+  }, [ready, styleEpoch, city3d, schoolIcons, storefrontsOn, eco, flatBuildings]);
 
   useEffect(() => {
     if (!ready) return;
@@ -1380,6 +1391,7 @@ export function MapView({
         <Suspense fallback={null}>
           {FEATURES.map((f) => (f.MapLayer ? <f.MapLayer key={f.id} /> : null))}
         </Suspense>
+        {walking ? null : <MapCompass />}
       </MapLibreMap>
 
 
