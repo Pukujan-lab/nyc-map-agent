@@ -6,10 +6,17 @@
     "scripts/*.ts",
     "api/**/*.ts",
     "src/lib/geo/*.worker.ts",
-    "src/features/index.ts"
+    "src/features/index.ts",
+    "deploy/cd/server.ts"
   ],
-  "project": ["src/**/*.{ts,tsx}", "server/**/*.ts", "api/**/*.ts", "scripts/**/*.ts"],
-  "ignore": ["dist/**", ".size-build/**"],
+  "project": [
+    "src/**/*.{ts,tsx}",
+    "server/**/*.ts",
+    "api/**/*.ts",
+    "scripts/**/*.ts",
+    "deploy/**/*.ts"
+  ],
+  "ignore": ["dist/**", ".size-build/**", "deploy/dashboard/**"],
   "rules": {
     "exports": "warn",
     "types": "warn",

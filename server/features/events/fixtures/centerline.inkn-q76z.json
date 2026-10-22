@@ -1,0 +1,286 @@
+[
+{
+"full_street_name": "CARROLL ST",
+"stname_label": "CARROLL ST",
+"boroughcode": "3",
+"the_geom": {
+"type": "MultiLineString",
+"coordinates": [
+[
+[
+-73.956224729462,
+40.667488446899
+],
+[
+-73.955748958594,
+40.667462473955
+],
+[
+-73.953522723901,
+40.667340926904
+]
+]
+]
+}
+},
+{
+"full_street_name": "CARROLL ST",
+"stname_label": "CARROLL ST",
+"boroughcode": "3",
+"the_geom": {
+"type": "MultiLineString",
+"coordinates": [
+[
+[
+-73.950752612405,
+40.667189658676
+],
+[
+-73.947985352015,
+40.667038955267
+]
+]
+]
+}
+},
+{
+"full_street_name": "CARROLL ST",
+"stname_label": "CARROLL ST",
+"boroughcode": "3",
+"the_geom": {
+"type": "MultiLineString",
+"coordinates": [
+[
+[
+-73.953522723901,
+40.667340926904
+],
+[
+-73.950752612405,
+40.667189658676
+]
+]
+]
+}
+},
+{
+"full_street_name": "NOSTRAND AVE",
+"stname_label": "NOSTRAND AVE",
+"boroughcode": "3",
+"the_geom": {
+"type": "MultiLineString",
+"coordinates": [
+[
+[
+-73.950837047777,
+40.666297427659
+],
+[
+-73.950919977431,
+40.665407500861
+]
+]
+]
+}
+},
+{
+"full_street_name": "NOSTRAND AVE",
+"stname_label": "NOSTRAND AVE",
+"boroughcode": "3",
+"the_geom": {
+"type": "MultiLineString",
+"coordinates": [
+[
+[
+-73.950919977431,
+40.665407500861
+],
+[
+-73.951004953058,
+40.664691365514
+]
+]
+]
+}
+},
+{
+"full_street_name": "NOSTRAND AVE",
+"stname_label": "NOSTRAND AVE",
+"boroughcode": "3",
+"the_geom": {
+"type": "MultiLineString",
+"coordinates": [
+[
+[
+-73.950752612405,
+40.667189658676
+],
+[
+-73.950837047777,
+40.666297427659
+]
+]
+]
+}
+},
+{
+"full_street_name": "NOSTRAND AVE",
+"stname_label": "NOSTRAND AVE",
+"boroughcode": "3",
+"the_geom": {
+"type": "MultiLineString",
+"coordinates": [
+[
+[
+-73.950522631472,
+40.669652776962
+],
+[
+-73.950586136409,
+40.668972896981
+]
+]
+]
+}
+},
+{
+"full_street_name": "NOSTRAND AVE",
+"stname_label": "NOSTRAND AVE",
+"boroughcode": "3",
+"the_geom": {
+"type": "MultiLineString",
+"coordinates": [
+[
+[
+-73.950669358681,
+40.668080692723
+],
+[
+-73.950752612405,
+40.667189658676
+]
+]
+]
+}
+},
+{
+"full_street_name": "NOSTRAND AVE",
+"stname_label": "NOSTRAND AVE",
+"boroughcode": "3",
+"the_geom": {
+"type": "MultiLineString",
+"coordinates": [
+[
+[
+-73.950586136409,
+40.668972896981
+],
+[
+-73.950669358681,
+40.668080692723
+]
+]
+]
+}
+},
+{
+"full_street_name": "ROGERS AVE",
+"stname_label": "ROGERS AVE",
+"boroughcode": "3",
+"the_geom": {
+"type": "MultiLineString",
+"coordinates": [
+[
+[
+-73.953439801613,
+40.668232251206
+],
+[
+-73.953522723901,
+40.667340926904
+]
+]
+]
+}
+},
+{
+"full_street_name": "ROGERS AVE",
+"stname_label": "ROGERS AVE",
+"boroughcode": "3",
+"the_geom": {
+"type": "MultiLineString",
+"coordinates": [
+[
+[
+-73.953690441498,
+40.665557423531
+],
+[
+-73.953787611546,
+40.664522634329
+]
+]
+]
+}
+},
+{
+"full_street_name": "ROGERS AVE",
+"stname_label": "ROGERS AVE",
+"boroughcode": "3",
+"the_geom": {
+"type": "MultiLineString",
+"coordinates": [
+[
+[
+-73.953354063156,
+40.669122826704
+],
+[
+-73.953439801613,
+40.668232251206
+]
+]
+]
+}
+},
+{
+"full_street_name": "ROGERS AVE",
+"stname_label": "ROGERS AVE",
+"boroughcode": "3",
+"the_geom": {
+"type": "MultiLineString",
+"coordinates": [
+[
+[
+-73.953522723901,
+40.667340926904
+],
+[
+-73.953607796443,
+40.666448487077
+]
+]
+]
+}
+},
+{
+"full_street_name": "ROGERS AVE",
+"stname_label": "ROGERS AVE",
+"boroughcode": "3",
+"the_geom": {
+"type": "MultiLineString",
+"coordinates": [
+[
+[
+-73.953607796443,
+40.666448487077
+],
+[
+-73.953690441498,
+40.665557423531
+]
+]
+]
+}
+}
+]

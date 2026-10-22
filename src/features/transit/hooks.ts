@@ -90,6 +90,33 @@ export function useBuses(enabled: boolean) {
   });
 }
 
+export type BusCall = { id: string; name: string; eta: number | null; away: string };
+export type BusTrip = { found: boolean; route?: string; destination?: string; dir?: string; calls?: BusCall[] };
+export type BusRoute = { route: string; lines: Array<Array<[number, number]>>; stops: Array<{ id: string; name: string; lon: number; lat: number }> };
+/** One bus's headsign and upcoming stops with ETAs (SIRI), while its sheet is open. */
+export function useBusTrip(vehicle: string | undefined) {
+  return useQuery({
+    queryKey: ["transit", "bus-trip", vehicle],
+    queryFn: () => getJson<BusTrip>(`${API_BASE}/api/transit/bus-trip?${new URLSearchParams({ vehicle: vehicle ?? "" })}`),
+    refetchInterval: REFRESH,
+    enabled: Boolean(vehicle),
+    retry: false,
+  });
+}
+/** A bus route's shape and stops, fetched on demand when the route is selected. */
+export function useBusRoute(route: string | undefined) {
+  return useQuery({
+    queryKey: ["transit", "bus-route", route],
+    queryFn: () => getJson<BusRoute>(`${API_BASE}/api/transit/bus-route?${new URLSearchParams({ route: route ?? "" })}`),
+    staleTime: 6 * 3600_000,
+    enabled: Boolean(route),
+    retry: false,
+  });
+}
+/** Routes with an active, unplanned delay or detour (not planned work or notices): these get the '!' badge. */
+export function alertedRoutes(alerts: TransitAlert[] | undefined): Set<string> {
+  return new Set((alerts ?? []).filter((a) => a.kind === "delay" || (a.reroute && a.kind !== "planned")).flatMap((a) => a.routes));
+}
 export type TransitAlert = { id: string; kind: "planned" | "delay" | "notice"; type: string; reroute: boolean; text: string; agency: string; routes: string[]; stops: string[] };
 export type Outage = { id: string; station: string; routes: string[]; stops: string[]; equipment: "Elevator" | "Escalator"; serving: string; reason: string; since: string; back: string; ada: "yes" | "no" | "not-ada"; alternative: string };
 export function useAlerts(enabled: boolean) {

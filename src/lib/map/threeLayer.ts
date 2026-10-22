@@ -940,6 +940,11 @@ function signsNear(map: MapLibreMap, lng: number, lat: number, radius: number): 
   return [...seen.values()].sort((a, b) => a.d - b.d);
 }
 
+/** The storefront sign nearest a point on a building's ground floor (eye-level picking). */
+export function storefrontAt(map: MapLibreMap, lng: number, lat: number, radius = 12): StorefrontSign | null {
+  return signsNear(map, lng, lat, radius)[0] ?? null;
+}
+
 /** The directory (main) sign nearest a clicked ground point, for the panel. */
 export function directoryAt(map: MapLibreMap, lng: number, lat: number): StorefrontSign | null {
   if (map.getZoom() < STOREFRONT_MIN_ZOOM) return null;
@@ -1219,7 +1224,10 @@ const LANDMARK_MODELS: Record<string, () => THREE.Group> = {
 
 /** GLB bytes for every hero landmark model (Node build step; the exporter is loaded on demand). */
 export async function landmarkGlbs(): Promise<Record<string, ArrayBuffer>> {
-  const { GLTFExporter } = await import("three/examples/jsm/exporters/GLTFExporter.js");
+  // Node-only (scripts/make-landmarks.ts). A non-literal specifier keeps Vite from
+  // emitting the ~7.7 kB br exporter chunk into the app bundle.
+  const exporterPath = "three/examples/jsm/exporters/GLTFExporter.js";
+  const { GLTFExporter } = (await import(/* @vite-ignore */ exporterPath)) as typeof import("three/examples/jsm/exporters/GLTFExporter.js");
   const exporter = new GLTFExporter();
   const out: Record<string, ArrayBuffer> = {};
   for (const [id, make] of Object.entries(LANDMARK_MODELS)) {

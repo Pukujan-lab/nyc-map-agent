@@ -2,9 +2,9 @@ name: stack-train
 on: [pull_request, workflow_dispatch]
 permissions:
   contents: read
-concurrency: 
-  group: stack-train-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 # The reusable Pukujan/agent-stack-train check-adopter.yml hard-codes
 # runs-on: ubuntu-latest (no input to override), so it can't run on the
 # self-hosted runner. This job runs the same check inline; drop it and go back

@@ -6,10 +6,15 @@ import { setAmbient } from "@/lib/ambient";
 import { useFlags } from "@/lib/flags";
 import { useFeatureToggles } from "@/lib/featureToggles";
 import { useMediaQuery } from "@/lib/useMediaQuery";
+import { MapCompass } from "./MapCompass";
 import { applyReadable } from "@/lib/map/readable";
 import { applyPlaces, usePlaces } from "@/lib/map/places";
 import { useMapOptions } from "@/lib/map/mapOptions";
-import { THEMES, applyMapTheme, useTheme } from "@/lib/theme";
+import { applyBuildings } from "@/lib/map/buildings";
+import { applyMapTheme, setThemeCoords, usePalette } from "@/lib/theme";
+import { sharedCoords } from "@/lib/geo/sharedLocation";
+
+setThemeCoords(sharedCoords);
 import { useTransitFocus } from "@/lib/map/transitFocus";
 import { useFlag } from "@/lib/flags";
 import MapLibreMap, {
@@ -20,7 +25,8 @@ import { LngLat, type GeoJSONSource } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { NtaBoundary } from "@/lib/api/nta";
 import { formatCount, formatPercent } from "@/lib/format";
-import { blockKey } from "@/lib/geo/blocks";
+import { blockContaining, blockKey } from "@/lib/geo/blocks";
+import { eyePick } from "@/lib/map/eyePick";
 import { boroughOutlinesToGeoJson } from "@/lib/geo/boroughs";
 import { NtaIndex } from "@/lib/geo/ntaIndex";
 import { areasToGeoJson, blockPointsToGeoJson, type AreaDatum } from "@/lib/geo/areas";
@@ -212,7 +218,7 @@ export function MapView({
   } | null>(null);
   /** "W 44 St at 8 Av": the nearest corner sign while walking. */
   const [corner, setCorner] = useState<string | null>(null);
-  const { showPanel } = usePanel();
+  const { showPanel, closeAll } = usePanel();
   // The hover card is a mouse affordance; on touch / narrow screens the sheet
   // already shows the same numbers.
   const canHover = useMediaQuery("(hover: hover) and (pointer: fine) and (min-width: 1024px)");
@@ -423,21 +429,26 @@ export function MapView({
   const [transitFocus] = useTransitFocus();
   const places = usePlaces();
   const opts = useMapOptions();
-  const theme = useTheme();
+  const t = usePalette();
+  // Flat pale footprints unless the person picked 3D buildings in Map detail (#174).
+  const flatBuildings = opts.buildings !== "3d";
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!map || !ready) return;
-    const t = THEMES[theme];
-    applyMapTheme(map, theme);
+    applyMapTheme(map, t);
     applyReadable(map, opts.streets === "simple" || transitFocus, { street: t.street, major: t.major, label: t.label_ });
     for (const l of map.getStyle()?.layers ?? []) {
       if (/^highway-name-major$/.test(l.id)) map.setLayoutProperty(l.id, "visibility", opts.streetNames ? "visible" : "none");
-      if (l.type === "fill-extrusion" && !l.id.startsWith("transit-") && !l.id.startsWith("neighborhood") && !l.id.startsWith("block")) {
-        map.setLayoutProperty(l.id, "visibility", opts.buildings ? "visible" : "none");
+      // Bus stop icons only from zoom 16, where a stop is a place you can walk to.
+      if (l.id === "poi_transit") {
+        const busFade = ["step", ["zoom"], ["case", ["==", ["get", "class"], "bus"], 0, 1], 16, 1];
+        map.setPaintProperty(l.id, "icon-opacity", busFade as never);
+        map.setPaintProperty(l.id, "text-opacity", busFade as never);
       }
     }
     applyPlaces(map, places);
-  }, [ready, styleEpoch, transitFocus, places, opts, theme]);
+    applyBuildings(map, flatBuildings, t.building);
+  }, [ready, styleEpoch, transitFocus, places, opts, t, flatBuildings]);
 
   const handleLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
@@ -484,6 +495,20 @@ export function MapView({
    * so both fallbacks are O(1) — the map stays clickable even if a layer's
    * render pass yields nothing.
    */
+  /** The block or neighborhood under a ground point (no screen query). */
+  const areaAt = useCallback(
+    (lngLat: { lat: number; lng: number }): Picked | null => {
+      if (scale === "blocks") {
+        const datum = blockByKey.get(blockKey(lngLat.lat, lngLat.lng).key) ?? blockContaining(blockByKey.values(), lngLat.lng, lngLat.lat);
+        return datum ? { kind: "block", datum } : null;
+      }
+      const code = ntaIndex?.assignCode(lngLat.lat, lngLat.lng) ?? null;
+      const datum = code ? neighborhoodByCode.get(code) : undefined;
+      return datum ? { kind: "neighborhood", datum } : null;
+    },
+    [scale, blockByKey, neighborhoodByCode, ntaIndex],
+  );
+
   const pickAt = useCallback(
     (
       x: number,
@@ -514,21 +539,9 @@ export function MapView({
         }
       }
 
-      if (scale === "blocks") {
-        const datum = blockByKey.get(blockKey(lngLat.lat, lngLat.lng).key);
-        return datum ? { kind: "block", datum } : null;
-      }
-      const code = ntaIndex?.assignCode(lngLat.lat, lngLat.lng) ?? null;
-      const datum = code ? neighborhoodByCode.get(code) : undefined;
-      return datum ? { kind: "neighborhood", datum } : null;
+      return areaAt(lngLat);
     },
-    [
-      scale,
-      blockByKey,
-      neighborhoodById,
-      neighborhoodByCode,
-      ntaIndex,
-    ],
+    [scale, blockByKey, neighborhoodById, areaAt],
   );
 
   const handleMouseMove = useCallback(
@@ -585,6 +598,41 @@ export function MapView({
       const clicked = mapRef.current?.getMap();
       const own = FEATURES.flatMap((f) => f.clickLayers ?? []).filter((id) => clicked?.getLayer(id));
       if (clicked && own.length && clicked.queryRenderedFeatures([event.point.x, event.point.y], { layers: own }).length) return;
+      // Eye level: cast the camera ray through the tap and open whatever it
+      // hits first (landmark model, storefront, building), like overhead.
+      if (walking) {
+        const hit = eyePick(event.target, event.point.x, event.point.y);
+        if (hit?.kind === "landmark") {
+          showPanel({ id: `landmark:${hit.landmark.id}`, title: hit.landmark.name, subtitle: "Landmark" });
+          return;
+        }
+        if (hit?.kind === "building") {
+          if (typeof hit.props.school === "string" && hit.props.school) {
+            showPanel({ id: `school:${hit.props.school}`, title: hit.props.school, subtitle: "School · NYC DOE (LCGMS)" });
+            return;
+          }
+          const shop = hit.props.store === 1 && hit.z < 4.5 ? signsMod.current?.storefrontAt(event.target, hit.lng, hit.lat) : null;
+          if (shop) {
+            const shops = (shop.dir ?? "").split("|").filter(Boolean);
+            showPanel({
+              id: `storefront:${shop.lng},${shop.lat}:${shop.name}`,
+              title: shop.name,
+              subtitle: `${shop.cat ? `${shop.cat} · ` : ""}© OpenStreetMap contributors`,
+              details: shops.length ? <ul className="space-y-1 text-sm">{shops.map((name) => <li key={name}>{name}</li>)}</ul> : undefined,
+            });
+            return;
+          }
+        }
+        // Anything else the ray hits (a facade, the pavement) opens the block
+        // or neighborhood it stands in, from the hit point rather than the
+        // ground far behind the facade that the click's lngLat would give.
+        if (hit) {
+          const area = areaAt({ lng: hit.lng, lat: hit.lat });
+          if (area?.kind === "block") selectBlock({ key: area.datum.key, ntaCode: area.datum.ntaCode });
+          else if (area) selectNta(area.datum.ntaCode);
+          if (area || hit.kind === "building") return;
+        }
+      }
       const school = city3dMod.current?.schoolAt(event.target, event.point.x, event.point.y);
       if (school) {
         showPanel({ id: `school:${school}`, title: school, subtitle: "School · NYC DOE (LCGMS)" });
@@ -593,14 +641,18 @@ export function MapView({
       // Clicks stay live at street level: picking the block underfoot opens
       // its details like it does overhead.
       const picked = pickAt(event.point.x, event.point.y, event.lngLat);
-      if (!picked) return;
+      if (!picked) {
+        // An empty-map tap closes the drawer and the sheet.
+        closeAll();
+        return;
+      }
       if (picked.kind === "block") {
         selectBlock({ key: picked.datum.key, ntaCode: picked.datum.ntaCode });
       } else {
         selectNta(picked.datum.ntaCode);
       }
     },
-    [pickAt, selectBlock, selectNta, routePicking, setRoutePoint, showPanel, city3d],
+    [pickAt, selectBlock, selectNta, routePicking, setRoutePoint, showPanel, closeAll, city3d, walking, areaAt],
   );
 
   const handleMoveEnd = useCallback(() => {
@@ -817,15 +869,16 @@ export function MapView({
     let cancelled = false;
     let cleanup: (() => void) | null = null;
     // Lazy chunk: users who never turn it on never download it.
+    const city3dOn = city3d && !flatBuildings;
     import("@/lib/map/city3d")
       .then(async (mod) => {
         const { installCity3d, setCity3dVisible, city3dCoversView } = mod;
         city3dMod.current = mod;
         // Distance skyline (z11-14): on unless low-power mode; tiny and plain colour.
-        if (!eco) await mod.installSkyline(map);
+        if (!eco && !flatBuildings) await mod.installSkyline(map);
         if (cancelled) return;
-        mod.setSkylineVisible(map, !eco);
-        if (!city3d && !schoolIcons) {
+        mod.setSkylineVisible(map, !eco && !flatBuildings);
+        if (!city3dOn && !schoolIcons) {
           setCity3dVisible(map, false);
           return;
         }
@@ -837,7 +890,7 @@ export function MapView({
         if (cancelled) return;
         signsMod.current = signs;
         if (storefrontsOn && !map.getLayer(signs.STOREFRONT_LAYER)) map.addLayer(signs.createStorefrontLayer());
-        if (!city3d) {
+        if (!city3dOn) {
           setCity3dVisible(map, false);
           return;
         }
@@ -859,7 +912,7 @@ export function MapView({
       cancelled = true;
       cleanup?.();
     };
-  }, [ready, styleEpoch, city3d, schoolIcons, storefrontsOn, eco]);
+  }, [ready, styleEpoch, city3d, schoolIcons, storefrontsOn, eco, flatBuildings]);
 
   useEffect(() => {
     if (!ready) return;
@@ -1342,6 +1395,7 @@ export function MapView({
         <Suspense fallback={null}>
           {FEATURES.map((f) => (f.MapLayer ? <f.MapLayer key={f.id} /> : null))}
         </Suspense>
+        {walking ? null : <MapCompass />}
       </MapLibreMap>
 
 

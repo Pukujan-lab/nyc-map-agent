@@ -41,7 +41,9 @@ import {
   type MapScale,
   type MapStyleId,
 } from "@/lib/layers";
+import type { Bbox } from "@/lib/api/nta";
 import type { AreaDatum } from "@/lib/geo/areas";
+import { jumpToNeighborhood } from "@/lib/map/neighborhoodJump";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { windowBounds } from "@/lib/windows";
@@ -54,6 +56,7 @@ export interface NeighborhoodOption {
   code: string;
   name: string;
   count: number;
+  bbox: Bbox;
 }
 
 interface ControlDrawerProps {
@@ -197,6 +200,7 @@ export function ControlDrawer({
     scale,
     selectedNtaCode,
     selectNta,
+    flyTo,
     setDetailsExpanded,
     navigate,
     setCaveatsOpen,
@@ -295,12 +299,9 @@ export function ControlDrawer({
           <Section label="Jump to a neighborhood">
             <Select
               value={selectedNtaCode ?? ""}
-              onValueChange={(code) => {
-                selectNta(code);
-                // Chosen from a list, not tapped on the map — the numbers are
-                // what was asked for, so open the full sheet straight away.
-                setDetailsExpanded(true);
-              }}
+              onValueChange={(code) =>
+                jumpToNeighborhood(code, neighborhoods, { selectNta, setDetailsExpanded, flyTo })
+              }
             >
               <SelectTrigger aria-label="Jump to a neighborhood">
                 <SelectValue placeholder="Choose a neighborhood…" />
