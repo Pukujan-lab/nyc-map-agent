@@ -51,3 +51,31 @@ export function formatStreetPair(label: string): string {
     .map((p, i) => (i % 2 ? p : formatStreetName(p)))
     .join("");
 }
+
+const TYPE_RE = "St|Str|Av|Ave|Avn|Blvd|Pl|Rd|Dr|Pkwy|Pky|Expy|Expwy|Hwy|Sq|Ln|Ter|Terr|Ct|Plz";
+/** A street phrase inside free text: optional leading directional, words, then a type abbreviation. */
+const PHRASE = new RegExp(
+  `\\b(?:[NSEW]\\.? )?(?:(?:St\\.? )?(?:[A-Z][\\w'’-]*|\\d+(?:st|nd|rd|th)?) )+?(?:${TYPE_RE})\\b\\.?(?: [NSEW]\\b(?! ?\\w))?|\\b(?:Av|Ave) [A-Z]\\b`,
+  "g",
+);
+
+/**
+ * Spell out street names inside any UI text: addresses ("385 Grand St, New
+ * York"), turn text ("Turn left onto W 44 St"), bus stop names
+ * ("GRAND ST/ESSEX ST" → "Grand Street/Essex Street"). Station names are not
+ * passed through this.
+ */
+export function formatStreetText(text: string | null | undefined): string {
+  if (!text) return "";
+  // ALL-CAPS stop names: format each "/"-, "&"- or comma-separated part whole.
+  if (/[A-Z]{2}/.test(text) && text === text.toUpperCase()) {
+    return text
+      .split(/(\s*[/&,]\s*|\s+AT\s+)/)
+      .map((p, i) => (i % 2 ? p.replace(/AT/, "at") : p.replace(/^(\d+[A-Z]?\s+)?(.*)$/, (_m, n: string | undefined, rest: string) => (n ?? "") + formatStreetName(rest))))
+      .join("");
+  }
+  return text.replace(PHRASE, (m) => {
+    // A leading Saint inside the phrase stays "St.", the suffix expands.
+    return formatStreetName(m);
+  });
+}

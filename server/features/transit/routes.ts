@@ -9,9 +9,11 @@
  *   /api/transit/alerts   → MTA service alerts + elevator/escalator outages
  *   /api/transit/bus-trip?vehicle=&route= → one bus: headsign + upcoming stops with ETAs (SIRI)
  *   /api/transit/bus-route?route=        → one route's shape + stops, on demand (Bus Time OBA)
+ *   /api/transit/bus-stops?lat=&lon=     → stops within ~300 m and the routes serving each (Bus Time OBA)
  */
 import GtfsRealtimeBindings from "gtfs-realtime-bindings";
 import { json } from "../../../api/_lib/http";
+import { conflate, loadCenterlines } from "./conflate";
 import { slimAlert, type MercuryAlert, type SlimAlert } from "./alerts";
 
 const { FeedMessage } = GtfsRealtimeBindings.transit_realtime;
@@ -91,7 +93,7 @@ export async function loadTrips(system: string) {
   return { at: Math.round(now), trips };
 }
 
-async function loadBuses(key: string) {
+export async function loadBuses(key: string) {
   const url = `https://gtfsrt.prod.obanyc.com/vehiclePositions?${new URLSearchParams({ key })}`;
   const feed = await decode(url);
   const buses = [];
@@ -208,9 +210,33 @@ async function loadBusRoute(key: string, route: string) {
     if (!lines.length) continue;
     const id = `${agency}_${route}`;
     const stops = (d.data?.references?.stops ?? []).filter((s) => !s.routeIds || s.routeIds.includes(id)).map((s) => ({ id: s.id, name: s.name, lon: s.lon, lat: s.lat }));
-    return { route, lines, stops };
+    // Snap to street centerlines and attach the right-hand lane offset (m) per vertex.
+    const pts = lines.flat();
+    const bbox: [number, number, number, number] = [Math.min(...pts.map((p) => p[0])), Math.min(...pts.map((p) => p[1])), Math.max(...pts.map((p) => p[0])), Math.max(...pts.map((p) => p[1]))];
+    const snapped = conflate(lines, await loadCenterlines(bbox));
+    return { route, lines: snapped.lines, offsets: snapped.offsets, stops };
   }
   return { route, lines: [], stops: [] };
+}
+
+type ObaStop = { id: string; name: string; lat: number; lon: number; direction?: string; routeIds?: string[] };
+type ObaRoute = { id: string; shortName?: string };
+/** Bus stops around a point with the route numbers that serve each, for the street-level pole signs. */
+export async function loadBusStops(key: string, lat: number, lon: number) {
+  const qs = new URLSearchParams({ key, lat: String(lat), lon: String(lon), latSpan: "0.006", lonSpan: "0.008", version: "2" });
+  const r = await fetch(`${BUSTIME}where/stops-for-location.json?${qs}`, { signal: AbortSignal.timeout(10_000) });
+  if (!r.ok) throw new Error(`bus-stops upstream ${r.status}`);
+  const d = (await r.json()) as { data?: { list?: ObaStop[]; references?: { routes?: ObaRoute[] } } };
+  const names = new Map((d.data?.references?.routes ?? []).map((x) => [x.id, x.shortName ?? x.id.replace(/^[^_]*_/, "")]));
+  const stops = (d.data?.list ?? []).map((s) => ({
+    id: s.id,
+    name: s.name,
+    lat: s.lat,
+    lon: s.lon,
+    dir: s.direction ?? "",
+    routes: [...new Set((s.routeIds ?? []).map((id) => names.get(id) ?? id.replace(/^[^_]*_/, "")))].sort((a, b) => a.localeCompare(b, "en", { numeric: true })),
+  }));
+  return { stops };
 }
 
 export async function GET(request: Request): Promise<Response> {
@@ -221,6 +247,17 @@ export async function GET(request: Request): Promise<Response> {
     if (system === "bus") {
       if (!busKey) return json({ error: "bus_unavailable" }, { status: 404 });
       return json(await cached("bus", () => loadBuses(busKey)), { maxAge: 15, browserMaxAge: 10 });
+    }
+    if (system === "bus-stops") {
+      if (!busKey) return json({ error: "bus_unavailable" }, { status: 404 });
+      const q = new URL(request.url).searchParams;
+      const lat = Number(q.get("lat"));
+      const lon = Number(q.get("lon"));
+      if (!(lat > 40.4 && lat < 41 && lon > -74.3 && lon < -73.6)) return json({ error: "bad_point" }, { status: 400 });
+      // ~100 m grid so walkers on one block share a cached answer.
+      const glat = Math.round(lat * 1000) / 1000;
+      const glon = Math.round(lon * 1000) / 1000;
+      return json(await cached(`bus-stops:${glat},${glon}`, () => loadBusStops(busKey, glat, glon), 24 * 3600_000), { maxAge: 3600, browserMaxAge: 3600 });
     }
     if (system === "bus-trip" || system === "bus-route") {
       if (!busKey) return json({ error: "bus_unavailable" }, { status: 404 });

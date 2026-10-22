@@ -1,4 +1,5 @@
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
+import { eyeOrCenter } from "@/lib/map/streetPick";
 
 /**
  * Public restrooms (NYC Open Data i7jb-7jku, ingested into Octo core.restrooms)
@@ -80,7 +81,8 @@ function wireNearest(map: MapLibreMap): void {
   const update = () => {
     void cityWide!.then((all) => {
       const src = map.getSource<GeoJSONSource>(SOURCE);
-      const c = map.getCenter();
+      // Around the viewer: at street level the centre is far down the look ray.
+      const c = eyeOrCenter(map);
       src?.setData(nearestRestrooms(all, [c.lng, c.lat]));
     });
   };

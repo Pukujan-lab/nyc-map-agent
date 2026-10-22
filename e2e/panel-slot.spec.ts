@@ -61,7 +61,7 @@ test("390px: drawer and sheet never overlap", async ({ page }) => {
   await expect(sheet(page)).toBeVisible();
 });
 
-test("a vehicle tap closes the drawer and opens its sheet", async ({ page }) => {
+test("a vehicle tap closes the drawer and follows it with a slim card", async ({ page }) => {
   await open(page);
   await layers(page).click();
   await expect(drawer(page)).toBeVisible();
@@ -69,10 +69,10 @@ test("a vehicle tap closes the drawer and opens its sheet", async ({ page }) => 
   // the bus layer has drawn; a miss on the open drawer's map strip is NJ.
   await expect.poll(async () => {
     await tapMap(page, 0.5, BUS_Y);
-    return sheet(page).count();
+    return page.getByTestId("follow-card").count();
   }, { timeout: 30_000 }).toBeGreaterThan(0);
   await expect(drawer(page)).toHaveCount(0);
-  await expect(sheet(page)).toContainText("Live vehicle");
+  await expect(page.getByRole("button", { name: "Stop following" }).first()).toBeVisible();
 });
 
 test("minimize turns the sheet into a labelled peek chip that restores", async ({ page }) => {

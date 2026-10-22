@@ -2599,6 +2599,259 @@
         }
       }
     },
+    "/api/v1/transit-bus-segments": {
+      "get": {
+        "summary": "Learned bus stop-to-stop travel and stop dwell times (median seconds) for a route at an hour of the week",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z]{1,3}\\d{1,3}[A-Za-z+]{0,2}$"
+            },
+            "required": true,
+            "name": "route",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 7
+            },
+            "required": false,
+            "name": "dow",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 23
+            },
+            "required": false,
+            "name": "hour",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "route": {
+                      "type": "string"
+                    },
+                    "dow": {
+                      "type": "integer"
+                    },
+                    "hour": {
+                      "type": "integer"
+                    },
+                    "segments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "dir": {
+                            "type": "integer"
+                          },
+                          "from": {
+                            "type": "string"
+                          },
+                          "to": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "travel",
+                              "dwell"
+                            ]
+                          },
+                          "n": {
+                            "type": "integer"
+                          },
+                          "median": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "dir",
+                          "from",
+                          "to",
+                          "kind",
+                          "n",
+                          "median"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "route",
+                    "dow",
+                    "hour",
+                    "segments"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transit-bus-segments": {
+      "get": {
+        "summary": "Learned bus stop-to-stop travel and stop dwell times (median seconds) for a route at an hour of the week (alias of /api/v1/transit-bus-segments)",
+        "deprecated": true,
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z]{1,3}\\d{1,3}[A-Za-z+]{0,2}$"
+            },
+            "required": true,
+            "name": "route",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 7
+            },
+            "required": false,
+            "name": "dow",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 23
+            },
+            "required": false,
+            "name": "hour",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "route": {
+                      "type": "string"
+                    },
+                    "dow": {
+                      "type": "integer"
+                    },
+                    "hour": {
+                      "type": "integer"
+                    },
+                    "segments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "dir": {
+                            "type": "integer"
+                          },
+                          "from": {
+                            "type": "string"
+                          },
+                          "to": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "travel",
+                              "dwell"
+                            ]
+                          },
+                          "n": {
+                            "type": "integer"
+                          },
+                          "median": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "dir",
+                          "from",
+                          "to",
+                          "kind",
+                          "n",
+                          "median"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "route",
+                    "dow",
+                    "hour",
+                    "segments"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/transit": {
       "get": {
         "summary": "Live transit capabilities ({ bus })",
@@ -2676,7 +2929,7 @@
     },
     "/api/v1/transit/{system}": {
       "get": {
-        "summary": "Live MTA GTFS-rt (subway / lirr / mnr trips, bus positions, alerts + elevator outages), cached ~15 s; bus-trip?vehicle= (one bus's headsign + upcoming stops) and bus-route?route= (route shape + stops)",
+        "summary": "Live MTA GTFS-rt (subway / lirr / mnr trips, bus positions, alerts + elevator outages), cached ~15 s; bus-trip?vehicle= (one bus's headsign + upcoming stops), bus-route?route= (route shape + stops) and bus-stops?lat=&lon= (stops within ~300 m with the routes serving each)",
         "parameters": [
           {
             "schema": {
@@ -2688,7 +2941,8 @@
                 "bus",
                 "alerts",
                 "bus-trip",
-                "bus-route"
+                "bus-route",
+                "bus-stops"
               ],
               "example": "subway"
             },
@@ -2712,6 +2966,24 @@
             },
             "required": false,
             "name": "route",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 12
+            },
+            "required": false,
+            "name": "lat",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 12
+            },
+            "required": false,
+            "name": "lon",
             "in": "query"
           }
         ],
@@ -2751,7 +3023,7 @@
     },
     "/api/transit/{system}": {
       "get": {
-        "summary": "Live MTA GTFS-rt (subway / lirr / mnr trips, bus positions, alerts + elevator outages), cached ~15 s; bus-trip?vehicle= (one bus's headsign + upcoming stops) and bus-route?route= (route shape + stops) (alias of /api/v1/transit/{system})",
+        "summary": "Live MTA GTFS-rt (subway / lirr / mnr trips, bus positions, alerts + elevator outages), cached ~15 s; bus-trip?vehicle= (one bus's headsign + upcoming stops), bus-route?route= (route shape + stops) and bus-stops?lat=&lon= (stops within ~300 m with the routes serving each) (alias of /api/v1/transit/{system})",
         "deprecated": true,
         "parameters": [
           {
@@ -2764,7 +3036,8 @@
                 "bus",
                 "alerts",
                 "bus-trip",
-                "bus-route"
+                "bus-route",
+                "bus-stops"
               ],
               "example": "subway"
             },
@@ -2788,6 +3061,24 @@
             },
             "required": false,
             "name": "route",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 12
+            },
+            "required": false,
+            "name": "lat",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 12
+            },
+            "required": false,
+            "name": "lon",
             "in": "query"
           }
         ],
@@ -3036,6 +3327,322 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PlaceToiletsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/storefronts/logo": {
+      "get": {
+        "summary": "A brand's freely licensed Wikidata P154 logo, re-hosted via Octo files (R2)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^Q[1-9]\\d{0,10}$"
+            },
+            "required": false,
+            "name": "qid",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "required": false,
+            "name": "name",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": -74.3,
+              "maximum": -73.6
+            },
+            "required": false,
+            "name": "lon",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 40.45,
+              "maximum": 40.95
+            },
+            "required": false,
+            "name": "lat",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/storefronts/logo": {
+      "get": {
+        "summary": "A brand's freely licensed Wikidata P154 logo, re-hosted via Octo files (R2) (alias of /api/v1/storefronts/logo)",
+        "deprecated": true,
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^Q[1-9]\\d{0,10}$"
+            },
+            "required": false,
+            "name": "qid",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "required": false,
+            "name": "name",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": -74.3,
+              "maximum": -73.6
+            },
+            "required": false,
+            "name": "lon",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 40.45,
+              "maximum": 40.95
+            },
+            "required": false,
+            "name": "lat",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/storefronts/brands": {
+      "get": {
+        "summary": "OSM shops and amenities with brand:wikidata in a small bbox (ODbL)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number",
+              "minimum": -74.3,
+              "maximum": -73.6
+            },
+            "required": true,
+            "name": "west",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 40.45,
+              "maximum": 40.95
+            },
+            "required": true,
+            "name": "south",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": -74.3,
+              "maximum": -73.6
+            },
+            "required": true,
+            "name": "east",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 40.45,
+              "maximum": 40.95
+            },
+            "required": true,
+            "name": "north",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/storefronts/brands": {
+      "get": {
+        "summary": "OSM shops and amenities with brand:wikidata in a small bbox (ODbL) (alias of /api/v1/storefronts/brands)",
+        "deprecated": true,
+        "parameters": [
+          {
+            "schema": {
+              "type": "number",
+              "minimum": -74.3,
+              "maximum": -73.6
+            },
+            "required": true,
+            "name": "west",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 40.45,
+              "maximum": 40.95
+            },
+            "required": true,
+            "name": "south",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": -74.3,
+              "maximum": -73.6
+            },
+            "required": true,
+            "name": "east",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 40.45,
+              "maximum": 40.95
+            },
+            "required": true,
+            "name": "north",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
                 }
               }
             }

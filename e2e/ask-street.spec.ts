@@ -52,16 +52,15 @@ test("street level: Ask opens a compact sheet and sends the spot as context; han
 
   await page.goto("/");
   await expect(page.locator("canvas.maplibregl-canvas")).toBeVisible();
-  await page.getByRole("button", { name: "Layers & filters", exact: true }).click();
-  await page.getByRole("button", { name: "Street view", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Leave street level and return to the overhead map" })).toBeVisible();
+  await page.getByTestId("view-switcher").getByRole("button", { name: "Street", exact: true }).click();
+  await expect(page.getByTestId("view-switcher").getByRole("button", { name: "Top", exact: true })).toBeVisible();
   await shot(page, "1-button");
 
   await page.getByRole("button", { name: "Ask about this spot" }).click();
   const sheet = page.getByTestId("ask-compact");
   await expect(sheet).toBeVisible();
   // Non-modal: the street-level controls stay usable behind it.
-  await expect(page.getByRole("button", { name: "Leave street level and return to the overhead map" })).toBeEnabled();
+  await expect(page.getByTestId("view-switcher").getByRole("button", { name: "Top", exact: true })).toBeEnabled();
   await sheet.getByLabel("Ask the assistant").fill("which exit should I use?");
   await sheet.getByRole("button", { name: "Send" }).click();
   await expect(sheet.getByText("Use the stairs at 7 Av and W 43 St for the 1 train.")).toBeVisible();

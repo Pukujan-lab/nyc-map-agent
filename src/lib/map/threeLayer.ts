@@ -8,8 +8,10 @@
  */
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { cornerOffset, crossingsNear, dirOf, toLocal, type NamedStreet } from "./signPlacement";
+import { cornerOffset, crossingsNear, dirOf, streetBearingAt, toLocal, type NamedStreet } from "./signPlacement";
+import { eyeOrCenter, kioskSources, setPickTargets, type PickTarget } from "./streetPick";
 import { LANDMARKS } from "./landmarks";
+import { atlasCell, facadeCategory } from "./storefrontCategory";
 import maplibregl, { type CustomLayerInterface, type CustomRenderMethodInput, type Map as MaplibreMap } from "maplibre-gl";
 // Default import: also loads under Node (CJS) for scripts/make-landmarks.ts.
 const { MercatorCoordinate } = maplibregl;
@@ -699,17 +701,8 @@ interface Sign {
   bb: number;
 }
 
-/** The walker's eye (the free camera), falling back to the map centre. */
-function eyeLngLat(map: MapLibreMap): { lng: number; lat: number } {
-  try {
-    const t = (map as unknown as { transform?: { getCameraLngLat?: () => { lng: number; lat: number } } }).transform;
-    const p = t?.getCameraLngLat?.();
-    if (p && Number.isFinite(p.lng) && Number.isFinite(p.lat)) return { lng: p.lng, lat: p.lat };
-  } catch {
-    /* fall through */
-  }
-  return map.getCenter();
-}
+/** The walker's eye, not the map centre (see eyeOrCenter). */
+const eyeLngLat = eyeOrCenter;
 
 /** Pedestrian-scale road classes whose crossings get a corner sign. */
 const SIGN_CLASSES = new Set(["minor", "tertiary", "secondary", "primary", "trunk", "living_street", "residential"]);
@@ -969,6 +962,377 @@ export function createStreetSignsLayer(): CustomLayerInterface {
   };
 }
 
+// ---- Street furniture: bus stop poles and restroom kiosks ----
+
+export const FURNITURE_LAYER = "city3d-furniture";
+const FURN_MIN_ZOOM = 17;
+const BUS_MAX = 24;
+const BUS_RADIUS_M = 260;
+const BUS_POLE_H = 3.0;
+const BUS_PLATE = { w: 0.5, h: 0.78, t: 0.03, z: 2.55 };
+const KIOSK_MAX = 24;
+const KIOSK_RADIUS_M = 220;
+const KIOSK = { w: 1.3, h: 2.7, panel: 1.1 };
+const BUS_COLS = 8;
+const BUS_ROWS = 3; // 2048 x 1536: 24 portrait slots of 256 x 512
+const API = (import.meta.env?.VITE_API_BASE ?? "").replace(/\/$/, "");
+
+interface BusStop { id: string; name: string; lat: number; lon: number; dir: string; routes: string[] }
+
+/** Instanced plane material sampling cell (slot.x, slot.y) of a cols x rows atlas. */
+function gridMaterial(tex: THREE.Texture, cols: number, rows: number, opts: THREE.MeshBasicMaterialParameters = {}): THREE.MeshBasicMaterial {
+  const m = new THREE.MeshBasicMaterial({ map: tex, ...opts });
+  m.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nattribute vec2 slot;")
+      .replace("#include <uv_vertex>", `#include <uv_vertex>\nvUv = vec2((slot.x + uv.x) / ${cols.toFixed(1)}, 1.0 - (slot.y + 1.0 - uv.y) / ${rows.toFixed(1)});`);
+  };
+  m.customProgramCacheKey = () => `grid-${cols}x${rows}`;
+  return m;
+}
+
+/** MTA bus stop flag: white on MTA blue, "BUS" pictogram line, then each route in a white tile. */
+function drawBusPlate(g: CanvasRenderingContext2D, slot: number, routes: string[]) {
+  const W = 256, H = 512;
+  const x = (slot % BUS_COLS) * W, y = Math.floor(slot / BUS_COLS) * H;
+  g.fillStyle = "#0039a6";
+  g.fillRect(x, y, W, H);
+  g.fillStyle = "#ffffff";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.font = '700 54px "Helvetica Neue", Arial, sans-serif';
+  g.fillText("BUS", x + W / 2, y + 48);
+  g.fillRect(x + 22, y + 86, W - 44, 4);
+  const shown = routes.slice(0, 6);
+  const rowH = Math.min(64, (H - 120) / Math.max(1, shown.length));
+  shown.forEach((r, i) => {
+    const cy = y + 112 + i * rowH + rowH / 2;
+    g.fillStyle = "#ffffff";
+    g.fillRect(x + 26, cy - rowH / 2 + 5, W - 52, rowH - 10);
+    g.fillStyle = "#0039a6";
+    let size = Math.min(46, rowH - 16);
+    do g.font = `700 ${size}px "Helvetica Neue", Arial, sans-serif`;
+    while (g.measureText(r).width > W - 70 && (size -= 2) > 14);
+    g.fillText(r, x + W / 2, cy + 2);
+  });
+  if (routes.length > shown.length) {
+    g.fillStyle = "#ffffff";
+    g.font = '600 28px "Helvetica Neue", Arial, sans-serif';
+    g.fillText(`+${routes.length - shown.length} more`, x + W / 2, y + H - 22);
+  }
+}
+
+/**
+ * Restroom kiosk panel in the Kresilo palette, built for legibility: ink on
+ * ivory, a large pictogram, the access rule in words, chartreuse when anyone
+ * may use it, and the wheelchair symbol when the place says it is accessible.
+ * Four variants: [anyone, customers] x [plain, wheelchair].
+ */
+function drawKioskPanels(g: CanvasRenderingContext2D) {
+  const S = 512;
+  ["anyone", "customers"].forEach((access, ai) => {
+    [false, true].forEach((wc, wi) => {
+      const x = (ai * 2 + wi) * S;
+      g.fillStyle = "#f6f3ea";
+      g.fillRect(x, 0, S, S);
+      g.fillStyle = "#16161a";
+      g.fillRect(x + 10, 10, S - 20, 14);
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      g.font = '800 150px "Helvetica Neue", Arial, sans-serif';
+      g.fillText("WC", x + S / 2, 150);
+      g.font = '600 46px "Helvetica Neue", Arial, sans-serif';
+      g.fillText("Restroom", x + S / 2, 262);
+      const band = access === "anyone";
+      g.fillStyle = band ? "#d4f53c" : "#16161a";
+      g.fillRect(x + 22, 316, S - 44, 108);
+      g.fillStyle = band ? "#16161a" : "#f6f3ea";
+      g.font = `800 ${band ? 70 : 56}px "Helvetica Neue", Arial, sans-serif`;
+      g.fillText(band ? "Anyone" : "Customers only", x + S / 2, 372, S - 64);
+      if (wc) {
+        g.fillStyle = "#16161a";
+        g.font = '700 64px "Helvetica Neue", Arial, sans-serif';
+        g.fillText("\u267F accessible", x + S / 2, 470, S - 60);
+      }
+    });
+  });
+}
+
+function wheelchairOf(p: Record<string, unknown>): boolean {
+  if (p.wheelchair === true || p.wheelchair === "true") return true;
+  const a = typeof p.accessibility === "string" ? p.accessibility : "";
+  return /accessible/i.test(a) && !/not|in-?accessible/i.test(a);
+}
+
+
+/**
+ * Bus stop pole signs (MTA blue flag with the routes serving the stop, the
+ * flag edge-on to the curb so it reads along the sidewalk and to an arriving
+ * bus) and restroom kiosks (public restrooms "Anyone", shops and cafés
+ * "Customers only"), instanced: 6 draw calls for everything in view.
+ */
+export function createFurnitureLayer(): CustomLayerInterface {
+  let map: MapLibreMap;
+  let renderer: THREE.WebGLRenderer;
+  const scene = new THREE.Scene();
+  const camera = new THREE.Camera();
+  const busCanvas = document.createElement("canvas");
+  busCanvas.width = 256 * BUS_COLS;
+  busCanvas.height = 512 * BUS_ROWS;
+  const bg = busCanvas.getContext("2d")!;
+  const busTex = new THREE.CanvasTexture(busCanvas);
+  busTex.encoding = THREE.sRGBEncoding;
+  busTex.anisotropy = 8;
+  const kioskCanvas = document.createElement("canvas");
+  kioskCanvas.width = 2048;
+  kioskCanvas.height = 512;
+  drawKioskPanels(kioskCanvas.getContext("2d")!);
+  const kioskTex = new THREE.CanvasTexture(kioskCanvas);
+  kioskTex.encoding = THREE.sRGBEncoding;
+  kioskTex.anisotropy = 8;
+
+  const busPoles = new THREE.InstancedMesh(
+    new THREE.CylinderGeometry(0.04, 0.05, BUS_POLE_H, 8).rotateX(Math.PI / 2).translate(0, 0, BUS_POLE_H / 2),
+    new THREE.MeshStandardMaterial({ color: 0x8b9096, metalness: 0.6, roughness: 0.45 }),
+    BUS_MAX,
+  );
+  const busPlates = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0x0039a6, roughness: 0.5 }), BUS_MAX);
+  const busFaceGeo = new THREE.PlaneGeometry(1, 1);
+  const busSlot = new THREE.InstancedBufferAttribute(new Float32Array(BUS_MAX * 2 * 2), 2);
+  busFaceGeo.setAttribute("slot", busSlot);
+  const busFaces = new THREE.InstancedMesh(busFaceGeo, gridMaterial(busTex, BUS_COLS, BUS_ROWS), BUS_MAX * 2);
+  const kioskBodies = new THREE.InstancedMesh(
+    new THREE.BoxGeometry(KIOSK.w, KIOSK.w, KIOSK.h).translate(0, 0, KIOSK.h / 2),
+    new THREE.MeshStandardMaterial({ color: 0x16161a, roughness: 0.7 }),
+    KIOSK_MAX,
+  );
+  const kioskFaceGeo = new THREE.PlaneGeometry(1, 1);
+  const kioskSlot = new THREE.InstancedBufferAttribute(new Float32Array(KIOSK_MAX * 4 * 2), 2);
+  kioskFaceGeo.setAttribute("slot", kioskSlot);
+  const kioskFaces = new THREE.InstancedMesh(kioskFaceGeo, gridMaterial(kioskTex, 4, 1), KIOSK_MAX * 4);
+  const all = [busPoles, busPlates, busFaces, kioskBodies, kioskFaces];
+  for (const m of all) {
+    m.frustumCulled = false;
+    m.count = 0;
+    m.castShadow = m !== busFaces && m !== kioskFaces;
+    scene.add(m);
+  }
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a8a, 1.1));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.6);
+  sun.position.set(0.4, -0.6, 1);
+  scene.add(sun);
+
+  let origin = new MercatorCoordinate(0, 0, 0);
+  let meters = 1;
+  let eyeAt = { lng: 0, lat: 0 };
+  let stops: BusStop[] = [];
+  let fetchedAt: { lng: number; lat: number } | null = null;
+  let lastCheck = 0;
+  let shown = "";
+
+  const loadStops = (eye: { lng: number; lat: number }) => {
+    if (fetchedAt && Math.hypot(...toLocal(eye.lng, eye.lat, fetchedAt)) < 120) return;
+    fetchedAt = eye;
+    const q = new URLSearchParams({ lat: eye.lat.toFixed(4), lon: eye.lng.toFixed(4) });
+    fetch(`${API}/api/transit/bus-stops?${q}`)
+      .then((r) => (r.ok ? (r.json() as Promise<{ stops: BusStop[] }>) : { stops: [] }))
+      .then((d) => {
+        const seen = new Map(stops.map((s) => [s.id, s]));
+        for (const s of d.stops ?? []) seen.set(s.id, s);
+        stops = [...seen.values()].filter((s) => Math.hypot(...toLocal(s.lon, s.lat, eye)) < 600);
+        shown = "";
+        build();
+      })
+      .catch(() => {
+        fetchedAt = null;
+      });
+  };
+
+  const streetLines = (): Array<Array<[number, number]>> => {
+    const out: Array<Array<[number, number]>> = [];
+    if (!map.getSource("openmaptiles")) return out;
+    for (const f of map.querySourceFeatures("openmaptiles", { sourceLayer: "transportation" })) {
+      const c = String(f.properties?.class);
+      if (!["minor", "tertiary", "secondary", "primary", "trunk", "service"].includes(c)) continue;
+      const g = f.geometry;
+      if (g.type === "LineString") out.push(g.coordinates as Array<[number, number]>);
+      else if (g.type === "MultiLineString") out.push(...(g.coordinates as Array<Array<[number, number]>>));
+    }
+    return out;
+  };
+
+  // Restroom points come from the GeoJSON sources' data, not rendered tiles:
+  // at street level the 2D icon layers are hidden, so their tiles never load.
+  let kioskData: Array<{ kind: PickTarget["kind"]; f: GeoJSON.Feature }> = [];
+  let kioskStamp = "";
+  const loadKiosks = () => {
+    const want = (["restrooms", "place-toilets"] as const).filter((id) => (id === "restrooms" ? kioskSources.restrooms : kioskSources.places) && map.getSource(id));
+    void Promise.all(
+      want.map((id) =>
+        (map.getSource(id) as unknown as { getData?: () => Promise<GeoJSON.GeoJSON> }).getData?.().then((d) => ({ id, d })).catch(() => null) ?? Promise.resolve(null),
+      ),
+    ).then((rows) => {
+      const next: typeof kioskData = [];
+      for (const r of rows) {
+        if (!r || r.d.type !== "FeatureCollection") continue;
+        for (const f of r.d.features) next.push({ kind: r.id === "restrooms" ? "restroom" : "place", f });
+      }
+      const stamp = `${next.length}:${want.join(",")}`;
+      kioskData = next;
+      if (stamp !== kioskStamp) {
+        kioskStamp = stamp;
+        shown = "";
+        build();
+      }
+    });
+  };
+
+  const kiosks = (eye: { lng: number; lat: number }): PickTarget[] => {
+    const out: Array<PickTarget & { d: number }> = [];
+    for (const { kind, f } of kioskData) {
+      if (f.geometry?.type !== "Point") continue;
+      if (kind === "restroom" ? !kioskSources.restrooms : !kioskSources.places) continue;
+      const [lng, lat] = f.geometry.coordinates;
+      const d = Math.hypot(...toLocal(lng, lat, eye));
+      if (d > KIOSK_RADIUS_M) continue;
+      const props = (f.properties ?? {}) as Record<string, unknown>;
+      const raw = props.id ?? props.name;
+      const id = typeof raw === "string" || typeof raw === "number" ? String(raw) : `${lng},${lat}`;
+      if (out.some((o) => o.kind === kind && o.id === id)) continue;
+      out.push({ kind, id, lng, lat, h: KIOSK.h, props, d });
+    }
+    return out.sort((a, b) => a.d - b.d).slice(0, KIOSK_MAX);
+  };
+
+  const build = () => {
+    if (!map || map.getZoom() < FURN_MIN_ZOOM) {
+      for (const m of all) m.count = 0;
+      setPickTargets([]);
+      return;
+    }
+    const eye = eyeLngLat(map);
+    const near = stops
+      .map((s) => ({ s, d: Math.hypot(...toLocal(s.lon, s.lat, eye)) }))
+      .filter((x) => x.d < BUS_RADIUS_M)
+      .sort((a, b) => a.d - b.d)
+      .slice(0, BUS_MAX)
+      .map((x) => x.s);
+    const ks = kiosks(eye);
+    const key = near.map((s) => s.id).join(",") + "|" + ks.map((k) => k.id).join(",") + `|${eye.lng.toFixed(4)},${eye.lat.toFixed(4)}`;
+    if (key === shown) return;
+    shown = key;
+    eyeAt = eye;
+    origin = MercatorCoordinate.fromLngLat(eye, 0);
+    meters = origin.meterInMercatorCoordinateUnits();
+    const m = new THREE.Matrix4();
+    const Z = new THREE.Vector3(0, 0, 1);
+    const lines = near.length ? streetLines() : [];
+    bg.clearRect(0, 0, busCanvas.width, busCanvas.height);
+    let nf = 0;
+    near.forEach((s, i) => {
+      drawBusPlate(bg, i, s.routes);
+      const [x, y] = toLocal(s.lon, s.lat, eye);
+      const brg = streetBearingAt(lines, s.lon, s.lat, 40) ?? 0;
+      const [ux, uy] = dirOf(brg);
+      const u = new THREE.Vector3(ux, uy, 0); // along the street: the plate faces along it
+      const n = new THREE.Vector3(uy, -ux, 0); // across the street: the plate's width
+      m.makeTranslation(x, y, 0);
+      busPoles.setMatrixAt(i, m);
+      // The flag hangs off the pole toward the roadway side.
+      const c = new THREE.Vector3(x, y, BUS_PLATE.z).addScaledVector(n, BUS_PLATE.w / 2 + 0.04);
+      m.makeBasis(n.clone().multiplyScalar(BUS_PLATE.w), u.clone().multiplyScalar(BUS_PLATE.t), Z.clone().multiplyScalar(BUS_PLATE.h)).setPosition(c);
+      busPlates.setMatrixAt(i, m);
+      for (const side of [1, -1]) {
+        const nn = u.clone().multiplyScalar(side);
+        const right = new THREE.Vector3().crossVectors(Z, nn);
+        m.makeBasis(right.multiplyScalar(BUS_PLATE.w * 0.96), Z.clone().multiplyScalar(BUS_PLATE.h * 0.97), nn)
+          .setPosition(c.clone().addScaledVector(nn, BUS_PLATE.t / 2 + 0.004));
+        busFaces.setMatrixAt(nf, m);
+        busSlot.setXY(nf++, i % BUS_COLS, Math.floor(i / BUS_COLS));
+      }
+    });
+    busPoles.count = near.length;
+    busPlates.count = near.length;
+    busFaces.count = nf;
+    let kf = 0;
+    ks.forEach((k, i) => {
+      const [x, y] = toLocal(k.lng, k.lat, eye);
+      m.makeTranslation(x, y, 0);
+      kioskBodies.setMatrixAt(i, m);
+      const access = k.kind === "restroom" ? 0 : String(k.props.access) === "anyone" ? 0 : 1;
+      const variant = access * 2 + (wheelchairOf(k.props) ? 1 : 0);
+      for (let f = 0; f < 4; f++) {
+        const a = (f * Math.PI) / 2;
+        const nn = new THREE.Vector3(Math.sin(a), Math.cos(a), 0);
+        const right = new THREE.Vector3().crossVectors(Z, nn);
+        m.makeBasis(right.multiplyScalar(KIOSK.panel * 0.94), Z.clone().multiplyScalar(KIOSK.panel * 0.94), nn)
+          .setPosition(x + nn.x * (KIOSK.w / 2 + 0.005), y + nn.y * (KIOSK.w / 2 + 0.005), KIOSK.h - KIOSK.panel / 2 - 0.08);
+        kioskFaces.setMatrixAt(kf, m);
+        kioskSlot.setXY(kf++, variant, 0);
+      }
+    });
+    kioskBodies.count = ks.length;
+    kioskFaces.count = kf;
+    setPickTargets(ks.map(({ kind, id, lng, lat, h, props }) => ({ kind, id, lng, lat, h, props })));
+    for (const x of all) x.instanceMatrix.needsUpdate = true;
+    busSlot.needsUpdate = true;
+    kioskSlot.needsUpdate = true;
+    busTex.needsUpdate = true;
+    map.triggerRepaint();
+  };
+
+  const refresh = () => {
+    if (!map || map.getZoom() < FURN_MIN_ZOOM) {
+      build();
+      return;
+    }
+    loadStops(eyeLngLat(map));
+    loadKiosks();
+    build();
+  };
+  const onData = (e: { sourceId?: string; isSourceLoaded?: boolean }) => {
+    if (e.sourceId === "restrooms" || e.sourceId === "place-toilets") loadKiosks();
+  };
+
+  return {
+    id: FURNITURE_LAYER,
+    type: "custom",
+    renderingMode: "3d",
+    onAdd(mp, gl) {
+      map = mp;
+      renderer = sharedRenderer(mp, gl);
+      mp.on("moveend", refresh);
+      mp.on("sourcedata", onData);
+      refresh();
+    },
+    onRemove(mp) {
+      mp.off("moveend", refresh);
+      mp.off("sourcedata", onData);
+      setPickTargets([]);
+      for (const x of all) {
+        x.geometry.dispose();
+        (x.material as THREE.Material).dispose();
+      }
+      busTex.dispose();
+      kioskTex.dispose();
+    },
+    render(_gl, args: CustomRenderMethodInput) {
+      const now = performance.now();
+      if (now - lastCheck > 500) {
+        lastCheck = now;
+        const e = eyeLngLat(map);
+        if (Math.hypot(...toLocal(e.lng, e.lat, eyeAt)) > 15) refresh();
+      }
+      if (map.getZoom() < FURN_MIN_ZOOM || (!busPoles.count && !kioskBodies.count)) return;
+      const s = meters;
+      const l = new THREE.Matrix4().makeTranslation(origin.x, origin.y, origin.z ?? 0).scale(new THREE.Vector3(s, -s, s));
+      camera.projectionMatrix = new THREE.Matrix4().fromArray(args.defaultProjectionData.mainMatrix as unknown as number[]).multiply(l);
+      renderer.resetState();
+      renderer.render(scene, camera);
+    },
+  };
+}
+
 // ---- Storefront signboards ----
 
 /**
@@ -996,7 +1360,21 @@ export const SIGN_COLORS: Record<string, string> = {
 
 export interface StorefrontSign {
   name: string; cat: string; brg: number; sw: number; fl: number; lng: number; lat: number;
-  main?: number; dir?: string;
+  main?: number; dir?: string; kind?: string; w?: number;
+}
+
+// ---- Brand logos for the sign bands (server: OSM brand:wikidata → Wikidata P154, re-hosted in R2) ----
+
+const logos = new Map<string, HTMLImageElement | null>();
+/** A loaded logo image, or undefined while it loads (onLoad fires once ready), or null if none. */
+function logoFor(s: StorefrontSign, onLoad: () => void): HTMLImageElement | null | undefined {
+  const key = `${s.name}@${s.lng.toFixed(5)},${s.lat.toFixed(5)}`;
+  if (logos.has(key)) return logos.get(key);
+  logos.set(key, null);
+  const img = new Image();
+  img.onload = () => { logos.set(key, img); onLoad(); };
+  img.src = `/api/v1/storefronts/logo?${new URLSearchParams({ name: s.name, lon: s.lng.toFixed(5), lat: s.lat.toFixed(5) })}`;
+  return undefined;
 }
 
 /** Signs from the loaded tiles, nearest first, deduplicated across tile edges. */
@@ -1032,7 +1410,7 @@ export function directoryAt(map: MapLibreMap, lng: number, lat: number): Storefr
   return signsNear(map, lng, lat, 25).find((s) => s.main === 1) ?? null;
 }
 
-function drawSlot(g: CanvasRenderingContext2D, i: number, s: StorefrontSign) {
+function drawSlot(g: CanvasRenderingContext2D, i: number, s: StorefrontSign, logo?: HTMLImageElement | null) {
   const x = (i % 2) * 512, y = Math.floor(i / 2) * 32;
   g.fillStyle = SIGN_COLORS[s.cat] ?? SIGN_COLORS.service;
   g.fillRect(x, y, 512, 32);
@@ -1043,10 +1421,19 @@ function drawSlot(g: CanvasRenderingContext2D, i: number, s: StorefrontSign) {
   g.textAlign = "center";
   g.textBaseline = "middle";
   const text = s.main ? s.name.toUpperCase() : s.name;
+  // A brand logo sits on a white tile at the left of the band, the name beside it.
+  const pad = logo ? 34 : 0;
+  if (logo) {
+    g.fillStyle = "#fff";
+    g.fillRect(x + 4, y + 3, 26, 26);
+    const k = Math.min(24 / logo.width, 24 / logo.height);
+    g.drawImage(logo, x + 17 - (logo.width * k) / 2, y + 16 - (logo.height * k) / 2, logo.width * k, logo.height * k);
+    g.fillStyle = "#fff";
+  }
   let size = 22;
   do g.font = `600 ${size}px "Helvetica Neue", Arial, sans-serif`;
-  while (g.measureText(text).width > 480 && (size -= 1) > 10);
-  g.fillText(text, x + 256, y + 17);
+  while (g.measureText(text).width > 480 - pad && (size -= 1) > 10);
+  g.fillText(text, x + 256 + pad / 2, y + 17);
 }
 
 export function createStorefrontLayer(): CustomLayerInterface {
@@ -1077,6 +1464,23 @@ export function createStorefrontLayer(): CustomLayerInterface {
   mesh.frustumCulled = false;
   mesh.count = 0;
   scene.add(mesh);
+  // Ground-floor shop fronts behind the bands: one atlas (5 x 2 categories),
+  // one instanced draw, a per-shop tint so a block never looks cloned.
+  const facadeTex = new THREE.TextureLoader().load("/textures/storefront-atlas.png", () => map?.triggerRepaint());
+  facadeTex.encoding = THREE.sRGBEncoding;
+  const cell = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 2), 2);
+  const facadeGeo = new THREE.PlaneGeometry(1, 1);
+  facadeGeo.setAttribute("cell", cell);
+  const facadeMat = new THREE.MeshBasicMaterial({ map: facadeTex, side: THREE.DoubleSide });
+  facadeMat.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nattribute vec2 cell;")
+      .replace("#include <uv_vertex>", "#include <uv_vertex>\nvUv = vec2((cell.x + uv.x) / 5.0, 1.0 - (cell.y + 1.0 - uv.y) / 2.0);");
+  };
+  const facades = new THREE.InstancedMesh(facadeGeo, facadeMat, MAX);
+  facades.frustumCulled = false;
+  facades.count = 0;
+  scene.add(facades);
   let origin = new MercatorCoordinate(0, 0, 0);
   let scale = 1;
   let shown = "";
@@ -1088,6 +1492,7 @@ export function createStorefrontLayer(): CustomLayerInterface {
   const refresh = () => {
     if (map.getZoom() < STOREFRONT_MIN_ZOOM) {
       mesh.count = 0;
+      facades.count = 0;
       shown = "";
       return;
     }
@@ -1099,17 +1504,19 @@ export function createStorefrontLayer(): CustomLayerInterface {
     // grows to stay about 14 px tall and readable (#67).
     const mpp = (78_271.517 * Math.cos((map.getCenter().lat * Math.PI) / 180)) / 2 ** map.getZoom();
     const grow = Math.min(6, Math.max(1, (mpp * 14) / PLATE_H));
-    const key = `${grow.toFixed(1)}|` + signs.map((s) => `${s.lng},${s.lat}`).join("|");
+    const c = map.getCenter();
+    const logoOf = (s: StorefrontSign) => (s.main || s.name === "Directory" ? null : logoFor(s, () => { shown = ""; refresh(); }));
+    const key = `${grow.toFixed(1)}|` + signs.map((s) => `${s.lng},${s.lat},${logoOf(s) ? 1 : 0}`).join("|");
     if (key === shown) return;
     shown = key;
-    const c = map.getCenter();
     origin = MercatorCoordinate.fromLngLat(c, 0);
     scale = origin.meterInMercatorCoordinateUnits();
     const kx = 111_320 * Math.cos((c.lat * Math.PI) / 180);
     g.clearRect(0, 0, canvas.width, canvas.height);
     const m = new THREE.Matrix4();
+    let nf = 0;
     signs.forEach((s, i) => {
-      drawSlot(g, i, s);
+      drawSlot(g, i, s, logoOf(s));
       uv.setXY(i, i % 2, Math.floor(i / 2));
       const b = (s.brg * Math.PI) / 180;
       const n = new THREE.Vector3(Math.sin(b), Math.cos(b), 0);
@@ -1122,7 +1529,22 @@ export function createStorefrontLayer(): CustomLayerInterface {
         .addScaledVector(t, (s.dx ?? 0) * grow);
       m.makeBasis(t.clone().multiplyScalar(w), new THREE.Vector3(0, 0, h), n).setPosition(pos);
       mesh.setMatrixAt(i, m);
+      // Ground-floor shop front under a ground-floor band (not the directory board).
+      if (!s.fl && !s.dx && s.name !== "Directory" && grow < 1.5) {
+        const fw = Math.min(Math.max(s.sw + 1.2, 3), Math.max(3, s.w ?? 8), 8);
+        const [cx, cy] = atlasCell(facadeCategory(s.kind, s.cat));
+        cell.setXY(nf, cx, cy);
+        const fpos = new THREE.Vector3((s.lng - c.lng) * kx, (s.lat - c.lat) * 111_320, 1.45).addScaledVector(n, 0.06);
+        m.makeBasis(t.clone().multiplyScalar(fw), new THREE.Vector3(0, 0, 2.9), n).setPosition(fpos);
+        facades.setMatrixAt(nf, m);
+        facades.setColorAt(nf, new THREE.Color().setScalar(0.92 + ((i * 7) % 17) / 100)); // ±8%, so a block never looks cloned
+        nf++;
+      }
     });
+    facades.count = nf;
+    facades.instanceMatrix.needsUpdate = true;
+    if (facades.instanceColor) facades.instanceColor.needsUpdate = true;
+    cell.needsUpdate = true;
     mesh.count = signs.length;
     mesh.instanceMatrix.needsUpdate = true;
     uv.needsUpdate = true;
@@ -1151,6 +1573,9 @@ export function createStorefrontLayer(): CustomLayerInterface {
       geometry.dispose();
       material.dispose();
       atlas.dispose();
+      facadeGeo.dispose();
+      facadeMat.dispose();
+      facadeTex.dispose();
     },
     render(_gl, args) {
       // Animated layers (weather, hazards) keep the map from ever going idle,
@@ -1160,7 +1585,7 @@ export function createStorefrontLayer(): CustomLayerInterface {
         lastCheck = now;
         refresh();
       }
-      if (!mesh.count) return;
+      if (!mesh.count && !facades.count) return;
       const l = new THREE.Matrix4().makeTranslation(origin.x, origin.y, origin.z ?? 0).scale(new THREE.Vector3(scale, -scale, scale));
       camera.projectionMatrix = new THREE.Matrix4().fromArray(args.defaultProjectionData.mainMatrix as unknown as number[]).multiply(l);
       renderer.resetState();
