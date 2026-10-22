@@ -8,7 +8,7 @@
  */
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { distanceFade } from "./corner";
+import { cornerOffset, crossingsNear, dirOf, toLocal, type NamedStreet } from "./signPlacement";
 import { LANDMARKS } from "./landmarks";
 import maplibregl, { type CustomLayerInterface, type CustomRenderMethodInput, type Map as MaplibreMap } from "maplibre-gl";
 // Default import: also loads under Node (CJS) for scripts/make-landmarks.ts.
@@ -670,20 +670,24 @@ export function createHydrantLayer(): CustomLayerInterface {
  */
 export const STREET_SIGNS_LAYER = "city3d-signs";
 export const SIGNS_MIN_ZOOM = 17;
-const SIGNS_RADIUS_M = 300;
-const SIGNS_MAX = 60;
-const SCALE = 1.15; // model is 3.04 m with 0.6 m blades; NYC poles are ~3.5 m
-const CORNER_M = 8; // from the centreline crossing to the corner, along the bisector
-// Blade faces in model metres: lower blade runs along X, upper along Z.
-const BLADES = [
-  { y: 2.775, axis: "x" as const, half: 0.0175 },
-  { y: 2.9535, axis: "z" as const, half: 0.0175 },
-];
-// Real blades are ~0.6 m, but at eye level and 30 m away that is a few pixels
-// of text: the decal blades are drawn ~1.6x larger so names stay readable.
-const BLADE_SCALE = 1.6;
-const DECAL_W = 0.58 * BLADE_SCALE;
-const DECAL_H = 0.14 * BLADE_SCALE;
+const SIGNS_RADIUS_M = 220;
+const SIGNS_MAX = 40; // two names each: 80 of the atlas's 84 slots
+const POLE_H = 3.7; // NYC sign poles are ~3.5-4 m
+// Real blades are ~0.75 x 0.15 m, but at eye level and 30 m away that is a few
+// pixels of text: blades are drawn ~1.6x larger so names stay readable.
+const BLADE_W = 1.25;
+const BLADE_H = 0.26;
+const BLADE_T = 0.03;
+const BLADE_Z = [POLE_H - 0.42, POLE_H - 0.12]; // street A lower, street B on top, crossed
+/** Road-surface name: metres across the street, along it, and back from the crossing. */
+const ROAD_W = 7;
+const ROAD_H = 3.5;
+const ROAD_BACK_M = 14;
+// Atlas: 2048 x 2048, 4 columns x 21 rows of 512 x 96 blade faces.
+const ATLAS = 2048;
+const SLOT_W = 512;
+const SLOT_H = 96;
+const COLS = ATLAS / SLOT_W;
 
 interface Sign {
   key: string;
@@ -695,73 +699,96 @@ interface Sign {
   bb: number;
 }
 
-function bladeTexture(name: string): THREE.CanvasTexture {
-  const c = document.createElement("canvas");
-  c.width = 512;
-  c.height = 124;
-  const g = c.getContext("2d")!;
+/** The walker's eye (the free camera), falling back to the map centre. */
+function eyeLngLat(map: MapLibreMap): { lng: number; lat: number } {
+  try {
+    const t = (map as unknown as { transform?: { getCameraLngLat?: () => { lng: number; lat: number } } }).transform;
+    const p = t?.getCameraLngLat?.();
+    if (p && Number.isFinite(p.lng) && Number.isFinite(p.lat)) return { lng: p.lng, lat: p.lat };
+  } catch {
+    /* fall through */
+  }
+  return map.getCenter();
+}
+
+/** Pedestrian-scale road classes whose crossings get a corner sign. */
+const SIGN_CLASSES = new Set(["minor", "tertiary", "secondary", "primary", "trunk", "living_street", "residential"]);
+
+/**
+ * Corner signs around the eye (not the map centre, which floats down the look
+ * ray at eye level), from the crossings of the basemap's named street
+ * centrelines (OSM, the same lines the street-view header reads).
+ */
+function nearbySigns(map: MapLibreMap, eye: { lng: number; lat: number }): Sign[] {
+  if (!map.getSource("openmaptiles")) return [];
+  const lines: NamedStreet[] = [];
+  for (const f of map.querySourceFeatures("openmaptiles", { sourceLayer: "transportation_name" })) {
+    const p = f.properties ?? {};
+    if (!SIGN_CLASSES.has(String(p.class)) || p.brunnel === "tunnel" || p.brunnel === "bridge") continue;
+    const name = String(p["name:en"] ?? p.name ?? "");
+    if (!name) continue;
+    const g = f.geometry;
+    if (g.type === "LineString") lines.push({ name, coords: g.coordinates as Array<[number, number]> });
+    else if (g.type === "MultiLineString") for (const c of g.coordinates) lines.push({ name, coords: c as Array<[number, number]> });
+  }
+  return crossingsNear(lines, eye, SIGNS_RADIUS_M, SIGNS_MAX).map((c) => ({ ...c, key: `${c.lng.toFixed(5)},${c.lat.toFixed(5)}` }));
+}
+
+/** Blade face: white on NYC street-sign green, abbreviated as the real signs are ("Grand St"). */
+function drawBlade(g: CanvasRenderingContext2D, slot: number, name: string) {
+  const x = (slot % COLS) * SLOT_W;
+  const y = Math.floor(slot / COLS) * SLOT_H;
   g.fillStyle = "#0b6b3a";
-  g.fillRect(0, 0, c.width, c.height);
+  g.fillRect(x, y, SLOT_W, SLOT_H);
   g.strokeStyle = "#ffffff";
-  g.lineWidth = 6;
-  g.strokeRect(8, 8, c.width - 16, c.height - 16);
+  g.lineWidth = 4;
+  g.strokeRect(x + 6, y + 6, SLOT_W - 12, SLOT_H - 12);
   g.fillStyle = "#ffffff";
   g.textAlign = "center";
   g.textBaseline = "middle";
-  let size = 72;
+  let size = 60;
   do g.font = `600 ${size}px "Helvetica Neue", Arial, sans-serif`;
-  while (g.measureText(name).width > c.width - 48 && (size -= 4) > 24);
-  g.fillText(name, c.width / 2, c.height / 2 + 3);
-  const t = new THREE.CanvasTexture(c);
-  t.encoding = THREE.sRGBEncoding;
-  t.anisotropy = 4;
-  return t;
+  while (g.measureText(name).width > SLOT_W - 40 && (size -= 3) > 18);
+  g.fillText(name, x + SLOT_W / 2, y + SLOT_H / 2 + 3);
 }
 
 /**
- * Street name painted on the asphalt before the crossing, white on clear.
- * Letters are drawn ~2.5x tall: seen from 1.7 m up the road foreshortens them
- * back to normal proportions (the same trick as painted "STOP" markings).
+ * Street name painted on the asphalt before the crossing, white on clear, in
+ * the half-size road atlas. Seen from 1.7 m up, the plane (stretched along the
+ * road) foreshortens the letters back to normal proportions, like "STOP".
  */
-function roadTexture(name: string): THREE.CanvasTexture {
-  const c = document.createElement("canvas");
-  c.width = 512;
-  c.height = 256;
-  const g = c.getContext("2d")!;
+function drawRoad(g: CanvasRenderingContext2D, slot: number, name: string) {
+  const w = SLOT_W / 2;
+  const h = SLOT_H / 2;
+  const x = (slot % COLS) * w;
+  const y = Math.floor(slot / COLS) * h;
   g.fillStyle = "rgba(244,241,232,0.95)";
   g.textAlign = "center";
   g.textBaseline = "middle";
-  let size = 96;
+  let size = 34;
   do g.font = `700 ${size}px "Helvetica Neue", Arial, sans-serif`;
-  while (g.measureText(name).width > c.width - 24 && (size -= 4) > 24);
-  g.setTransform(1, 0, 0, 2.5, 0, 0);
-  g.fillText(name, c.width / 2, c.height / 5);
-  const t = new THREE.CanvasTexture(c);
-  t.encoding = THREE.sRGBEncoding;
-  t.anisotropy = 8;
-  return t;
+  while (g.measureText(name).width > w - 12 && (size -= 2) > 10);
+  g.fillText(name, x + w / 2, y + h / 2 + 2, w - 8);
 }
-/** Road-surface name: metres across the street, along it, and back from the crossing. */
-const ROAD_W = 7;
-const ROAD_H = 3.5;
-const ROAD_BACK_M = 14;
-const ROAD_OPACITY = 0.85;
 
-/** Picks the nearest signs from the loaded tiles. */
-function nearbySigns(map: MapLibreMap): Sign[] {
-  const { lng, lat } = map.getCenter();
-  const kx = 111_320 * Math.cos((lat * Math.PI) / 180);
-  const seen = new Map<string, Sign & { d: number }>();
-  for (const f of map.querySourceFeatures("city3d", { sourceLayer: "signs" })) {
-    if (f.geometry.type !== "Point") continue;
-    const [x, y] = f.geometry.coordinates;
-    const d = Math.hypot((x - lng) * kx, (y - lat) * 111_320);
-    if (d > SIGNS_RADIUS_M) continue;
-    const p = f.properties as { a: string; b: string; ba: number; bb: number };
-    const key = `${x.toFixed(6)},${y.toFixed(6)}`;
-    if (!seen.has(key)) seen.set(key, { key, lng: x, lat: y, ...p, d });
-  }
-  return [...seen.values()].sort((p, q) => p.d - q.d).slice(0, SIGNS_MAX);
+/**
+ * Instanced plane material that samples its own atlas slot (blade faces, or
+ * road letters on clear). Road letters are an alpha cut-out, not blended:
+ * blending inside MapLibre's shared context dropped them entirely.
+ */
+function slotMaterial(atlas: THREE.Texture, road: boolean): THREE.MeshBasicMaterial {
+  const m = road
+    ? new THREE.MeshBasicMaterial({ map: atlas, alphaTest: 0.5, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 })
+    : new THREE.MeshBasicMaterial({ map: atlas, color: 0xe6e6e6 });
+  m.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nattribute vec2 slot;")
+      .replace(
+        "#include <uv_vertex>",
+        `#include <uv_vertex>\nvUv = vec2((slot.x + uv.x) / ${COLS.toFixed(1)}, 1.0 - (slot.y + 1.0 - uv.y) * ${(SLOT_H / ATLAS).toFixed(6)});`,
+      );
+  };
+  return m;
 }
 
 export function createStreetSignsLayer(): CustomLayerInterface {
@@ -769,110 +796,131 @@ export function createStreetSignsLayer(): CustomLayerInterface {
   let renderer: THREE.WebGLRenderer;
   const scene = new THREE.Scene();
   const camera = new THREE.Camera();
-  const group = new THREE.Group();
-  let model: THREE.Object3D | null = null;
+  const canvas = document.createElement("canvas");
+  canvas.width = ATLAS;
+  canvas.height = ATLAS;
+  const g = canvas.getContext("2d")!;
+  const atlas = new THREE.CanvasTexture(canvas);
+  atlas.encoding = THREE.sRGBEncoding;
+  atlas.anisotropy = 8;
+  // Road letters: same slot grid at half resolution, white on clear.
+  const roadCanvas = document.createElement("canvas");
+  roadCanvas.width = ATLAS / 2;
+  roadCanvas.height = ATLAS / 2;
+  const rg = roadCanvas.getContext("2d")!;
+  const roadAtlas = new THREE.CanvasTexture(roadCanvas);
+  roadAtlas.encoding = THREE.sRGBEncoding;
+  roadAtlas.anisotropy = 8;
+
+  // One draw call per part, for every sign in view.
+  const poleGeo = new THREE.CylinderGeometry(0.045, 0.055, POLE_H, 8).rotateX(Math.PI / 2).translate(0, 0, POLE_H / 2);
+  const poles = new THREE.InstancedMesh(poleGeo, new THREE.MeshStandardMaterial({ color: 0x2c3530, metalness: 0.5, roughness: 0.55 }), SIGNS_MAX);
+  const bladeGeo = new THREE.BoxGeometry(1, 1, 1);
+  const blades = new THREE.InstancedMesh(bladeGeo, new THREE.MeshStandardMaterial({ color: 0x0b6b3a, roughness: 0.6 }), SIGNS_MAX * 2);
+  const faceGeo = new THREE.PlaneGeometry(1, 1);
+  const faceSlot = new THREE.InstancedBufferAttribute(new Float32Array(SIGNS_MAX * 4 * 2), 2);
+  faceGeo.setAttribute("slot", faceSlot);
+  const faces = new THREE.InstancedMesh(faceGeo, slotMaterial(atlas, false), SIGNS_MAX * 4);
+  const roadGeo = new THREE.PlaneGeometry(1, 1);
+  const roadSlot = new THREE.InstancedBufferAttribute(new Float32Array(SIGNS_MAX * 4 * 2), 2);
+  roadGeo.setAttribute("slot", roadSlot);
+  const roads = new THREE.InstancedMesh(roadGeo, slotMaterial(roadAtlas, true), SIGNS_MAX * 4);
+  for (const m of [poles, blades, faces, roads]) {
+    m.frustumCulled = false;
+    m.count = 0;
+    // Sun shadows (when on) fall from the pole and blades.
+    m.castShadow = m !== roads && m !== faces;
+    scene.add(m);
+  }
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a8a, 1.1));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.6);
+  sun.position.set(0.4, -0.6, 1);
+  scene.add(sun);
+
   let origin = new MercatorCoordinate(0, 0, 0);
   let meters = 1;
-  const placed = new Map<string, THREE.Object3D>();
-  const decalGeo = new THREE.PlaneGeometry(DECAL_W, DECAL_H);
-  const roadGeo = new THREE.PlaneGeometry(ROAD_W, ROAD_H);
-  /** Material opacity at full strength (before the distance fade). */
-  const baseOpacity = new WeakMap<THREE.Material, number>();
-  /** Blade materials whose text texture this layer made (and must dispose). */
-  const ownMaps = new WeakSet<THREE.Material>();
-
-  const build = (s: Sign): THREE.Object3D => {
-    const root = model!.clone();
-    root.scale.setScalar(SCALE);
-    // Own materials per sign so each can fade with its distance from the eye.
-    const mats: THREE.Material[] = [];
-    root.traverse((c) => {
-      if (!(c instanceof THREE.Mesh)) return;
-      c.material = (c.material as THREE.Material).clone();
-      mats.push(c.material as THREE.Material);
-    });
-    BLADES.forEach((blade, i) => {
-      const mat = new THREE.MeshStandardMaterial({ map: bladeTexture(i === 0 ? s.a : s.b), roughness: 0.6 });
-      ownMaps.add(mat);
-      mats.push(mat);
-      for (const side of [1, -1]) {
-        const m = new THREE.Mesh(decalGeo, mat);
-        m.position.y = blade.y;
-        if (blade.axis === "x") {
-          m.position.z = side * (blade.half + 0.004);
-          m.rotation.y = side > 0 ? 0 : Math.PI;
-        } else {
-          m.position.x = side * (blade.half + 0.004);
-          m.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
-        }
-        root.add(m);
-      }
-    });
-    // Scene x = east, z = south (metres). Lower blade (model X) along street A.
-    const wrap = new THREE.Group();
-    wrap.add(root);
-    root.rotation.y = ((90 - s.ba) * Math.PI) / 180;
-    const ua = [Math.sin((s.ba * Math.PI) / 180), -Math.cos((s.ba * Math.PI) / 180)];
-    const ub = [Math.sin((s.bb * Math.PI) / 180), -Math.cos((s.bb * Math.PI) / 180)];
-    const bis = [ua[0] + ub[0], ua[1] + ub[1]];
-    const len = Math.hypot(bis[0], bis[1]) || 1;
-    const off = [(bis[0] / len) * CORNER_M, (bis[1] / len) * CORNER_M];
-    wrap.userData = { lng: s.lng, lat: s.lat, off };
-    // Names on the road, on each approach to the crossing, facing the walker coming up to it.
-    for (const [name, u] of [[s.a, ua], [s.b, ub]] as const) {
-      const mat = new THREE.MeshBasicMaterial({ map: roadTexture(name), transparent: true, depthWrite: false });
-      ownMaps.add(mat);
-      baseOpacity.set(mat, ROAD_OPACITY);
-      mats.push(mat);
-      for (const side of [1, -1]) {
-        const d = [-side * u[0], -side * u[1]]; // the walker's view direction
-        const m = new THREE.Mesh(roadGeo, mat);
-        m.rotation.order = "YXZ";
-        m.rotation.set(-Math.PI / 2, Math.atan2(-d[0], -d[1]), 0);
-        m.position.set(-off[0] + side * u[0] * ROAD_BACK_M, 0.05, -off[1] + side * u[1] * ROAD_BACK_M);
-        wrap.add(m);
-      }
-    }
-    for (const m of mats) m.transparent = true;
-    wrap.userData.mats = mats;
-    return wrap;
-  };
-
-  const place = (o: THREE.Object3D) => {
-    const { lng, lat, off, mats } = o.userData as { lng: number; lat: number; off: number[]; mats: THREE.Material[] };
-    const mc = MercatorCoordinate.fromLngLat([lng, lat], 0);
-    o.position.set((mc.x - origin.x) / meters + off[0], 0, (mc.y - origin.y) / meters + off[1]);
-    // The scene origin is the map centre (the walker's eye), so this is the distance to it.
-    const fade = distanceFade(Math.hypot(o.position.x, o.position.z));
-    o.visible = fade > 0.02;
-    for (const m of mats) m.opacity = (baseOpacity.get(m) ?? 1) * fade;
-  };
+  let shown = "";
+  let lastEye = { lng: 0, lat: 0 };
+  let lastCheck = 0;
+  let dirty = true;
 
   const refresh = () => {
-    if (!model || map.getZoom() < SIGNS_MIN_ZOOM) return;
-    origin = MercatorCoordinate.fromLngLat(map.getCenter(), 0);
+    if (map.getZoom() < SIGNS_MIN_ZOOM) {
+      if (poles.count) {
+        for (const m of [poles, blades, faces, roads]) m.count = 0;
+        shown = "";
+        map.triggerRepaint();
+      }
+      return;
+    }
+    const eye = eyeLngLat(map);
+    const want = nearbySigns(map, eye);
+    const key = want.map((s) => s.key).join("|");
+    if (key === shown && !dirty) return;
+    shown = key;
+    dirty = false;
+    lastEye = eye;
+    origin = MercatorCoordinate.fromLngLat(eye, 0);
     meters = origin.meterInMercatorCoordinateUnits();
-    const want = nearbySigns(map);
-    const keep = new Set(want.map((s) => s.key));
-    for (const [key, o] of placed) {
-      if (keep.has(key)) continue;
-      group.remove(o);
-      for (const mat of (o.userData as { mats: THREE.MeshStandardMaterial[] }).mats) {
-        // Cloned model materials share the GLB's textures; only blade text maps are ours.
-        if (ownMaps.has(mat)) mat.map?.dispose();
-        mat.dispose();
-      }
-      placed.delete(key);
-    }
-    for (const s of want) {
-      if (!placed.has(s.key)) {
-        const o = build(s);
-        placed.set(s.key, o);
-        group.add(o);
-      }
-    }
-    for (const o of placed.values()) place(o);
+    g.clearRect(0, 0, ATLAS, ATLAS);
+    rg.clearRect(0, 0, ATLAS / 2, ATLAS / 2);
+    const m = new THREE.Matrix4();
+    const Z = new THREE.Vector3(0, 0, 1);
+    let nb = 0;
+    let nf = 0;
+    let nr = 0;
+    want.forEach((s, i) => {
+      const slots = [2 * i, 2 * i + 1];
+      drawBlade(g, slots[0], s.a);
+      drawBlade(g, slots[1], s.b);
+      drawRoad(rg, slots[0], s.a);
+      drawRoad(rg, slots[1], s.b);
+      const [cx, cy] = toLocal(s.lng, s.lat, eye);
+      const [ox, oy] = cornerOffset(s.ba, s.bb);
+      const pole = new THREE.Vector3(cx + ox, cy + oy, 0);
+      m.makeTranslation(pole.x, pole.y, 0);
+      poles.setMatrixAt(i, m);
+      [s.ba, s.bb].forEach((brg, k) => {
+        const [ux, uy] = dirOf(brg);
+        const u = new THREE.Vector3(ux, uy, 0); // along the street: the blade runs parallel to it
+        const n = new THREE.Vector3(uy, -ux, 0); // blade face normal
+        const z = BLADE_Z[k];
+        m.makeBasis(u.clone().multiplyScalar(BLADE_W), n.clone().multiplyScalar(BLADE_T), Z.clone().multiplyScalar(BLADE_H)).setPosition(pole.x, pole.y, z);
+        blades.setMatrixAt(nb++, m);
+        const slot = slots[k];
+        for (const side of [1, -1]) {
+          const nn = n.clone().multiplyScalar(side);
+          const right = new THREE.Vector3().crossVectors(Z, nn); // reads left-to-right from that side
+          m.makeBasis(right.multiplyScalar(BLADE_W * 0.98), Z.clone().multiplyScalar(BLADE_H * 0.96), nn)
+            .setPosition(pole.x + nn.x * (BLADE_T / 2 + 0.004), pole.y + nn.y * (BLADE_T / 2 + 0.004), z);
+          faces.setMatrixAt(nf, m);
+          faceSlot.setXY(nf++, slot % COLS, Math.floor(slot / COLS));
+          // Name painted on the asphalt on each approach, reading toward the crossing.
+          const look = new THREE.Vector3(-side * ux, -side * uy, 0);
+          const r = new THREE.Vector3(look.y, -look.x, 0);
+          m.makeBasis(r.multiplyScalar(ROAD_W), look.multiplyScalar(ROAD_H), Z)
+            .setPosition(cx + side * ux * ROAD_BACK_M, cy + side * uy * ROAD_BACK_M, 0.05);
+          roads.setMatrixAt(nr, m);
+          roadSlot.setXY(nr++, slot % COLS, Math.floor(slot / COLS));
+        }
+      });
+    });
+    poles.count = want.length;
+    blades.count = nb;
+    faces.count = nf;
+    roads.count = nr;
+    for (const x of [poles, blades, faces, roads]) x.instanceMatrix.needsUpdate = true;
+    faceSlot.needsUpdate = true;
+    roadSlot.needsUpdate = true;
+    atlas.needsUpdate = true;
+    roadAtlas.needsUpdate = true;
     map.triggerRepaint();
+  };
+  const onData = (e: { sourceId?: string; isSourceLoaded?: boolean }) => {
+    if (e.sourceId === "openmaptiles" && e.isSourceLoaded) {
+      dirty = true;
+      refresh();
+    }
   };
 
   return {
@@ -882,33 +930,37 @@ export function createStreetSignsLayer(): CustomLayerInterface {
     onAdd(m, gl) {
       map = m;
       renderer = sharedRenderer(m, gl);
-      scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a8a, 1.1));
-      const sun = new THREE.DirectionalLight(0xffffff, 0.9);
-      sun.position.set(0.4, 1, 0.6);
-      scene.add(sun, group);
-      new GLTFLoader().load("/models/street-name-sign.glb", (gltf) => {
-        model = gltf.scene;
-        refresh();
-      });
       m.on("moveend", refresh);
-      m.on("sourcedata", (e) => {
-        if (e.sourceId === "city3d" && e.isSourceLoaded) refresh();
-      });
+      m.on("sourcedata", onData);
+      refresh();
     },
     onRemove(m) {
       m.off("moveend", refresh);
+      m.off("sourcedata", onData);
+      for (const x of [poles, blades, faces, roads]) {
+        x.geometry.dispose();
+        (x.material as THREE.Material).dispose();
+      }
+      atlas.dispose();
+      roadAtlas.dispose();
     },
     render(_gl, args: CustomRenderMethodInput) {
-      if (!model || map.getZoom() < SIGNS_MIN_ZOOM || placed.size === 0) return;
+      // Walking moves the eye every frame without a moveend; re-pick every
+      // ~0.4 s once it has gone 15 m, so the corner you stand at is always built.
+      const now = performance.now();
+      if (now - lastCheck > 400) {
+        lastCheck = now;
+        const e = eyeLngLat(map);
+        const [dx, dy] = toLocal(e.lng, e.lat, lastEye);
+        if (Math.hypot(dx, dy) > 15) {
+          dirty = true;
+          refresh();
+        }
+      }
+      if (map.getZoom() < SIGNS_MIN_ZOOM || !poles.count) return;
       const s = meters;
-      // Scene is right-handed y-up metres (x = east, z = south); mercator is z-up with +y south.
-      const toMerc = new THREE.Matrix4()
-        .makeTranslation(origin.x, origin.y, origin.z)
-        .scale(new THREE.Vector3(s, s, s))
-        .multiply(new THREE.Matrix4().set(1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1));
-      camera.projectionMatrix = new THREE.Matrix4()
-        .fromArray(args.defaultProjectionData.mainMatrix as unknown as number[])
-        .multiply(toMerc);
+      const l = new THREE.Matrix4().makeTranslation(origin.x, origin.y, origin.z ?? 0).scale(new THREE.Vector3(s, -s, s));
+      camera.projectionMatrix = new THREE.Matrix4().fromArray(args.defaultProjectionData.mainMatrix as unknown as number[]).multiply(l);
       renderer.resetState();
       renderer.render(scene, camera);
     },
