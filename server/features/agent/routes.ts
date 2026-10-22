@@ -6,7 +6,7 @@
  */
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { stepCountIs, streamText, type LanguageModel } from "ai";
-import { requestBody, type StreamEvent } from "../../../src/features/agent/schema";
+import { requestBody, type AskContext, type StreamEvent } from "../../../src/features/agent/schema";
 import { resolveFlags } from "../../../src/lib/flags/registry";
 import { makeTools, type ToolContext } from "./tools";
 import { toNyLocal } from "./trip";
@@ -20,8 +20,20 @@ export const DEFAULT_MODEL = "deepseek/deepseek-v4.1-flash";
  * at the right corner. It is used for this request only: the server never
  * logs it, writes it to Octo or R2, or keeps it after the response ends.
  */
-export function systemPrompt(nowLocal: string, location: { lon: number; lat: number } | null, mode: "walk" | "transit" | "drive" = "transit"): string {
+export function contextLine(c: AskContext | undefined): string | null {
+  if (!c) return null;
+  const parts = [`The user is in street view at longitude ${c.lon}, latitude ${c.lat}`];
+  if (c.heading !== null) parts.push(`facing ${c.heading} degrees`);
+  if (c.nearestStation) parts.push(`nearest station ${c.nearestStation}`);
+  if (c.nearestEntrance) parts.push(`nearest entrance ${c.nearestEntrance}`);
+  if (c.followedTrain) parts.push(`following train ${c.followedTrain}`);
+  return `${parts.join("; ")}. Treat "here" as that spot unless they say otherwise.`;
+}
+
+export function systemPrompt(nowLocal: string, location: { lon: number; lat: number } | null, mode: "walk" | "transit" | "drive" = "transit", context?: AskContext): string {
+  const street = contextLine(context);
   return [
+    ...(street ? [street] : []),
     "You are the NYC Map's trip assistant. Answers are spoken aloud: 2-4 short sentences, no markdown, no lists.",
     `Now is ${nowLocal} in New York. Resolve relative times ("tomorrow at 9am") to local New York time YYYY-MM-DDTHH:MM.`,
     location
@@ -43,7 +55,9 @@ function defaultModel(): LanguageModel {
 export async function POST(request: Request, opts: { model?: LanguageModel; deps?: ToolContext["deps"] } = {}): Promise<Response> {
   const parsed = requestBody.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "bad_request" }, { status: 400 });
-  const { messages, location, now, mode } = parsed.data;
+  const { messages, now, mode, context } = parsed.data;
+  // Street view's spot counts as the shared location for "here".
+  const location = parsed.data.location ?? (context ? { lon: context.lon, lat: context.lat } : null);
   const enc = new TextEncoder();
   const modelId = process.env.INFERHUB_MODEL ?? DEFAULT_MODEL;
 
@@ -54,7 +68,7 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
         const model = opts.model ?? defaultModel();
         const result = streamText({
           model,
-          system: systemPrompt(toNyLocal(now ? new Date(now) : new Date()), location, mode),
+          system: systemPrompt(toNyLocal(now ? new Date(now) : new Date()), location, mode, context),
           messages,
           tools: makeTools({ location, emit: (command) => send({ type: "command", command }), deps: opts.deps, drive: resolveFlags({ env: process.env.VITE_FLAGS, advancedMode: false }).agentDrive }),
           stopWhen: stepCountIs(8),

@@ -62,6 +62,17 @@ export const AGENT_ROUTE = createRoute({
               location: z.object({ lon: z.number(), lat: z.number() }).nullable().optional(),
               mode: z.enum(["walk", "transit", "drive"]).optional(),
               now: z.string().optional(),
+              context: z
+                .object({
+                  source: z.literal("street-view"),
+                  lon: z.number(),
+                  lat: z.number(),
+                  heading: z.number().nullable().optional(),
+                  nearestStation: z.string().nullable().optional(),
+                  nearestEntrance: z.string().nullable().optional(),
+                  followedTrain: z.string().nullable().optional(),
+                })
+                .optional(),
             })
             .openapi("AgentRequest"),
         },

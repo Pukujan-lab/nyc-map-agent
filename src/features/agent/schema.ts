@@ -119,6 +119,18 @@ export const streamEvent = z.discriminatedUnion("type", [
 ]);
 export type StreamEvent = z.infer<typeof streamEvent>;
 
+/** Where the question was asked from (street view). Used for this request only; never stored. */
+export const askContext = z.object({
+  source: z.literal("street-view"),
+  lon: z.number().min(-180).max(180),
+  lat: z.number().min(-90).max(90),
+  heading: z.number().min(0).max(360).nullable().default(null),
+  nearestStation: z.string().max(200).nullable().default(null),
+  nearestEntrance: z.string().max(200).nullable().default(null),
+  followedTrain: z.string().max(100).nullable().default(null),
+});
+export type AskContext = z.infer<typeof askContext>;
+
 export const requestBody = z.object({
   messages: z
     .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().max(4000) }))
@@ -130,5 +142,6 @@ export const requestBody = z.object({
   mode: tripMode.default("transit"),
   /** Client clock, so "tomorrow 9am" resolves in the user's zone. */
   now: z.string().optional(),
+  context: askContext.optional(),
 });
 export type AgentRequest = z.infer<typeof requestBody>;

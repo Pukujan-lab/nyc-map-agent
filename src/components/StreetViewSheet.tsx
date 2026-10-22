@@ -11,6 +11,7 @@ import {
   ChevronRight,
   ImageOff,
   KeyRound,
+  MessageCircleQuestion,
   Play,
   Square,
   TriangleAlert,
@@ -37,6 +38,8 @@ import { formatCount, formatDate } from "@/lib/format";
 import type { BlockDatum } from "@/lib/layers";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { cn } from "@/lib/utils";
+import { buildStreetContext, closeAsk, openAsk } from "@/lib/agent/streetContext";
+import { useFollowed } from "@/lib/transit/follow";
 
 interface StreetViewSheetProps {
   /** The block whose surroundings we photograph. */
@@ -246,7 +249,22 @@ export function StreetViewSheet({
     };
   }, [driving, step]);
 
-  const close = () => setStreetViewOpen(false);
+  const followed = useFollowed();
+  const close = () => { closeAsk(); setStreetViewOpen(false); };
+  const askHere = async () => {
+    const viewer = viewerRef.current;
+    let lon: number | null = image?.lon ?? null;
+    let lat: number | null = image?.lat ?? null;
+    let heading: number | null = null;
+    if (viewer) {
+      try {
+        const [pos, bearing] = await Promise.all([viewer.getPosition(), viewer.getBearing()]);
+        lon = pos.lng; lat = pos.lat; heading = bearing;
+      } catch { /* viewer still loading: fall back to the photo spot */ }
+    }
+    if (lon === null || lat === null) return;
+    openAsk(buildStreetContext({ lon, lat, heading, followedTrain: followed }));
+  };
 
   const footerNote = atSequenceEnd
     ? "End of this sequence — try another block"
@@ -259,7 +277,7 @@ export function StreetViewSheet({
   const body = (
     <>
       <div className="flex items-start justify-between gap-2 border-b border-border/60 p-4 pb-3 pr-10">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold">
             Street view · {ntaName ?? "this block"}
           </div>
@@ -273,10 +291,15 @@ export function StreetViewSheet({
             </div>
           ) : null}
         </div>
+        <Button type="button" size="sm" variant="secondary" aria-label="Ask about this spot" className="h-8 shrink-0 gap-1.5 rounded-full px-3 text-xs" onClick={() => void askHere()}>
+          <MessageCircleQuestion className="h-3.5 w-3.5" /> Ask
+        </Button>
       </div>
 
       <div className="relative min-h-0 flex-1 overflow-hidden bg-black">
         <div ref={containerRef} className="absolute inset-0" />
+        {/* The compact Ask sheet portals here so it stays usable inside this dialog. */}
+        <div id="ask-street-slot" className="pointer-events-none absolute inset-0 z-30 [&>*]:pointer-events-auto" />
 
         {!hasMapillaryToken ? (
           <Notice icon={<KeyRound className="h-4 w-4" />} title="No Mapillary token">
