@@ -115,10 +115,12 @@ export function MapPanel({
     minimized, minimize, restore, modeActive,
   } = usePanel();
 
-  // Follow / Navigate own the top HUD: on phone the sheet drops to peek.
+  // Follow / Navigate keep a tall sheet from covering the train. The vehicle
+  // sheet is that train's stops and delays, so it stays open at the snap it
+  // was given.
   useEffect(() => {
-    if (modeActive && !isDesktop) setSnap("peek");
-  }, [modeActive, isDesktop, setSnap]);
+    if (modeActive && !isDesktop && !content?.id.startsWith("transit:vehicle:")) setSnap("peek");
+  }, [modeActive, isDesktop, setSnap, content?.id]);
 
   // A map pick replaces pushed content; it never stacks on it.
   useEffect(() => {

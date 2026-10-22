@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { arrivalsAt, directionLabel, estimateTrain, minutesUntil, stationOf, type LiveSystem, type StaticSystem, type SystemId, type Vehicle } from "./model";
 import { useAlerts, useBusRoute, useBusTrip, useBuses, useNow, useStarred, useTransitData, type Outage } from "./hooks";
 import { setFollowed, stopFollowing, useFollowed } from "./follow";
+import { usePanel, type PanelContent } from "@/lib/store/PanelContext";
 import { useSharedLocation } from "@/lib/geo/sharedLocation";
 import { getXray, setXray, useXray } from "./xray";
 import { AlertRow } from "./AlertCard";
@@ -228,10 +229,21 @@ export function VehicleDetails({ vehicleKey }: { vehicleKey: string }) {
       <Button size="sm" variant={following ? "default" : "outline"} aria-pressed={following} disabled={!v}
         onClick={() => (following ? stopFollowing() : setFollowed(vehicleKey))}>
         <Crosshair className="mr-1.5 h-4 w-4" />
-        {following ? "Following · drag or Esc to stop" : "Follow"}
+        {following ? "Stop following" : "Follow"}
       </Button>
     </div>
   );
+}
+
+/** The vehicle sheet: stops, delays and alerts for one train or bus. */
+export function vehiclePanel(key: string, system: string, route: string): PanelContent {
+  const title = system === "bus" ? (route ? `${route} bus` : "Bus") : (route ? `${route} train` : "Train");
+  return {
+    id: `transit:vehicle:${key}`,
+    title,
+    subtitle: "Stops, delays and alerts",
+    details: <VehicleDetails vehicleKey={key} />,
+  };
 }
 
 /** One elevator / escalator outage: what is out, why, when it is back, and step-free status. */
@@ -251,22 +263,27 @@ export function OutageRow({ o }: { o: Outage }) {
 }
 
 /**
- * Follow mode's slim card (top centre, never blocks the view): route, next
- * stop, ETA and any delay. The camera switcher and "Stop following" live in
- * the view switcher at the bottom.
+ * Follow mode's slim card (top centre): route, next stop, ETA and any delay.
+ * The stop and delay open this vehicle's sheet. Stop following lets go and
+ * eases the camera back; the same action sits with the train controls.
  */
 export function FollowCard({ vehicle }: { vehicle: Vehicle }) {
   const now = useNow();
+  const { showPanel, setSnap } = usePanel();
   const sys = vehicle.system === "bus" ? [] : [vehicle.system];
   const data = useTransitData(sys);
   const alerts = useAlerts(true);
   const delay = (alerts.data?.alerts ?? []).find((a) => a.routes.includes(vehicle.route) && a.kind !== "planned");
   const next = vehicle.stopped?.kind === "at" ? vehicle.stopped.stop : vehicle.nextStop;
+  const open = () => {
+    showPanel(vehiclePanel(vehicle.key, vehicle.system, vehicle.route));
+    setSnap("half");
+  };
   return (
-    <div data-testid="follow-card" className="pointer-events-none absolute left-1/2 top-16 z-30 w-[min(92vw,420px)] -translate-x-1/2 lg:top-3">
-      <div className="pointer-events-auto flex items-center gap-[var(--sp-2)] rounded-xl border border-border bg-card/95 px-[var(--sp-3)] py-1.5 text-[12px] shadow-lg backdrop-blur-md">
+    <div data-testid="follow-card" className="pointer-events-none absolute left-1/2 top-16 z-30 w-[min(92vw,480px)] -translate-x-1/2 lg:top-3">
+      <div className="pointer-events-auto flex flex-wrap items-center gap-[var(--sp-2)] rounded-xl border border-border bg-card/95 px-[var(--sp-3)] py-1.5 text-[12px] shadow-lg backdrop-blur-md">
         <RouteBullet system={vehicle.system} route={vehicle.route} data={data} />
-        <div className="min-w-0 flex-1">
+        <button type="button" onClick={open} className="min-w-[8rem] flex-1 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <div className="truncate font-semibold">
             {vehicle.stopped?.kind === "at" ? "At " : "Next "}
             {next ? stopName(data, vehicle.system, next) : "—"}
@@ -275,8 +292,12 @@ export function FollowCard({ vehicle }: { vehicle: Vehicle }) {
           <div className="truncate text-[11px] text-muted-foreground">
             {delay ? <><span className="font-semibold text-foreground">{delay.reroute ? "Detour" : "Delay"}:</span> {delay.text}</> : "No delays reported"}
           </div>
-        </div>
+          <div className="text-[11px] font-semibold">Stops & alerts</div>
+        </button>
         <span className="shrink-0 text-[11px] font-medium text-muted-foreground">{vehicle.grade === "underground" ? "Underground" : vehicle.grade === "elevated" ? "Elevated" : "At grade"}</span>
+        <button type="button" onClick={() => stopFollowing()} className="h-8 rounded-full border border-border bg-card px-[var(--sp-3)] text-[12px] font-semibold text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          Stop following
+        </button>
       </div>
     </div>
   );

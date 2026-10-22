@@ -2,7 +2,7 @@ import { formatStreetText } from "@/lib/streetName";
 import { liveProgress } from "./monotonic";
 import { BusEstimator } from "./busEstimate";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal, flushSync } from "react-dom";
+import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { Layer, Source, useMap } from "react-map-gl/maplibre";
 import { LngLat, type Map as MaplibreMap, type MapLayerMouseEvent } from "maplibre-gl";
@@ -24,15 +24,16 @@ import { useXray, xrayPrims } from "./xray";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { useFlag } from "@/lib/flags";
 import { usePanel, usePanelChip, usePanelMode, usePanelSearch, type SearchProvider } from "@/lib/store/PanelContext";
-import { followRig, rememberFollowOrigin, setFollowMode, setFollowed, takeFollowRestore, useFollowMode, useFollowed } from "./follow";
+import { followRig, followedTrain, rememberFollowOrigin, setFollowMode, setFollowed, stopFollowing, takeFollowRestore, useFollowMode, useFollowed } from "./follow";
 import { publishSubway } from "@/lib/agent/streetContext";
 import { publishLiveDots } from "@/lib/transit/liveVehicles";
+import { setLinesControl } from "@/lib/transit/linesControl";
 import { setStreetXray, useStreetXray } from "@/lib/transit/streetXray";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 
 const stopFollow = () => setFollowed(null);
 import { SYSTEM_LABELS, cellKey } from "./model";
-import { FollowCard, StationDetails } from "./TransitCard";
+import { FollowCard, StationDetails, vehiclePanel } from "./TransitCard";
 import { TransitStatusDetails } from "./TransitStatus";
 import { alertGeometry, setAlertFocus, stationChanges, useAlertFocus } from "./alertFocus";
 import { LinesDrawer } from "./LinesDrawer";
@@ -139,7 +140,7 @@ export default function TransitLayer() {
     if (import.meta.env.DEV) (window as unknown as { __walk?: unknown }).__walk = startWalk;
   }, [startWalk]);
   const { on, set, panelOpen, setPanelOpen } = useTransitToggles();
-  const { content, showPanel, setDrawerOpen } = usePanel();
+  const { content, showPanel, setDrawerOpen, setSnap } = usePanel();
   const meta = useTransitMeta();
   const rail = (["subway", "lirr", "mnr"] as SystemId[]).filter((s) => on.has(s));
   const busOn = on.has("bus") && meta.data?.bus === true;
@@ -321,6 +322,11 @@ export default function TransitLayer() {
     else if (shownAlert.current === want) setAlertFocus(null);
   }, [content?.id, alertFocus]);
   const openLines = useCallback(() => showPanel({ id: "transit:lines", title: "Lines", subtitle: "Tap lines to show only those", details: <LinesDrawer /> }), [showPanel]);
+  const linesOn = enabled && (rail.length > 0 || busOn);
+  useEffect(() => {
+    setLinesControl(linesOn ? { count: opts.routes.length, open: openLines } : null);
+  }, [linesOn, openLines, opts.routes.length]);
+  useEffect(() => () => setLinesControl(null), []);
 
   const searchStations = useCallback<SearchProvider>(
     (q) => {
@@ -611,7 +617,8 @@ export default function TransitLayer() {
   }, [map, following]);
   usePanelMode("follow", following ? stopFollow : null);
 
-  // Clicks on transit features: a vehicle starts Follow straight away (no popup).
+  // A vehicle press follows it and opens its stops and delays. Pressing the
+  // one already followed lets go and eases the camera back.
   useEffect(() => {
     if (!map) return;
     const onClick = (e: MapLayerMouseEvent) => {
@@ -619,9 +626,16 @@ export default function TransitLayer() {
       const f = layers.length ? map.queryRenderedFeatures(e.point, { layers })[0] : undefined;
       if (!f?.properties) return;
       if (f.layer.id.startsWith("transit-vehicle") || f.layer.id === "transit-bullet" || f.layer.id.startsWith("transit-bus-badge")) {
+        const key = String(f.properties.key);
+        if (followedTrain() === key) {
+          stopFollowing();
+          return;
+        }
         setDrawerOpen(false);
         setFollowMode("chase");
-        setFollowed(String(f.properties.key));
+        setFollowed(key);
+        showPanel(vehiclePanel(key, String(f.properties.system ?? ""), String(f.properties.route ?? "")));
+        setSnap("half");
         return;
       }
       // Entrances carry the station's GTFS id, so they open the same card.
@@ -631,7 +645,7 @@ export default function TransitLayer() {
     };
     map.on("click", onClick);
     return () => { map.off("click", onClick); };
-  }, [map, openStation, setDrawerOpen]);
+  }, [map, openStation, setDrawerOpen, showPanel, setSnap]);
 
   // Notices for alerts touching starred lines or stations (in-app + optional browser).
   const notified = useRef(new Set<string>());
@@ -657,15 +671,9 @@ export default function TransitLayer() {
   const dimLines = (alertFocus ? 0.12 : lineAlpha);
   // Isolated lines: their stations stay, the rest fade.
   const stationAlpha = (opts.routes.length ? ["case", ["any", ...opts.routes.map((r) => ["in", ` ${r} `, ["concat", " ", ["get", "routes"], " "]])], 1, 0.15] : 1) as number;
-  const linesButton = typeof document !== "undefined" ? createPortal(
-    <button type="button" onClick={openLines} data-testid="lines-button"
-      className="fixed right-3 top-1/2 z-30 h-9 -translate-y-1/2 rounded-full border border-border bg-card px-4 text-[13px] font-semibold text-foreground shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-      Lines{opts.routes.length ? ` · ${opts.routes.length}` : ""}
-    </button>, document.body) : null;
   return (
     <>
       {followed ? <FollowCard vehicle={followed} /> : null}
-      {linesButton}
       <Source id="transit-lines" type="geojson" data={lines}>
         {/* X-ray: tunnels read as solid, glowing runs; otherwise a faint dashed hint. */}
         <Layer id="transit-line-under" type="line" filter={["==", ["get", "grade"], "underground"]}
