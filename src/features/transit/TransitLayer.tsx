@@ -1,3 +1,4 @@
+import { liveProgress } from "./monotonic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
@@ -247,7 +248,7 @@ export default function TransitLayer() {
         const st = data[s]?.stat, lv = data[s]?.live;
         if (!st || !lv) continue;
         for (const trip of lv.trips) {
-          const est = estimateTrain(st, trip, now);
+          const est = estimateTrain(st, trip, now, liveProgress);
           const v = est && s !== "subway" ? { ...est, grade: "grade" as const } : est;
           if (v && (inView(v) || v.key === selectedKey)) out.push(v);
         }
