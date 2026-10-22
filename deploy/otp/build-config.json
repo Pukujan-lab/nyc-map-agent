@@ -1,0 +1,70 @@
+{
+  "transitServiceStart": "-P3D",
+  "transitServiceEnd": "P30D",
+  "osmDefaults": {
+    "timeZone": "America/New_York",
+    "osmTagMapping": "default"
+  },
+  "osm": [
+    {
+      "source": "nyc.osm.pbf"
+    }
+  ],
+  "transitFeeds": [
+    {
+      "type": "gtfs",
+      "feedId": "SUBWAY",
+      "source": "gtfs_subway.zip"
+    },
+    {
+      "type": "gtfs",
+      "feedId": "BX",
+      "source": "gtfs_bx.zip"
+    },
+    {
+      "type": "gtfs",
+      "feedId": "B",
+      "source": "gtfs_b.zip"
+    },
+    {
+      "type": "gtfs",
+      "feedId": "M",
+      "source": "gtfs_m.zip"
+    },
+    {
+      "type": "gtfs",
+      "feedId": "Q",
+      "source": "gtfs_q.zip"
+    },
+    {
+      "type": "gtfs",
+      "feedId": "SI",
+      "source": "gtfs_si.zip"
+    },
+    {
+      "type": "gtfs",
+      "feedId": "BUSCO",
+      "source": "gtfs_busco.zip"
+    },
+    {
+      "type": "gtfs",
+      "feedId": "LIRR",
+      "source": "gtfslirr.zip"
+    },
+    {
+      "type": "gtfs",
+      "feedId": "MNR",
+      "source": "gtfsmnr.zip"
+    },
+    {
+      "type": "gtfs",
+      "feedId": "FERRY",
+      "source": "gtfs_ferry.zip"
+    },
+    {
+      "type": "gtfs",
+      "feedId": "SIFERRY",
+      "source": "gtfs_siferry.zip"
+    }
+  ]
+}

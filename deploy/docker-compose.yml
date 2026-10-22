@@ -24,12 +24,34 @@ services:
         required: false
     environment:
       PORT: "8080"
+      OTP_URL: http://nyc-map-otp:8080
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 20s
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # OpenTripPlanner 2: multimodal trip search for Ask (docs/OTP.md). Internal
+  # network only, no published port. The graph is built weekly on the host by
+  # deploy/otp/build-graph.sh into /srv/nyc-map-agent/otp/graph. CD never
+  # recreates it (the pipeline only swaps `web`).
+  otp:
+    container_name: nyc-map-otp
+    image: ${OTP_IMAGE:-opentripplanner/opentripplanner:2.10.0}
+    command: ["--load", "--serve"]
+    restart: unless-stopped
+    env_file:
+      - path: ${CD_HOST_ENV_FILE:-/work/.env}
+        required: false
+    environment:
+      JAVA_TOOL_OPTIONS: -Xmx7g -XX:+UseG1GC
+    mem_limit: 9g
+    volumes:
+      - ${OTP_GRAPH_DIR:-/srv/nyc-map-agent/otp/graph}:/var/opentripplanner
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
