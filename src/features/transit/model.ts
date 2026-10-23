@@ -296,6 +296,86 @@ export function raisedTrack(sys: StaticSystem): {
 /** ~45 m grid cell key. */
 export const cellKey = (p: GeoJSON.Position) => `${Math.round(p[0] * 2400)},${Math.round(p[1] * 2400)}`;
 
+const LINE_MERGE_M = 45;
+const LINE_CELL = 0.001; // ~80–110 m grid for the segment index
+
+function cellKeyLine(p: GeoJSON.Position): string {
+  return `${Math.floor(p[0] / LINE_CELL)},${Math.floor(p[1] / LINE_CELL)}`;
+}
+
+/** Segments of lines already drawn, so a later branch can drop the shared trunk. */
+function coverIndex(): { add: (line: GeoJSON.Position[]) => void; has: (p: [number, number]) => boolean } {
+  const cells = new Map<string, Array<[[number, number], [number, number]]>>();
+  const add = (line: GeoJSON.Position[]) => {
+    for (let i = 1; i < line.length; i++) {
+      const a = line[i - 1] as [number, number], b = line[i] as [number, number];
+      const steps = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / LINE_CELL));
+      for (let s = 0; s <= steps; s++) {
+        const key = cellKeyLine([a[0] + ((b[0] - a[0]) * s) / steps, a[1] + ((b[1] - a[1]) * s) / steps]);
+        const list = cells.get(key);
+        const seg: [[number, number], [number, number]] = [a, b];
+        if (list) { if (!list.includes(seg)) list.push(seg); }
+        else cells.set(key, [seg]);
+      }
+    }
+  };
+  const has = (p: [number, number]) => {
+    const cx = Math.floor(p[0] / LINE_CELL), cy = Math.floor(p[1] / LINE_CELL);
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+      const list = cells.get(`${cx + dx},${cy + dy}`);
+      if (!list) continue;
+      for (const [a, b] of list) if (metresToSegment(p, a, b) < LINE_MERGE_M) return true;
+    }
+    return false;
+  };
+  return { add, has };
+}
+
+/**
+ * One drawing of each track. GTFS stores a shape per branch, so a shared trunk
+ * is painted once per branch. The elevated stroke is already opaque and looks
+ * the same stacked; the translucent underground dash stacks into a solid
+ * stretch in some places and a broken dash in others, which is the seam
+ * between elevated runs. Same color and grade within 45 m is one line (the
+ * shape resample is 40 m, and the two directions disagree by about that at a
+ * portal). Where a later shape leaves the trunk, only the branch is kept.
+ */
+export function dedupeTrackLines<T extends GeoJSON.Feature<GeoJSON.LineString>>(features: T[]): T[] {
+  const groups = new Map<string, T[]>();
+  for (const f of features) {
+    const p = f.properties as { color?: string; grade?: string } | null;
+    const key = `${p?.color ?? ""}|${p?.grade ?? ""}`;
+    const list = groups.get(key);
+    if (list) list.push(f);
+    else groups.set(key, [f]);
+  }
+  const out: T[] = [];
+  for (const group of groups.values()) {
+    const index = coverIndex();
+    const ordered = group.slice().sort((a, b) => b.geometry.coordinates.length - a.geometry.coordinates.length);
+    for (const f of ordered) {
+      const coords = f.geometry.coordinates;
+      if (coords.length < 2) continue;
+      const covered = coords.map((pt) => index.has(pt as [number, number]));
+      let start = -1;
+      const emit = (to: number) => {
+        const seg = coords.slice(start, to);
+        if (seg.length > 1) {
+          out.push({ ...f, geometry: { type: "LineString", coordinates: seg } });
+          index.add(seg);
+        }
+        start = -1;
+      };
+      for (let i = 0; i < coords.length; i++) {
+        if (!covered[i]) { if (start < 0) start = Math.max(0, i - 1); }
+        else if (start >= 0) emit(i + 1);
+      }
+      if (start >= 0) emit(coords.length);
+    }
+  }
+  return out;
+}
+
 /** Split subway ground lines into runs, marking runs under raised track `raised` so 3D hides them and 2D draws them solid. */
 export function splitRaised(lines: GeoJSON.Feature<GeoJSON.LineString>[], raised: Set<string>): GeoJSON.Feature<GeoJSON.LineString>[] {
   const out: GeoJSON.Feature<GeoJSON.LineString>[] = [];
