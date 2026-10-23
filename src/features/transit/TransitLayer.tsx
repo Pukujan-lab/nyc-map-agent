@@ -1,6 +1,7 @@
 import { formatStreetText } from "@/lib/streetName";
 import { liveProgress } from "./monotonic";
 import { BusEstimator } from "./busEstimate";
+import { labelledStationIds } from "./stationLabels";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
@@ -255,16 +256,20 @@ export default function TransitLayer() {
       return s.system === "subway" ? splitRaised(fs, raised.raisedCells) : fs;
     }),
   }), [staticKey, raised]); // eslint-disable-line react-hooks/exhaustive-deps
-  const stations = useMemo<GeoJSON.FeatureCollection>(() => ({
+  const stations = useMemo<GeoJSON.FeatureCollection>(() => {
+    // One name per station complex: same-name neighbours would stack the label twice (#312).
+    const labelled = labelledStationIds(statics.flatMap((s) => s.system !== "subway" ? [] : s.stations.features.map((f) => ({ id: String(f.properties.id), name: String(f.properties.name ?? ""), lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1] }))));
+    return {
     type: "FeatureCollection",
     features: statics.flatMap((s) => s.stations.features.map((f) => {
       // Subway stations carry a compact row of route bullets for their label (#177).
       const routes = s.system === "subway" ? String(f.properties.routes ?? "").split(/[\s,]+/).filter((r) => r && !r.endsWith("X")) : [];
       // Raised (elevated / viaduct) stations: their labels float above the platform in 3D.
       const raisedSt = s.system === "subway" && onRaisedTrack(raised.raisedCells, f.geometry.coordinates);
-      return { ...f, properties: { ...f.properties, system: s.system, raised: raisedSt, row: routes.length ? stationRowId([...new Set(routes)]) : "" } };
+      return { ...f, properties: { ...f.properties, system: s.system, raised: raisedSt, row: routes.length ? stationRowId([...new Set(routes)]) : "", labelled: s.system !== "subway" || labelled.has(String(f.properties.id)) } };
     })),
-  }), [staticKey, raised]); // eslint-disable-line react-hooks/exhaustive-deps
+    };
+  }, [staticKey, raised]); // eslint-disable-line react-hooks/exhaustive-deps
   const viaduct = raised.decks;
   const piers = raised.piers;
   const entrances = data.subway?.stat?.entrances ?? EMPTY;
@@ -798,7 +803,7 @@ export default function TransitLayer() {
         {/* Name + route bullets: every station from z15, or the hovered / open one at any zoom.
             Collision detection drops overlapping labels so they never pile up. */}
         <Layer id="transit-station-label" type="symbol" minzoom={11}
-          filter={["all", ["==", ["get", "system"], "subway"], ["any", [">=", ["zoom"], 15], ["==", ["get", "id"], hoverStation], ["==", ["get", "id"], openStationId]]]}
+          filter={["all", ["==", ["get", "system"], "subway"], ["any", ["all", [">=", ["zoom"], 15], ["==", ["get", "labelled"], true]], ["==", ["get", "id"], hoverStation], ["==", ["get", "id"], openStationId]]]}
           layout={{ "icon-image": ["get", "row"], "icon-size": ["interpolate", ["linear"], ["zoom"], 13, 0.8, 17, 1], "icon-anchor": "top",
             "icon-offset": (three ? ["case", ["get", "raised"], ["literal", [0, -RAISED_LIFT_PX]], ["literal", [0, 6]]] : [0, 6]) as [number, number],
             "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-anchor": "bottom",
