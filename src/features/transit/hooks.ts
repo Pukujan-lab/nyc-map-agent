@@ -144,6 +144,28 @@ export function useBusTrip(vehicle: string | undefined) {
     retry: false,
   });
 }
+export type BusStopInfo = { id: string; name: string; lat: number; lon: number; dir: string; routes: string[] };
+export type BusArrival = { route: string; destination: string; eta: number | null; away: string };
+/** Stops around a tapped point with the routes serving each (grid-cached on the server). */
+export function useBusStopsNear(point: { lon: number; lat: number } | undefined) {
+  return useQuery({
+    queryKey: ["transit", "bus-stops", point && point.lat.toFixed(3), point && point.lon.toFixed(3)],
+    queryFn: () => getJson<{ stops: BusStopInfo[] }>(`${API_BASE}/api/transit/bus-stops?${new URLSearchParams({ lat: String(point!.lat), lon: String(point!.lon) })}`),
+    staleTime: 3600_000,
+    enabled: Boolean(point),
+    retry: false,
+  });
+}
+/** Next buses at one stop, refreshed while its sheet is open. */
+export function useBusArrivals(stop: string | undefined) {
+  return useQuery({
+    queryKey: ["transit", "bus-arrivals", stop],
+    queryFn: () => getJson<{ arrivals: BusArrival[] }>(`${API_BASE}/api/transit/bus-arrivals?${new URLSearchParams({ stop: stop ?? "" })}`),
+    refetchInterval: REFRESH,
+    enabled: Boolean(stop),
+    retry: false,
+  });
+}
 /** Shapes and stops for the routes of buses near the view, for the motion estimator (shares the bus-route cache). */
 export function useBusShapes(routes: string[]): BusRoute[] {
   const qs = useQueries({
