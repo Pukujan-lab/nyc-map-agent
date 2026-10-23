@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import maplibregl, { type GeoJSONSource, type Map as MapLibreMap } from "maplibre-gl";
 import { RestroomDetails } from "@/components/RestroomCard";
-import { coneRotation, facingLabel, miniStyle } from "@/lib/map/miniStyle";
+import { applyInsetFilters, coneRotation, facingLabel, miniStyle, refreshInsetSource, type InsetFilters } from "@/lib/map/miniStyle";
 import { metresBetween } from "@/lib/map/walk";
 import { pushPanel } from "@/lib/store/PanelContext";
 import { dotsNear, useLiveDots } from "@/lib/transit/liveVehicles";
@@ -13,29 +13,37 @@ const DOTS_RADIUS_M = 900;
 /**
  * Street-level mini map: a small north-up inset (140 px phone, 200 px desktop)
  * in the bottom-right corner, above the credits and clear of the walk pad on
- * the left. Flat building footprints, streets, a "You" dot and a heading cone.
- * Public restrooms can be tapped. "Hide map" folds it away. "Leave street view"
- * stands you back up.
+ * the left. Flat building footprints, streets, a "You" dot and a heading cone
+ * that turns with the camera. Live trains and buses show as line-coloured dots.
+ * Point layers for Layers switches that are on are copied from the main map
+ * and dropped again when the switch goes off. Public restrooms are one tappable
+ * layer of its own (`mini-restrooms`). "Hide map" folds it away; "Leave street
+ * view" stands you back up.
  */
-export function StreetMiniMap({ main, getEye, onExit }: {
+export function StreetMiniMap({ main, getEye, onExit, filters }: {
   main: MapLibreMap;
   getEye: () => { lon: number; lat: number; bearing: number } | null;
   onExit: () => void;
+  filters: InsetFilters;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const [hidden, setHidden] = useState(false);
   const [bearing, setBearing] = useState(0);
   const miniRef = useRef<MapLibreMap | null>(null);
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
   const dots = useLiveDots();
   const facing = facingLabel(bearing);
+  const filtersKey = `${filters.busStops ? 1 : 0}|${filters.placeClasses.join(",")}|${[...filters.on].join(",")}`;
 
   useEffect(() => {
     if (hidden || !box.current) return;
     const eye = getEye();
     const c = main.getCenter();
+    const full = main.getStyle() ?? { version: 8 as const, sources: {}, layers: [] };
     const mini = new maplibregl.Map({
       container: box.current,
-      style: miniStyle(main.getStyle()),
+      style: miniStyle(full, filtersRef.current),
       center: eye ? [eye.lon, eye.lat] : [c.lng, c.lat],
       zoom: 15.5,
       bearing: 0,
@@ -73,6 +81,8 @@ export function StreetMiniMap({ main, getEye, onExit }: {
       });
     };
     mini.on("load", () => {
+      // Points under the dots. Camera bearing and pitch stay at the north-up values above.
+      applyInsetFilters(mini, main, filtersRef.current, DOTS);
       mini.addSource(DOTS, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       mini.addLayer({ id: DOTS, type: "circle", source: DOTS, paint: {
         "circle-radius": ["case", ["get", "bus"], 3, 4],
@@ -104,6 +114,36 @@ export function StreetMiniMap({ main, getEye, onExit }: {
       mini.remove();
     };
   }, [main, getEye, hidden]);
+
+  // Filter toggles, and layers that mount a moment later, update this inset in place.
+  useEffect(() => {
+    if (hidden) return;
+    let queued = 0;
+    const run = () => {
+      const mini = miniRef.current;
+      if (mini) applyInsetFilters(mini, main, filtersRef.current, DOTS);
+    };
+    const schedule = () => {
+      if (queued) return;
+      queued = window.setTimeout(() => {
+        queued = 0;
+        run();
+      }, 0);
+    };
+    const onSource = (e: { sourceDataType?: string; sourceId?: string }) => {
+      if (e.sourceDataType !== "content" || !e.sourceId) return;
+      const mini = miniRef.current;
+      if (mini) refreshInsetSource(mini, main, e.sourceId);
+    };
+    schedule();
+    main.on("styledata", schedule);
+    main.on("sourcedata", onSource);
+    return () => {
+      window.clearTimeout(queued);
+      main.off("styledata", schedule);
+      main.off("sourcedata", onSource);
+    };
+  }, [main, hidden, filtersKey]);
 
   useEffect(() => {
     const mini = miniRef.current;

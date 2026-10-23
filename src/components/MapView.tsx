@@ -12,7 +12,9 @@ import { useMediaQuery } from "@/lib/useMediaQuery";
 import { MapCompass } from "./MapCompass";
 import { ViewSwitcher } from "./ViewSwitcher";
 import { applyReadable } from "@/lib/map/readable";
-import { applyPlaces, placesStale, usePlaces, withQuickPlaces } from "@/lib/map/places";
+import { busStopIconOpacity, busStopTextOpacity } from "@/lib/map/busStops";
+import { applyPlaces, classesFor, placesStale, usePlaces, withQuickPlaces } from "@/lib/map/places";
+import { insetFilters } from "@/lib/map/miniStyle";
 import { useMapOptions } from "@/lib/map/mapOptions";
 import { applyBuildings, wantsFlatBuildings } from "@/lib/map/buildings";
 import { setWalkEye } from "@/lib/map/walkEye";
@@ -478,18 +480,16 @@ export function MapView({
     const map = mapRef.current?.getMap();
     if (!map || !ready) return;
     applyMapTheme(map, t);
-    applyReadable(map, opts.streets === "simple" || transitFocus, { street: t.street, major: t.major, label: t.label_ });
+    const streetLook = opts.roads ? (opts.streets === "simple" || transitFocus ? "simple" : "full") : "off";
+    applyReadable(map, streetLook, { street: t.street, major: t.major, label: t.label_ });
     for (const l of map.getStyle()?.layers ?? []) {
-      if (/^highway-name-major$/.test(l.id)) map.setLayoutProperty(l.id, "visibility", opts.streetNames ? "visible" : "none");
+      if (/^highway-name-major$/.test(l.id)) map.setLayoutProperty(l.id, "visibility", opts.roads && opts.streetNames ? "visible" : "none");
       // Transit-first open: neighbourhood / quarter names only with the analytics on.
       if (l.id === "label_other") map.setLayoutProperty(l.id, "visibility", analytics ? "visible" : "none");
-      // Bus stop icons only from zoom 15, where a stop is a place you can walk to.
+      // Bus stop icons from zoom 15, names from 17. The Layers switch hides both.
       if (l.id === "poi_transit") {
-        const busFade = ["step", ["zoom"], ["case", ["==", ["get", "class"], "bus"], 0, 1], 15, 1];
-        map.setPaintProperty(l.id, "icon-opacity", busFade as never);
-        // Stop names only up close (17+): at 15–16 the icon alone marks the stop.
-        const busText = ["step", ["zoom"], ["case", ["==", ["get", "class"], "bus"], 0, 1], 17, 1];
-        map.setPaintProperty(l.id, "text-opacity", busText as never);
+        map.setPaintProperty(l.id, "icon-opacity", busStopIconOpacity(opts.busStops) as never);
+        map.setPaintProperty(l.id, "text-opacity", busStopTextOpacity(opts.busStops) as never);
       }
     }
     const shownPlaces = withQuickPlaces(places, { businesses, health, parksPlaces, citibike });
@@ -936,6 +936,16 @@ export function MapView({
   // their flag is on, remounted after a style reload, cleaned up otherwise.
   const flags = useFlags();
   const [toggledOn] = useFeatureToggles();
+  const inset = useMemo(() => insetFilters({
+    placeClasses: classesFor(withQuickPlaces(places, { businesses, health, parksPlaces, citibike })),
+    busStops: opts.busStops,
+    restrooms,
+    shops: toggledOn.has("restroomShops"),
+    parking: toggledOn.has("parking"),
+    events: toggledOn.has("events"),
+    ferry: toggledOn.has("ferry"),
+    schools: schoolIcons,
+  }), [places, businesses, health, parksPlaces, citibike, opts.busStops, restrooms, toggledOn, schoolIcons]);
   const mountedKey = FEATURES.filter((f) => f.layers && flags[f.id] && (!f.chip || toggledOn.has(f.chip.id)))
     .map((f) => f.id)
     .join(",");
@@ -1604,7 +1614,7 @@ export function MapView({
         />
       ) : null}
       {walking && ready && mapRef.current ? (
-        <StreetMiniMap main={mapRef.current.getMap()} getEye={getEye} onExit={stopWalk} />
+        <StreetMiniMap main={mapRef.current.getMap()} getEye={getEye} onExit={stopWalk} filters={inset} />
       ) : null}
 
       {hover && !walking && canHover && !sheetOpen && analytics ? (

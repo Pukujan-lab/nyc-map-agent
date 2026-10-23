@@ -296,10 +296,12 @@ export function LayersDrawer({
           </div>
         </Section>
 
-        <Section title="Map detail" hidden={!!q.trim() && !["streets", "street names", "buildings", "theme", "auto", "dusk", "night", "ivory", "ink", "mta", "neon", "map detail"].some(match)}>
+        <Section title="Map detail" hidden={!!q.trim() && !["streets", "street names", "roads", "hide", "buildings", "theme", "auto", "dusk", "night", "ivory", "ink", "mta", "neon", "map detail", "bus", "stops", "stations"].some(match)}>
           <div className="flex flex-wrap gap-[var(--sp-2)]">
             <Pill on={opts.streets === "simple"} onClick={() => setOptions({ streets: "simple" })}>Simple streets</Pill>
             <Pill on={opts.streets === "full"} onClick={() => setOptions({ streets: "full" })}>Detailed streets</Pill>
+            <Pill on={!opts.roads} onClick={() => setOptions({ roads: !opts.roads })}>Hide roads</Pill>
+            <Pill on={!opts.busStops} onClick={() => setOptions({ busStops: !opts.busStops })}>Hide bus stops</Pill>
             <Pill on={opts.streetNames} onClick={() => setOptions({ streetNames: !opts.streetNames })}>Street names</Pill>
             <Pill on={opts.buildings === "flat"} onClick={() => setOptions({ buildings: "flat" })}>Flat buildings</Pill>
             <Pill on={opts.buildings === "3d"} onClick={() => setOptions({ buildings: "3d" })}>3D buildings</Pill>
