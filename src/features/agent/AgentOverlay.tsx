@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useFlag } from "@/lib/flags";
 import { getMapInstance } from "@/lib/map/mapInstance";
 import { useMapState } from "@/lib/store/MapStateContext";
+import { setFollowed } from "@/lib/transit/follow";
 import { usePanel } from "@/lib/store/PanelContext";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { cn } from "@/lib/utils";
@@ -44,7 +45,7 @@ const MODES: Array<{ id: TripMode; label: string; Icon: typeof Bus }> = [
 ];
 
 export default function AgentOverlay() {
-  const { chatOpen, setChatOpen, flyTo, startWalk, chatSeed, clearSeed } = useMapState();
+  const { chatOpen, setChatOpen, flyTo, startWalk, stopWalk, chatSeed, clearSeed } = useMapState();
   const { showPanel, closeAll } = usePanel();
   // One panel at a time (#225): opening Ask closes the drawer and any sheet.
   useEffect(() => {
@@ -71,16 +72,24 @@ export default function AgentOverlay() {
 
   const speech = useSpeech({ onFinalTranscript: (t) => void send(t) });
   const player = usePlayer((text) => speech.speak(text));
+  // Ask, the route fit, and the preview all move the camera. Follow and street
+  // view let go first, without the Stop following glide back.
+  const handoffCamera = () => {
+    setFollowed(null);
+    player.release();
+    stopWalk();
+    getMapInstance()?.stop();
+  };
 
   const ctx: ExecutorContext = {
-    flyTo: (lon, lat, zoom) => flyTo({ lon, lat, zoom }),
-    showTrip: (t) => { setTrip(t); const m = getMapInstance(); if (m) showTrip(m, t); },
+    flyTo: (lon, lat, zoom) => { handoffCamera(); flyTo({ lon, lat, zoom }); },
+    showTrip: (t) => { handoffCamera(); setTrip(t); const m = getMapInstance(); if (m) showTrip(m, t); },
     openTrip: (t) => {
       setTrip(t);
       showPanel({ id: `agent:trip:${t.id}`, title: `To ${t.destination.label}`, subtitle: `${t.departIso.slice(11)} → ${t.arriveIso.slice(11)}`, summary: <TripSummary trip={t} compact onSelect={(alt) => ctxRef.current.openTrip(selectAlternative(t, alt))} />, details: <TripSummary trip={t} bodyOnly /> });
     },
-    enterStreetView: (lon, lat) => startWalk({ lon, lat }),
-    playFlythrough: (t, speed) => { setTrip(t); setChatOpen(false); player.start(t, speed); },
+    enterStreetView: (lon, lat) => { handoffCamera(); startWalk({ lon, lat }); },
+    playFlythrough: (t, speed) => { handoffCamera(); setTrip(t); setChatOpen(false); player.start(t, speed); },
     setTime: (iso) => setMapTime(iso),
   };
   const ctxRef = useRef(ctx);

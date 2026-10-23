@@ -12,6 +12,7 @@ import schools from "./schools";
 import storefronts from "./storefronts";
 import events from "./events";
 import placeToilets from "./place-toilets";
+import ferry from "./ferry";
 
 /** Every feature module. Core reads features only through this list. */
-export const FEATURES: FeatureModule[] = [restrooms, agent, transit, daylight, weather, hazards, traffic, parking, schools, storefronts, liveview, events, placeToilets];
+export const FEATURES: FeatureModule[] = [restrooms, agent, transit, daylight, weather, hazards, traffic, parking, schools, storefronts, liveview, events, placeToilets, ferry];

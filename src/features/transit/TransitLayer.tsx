@@ -24,11 +24,11 @@ import { useXray, xrayPrims } from "./xray";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { useFlag } from "@/lib/flags";
 import { usePanel, usePanelChip, usePanelMode, usePanelSearch, type SearchProvider } from "@/lib/store/PanelContext";
-import { followRig, followedTrain, rememberFollowOrigin, setFollowMode, setFollowed, stopFollowing, takeFollowRestore, useFollowMode, useFollowed } from "./follow";
+import { followRig, followedTrain, rememberFollowOrigin, setFollowMode, setFollowed, stableHeading, stopFollowing, takeFollowRestore, useFollowMode, useFollowed } from "./follow";
 import { publishSubway } from "@/lib/agent/streetContext";
 import { publishLiveDots } from "@/lib/transit/liveVehicles";
 import { setLinesControl } from "@/lib/transit/linesControl";
-import { setStreetXray, useStreetXray } from "@/lib/transit/streetXray";
+import { XRAY_VEIL_M, setStreetXray, useStreetXray, xrayVeilDisc } from "@/lib/transit/streetXray";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 
 const stopFollow = () => setFollowed(null);
@@ -60,8 +60,6 @@ function onRaisedTrack(cells: Set<string>, p: GeoJSON.Position): boolean {
 const STREET_RADIUS_M = 600;
 /** X-ray draws underground trains this far below the ground plane. */
 const XRAY_DEPTH_M = -12;
-/** X-ray ground veil radius for the overhead levels: wider as you rise. */
-const veilRadius = (zoom: number) => Math.min(6000, Math.max(800, 1500 * 2 ** (16 - zoom)));
 /** Where the walker stands: at street level the map centre sits at most ~10 m ahead of the eye. */
 function streetEye(map: MaplibreMap): { lon: number; lat: number } {
   const c = map.getCenter();
@@ -545,6 +543,23 @@ export default function TransitLayer() {
   // Underground trains draw in 3D only with X-ray on (their route bullets always show);
   // then they glow below a see-through ground and buildings, at every level.
   const xrayOn = useStreetXray();
+  const flatVeilKey = useRef("");
+  const [flatVeil, setFlatVeil] = useState(EMPTY);
+  useEffect(() => {
+    if (!map || three || !xrayOn) return;
+    const sync = () => {
+      const e = streetEye(map);
+      const key = `${e.lon.toFixed(3)},${e.lat.toFixed(3)}`;
+      if (key === flatVeilKey.current) return;
+      flatVeilKey.current = key;
+      setFlatVeil(xrayVeilDisc(e.lon, e.lat));
+    };
+    sync();
+    map.on("moveend", sync);
+    return () => {
+      map.off("moveend", sync);
+    };
+  }, [map, three, xrayOn]);
   useEffect(() => {
     if (!three) return;
     v3d.current?.update(
@@ -566,7 +581,7 @@ export default function TransitLayer() {
       const ids = map.getLayersOrder();
       if (map.getLayer(v.layer.id) && ids[ids.length - 1] !== v.layer.id) map.moveLayer(v.layer.id);
       const e = streetEye(map);
-      v.setGroundVeil([e.lon, e.lat], walking ? STREET_RADIUS_M : veilRadius(map.getZoom()));
+      v.setGroundVeil([e.lon, e.lat], XRAY_VEIL_M);
     };
     sync();
     const late = window.setTimeout(sync, 1200); // the three layer loads on the first tilt
@@ -593,12 +608,22 @@ export default function TransitLayer() {
     const c = map.getCenter();
     rememberFollowOrigin({ center: [c.lng, c.lat], zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() });
   }, [map, followedKey]);
+  // One pose per displayed vehicle. A fresh glide every update piled up and
+  // fought the trip preview. A heading that flips almost backward waits out.
+  const headingKey = useRef<string | null>(null);
+  const headingHold = useRef({ bearing: 0, streak: 0 });
   useEffect(() => {
     if (!map || !followed) return;
-    const { eye, look } = followRig(followMode, followed.bearing, followed.z ?? 0);
+    if (headingKey.current !== followed.key) {
+      headingKey.current = followed.key;
+      headingHold.current = stableHeading(null, followed.bearing, 0);
+    } else {
+      headingHold.current = stableHeading(headingHold.current.bearing, followed.bearing, headingHold.current.streak);
+    }
+    const { eye, look } = followRig(followMode, headingHold.current.bearing, followed.z ?? 0);
     const at = (dx: number, dy: number) => new LngLat(followed.lon + dx / (111_320 * Math.cos((followed.lat * Math.PI) / 180)), followed.lat + dy / 111_320);
     const cam = map.calculateCameraOptionsFromTo(at(eye[0], eye[1]), eye[2], at(look[0], look[1]), look[2]);
-    map.easeTo({ ...cam, duration: 250, easing: (t) => t });
+    map.jumpTo(cam);
   }, [map, followed, followMode]);
   useEffect(() => {
     if (!map || followedKey) return;
@@ -686,7 +711,7 @@ export default function TransitLayer() {
       </Source>
       {xrayOn && !three ? (
         // Top-down X-ray: the ground and buildings fade so the tunnels below read through.
-        <Source id="transit-xray-veil" type="geojson" data={WORLD}>
+        <Source id="transit-xray-veil" type="geojson" data={flatVeil}>
           <Layer id="transit-xray-veil" type="fill" beforeId="transit-line-under" paint={{ "fill-color": "#0b1220", "fill-opacity": 0.55 }} />
         </Source>
       ) : null}
