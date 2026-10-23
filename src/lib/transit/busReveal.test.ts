@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { busRoutesOfTrip, busesToShow, holdShuttle, registerBusToggle, revealTripBuses, setShuttleBuses, setTripBuses } from "./busReveal";
+import { busRoutesOfTrip, busesToShow, holdShuttle, registerBusToggle, revealTripBuses, setShuttleBuses, setTripBuses, shownVehicles } from "./busReveal";
 
 const leg = (route: string, mode: "bus" | "subway") => ({ kind: "ride", route, mode });
 
@@ -45,5 +45,13 @@ describe("which buses a trip reveals", () => {
     expect(busesToShow([])).toEqual({ why: "off", routes: [] });
     setTripBuses([]);
     setShuttleBuses(null, []);
+  });
+
+  it("drops every bus when live buses is off and keeps the train", () => {
+    const train = { system: "subway", route: "M" };
+    const bus = { system: "bus", route: "Q1" };
+    expect(shownVehicles([train, bus], [])).toEqual([train]);
+    expect(shownVehicles([train, bus], ["q1"])).toEqual([train, bus]);
+    expect(shownVehicles([train, bus], ["B44"])).toEqual([train]);
   });
 });

@@ -26,7 +26,7 @@ import { useFlag } from "@/lib/flags";
 import { usePanel, usePanelChip, usePanelMode, usePanelSearch, type SearchProvider } from "@/lib/store/PanelContext";
 import { followRig, rememberFollowOrigin, setFollowMode, setFollowed, stableHeading, takeFollowRestore, useFollowMode, useFollowed } from "./follow";
 import { publishSubway } from "@/lib/agent/streetContext";
-import { busesToShow, holdShuttle, registerBusToggle, setShuttleBuses, useBusPins } from "@/lib/transit/busReveal";
+import { busesToShow, holdShuttle, registerBusToggle, setShuttleBuses, shownVehicles, useBusPins } from "@/lib/transit/busReveal";
 import { publishLiveDots } from "@/lib/transit/liveVehicles";
 import { setLinesControl } from "@/lib/transit/linesControl";
 import { XRAY_VEIL_M, setStreetXray, useStreetXray, xrayForFollow, xrayVeilDisc } from "@/lib/transit/streetXray";
@@ -46,7 +46,7 @@ import { FOCUS_OPACITY, FOCUS_VEIL_ID, WORLD, focusVeil, useTransitFocus } from 
 /** Layers a click on the map should hand to transit instead of the area pick. */
 /** CC BY 4.0 credits for the 3D vehicle models (public/models/LICENSE.md), shown while they can be on screen. */
 const VEHICLE_CREDITS = "3D vehicles: R142 by yarankepang, XD40 by kieranfarr, P32 by Sharky (Sketchfab, CC BY 4.0)";
-const TRANSIT_CLICK_LAYERS = ["transit-bullet", "transit-bus-badge", "transit-bus-badge-full", "transit-bus-badge-selected", "transit-vehicle-2d", "transit-vehicle-hit", "transit-access", "transit-entrance", "transit-station"];
+const TRANSIT_CLICK_LAYERS = ["transit-bullet", "transit-bus-badge", "transit-bus-badge-full", "transit-bus-badge-selected", "transit-vehicle-2d", "transit-vehicle-hit", "transit-access", "transit-entrance", "transit-station-label", "transit-station-raised", "transit-station"];
 
 const MAX_VEHICLES = 400;
 /** In 3D, labels and bullets on raised track lift by about a viaduct's height on screen. */
@@ -154,6 +154,9 @@ export default function TransitLayer() {
     [busWanted, busPage, busLines.data, pins],
   );
   const busOn = meta.data?.bus === true && show.routes.length > 0;
+  // The draw loop reads this, so a stale timer cannot keep a bus after Live buses turns off.
+  const busRoutesRef = useRef<string[]>([]);
+  busRoutesRef.current = show.routes;
   const data = useTransitData(rail);
   const subwayRoutes = useMemo(() => [...new Set((data.subway?.live?.trips ?? []).map((t) => t.route))].sort(), [data.subway?.live]);
   const history = useSegmentHistory(subwayRoutes);
@@ -163,6 +166,9 @@ export default function TransitLayer() {
   // The panel owns what is open; a vehicle stays "selected" while its panel is up.
   const selectedKey = content?.id.startsWith("transit:vehicle:") ? content.id.slice(16) : undefined;
   const followedKey = useFollowed();
+  useEffect(() => {
+    if (!show.routes.length && followedKey?.startsWith("bus:")) setFollowed(null);
+  }, [show.routes.length, followedKey]);
   const display = useRef(new Map<string, Vehicle>());
   // Buses: snapped to their route shape and dead-reckoned between 30 s GPS reports.
   const busEst = useRef(new BusEstimator());
@@ -402,7 +408,7 @@ export default function TransitLayer() {
           if (v && (inView(v) || v.key === selectedKey || v.key === followedKey)) out.push(v);
         }
       }
-      const allow = new Set(show.routes.map((r) => r.toUpperCase()));
+      const allow = new Set(busRoutesRef.current.map((r) => r.toUpperCase()));
       for (const bus of allow.size ? buses.data?.buses ?? [] : []) {
         if (!allow.has(bus.route.toUpperCase())) continue;
         const v: Vehicle = { key: `bus:${bus.id}`, system: "bus", route: bus.route, label: bus.route, color: "#0039A6", lon: bus.lon, lat: bus.lat, bearing: bus.bearing ?? 0, grade: "grade", dir: bus.dir, nextStop: bus.next ?? undefined };
@@ -426,7 +432,8 @@ export default function TransitLayer() {
       last = t;
       const next = new Map<string, Vehicle>();
       const nowS = Date.now() / 1000;
-      for (const v of targets.current) {
+      if (!busRoutesRef.current.length) busEst.current.retain(new Set());
+      for (const v of shownVehicles(targets.current, busRoutesRef.current)) {
         if (v.system === "bus") {
           const f = busEst.current.frame(v.key.slice(4), nowS);
           if (f) { next.set(v.key, { ...v, lon: f.lon, lat: f.lat, bearing: f.bearing, alpha: f.alpha }); continue; }
@@ -459,7 +466,7 @@ export default function TransitLayer() {
   // Street level: publish the drawn vehicles once a second for the mini map.
   useEffect(() => {
     if (!walking) { publishLiveDots([]); return; }
-    const push = () => publishLiveDots([...display.current.values()].map((v) => ({ key: v.key, lon: v.lon, lat: v.lat, color: v.system === "bus" ? theme.bus : v.color, bus: v.system === "bus", underground: v.grade === "underground" })));
+    const push = () => publishLiveDots(shownVehicles([...display.current.values()], busRoutesRef.current).map((v) => ({ key: v.key, lon: v.lon, lat: v.lat, color: v.system === "bus" ? theme.bus : v.color, bus: v.system === "bus", underground: v.grade === "underground" })));
     push();
     const id = window.setInterval(push, 1000);
     return () => { window.clearInterval(id); publishLiveDots([]); };
@@ -469,16 +476,18 @@ export default function TransitLayer() {
   useEffect(() => {
     if (!map) return;
     const move = (e: MapLayerMouseEvent) => {
-      const f = map.getLayer("transit-station") ? map.queryRenderedFeatures(e.point, { layers: ["transit-station"] })[0] : undefined;
+      const stationLayers = ["transit-station-raised", "transit-station"].filter((id) => map.getLayer(id));
+      const f = stationLayers.length ? map.queryRenderedFeatures(e.point, { layers: stationLayers })[0] : undefined;
       setHoverStation(f?.properties?.system === "subway" ? String(f.properties.id) : "");
     };
     map.on("mousemove", move);
     return () => { map.off("mousemove", move); };
   }, [map]);
   const alerted = useMemo(() => alertedRoutes(alerts.data?.alerts), [alerts.data]);
+  const visible = useMemo(() => shownVehicles(vehicles, show.routes), [vehicles, show.routes]);
   const vehicleFc = useMemo<GeoJSON.FeatureCollection>(() => ({
     type: "FeatureCollection",
-    features: vehicles.map((v) => {
+    features: visible.map((v) => {
       const alert = alerted.has(v.route);
       let bullet = "", badge = "", badgeFull = "";
       if (v.system === "subway") bullet = bulletId(v.route, v.color, alert);
@@ -490,11 +499,12 @@ export default function TransitLayer() {
       }
       return { type: "Feature", properties: { key: v.key, color: v.color, bearing: v.bearing, grade: v.grade, label: v.label, system: v.system, route: v.route, bullet, badge, badgeFull, alpha: v.alpha ?? 1 }, geometry: { type: "Point", coordinates: [v.lon, v.lat] } };
     }),
-  }), [vehicles, alerted, theme]);
-  const selBusRoute = (selectedKey?.startsWith("bus:") ? vehicles.find((v) => v.key === selectedKey)?.route : undefined) ?? "";
+  }), [visible, alerted, theme]);
+  const selBusRoute = (show.routes.length && selectedKey?.startsWith("bus:") ? visible.find((v) => v.key === selectedKey)?.route : undefined) ?? "";
   const busRoute = useBusRoute(selBusRoute || undefined);
   const busRouteFc = useMemo<GeoJSON.FeatureCollection>(() => {
     const features: GeoJSON.Feature[] = [];
+    if (!show.routes.length) return { type: "FeatureCollection", features };
     const drawn = selBusRoute ? busRoute.data : undefined;
     if (drawn) {
       features.push(
@@ -510,7 +520,7 @@ export default function TransitLayer() {
       }
     }
     return { type: "FeatureCollection", features };
-  }, [busRoute.data, selBusRoute, show.why, busShapes]);
+  }, [busRoute.data, selBusRoute, show.why, show.routes.length, busShapes]);
   // 3D: one three.js custom layer in the map's canvas, loaded on first tilt.
   const entr = useRef<ReturnType<typeof entranceInstances>>([]);
   const bays = useRef<ReturnType<typeof viaductBays>>([]);
@@ -600,7 +610,7 @@ export default function TransitLayer() {
   useEffect(() => {
     if (!three) return;
     v3d.current?.update(
-      vehicles
+      visible
         // The followed (boarded) train always draws, whatever its grade.
         .filter((v) => v.key === followedKey || xrayOn || v.grade !== "underground")
         .map((v) => {
@@ -608,7 +618,7 @@ export default function TransitLayer() {
           return { lon: v.lon, lat: v.lat, bearing: v.bearing, z: ghost ? XRAY_DEPTH_M : v.z ?? 0, color: v.system === "bus" ? "#f8fafc" : v.color, kind: v.system === "bus" ? "bus" : v.system === "subway" ? "subway" : "rail", ghost };
         }),
     );
-  }, [vehicles, three, xrayOn, followedKey]);
+  }, [visible, three, xrayOn, followedKey]);
   useEffect(() => {
     if (!map || !three || !xrayOn) { v3d.current?.setGroundVeil(null); return; }
     const sync = () => {
@@ -768,7 +778,14 @@ export default function TransitLayer() {
       </Source>
       <Source id="transit-stations" type="geojson" data={stations}>
         <Layer id="transit-station" type="circle" minzoom={11}
+          {...(three ? { filter: ["!=", ["get", "raised"], true] as ["!=", ["get", "raised"], true] } : {})}
           paint={{ "circle-color": "#ffffff", "circle-stroke-color": "#6b6a66", "circle-stroke-width": 1, "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 1.5, 16, 4], "circle-opacity": stationAlpha, "circle-stroke-opacity": stationAlpha }} />
+        {three ? (
+          // The white station dot is the click target. On a viaduct it has to sit with the label, or the tap lands on the street underneath.
+          <Layer id="transit-station-raised" type="circle" minzoom={11}
+            filter={["==", ["get", "raised"], true]}
+            paint={{ "circle-color": "#ffffff", "circle-stroke-color": "#6b6a66", "circle-stroke-width": 1, "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 1.5, 16, 4], "circle-pitch-alignment": "viewport", "circle-translate-anchor": "viewport", "circle-translate": [0, -RAISED_LIFT_PX], "circle-opacity": stationAlpha, "circle-stroke-opacity": stationAlpha }} />
+        ) : null}
         {/* Name + route bullets: every station from z15, or the hovered / open one at any zoom.
             Collision detection drops overlapping labels so they never pile up. */}
         <Layer id="transit-station-label" type="symbol" minzoom={11}
