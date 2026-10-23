@@ -1,4 +1,4 @@
-import type { FilterPatch } from "@/features/agent/schema";
+import type { FilterPatch } from "./filterPatch";
 import { SUBWAY_ROUTES, setOptions, type MapOptions } from "./mapOptions";
 import { PLACE_CATEGORIES, setPlaces } from "./places";
 import { setQuickLayer, type QuickId } from "../quickLayers";
