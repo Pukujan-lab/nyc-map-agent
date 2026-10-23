@@ -14,6 +14,8 @@
     /* Gap between the chrome and the screen edge; safe-area insets are added on top where they apply. */
     --edge: var(--sp-3);
     --topbar-h: 90px; /* search row 46 + gap 8 + chip row 36 */
+    /* FollowCard publishes its height plus a gap while a vehicle is followed; 0 otherwise. */
+    --follow-card-h: 0px;
     --background: 0 0% 100%;
     --foreground: 222 47% 11%;
     --card: 0 0% 100%;
