@@ -12,7 +12,8 @@ import { MapCompass } from "./MapCompass";
 import { ViewSwitcher } from "./ViewSwitcher";
 import { applyReadable } from "@/lib/map/readable";
 import { busStopIconOpacity, busStopTextOpacity } from "@/lib/map/busStops";
-import { applyPlaces, placesStale, usePlaces, withQuickPlaces } from "@/lib/map/places";
+import { applyPlaces, classesFor, placesStale, usePlaces, withQuickPlaces } from "@/lib/map/places";
+import { insetFilters } from "@/lib/map/miniStyle";
 import { useMapOptions } from "@/lib/map/mapOptions";
 import { applyBuildings, wantsFlatBuildings } from "@/lib/map/buildings";
 import { applyMapTheme, buildingEdge, setThemeCoords, usePalette } from "@/lib/theme";
@@ -910,6 +911,16 @@ export function MapView({
   // their flag is on, remounted after a style reload, cleaned up otherwise.
   const flags = useFlags();
   const [toggledOn] = useFeatureToggles();
+  const inset = useMemo(() => insetFilters({
+    placeClasses: classesFor(withQuickPlaces(places, { businesses, health, parksPlaces, citibike })),
+    busStops: opts.busStops,
+    restrooms,
+    shops: toggledOn.has("restroomShops"),
+    parking: toggledOn.has("parking"),
+    events: toggledOn.has("events"),
+    ferry: toggledOn.has("ferry"),
+    schools: schoolIcons,
+  }), [places, businesses, health, parksPlaces, citibike, opts.busStops, restrooms, toggledOn, schoolIcons]);
   const mountedKey = FEATURES.filter((f) => f.layers && flags[f.id] && (!f.chip || toggledOn.has(f.chip.id)))
     .map((f) => f.id)
     .join(",");
@@ -1566,7 +1577,7 @@ export function MapView({
         />
       ) : null}
       {walking && ready && mapRef.current ? (
-        <StreetMiniMap main={mapRef.current.getMap()} getEye={getEye} onExit={stopWalk} />
+        <StreetMiniMap main={mapRef.current.getMap()} getEye={getEye} onExit={stopWalk} filters={inset} />
       ) : null}
 
       {hover && !walking && canHover && !sheetOpen && analytics ? (
