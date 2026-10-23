@@ -307,6 +307,30 @@ export const SOURCES: SourceConfig[] = [
     castNumber: true,
     defaultEnabled: false,
   },
+  {
+    id: "rat-activity",
+    guide: {
+      what: "A DOHMH rat inspection that failed for active rat signs (burrows, droppings, gnaw marks, runways).",
+      caveats:
+        "Only inspections that found rat activity are counted; passed visits, baiting and cleanups are left out. Inspections follow 311 complaints and city sweeps, so coverage is uneven.",
+      cadence: "Daily",
+    },
+    polarity: "worse",
+    kind: "grid",
+    label: "Rat activity (failed inspections)",
+    shortLabel: "Rat activity",
+    category: "Streets & environment",
+    datasetId: "p937-wjvj",
+    description:
+      "DOHMH rodent inspections that failed for rat activity, by inspection date.",
+    unit: "inspections",
+    lat: "latitude",
+    lon: "longitude",
+    castNumber: true,
+    dateField: "inspection_date",
+    where: "result in ('Failed for Rat Activity', 'Failed for Rat Activity and Other Reason')",
+    defaultEnabled: false,
+  },
 ];
 
 /** Requested but not wired, with the reason found when probing them live. */

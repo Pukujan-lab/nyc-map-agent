@@ -36,6 +36,24 @@ describe("gridQuery", () => {
   });
 });
 
+describe("rat-activity source", () => {
+  const source = SOURCE_BY_ID["rat-activity"] as GridSource;
+
+  it("is a worse-is-higher grid source on the rodent inspection dataset", () => {
+    expect(source.datasetId).toBe("p937-wjvj");
+    expect(source.polarity).toBe("worse");
+    expect(source.guide.what.length).toBeGreaterThan(0);
+  });
+
+  it("keeps only rat-activity failures inside the window", () => {
+    const q = gridQuery(source, windowBounds("90d", new Date(2026, 9, 20)));
+    expect(q.$select).toContain("floor(latitude::number / 0.003) AS r");
+    expect(q.$where).toContain("inspection_date > '2026-07-22T00:00:00'");
+    expect(q.$where).toContain("'Failed for Rat Activity'");
+    expect(q.$where).not.toContain("Passed");
+  });
+});
+
 describe("representativePoint", () => {
   it("handles points, multipoints and multilines", () => {
     expect(representativePoint({ type: "Point", coordinates: [-73.9, 40.7] })).toEqual([-73.9, 40.7]);
@@ -164,7 +182,7 @@ describe("polarity", () => {
   it("defaults problems to worse and assets to better", async () => {
     const { SOURCES, effectivePolarity } = await import("./registry");
     const by = Object.fromEntries(SOURCES.map((s) => [s.id, s.polarity]));
-    for (const id of ["noise", "311", "crashes", "hpd"]) expect(by[id]).toBe("worse");
+    for (const id of ["noise", "311", "crashes", "hpd", "rat-activity"]) expect(by[id]).toBe("worse");
     for (const id of ["trees", "ramps", "speed-humps", "sip-corridors", "sip-intersections", "pluto-units"]) {
       expect(by[id]).toBe("better");
     }

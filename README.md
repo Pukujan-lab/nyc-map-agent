@@ -76,6 +76,7 @@ Every map source is one entry in `src/lib/datasets/registry.ts`; the data-source
 | Speed humps | `jknp-skuy` | `the_geom` multiline (midpoint) | inventory | paged rows |
 | SIP corridors | `if4c-w48d` | `the_geom` multiline (midpoint) | inventory | paged rows |
 | SIP intersections | `shr7-eqdc` | `lat`/`long` (text, cast) | inventory | server-side grid `GROUP BY` |
+| Rat activity (failed inspections) | `p937-wjvj` | `latitude`/`longitude` (text, cast) | selected (`inspection_date`) | server-side grid `GROUP BY` |
 
 The server-side rollup is `floor(lat / 0.003), floor(lon / 0.003)`, which is the same ~300 m block grid the map draws. Even an 850k-row dataset comes back as a few thousand cells. Each cell goes to the neighborhood under its centre.
 
@@ -86,7 +87,7 @@ The server-side rollup is `floor(lat / 0.003), floor(lon / 0.003)`, which is the
 The view dropdown in the dock (and in the settings drawer) can show the classic noise / crashes / both layers, **any single enabled source**, or the **Concern score**, which is an average across sources. Each ticked source becomes a 0–100 percentile rank per area (ties share their rank, areas with no records rank 0).
 
 Every registry entry has a default `polarity`:
-- **Higher is worse:** 311, noise, crashes and HPD violations count as is.
+- **Higher is worse:** 311, noise, crashes, HPD violations and rat activity count as is.
 - **Higher is better:** trees, ramps, speed humps, street improvements and residential units count as `100 − percentile`.
 
 So a high score always means more concern. The data-sources drawer has a button on each source in the average to flip its direction. The legend marks each contributor ↑ (higher is worse) or ↓ (higher is better). The details sheet shows each source's raw count, percentile, direction and concern contribution.
