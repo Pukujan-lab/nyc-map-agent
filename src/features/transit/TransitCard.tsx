@@ -264,7 +264,7 @@ export function FollowCard({ vehicle }: { vehicle: Vehicle }) {
   const next = vehicle.stopped?.kind === "at" ? vehicle.stopped.stop : vehicle.nextStop;
   return (
     <div data-testid="follow-card" className="pointer-events-none absolute left-1/2 top-16 z-30 w-[min(92vw,420px)] -translate-x-1/2 lg:top-3">
-      <div className="pointer-events-auto flex items-center gap-[var(--sp-2)] rounded-xl border border-border bg-card/95 px-[var(--sp-3)] py-1.5 text-[12px] shadow-lg backdrop-blur-md">
+      <div className="pointer-events-auto flex items-center gap-[var(--sp-2)] rounded-xl border border-border bg-card px-[var(--sp-3)] py-1.5 text-[12px] shadow-lg">
         <RouteBullet system={vehicle.system} route={vehicle.route} data={data} />
         <div className="min-w-0 flex-1">
           <div className="truncate font-semibold">

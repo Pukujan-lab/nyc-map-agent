@@ -260,7 +260,18 @@ function schoolIcon(): ImageData {
   return ctx.getImageData(0, 0, n, n);
 }
 
-/** Optional school icons (the "Schools" chip). Needs installCity3d first. */
+/**
+ * DOE school points already in the city tiles (`schools` source-layer).
+ * Does not load facade textures, so the Schools switch still works when the
+ * textured city is off.
+ */
+export async function installSchoolIcons(map: MapLibreMap, on: boolean): Promise<void> {
+  if (!on && !map.getSource(SOURCE)) return;
+  if (on) await ensureSource(map);
+  setSchoolIconsVisible(map, on);
+}
+
+/** Optional school icons (the "Schools" chip). Needs the city-tile source. */
 export function setSchoolIconsVisible(map: MapLibreMap, on: boolean): void {
   if (!map.getSource(SOURCE)) return;
   if (!map.hasImage("school-icon")) map.addImage("school-icon", schoolIcon(), { pixelRatio: 2 });

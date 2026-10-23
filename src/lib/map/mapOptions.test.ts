@@ -6,6 +6,10 @@ describe("map options", () => {
     expect(readOptions({ getItem: () => null })).toEqual(DEFAULT_OPTIONS);
     expect(readOptions({ getItem: () => JSON.stringify({ streets: "full", routes: ["L", 3] }) })).toMatchObject({ streets: "full", routes: ["L"] });
   });
+  it("shows bus stop dots unless they were hidden", () => {
+    expect(readOptions({ getItem: () => null }).busStops).toBe(true);
+    expect(readOptions({ getItem: () => JSON.stringify({ busStops: false }) }).busStops).toBe(false);
+  });
   it("keeps 3D buildings only when chosen", () => {
     expect(readOptions({ getItem: () => JSON.stringify({ buildings: "3d" }) }).buildings).toBe("3d");
     expect(readOptions({ getItem: () => JSON.stringify({ buildings: true }) }).buildings).toBe("flat");

@@ -2,13 +2,13 @@ import { useSyncExternalStore } from "react";
 
 /**
  * Shared on/off store for the quick Layers drawer: Businesses (storefront
- * signs), Street art and the global X-ray (underground trains). Persisted in
+ * signs), Street art, the global X-ray, and school icons. Persisted in
  * localStorage; any module can read it (`getQuickLayer`) or subscribe
  * (`useQuickLayer`). Transit Focus, Restrooms and Events keep their own stores.
  */
-export type QuickId = "businesses" | "streetArt" | "xray" | "health" | "parksPlaces" | "citibike";
+export type QuickId = "businesses" | "streetArt" | "xray" | "health" | "parksPlaces" | "citibike" | "schools";
 const KEY = "nma.quickLayers";
-const DEFAULTS: Record<QuickId, boolean> = { businesses: false, streetArt: true, xray: false, health: false, parksPlaces: false, citibike: false };
+const DEFAULTS: Record<QuickId, boolean> = { businesses: false, streetArt: true, xray: false, health: false, parksPlaces: false, citibike: false, schools: false };
 
 function load(): Record<QuickId, boolean> {
   try {

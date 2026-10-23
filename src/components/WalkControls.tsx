@@ -51,7 +51,7 @@ function HoldButton({
       size="icon"
       variant="outline"
       aria-label={label}
-      className="h-9 w-9 touch-none select-none rounded-md border-border/70 bg-card/90 shadow-md"
+      className="h-9 w-9 touch-none select-none rounded-md border-border bg-card shadow-md"
       onPointerDown={press}
       onPointerUp={release}
       onPointerCancel={release}
@@ -91,7 +91,7 @@ export function WalkControls({
         of each other.
       */}
       <div className="pointer-events-none absolute left-3 top-3 z-30 flex max-w-[calc(100%-1.5rem)]">
-        <div className="pointer-events-auto max-w-full rounded-xl border border-border/70 bg-card/90 py-1.5 pl-3 pr-1 shadow-xl backdrop-blur-md">
+        <div className="pointer-events-auto max-w-full rounded-xl border border-border bg-card py-1.5 pl-3 pr-1 shadow-xl">
           <div className="flex items-center gap-2">
             <Camera
               className="h-3.5 w-3.5 shrink-0 text-primary"

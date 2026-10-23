@@ -32,7 +32,7 @@ export function MapCompass() {
   return (
     <div
       className="absolute z-20 flex items-center gap-[var(--sp-2)]"
-      style={{ right: "max(var(--edge), env(safe-area-inset-right))", bottom: "calc(max(var(--edge), env(safe-area-inset-bottom)) + var(--sp-6))" }}
+      style={{ right: "max(var(--edge), env(safe-area-inset-right))", bottom: isDesktop ? "calc(max(var(--edge), env(safe-area-inset-bottom)) + var(--sp-6))" : "calc(var(--edge) + 96px)" }}
       aria-label="Map orientation"
       role="group"
     >

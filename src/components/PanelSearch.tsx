@@ -10,7 +10,7 @@ import { usePanel, type SearchHit } from "@/lib/store/PanelContext";
 import { cn } from "@/lib/utils";
 
 /** The Ask button lives beside the field, so it calls in through this handle. */
-export type PanelSearchHandle = { ask: () => void };
+export type PanelSearchHandle = { ask: () => void; dismiss: () => void };
 
 /**
  * One search bar for neighborhoods, addresses (NYC GeoSearch) and anything a
@@ -20,7 +20,7 @@ export type PanelSearchHandle = { ask: () => void };
  */
 export const PanelSearch = forwardRef<PanelSearchHandle, { boundaries: NtaBoundary[] | null }>(function PanelSearch({ boundaries }, ref) {
   const { selectNta, flyTo, seedChat, setChatOpen } = useMapState();
-  const { searchProviders, closePanel } = usePanel();
+  const { searchProviders, closePanel, setDrawerOpen } = usePanel();
   const [text, setText] = useState("");
   const [debounced, setDebounced] = useState("");
   useEffect(() => {
@@ -69,7 +69,8 @@ export const PanelSearch = forwardRef<PanelSearchHandle, { boundaries: NtaBounda
     seedChat(q);
     setText("");
   }, [text, seedChat, setChatOpen]);
-  useImperativeHandle(ref, () => ({ ask }), [ask]);
+  const dismiss = useCallback(() => setText(""), []);
+  useImperativeHandle(ref, () => ({ ask, dismiss }), [ask, dismiss]);
 
   const { isOpen, getInputProps, getMenuProps, getItemProps, getLabelProps, highlightedIndex } =
     useCombobox<SearchHit>({
@@ -82,6 +83,10 @@ export const PanelSearch = forwardRef<PanelSearchHandle, { boundaries: NtaBounda
         setText("");
       },
     });
+  // The suggestion list and the filters drawer do not stack.
+  useEffect(() => {
+    if (isOpen) setDrawerOpen(false);
+  }, [isOpen, setDrawerOpen]);
 
   return (
     <div className="relative">

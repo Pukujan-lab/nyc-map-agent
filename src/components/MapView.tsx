@@ -12,6 +12,7 @@ import { MapCompass } from "./MapCompass";
 import { ViewSwitcher } from "./ViewSwitcher";
 import { applyReadable } from "@/lib/map/readable";
 import { applyPlaces, placesStale, usePlaces, withQuickPlaces } from "@/lib/map/places";
+import { BUS_STOP_DOT_LAYERS, visibilityPatch } from "@/lib/map/busStopDots";
 import { useMapOptions } from "@/lib/map/mapOptions";
 import { applyBuildings, wantsFlatBuildings } from "@/lib/map/buildings";
 import { applyMapTheme, buildingEdge, setThemeCoords, usePalette } from "@/lib/theme";
@@ -146,7 +147,7 @@ function eyeCamera(map: MaplibreMapInstance, eye: Eye): CameraOptions {
 import { useMapState } from "@/lib/store/MapStateContext";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 import { WalkControls } from "./WalkControls";
-import { useQuickLayer } from "@/lib/quickLayers";
+import { getQuickLayer, setQuickLayer, useQuickLayer } from "@/lib/quickLayers";
 import { QuickLayers } from "./QuickLayers";
 import { StreetMiniMap } from "./StreetMiniMap";
 import { nearestCorner, type CornerSign } from "@/lib/map/corner";
@@ -258,8 +259,8 @@ export function MapView({
   const canHover = useMediaQuery("(hover: hover) and (pointer: fine) and (min-width: 1024px)");
   const signsMod = useRef<typeof import("@/lib/map/threeLayer") | null>(null);
   const city3dMod = useRef<typeof import("@/lib/map/city3d") | null>(null);
-  const [schoolIcons, setSchoolIcons] = useState(false);
-  const toggleSchools = useCallback(() => setSchoolIcons((on) => !on), []);
+  const schoolIcons = useQuickLayer("schools");
+  const toggleSchools = useCallback(() => setQuickLayer("schools", !getQuickLayer("schools")), []);
   const schoolsOn = useFlag("schools");
   const analyticsFlags = useFlags();
   const analytics = analyticsFlags.noise || analyticsFlags.crashes || analyticsFlags.dataLayers;
@@ -937,6 +938,23 @@ export function MapView({
 
   useEffect(() => setAmbient({ eco }), [eco]);
 
+  // Bus-route stop dots. Vehicle badges are separate layers and are not touched.
+  useEffect(() => {
+    if (!ready) return;
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    const apply = () => {
+      for (const id of BUS_STOP_DOT_LAYERS) {
+        if (!map.getLayer(id)) continue;
+        const next = visibilityPatch(map.getLayoutProperty(id, "visibility"), opts.busStops);
+        if (next) map.setLayoutProperty(id, "visibility", next);
+      }
+    };
+    apply();
+    map.on("idle", apply);
+    return () => { map.off("idle", apply); };
+  }, [ready, styleEpoch, opts.busStops]);
+
   // Public restrooms: lazily installed icon layer, toggled from the Layers dropdown.
   useEffect(() => {
     if (!ready) return;
@@ -971,11 +989,17 @@ export function MapView({
         mod.setSkylineVisible(map, !eco && !flatBuildings);
         if (!city3dOn && !schoolIcons) {
           setCity3dVisible(map, false);
+          await mod.installSchoolIcons(map, false);
           return;
         }
-        await installCity3d(map);
+        try {
+          await installCity3d(map);
+        } catch (err) {
+          console.warn("3D city failed to load", err);
+        }
         if (cancelled) return;
-        mod.setSchoolIconsVisible(map, schoolIcons);
+        // School points are their own source-layer, so a failed facade load still shows them.
+        await mod.installSchoolIcons(map, schoolIcons);
         // Storefront signboards: a three.js custom layer, eye level only.
         const signs = await import("@/lib/map/threeLayer");
         if (cancelled) return;
@@ -1572,7 +1596,7 @@ export function MapView({
 
       {hover && !walking && canHover && !sheetOpen && analytics ? (
         <div
-          className="pointer-events-none absolute z-20 max-w-[220px] rounded-lg border border-border bg-card/95 px-3 py-2 text-xs shadow-xl backdrop-blur"
+          className="pointer-events-none absolute z-20 max-w-[220px] rounded-lg border border-border bg-card px-3 py-2 text-xs shadow-xl"
           style={{
             left: Math.min(hover.x + 14, window.innerWidth - 240),
             top: Math.max(hover.y - 10, 8),

@@ -68,3 +68,14 @@ export function escapeTarget(s: SlotState, modeActive: boolean): "drawer" | "she
 export function peekChipLabel(title: string, peek?: string): string {
   return peek?.trim() || title;
 }
+
+/**
+ * Phone sheet height. Lines need the half drawer so the list is readable.
+ * Follow keeps the peek so the camera controls stay on screen. Other sheets
+ * stay at the peek showPanel already set.
+ */
+export function sheetSnapFor(contentId: string | null, modeActive: boolean): "half" | "peek" | null {
+  if (contentId === "transit:lines") return "half";
+  if (modeActive) return "peek";
+  return null;
+}

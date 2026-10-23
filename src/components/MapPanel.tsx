@@ -1,7 +1,7 @@
 import { ArrowLeft } from "lucide-react";
 import { useFlags } from "@/lib/flags";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { peekChipLabel } from "@/lib/store/panelSlot";
+import { peekChipLabel, sheetSnapFor } from "@/lib/store/panelSlot";
 import { Drawer } from "vaul";
 import { Button } from "@/components/ui/button";
 import type { NtaBoundary } from "@/lib/api/nta";
@@ -43,7 +43,7 @@ function FeatureTopBar() {
  */
 function TopBar({ boundaries, status, onLayers }: { boundaries: NtaBoundary[] | null; status?: ReactNode; onLayers: () => void }) {
   const searchRef = useRef<PanelSearchHandle>(null);
-  const { chips } = usePanel();
+  const { chips, content, drawerOpen } = usePanel();
   const transit = chips.find((c) => c.id === "transit");
   // The alert/weather row is a real slot: publish the bar's measured height as
   // --topbar-h so the sheet, the drawer and the status chip sit below it.
@@ -59,6 +59,10 @@ function TopBar({ boundaries, status, onLayers }: { boundaries: NtaBoundary[] | 
       root.style.removeProperty("--topbar-h");
     };
   }, []);
+  // A lines drawer or the filters drawer owns the screen: drop the suggestion list.
+  useEffect(() => {
+    if (drawerOpen || content?.id === "transit:lines") searchRef.current?.dismiss();
+  }, [drawerOpen, content?.id]);
   return (
     <div ref={ref} data-testid="topbar" className="space-y-[var(--sp-2)]">
       <div className="flex items-center gap-[var(--sp-2)] rounded-full border border-border bg-card p-[var(--sp-1)] shadow-lg">
@@ -115,10 +119,12 @@ export function MapPanel({
     minimized, minimize, restore, modeActive,
   } = usePanel();
 
-  // Follow / Navigate own the top HUD: on phone the sheet drops to peek.
+  // Lines open as a half drawer. Follow still drops the sheet to a peek.
   useEffect(() => {
-    if (modeActive && !isDesktop) setSnap("peek");
-  }, [modeActive, isDesktop, setSnap]);
+    if (isDesktop) return;
+    const next = sheetSnapFor(content?.id ?? null, modeActive);
+    if (next) setSnap(next);
+  }, [content?.id, modeActive, isDesktop, setSnap]);
 
   // A map pick replaces pushed content; it never stacks on it.
   useEffect(() => {
@@ -212,7 +218,7 @@ export function MapPanel({
   if (isDesktop) {
     return (
       <>
-        <div className="absolute left-[var(--edge)] top-[var(--edge)] z-40 w-[clamp(360px,46vw,720px)]">{top}</div>
+        <div className="absolute left-[var(--edge)] top-[var(--edge)] z-[46] w-[clamp(360px,46vw,720px)]">{top}</div>
         {drawer}
         {chip}
         {showSheet ? (
@@ -226,7 +232,7 @@ export function MapPanel({
 
   return (
     <>
-      <div className="absolute z-30" style={{ top: "calc(env(safe-area-inset-top) + var(--edge))", left: "max(var(--edge), env(safe-area-inset-left))", right: "max(var(--edge), env(safe-area-inset-right))" }}>{top}</div>
+      <div className="absolute z-[46]" style={{ top: "calc(env(safe-area-inset-top) + var(--edge))", left: "max(var(--edge), env(safe-area-inset-left))", right: "max(var(--edge), env(safe-area-inset-right))" }}>{top}</div>
       {drawer}
       {chip}
       {showSheet ? <Drawer.Root

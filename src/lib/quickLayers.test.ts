@@ -6,6 +6,7 @@ describe("quick layers store", () => {
     expect(getQuickLayer("businesses")).toBe(false);
     expect(getQuickLayer("streetArt")).toBe(true);
     expect(getQuickLayer("xray")).toBe(false);
+    expect(getQuickLayer("schools")).toBe(false);
   });
   it("toggles", () => {
     setQuickLayer("xray", true);

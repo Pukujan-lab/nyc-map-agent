@@ -126,10 +126,10 @@ export function LayersDrawer({
   for (const c of chips) add(c);
 
   const directing = routePicking !== null || routeStart !== null;
-  const filtersOn = places.size + opts.routes.length + layerChips.filter((c) => c.active).length + (opts.stationsOnly ? 1 : 0) + (registered.get("liveBuses")?.active ? 1 : 0);
+  const filtersOn = places.size + opts.routes.length + layerChips.filter((c) => c.active).length + (opts.stationsOnly ? 1 : 0) + (opts.busStops ? 0 : 1) + (registered.get("liveBuses")?.active ? 1 : 0);
   const clearAll = () => {
     setPlaces(new Set());
-    setOptions({ routes: [], stationsOnly: false });
+    setOptions({ routes: [], stationsOnly: false, busStops: true });
     setTransitFocusOff();
     for (const c of layerChips) if (c.active && c.id !== "transit") c.onToggle();
     const buses = registered.get("liveBuses");
@@ -261,6 +261,7 @@ export function LayersDrawer({
           </div>
           <div className="flex flex-wrap gap-[var(--sp-2)]">
             <Pill on={opts.stationsOnly} onClick={() => setOptions({ stationsOnly: !opts.stationsOnly })}>Stations only (hide vehicles)</Pill>
+            <Pill on={opts.busStops} onClick={() => setOptions({ busStops: !opts.busStops })}>Bus stops</Pill>
             {opts.routes.length ? <Pill onClick={() => setOptions({ routes: [] })}>Show all lines</Pill> : null}
           </div>
         </Section>
@@ -317,7 +318,7 @@ export function LayersDrawer({
         aria-label="Layers and filters"
         data-testid="layers-drawer"
         className={cn(
-          "fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-[22px] border border-border bg-card pb-[max(var(--sp-2),env(safe-area-inset-bottom))] text-card-foreground shadow-2xl outline-none",
+          "fixed inset-x-0 bottom-0 z-40 flex flex-col rounded-t-[22px] border border-border bg-card pb-[max(var(--sp-2),env(safe-area-inset-bottom))] text-card-foreground shadow-2xl outline-none",
           // Leaves the top of the map free to tap; with Follow / Navigate on,
           // it stops further short so it never covers their HUD.
           hudActive ? "max-h-[50%]" : "max-h-[60%]",
