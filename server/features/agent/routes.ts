@@ -6,7 +6,7 @@
  */
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { stepCountIs, streamText, type LanguageModel } from "ai";
-import { requestBody, type AskContext, type StreamEvent } from "../../../src/features/agent/schema";
+import { requestBody, type AgentRequest, type AskContext, type StreamEvent } from "../../../src/features/agent/schema";
 import { resolveFlags } from "../../../src/lib/flags/registry";
 import { makeTools, type ToolContext } from "./tools";
 import { toNyLocal } from "./trip";
@@ -31,11 +31,20 @@ export function contextLine(c: AskContext | undefined): string | null {
   return `${parts.join("; ")}. Treat "here" as that spot unless they say otherwise.`;
 }
 
-export function systemPrompt(nowLocal: string, location: { lon: number; lat: number } | null, mode: "walk" | "transit" | "drive" = "transit", context?: AskContext): string {
+export function systemPrompt(nowLocal: string, location: { lon: number; lat: number } | null, mode: "walk" | "transit" | "drive" = "transit", context?: AskContext, places?: AgentRequest["places"]): string {
   const street = contextLine(context);
+  const spot = (kind: "home" | "work") => {
+    const saved = places?.[kind];
+    return saved
+      ? `Saved ${kind} is "${saved.label}". The place name "${kind}" is that spot in every tool, including flyTo and transit_plan.`
+      : `No ${kind} is saved. If they ask for ${kind}, tell them to open Layers and filters and tap Save ${kind} here.`;
+  };
   return [
     ...(street ? [street] : []),
     "You are the NYC Map's trip assistant. Answers are spoken aloud: 2-4 short sentences, no markdown, no lists.",
+    spot("home"),
+    spot("work"),
+    "When they ask to show, hide, or focus part of the map, call set_filters with only the fields they named, then say what changed. That includes roads, bus stops, street names, flat or 3D buildings, simple or detailed streets, one subway line, restrooms, x-ray, transit focus, eco, the textured city, events, parking, traffic, weather, ferries, live trains, the theme, and place icons such as restaurants or parks. liveBuses true opens the bus line picker. It does not turn on every bus in the city.",
     `Now is ${nowLocal} in New York. Resolve relative times ("tomorrow at 9am") to local New York time YYYY-MM-DDTHH:MM.`,
     location
       ? `The user shared their exact location: longitude ${location.lon}, latitude ${location.lat}. Use "here" for it in tools; do not repeat the coordinates back.`
@@ -59,7 +68,7 @@ function defaultModel(): LanguageModel {
 export async function POST(request: Request, opts: { model?: LanguageModel; deps?: ToolContext["deps"] } = {}): Promise<Response> {
   const parsed = requestBody.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "bad_request" }, { status: 400 });
-  const { messages, now, mode, context } = parsed.data;
+  const { messages, now, mode, context, places } = parsed.data;
   // Street view's spot counts as the shared location for "here".
   const location = parsed.data.location ?? (context ? { lon: context.lon, lat: context.lat } : null);
   const enc = new TextEncoder();
@@ -72,9 +81,9 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
         const model = opts.model ?? defaultModel();
         const result = streamText({
           model,
-          system: systemPrompt(toNyLocal(now ? new Date(now) : new Date()), location, mode, context),
+          system: systemPrompt(toNyLocal(now ? new Date(now) : new Date()), location, mode, context, places),
           messages,
-          tools: makeTools({ location, emit: (command) => send({ type: "command", command }), deps: opts.deps, drive: resolveFlags({ env: process.env.VITE_FLAGS, advancedMode: false }).agentDrive }),
+          tools: makeTools({ location, places, emit: (command) => send({ type: "command", command }), deps: opts.deps, drive: resolveFlags({ env: process.env.VITE_FLAGS, advancedMode: false }).agentDrive }),
           stopWhen: stepCountIs(8),
           maxRetries: 1,
           // The default handler console.logs the raw provider error; keep logs to the request id only.

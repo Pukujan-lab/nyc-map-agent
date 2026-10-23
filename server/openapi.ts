@@ -75,6 +75,12 @@ export const AGENT_ROUTE = createRoute({
                   followedTrain: z.string().nullable().optional(),
                 })
                 .optional(),
+              places: z
+                .object({
+                  home: z.object({ label: z.string(), lon: z.number(), lat: z.number() }).nullable().optional(),
+                  work: z.object({ label: z.string(), lon: z.number(), lat: z.number() }).nullable().optional(),
+                })
+                .optional(),
             })
             .openapi("AgentRequest"),
         },

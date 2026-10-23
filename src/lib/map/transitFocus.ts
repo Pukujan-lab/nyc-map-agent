@@ -63,7 +63,12 @@ export function useTransitFocus(): [boolean, (on: boolean) => void] {
   return [on, setFocusOn];
 }
 
+/** The Layers drawer and Ask share this. */
+export function setTransitFocus(on: boolean): void {
+  setFocusOn(on);
+}
+
 /** Clear all in the Layers & filters drawer turns Focus off too. */
 export function setTransitFocusOff(): void {
-  setFocusOn(false);
+  setTransitFocus(false);
 }

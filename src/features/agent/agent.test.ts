@@ -21,7 +21,7 @@ export const sampleTrip: Trip = tripSchema.parse({
   ],
 });
 
-const ctx = (): ExecutorContext => ({ flyTo: vi.fn(), showTrip: vi.fn(), openTrip: vi.fn(), enterStreetView: vi.fn(), playFlythrough: vi.fn(), setTime: vi.fn() });
+const ctx = (): ExecutorContext => ({ flyTo: vi.fn(), showTrip: vi.fn(), openTrip: vi.fn(), enterStreetView: vi.fn(), playFlythrough: vi.fn(), setTime: vi.fn(), applyFilters: vi.fn() });
 
 describe("command schema", () => {
   it("accepts every command type", () => {
@@ -32,6 +32,7 @@ describe("command schema", () => {
       { type: "enterStreetView", lon: -74, lat: 40.7 },
       { type: "playFlythrough", trip: sampleTrip },
       { type: "setTime", iso: "2026-10-22T09:00" },
+      { type: "setFilters", filters: { roads: false, restrooms: true } },
     ]) expect(command.safeParse(c).success).toBe(true);
   });
   it("rejects unknown commands and bad coordinates", () => {
@@ -50,6 +51,8 @@ describe("command executor", () => {
     expect(c.playFlythrough).toHaveBeenCalledWith(expect.objectContaining({ id: "t1" }), 30);
     executeCommand({ type: "setTime", iso: "2026-10-22T09:00" }, c);
     expect(c.setTime).toHaveBeenCalledWith("2026-10-22T09:00");
+    executeCommand({ type: "setFilters", filters: { xray: true } }, c);
+    expect(c.applyFilters).toHaveBeenCalledWith({ xray: true });
   });
   it("refuses invalid input without calling anything", () => {
     const c = ctx();

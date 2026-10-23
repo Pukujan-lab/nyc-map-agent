@@ -1,5 +1,6 @@
 import { Bus, Car, Footprints, Headphones, LocateFixed, Mic, MicOff, MoreVertical, Pause, Play, Send, SkipForward, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,8 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/
 import { Textarea } from "@/components/ui/textarea";
 import { useFlag } from "@/lib/flags";
 import { getMapInstance } from "@/lib/map/mapInstance";
+import { applyStoredFilters, searchForFilters } from "@/lib/map/mapFilters";
+import { readSavedPlaces } from "@/lib/map/savedPlaces";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { revealTripBuses } from "@/lib/transit/busReveal";
 import { setFollowed } from "@/lib/transit/follow";
@@ -47,7 +50,8 @@ const MODES: Array<{ id: TripMode; label: string; Icon: typeof Bus }> = [
 
 export default function AgentOverlay() {
   const { chatOpen, setChatOpen, flyTo, startWalk, stopWalk, chatSeed, clearSeed } = useMapState();
-  const { showPanel, closeAll } = usePanel();
+  const { showPanel, closeAll, setDrawerOpen } = usePanel();
+  const [, setSearchParams] = useSearchParams();
   // One panel at a time (#225): opening Ask closes the drawer and any sheet.
   useEffect(() => {
     if (chatOpen) closeAll();
@@ -93,6 +97,11 @@ export default function AgentOverlay() {
     enterStreetView: (lon, lat) => { handoffCamera(); startWalk({ lon, lat }); },
     playFlythrough: (t, speed) => { handoffCamera(); revealTripBuses(t); setTrip(t); setChatOpen(false); player.start(t, speed); },
     setTime: (iso) => setMapTime(iso),
+    applyFilters: (filters) => {
+      applyStoredFilters(filters);
+      setSearchParams((prev) => searchForFilters(prev, filters), { replace: true });
+      if (filters.liveBuses === true) setDrawerOpen(true);
+    },
   };
   const ctxRef = useRef(ctx);
   ctxRef.current = ctx;
@@ -125,7 +134,9 @@ export default function AgentOverlay() {
     abort.current = new AbortController();
     let spoken = "";
     try {
-      for await (const ev of askAgent({ messages: history.map(({ role, content }) => ({ role, content })), location, mode, now: new Date().toISOString(), ...(askReq ? { context: askReq.context } : {}) }, abort.current.signal)) {
+      const saved = readSavedPlaces();
+      const places = saved.home || saved.work ? saved : undefined;
+      for await (const ev of askAgent({ messages: history.map(({ role, content }) => ({ role, content })), location, mode, now: new Date().toISOString(), ...(places ? { places } : {}), ...(askReq ? { context: askReq.context } : {}) }, abort.current.signal)) {
         if (ev.type === "text") {
           spoken += ev.text;
           setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, content: x.content + ev.text } : x)));

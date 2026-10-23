@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { describeStep } from "./drive/router";
 import { MTA_TOLLS, tolls } from "./drive/context";
-import { args } from "./tools";
+import { args, savedSpotFor } from "./tools";
 import { nyLocalToDate, toNyLocal } from "./trip";
 import { octant } from "./transit";
 
@@ -13,6 +13,11 @@ describe("tool argument schemas", () => {
   it("playFlythrough only accepts 2x/10x/30x", () => {
     expect(args.playFlythrough.parse({ tripId: "t" }).speed).toBe(10);
     expect(() => args.playFlythrough.parse({ tripId: "t", speed: 5 })).toThrow();
+  });
+  it("resolves a saved home and refuses a missing work", () => {
+    expect(savedSpotFor("Home", { home: { label: "Astoria", lon: -73.92, lat: 40.76 } })).toEqual({ label: "Astoria", at: [-73.92, 40.76] });
+    expect(savedSpotFor("work", { home: { label: "Astoria", lon: -73.92, lat: 40.76 } })).toBe("missing");
+    expect(savedSpotFor("Grand Central", {})).toBeNull();
   });
   it("drive_plan and weather validate", () => {
     expect(args.drive_plan.safeParse({ to: "JFK", depart: "2026-10-22T07:30" }).success).toBe(true);

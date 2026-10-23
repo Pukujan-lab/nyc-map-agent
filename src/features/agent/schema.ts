@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SAVED_LAT_MAX, SAVED_LAT_MIN, SAVED_LON_MAX, SAVED_LON_MIN } from "../../lib/map/savedSpot";
 
 /**
  * The agent's wire contract, shared by server/features/agent (producer) and the
@@ -108,6 +109,47 @@ export const trip = tripBase.extend({ alternatives: z.array(tripBase).max(4).def
 export type TripCore = z.infer<typeof tripBase>;
 export type Trip = z.infer<typeof trip>;
 
+/** One saved home or work spot the browser sends with a question. */
+export const savedSpot = z.object({
+  label: z.string().min(1).max(80),
+  lon: z.number().min(SAVED_LON_MIN).max(SAVED_LON_MAX),
+  lat: z.number().min(SAVED_LAT_MIN).max(SAVED_LAT_MAX),
+});
+
+/**
+ * A partial change to the map's filters. Absent fields stay as they are.
+ * `liveBuses: true` only asks the client to open the line picker.
+ */
+export const filterPatch = z.object({
+  roads: z.boolean().optional().describe("false hides road paint and road names"),
+  busStops: z.boolean().optional().describe("false hides bus stop icons"),
+  streetNames: z.boolean().optional(),
+  buildings: z.enum(["flat", "3d"]).optional(),
+  streets: z.enum(["simple", "full"]).optional().describe("simple is the pale street style; full is detailed"),
+  stationsOnly: z.boolean().optional().describe("true hides live vehicles and keeps stations"),
+  routes: z.array(z.string().max(3)).max(24).optional().describe("Subway lines to emphasize, such as [\"L\"]. An empty list shows every line."),
+  businesses: z.boolean().optional(),
+  streetArt: z.boolean().optional(),
+  xray: z.boolean().optional().describe("underground trains near the camera"),
+  health: z.boolean().optional(),
+  parksPlaces: z.boolean().optional(),
+  citibike: z.boolean().optional(),
+  restrooms: z.boolean().optional(),
+  transitFocus: z.boolean().optional().describe("dims the basemap so transit stands out"),
+  eco: z.boolean().optional().describe("lighter drawing for a slow device"),
+  texturedCity: z.boolean().optional().describe("textured 3D buildings"),
+  events: z.boolean().optional(),
+  parking: z.boolean().optional(),
+  traffic: z.boolean().optional(),
+  weather: z.boolean().optional(),
+  ferry: z.boolean().optional(),
+  liveTrains: z.boolean().optional(),
+  liveBuses: z.boolean().optional().describe("true opens the bus line picker; false hides live buses. Never turn on every bus."),
+  theme: z.enum(["auto", "ivory", "ink", "mta", "neon"]).optional(),
+  places: z.array(z.string().max(40)).max(30).optional().describe("Basemap place ids to show, replacing the current set: food.restaurant, food.fast, food.bar, food.bakery, food.icecream, coffee.cafe, todo.museum, todo.shows, todo.sights, todo.library, todo.sport, shop.grocery, shop.clothes, shop.books, shop.other, parks.park, parks.play, parks.dog, health.care, citibike.dock. An empty list hides them."),
+});
+export type FilterPatch = z.infer<typeof filterPatch>;
+
 /** Structured map commands the model returns and the client executes. Keep it small. */
 export const command = z.discriminatedUnion("type", [
   z.object({ type: z.literal("flyTo"), lon: z.number().min(-180).max(180), lat: z.number().min(-90).max(90), zoom: z.number().min(9).max(20).optional() }),
@@ -116,6 +158,7 @@ export const command = z.discriminatedUnion("type", [
   z.object({ type: z.literal("enterStreetView"), lon: z.number().min(-180).max(180), lat: z.number().min(-90).max(90) }),
   z.object({ type: z.literal("playFlythrough"), trip, speed: z.union([z.literal(2), z.literal(10), z.literal(30)]).default(10) }),
   z.object({ type: z.literal("setTime"), iso: z.string() }),
+  z.object({ type: z.literal("setFilters"), filters: filterPatch }),
 ]);
 export type AgentCommand = z.infer<typeof command>;
 
@@ -157,5 +200,10 @@ export const requestBody = z.object({
   /** Client clock, so "tomorrow 9am" resolves in the user's zone. */
   now: z.string().optional(),
   context: askContext.optional(),
+  /** Saved home and work for this question. The server does not store them. */
+  places: z.object({
+    home: savedSpot.nullable().optional(),
+    work: savedSpot.nullable().optional(),
+  }).optional(),
 });
 export type AgentRequest = z.infer<typeof requestBody>;

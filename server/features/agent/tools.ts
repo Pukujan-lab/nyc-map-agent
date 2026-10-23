@@ -1,6 +1,7 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { command, type AgentCommand, type LngLatTuple, type Trip } from "../../../src/features/agent/schema";
+import { command, filterPatch, type AgentCommand, type LngLatTuple, type Trip } from "../../../src/features/agent/schema";
+import type { SavedSpot } from "../../../src/lib/map/savedSpot";
 import { elevatorStatus, geocode, hazardsAt, routeWalk, weatherAt, type Place } from "./services";
 import { buildDriveTrip } from "./drive/trip";
 import type { DriveRouter } from "./drive/router";
@@ -13,6 +14,17 @@ export interface ToolContext {
   deps?: PlanDeps & { driveRouter?: DriveRouter };
   /** Driving sub-module flag (agentDrive). */
   drive?: boolean;
+  /** Saved home and work for this question only. */
+  places?: { home?: SavedSpot | null; work?: SavedSpot | null };
+}
+
+/** "home" and "work" resolve to the saved spots. Null means the word is not a saved place. */
+export function savedSpotFor(text: string, places: ToolContext["places"]): { label: string; at: LngLatTuple } | "missing" | null {
+  const key = text.trim().toLowerCase();
+  if (key !== "home" && key !== "work") return null;
+  const spot = places?.[key];
+  if (!spot) return "missing";
+  return { label: spot.label, at: [spot.lon, spot.lat] };
 }
 
 /** Tool argument schemas, exported for tests. "here" means the user's location. */
@@ -47,6 +59,9 @@ export function makeTools(ctx: ToolContext) {
       if (!ctx.location) throw new Error("Location permission not granted; ask the user where they are starting.");
       return { label: "your location", at: [ctx.location.lon, ctx.location.lat] };
     }
+    const saved = savedSpotFor(text, ctx.places);
+    if (saved === "missing") throw new Error(`No ${text.trim().toLowerCase()} is saved. Tell them to open Layers and filters and tap Save ${text.trim().toLowerCase()} here.`);
+    if (saved) return saved;
     const p = await geocode(text);
     if (!p) throw new Error(`Could not find "${text}" in NYC.`);
     return p;
@@ -101,5 +116,10 @@ export function makeTools(ctx: ToolContext) {
     enterStreetView: tool({ description: "Map: drop to street level at a place.", inputSchema: args.enterStreetView, execute: async ({ place }) => { const p = await resolve(place); return emit({ type: "enterStreetView", lon: p.at[0], lat: p.at[1] }); } }),
     playFlythrough: tool({ description: "Map: fast-forward preview flying along a planned trip.", inputSchema: args.playFlythrough, execute: ({ tripId, speed }) => emit({ type: "playFlythrough", trip: tripOf(tripId), speed }) }),
     setTime: tool({ description: "Map: set the time the map shows (for forecasts/planned work).", inputSchema: args.setTime, execute: ({ iso }) => emit({ type: "setTime", iso }) }),
+    set_filters: tool({
+      description: "Map: change layers and filters. Send only the fields the person asked to change. liveBuses true opens the bus line picker and does not show every bus.",
+      inputSchema: filterPatch,
+      execute: (filters) => emit({ type: "setFilters", filters }),
+    }),
   };
 }

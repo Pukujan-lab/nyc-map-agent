@@ -12,6 +12,8 @@ import { MapCompass } from "./MapCompass";
 import { ViewSwitcher } from "./ViewSwitcher";
 import { applyReadable } from "@/lib/map/readable";
 import { busStopIconOpacity, busStopTextOpacity } from "@/lib/map/busStops";
+import { SAVED_LABEL, SAVED_LAYER, syncSavedPlaces } from "@/lib/map/savedPlaceLayer";
+import { readSavedPlaces, useSavedPlaces } from "@/lib/map/savedPlaces";
 import { applyPlaces, placesStale, usePlaces, withQuickPlaces } from "@/lib/map/places";
 import { useMapOptions } from "@/lib/map/mapOptions";
 import { applyBuildings, wantsFlatBuildings } from "@/lib/map/buildings";
@@ -504,6 +506,13 @@ export function MapView({
     };
   }, [ready, styleEpoch, transitFocus, places, businesses, health, parksPlaces, citibike, opts, t, flatBuildings, analytics]);
 
+  const savedPlaces = useSavedPlaces();
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map || !ready) return;
+    return syncSavedPlaces(map, savedPlaces);
+  }, [ready, styleEpoch, savedPlaces]);
+
   const handleLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
     if (!map) return;
@@ -692,6 +701,18 @@ export function MapView({
       }
       // Other feature layers (events, parking…) open their own panel.
       if (hitsAny(FEATURES.filter((f) => f.id !== "transit").flatMap((f) => f.clickLayers ?? []))) return;
+      if (clicked && hitsAny([SAVED_LAYER, SAVED_LABEL])) {
+        const live = [SAVED_LAYER, SAVED_LABEL].filter((id) => clicked.getLayer(id));
+        const feat = clicked.queryRenderedFeatures([event.point.x, event.point.y], { layers: live })[0];
+        const kind = String(feat?.properties?.kind ?? "");
+        if (kind === "home" || kind === "work") {
+          const spot = readSavedPlaces()[kind];
+          if (spot) {
+            showPanel({ id: `saved:${kind}`, title: kind === "home" ? "Home" : "Work", subtitle: spot.label });
+            return;
+          }
+        }
+      }
       // Eye level: cast the camera ray through the tap and open whatever it
       // hits first (landmark model, storefront, building), like overhead.
       if (walking) {

@@ -4,8 +4,9 @@ import { useFeatureToggles } from "@/lib/featureToggles";
 import { isFlagId, useFlags } from "@/lib/flags";
 import type { NtaBoundary } from "@/lib/api/nta";
 import { NtaIndex } from "@/lib/geo/ntaIndex";
-import { startSharing, stopSharing, useSharedLocation } from "@/lib/geo/sharedLocation";
-import { onMapInstance } from "@/lib/map/mapInstance";
+import { sharedCoords, startSharing, stopSharing, useSharedLocation } from "@/lib/geo/sharedLocation";
+import { getMapInstance, onMapInstance } from "@/lib/map/mapInstance";
+import { clearSavedPlace, saveSavedPlace, useSavedPlaces } from "@/lib/map/savedPlaces";
 import { SUBWAY_ROUTES, setOptions, useMapOptions } from "@/lib/map/mapOptions";
 import { PLACE_CATEGORIES, setPlaces, usePlaces } from "@/lib/map/places";
 import { setTransitFocusOff } from "@/lib/map/transitFocus";
@@ -105,6 +106,7 @@ export function LayersDrawer({
   const theme = useTheme();
   const phase = useAutoPhase();
   const shared = useSharedLocation();
+  const saved = useSavedPlaces();
   const hood = useNeighborhood(boundaries);
   const [q, setQ] = useState("");
   const [openCat, setOpenCat] = useState<string | null>(null);
@@ -189,6 +191,28 @@ export function LayersDrawer({
         />
       </div>
       <div className="min-h-0 flex-1 space-y-[var(--sp-5)] overflow-y-auto overscroll-contain px-[var(--sp-4)] pb-[var(--sp-6)] pt-[var(--sp-3)]">
+        <Section title="Home and work" hidden={!!q.trim() && !["home", "work", "save", "place"].some(match)}>
+          <p className="text-[13px] text-muted-foreground">Saved on this phone. Ask can start or end a trip at either one.</p>
+          <div className="flex flex-wrap gap-[var(--sp-2)]">
+            {(["home", "work"] as const).flatMap((kind) => {
+              const spot = saved[kind];
+              const title = kind === "home" ? "Home" : "Work";
+              const here = () => {
+                const c = getMapInstance()?.getCenter();
+                if (!c) return;
+                const label = hood && hood !== "New York" ? hood : title;
+                saveSavedPlace(kind, { label, lon: c.lng, lat: c.lat });
+              };
+              return [
+                spot ? <Pill key={`${kind}-go`} on onClick={() => flyTo({ lon: spot.lon, lat: spot.lat, zoom: 16 })}>{spot.label === title ? title : `${title} · ${spot.label}`}</Pill> : null,
+                <Pill key={`${kind}-save`} onClick={here}>{spot ? `Move ${kind} here` : `Save ${kind} here`}</Pill>,
+                shared.status === "on" ? <Pill key={`${kind}-gps`} onClick={() => { const c = sharedCoords(); if (c) saveSavedPlace(kind, { label: "My location", lon: c.lon, lat: c.lat }); }}>Save {kind} as my location</Pill> : null,
+                spot ? <Pill key={`${kind}-clear`} onClick={() => clearSavedPlace(kind)}>Clear {kind}</Pill> : null,
+              ];
+            })}
+          </div>
+        </Section>
+
         <Section title="Getting around" hidden={!around.some((a) => match(a.label))}>
           <div className="grid grid-cols-2 gap-[var(--sp-2)]">
             {around.filter((a) => match(a.label)).map((a) =>

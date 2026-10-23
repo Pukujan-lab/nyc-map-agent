@@ -419,6 +419,55 @@
               "lon",
               "lat"
             ]
+          },
+          "places": {
+            "type": "object",
+            "properties": {
+              "home": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  },
+                  "lon": {
+                    "type": "number"
+                  },
+                  "lat": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "label",
+                  "lon",
+                  "lat"
+                ]
+              },
+              "work": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  },
+                  "lon": {
+                    "type": "number"
+                  },
+                  "lat": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "label",
+                  "lon",
+                  "lat"
+                ]
+              }
+            }
           }
         },
         "required": [

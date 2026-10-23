@@ -1,7 +1,7 @@
 import { MockLanguageModelV4, convertArrayToReadableStream } from "ai/test";
 import { describe, expect, it, vi } from "vitest";
 import { streamEvent, type StreamEvent } from "../../../src/features/agent/schema";
-import { POST } from "./routes";
+import { POST, systemPrompt } from "./routes";
 
 const usage = { inputTokens: { total: 100, noCache: 100, cacheRead: 0, cacheWrite: 0 }, outputTokens: { total: 20, text: 20, reasoning: 0 } };
 const finish = (reason: "tool-calls" | "stop") => ({ type: "finish", finishReason: { unified: reason, raw: reason }, usage }) as const;
@@ -25,6 +25,15 @@ async function run(body: unknown): Promise<StreamEvent[]> {
   const text = await res.text();
   return text.trim().split("\n").map((l) => streamEvent.parse(JSON.parse(l)));
 }
+
+describe("system prompt", () => {
+  it("names a saved home and tells Ask it can change filters", () => {
+    const text = systemPrompt("2026-10-23T09:00", null, "transit", undefined, { home: { label: "Astoria", lon: -73.92, lat: 40.76 }, work: null });
+    expect(text).toContain("Saved home is \"Astoria\"");
+    expect(text).toContain("No work is saved");
+    expect(text).toContain("set_filters");
+  });
+});
 
 describe("POST /api/agent (mocked LLM)", () => {
   it("rejects a bad body", async () => {

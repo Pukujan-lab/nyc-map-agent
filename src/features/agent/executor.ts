@@ -1,4 +1,4 @@
-import { command, type AgentCommand, type Trip } from "./schema";
+import { command, type AgentCommand, type FilterPatch, type Trip } from "./schema";
 
 /** What the client can do for the agent. Injected, so the executor is pure. */
 export interface ExecutorContext {
@@ -8,6 +8,7 @@ export interface ExecutorContext {
   enterStreetView: (lon: number, lat: number) => void;
   playFlythrough: (trip: Trip, speed: 2 | 10 | 30) => void;
   setTime: (iso: string) => void;
+  applyFilters: (filters: FilterPatch) => void;
 }
 
 export type ExecResult = { ok: true; type: AgentCommand["type"] } | { ok: false; error: string };
@@ -25,6 +26,7 @@ export function executeCommand(raw: unknown, ctx: ExecutorContext): ExecResult {
       case "enterStreetView": ctx.enterStreetView(c.lon, c.lat); break;
       case "playFlythrough": ctx.playFlythrough(c.trip, c.speed); break;
       case "setTime": ctx.setTime(c.iso); break;
+      case "setFilters": ctx.applyFilters(c.filters); break;
     }
     return { ok: true, type: c.type };
   } catch (e) {
