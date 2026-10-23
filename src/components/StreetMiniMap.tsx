@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import maplibregl, { type GeoJSONSource, type Map as MapLibreMap } from "maplibre-gl";
 import { RestroomDetails } from "@/components/RestroomCard";
-import { applyInsetFilters, coneRotation, facingLabel, miniStyle, refreshInsetSource, type InsetFilters } from "@/lib/map/miniStyle";
+import type { RestroomInfo } from "@/features/restrooms/layers";
+import { applyInsetFilters, bearingTo, coneRotation, facingLabel, miniStyle, refreshInsetSource, whereLabel, type InsetFilters } from "@/lib/map/miniStyle";
 import { metresBetween } from "@/lib/map/walk";
 import { pushPanel } from "@/lib/store/PanelContext";
 import { dotsNear, useLiveDots } from "@/lib/transit/liveVehicles";
@@ -9,6 +10,17 @@ import { dotsNear, useLiveDots } from "@/lib/transit/liveVehicles";
 const DOTS = "mini-live-vehicles";
 /** Live vehicles drawn on the inset: about what it shows at z15.5. */
 const DOTS_RADIUS_M = 900;
+
+interface NearestRestroom { info: RestroomInfo; metres: number; bearing: number }
+
+function openRestroom(info: RestroomInfo, distanceLabel?: string): void {
+  pushPanel({
+    id: `restroom:${info.lon.toFixed(5)},${info.lat.toFixed(5)}`,
+    title: info.name,
+    subtitle: distanceLabel ?? "Public restroom",
+    details: <RestroomDetails restroom={info} distanceLabel={distanceLabel} />,
+  });
+}
 
 /**
  * Street-level mini map: a small north-up inset (140 px phone, 200 px desktop)
@@ -30,6 +42,8 @@ export function StreetMiniMap({ main, getEye, onExit, filters }: {
   const [hidden, setHidden] = useState(false);
   const [bearing, setBearing] = useState(0);
   const miniRef = useRef<MapLibreMap | null>(null);
+  // The closest restroom to the eye, even when it is past the inset's edge.
+  const [nearest, setNearest] = useState<NearestRestroom | null>(null);
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
   const dots = useLiveDots();
@@ -66,9 +80,15 @@ export function StreetMiniMap({ main, getEye, onExit, filters }: {
         void mod.loadRestrooms().then((all) => {
           if (!alive || !mini.getSource("mini-restrooms")) return;
           const b = mini.getBounds();
-          const next = mod.restroomsForView(all, [e.lon, e.lat], mini.getZoom(), {
+          const view = mod.restroomsForView(all, [e.lon, e.lat], mini.getZoom(), {
             west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth(),
           });
+          const here: [number, number] = [e.lon, e.lat];
+          const closest = mod.nearestRestrooms(all, here, 1).features[0];
+          const info = closest ? mod.restroomInfo(closest) : null;
+          setNearest(info ? { info, metres: metresBetween(here, [info.lon, info.lat]), bearing: bearingTo(here, [info.lon, info.lat]) } : null);
+          const has = (f: GeoJSON.Feature) => view.features.some((v) => v.geometry?.type === "Point" && f.geometry?.type === "Point" && v.geometry.coordinates[0] === f.geometry.coordinates[0] && v.geometry.coordinates[1] === f.geometry.coordinates[1]);
+          const next: GeoJSON.FeatureCollection = closest && !has(closest) ? { type: "FeatureCollection", features: [...view.features, closest] } : view;
           const key = next.features.map((f) => {
             if (f.geometry?.type !== "Point") return "";
             const [lon, lat] = f.geometry.coordinates as [number, number];
@@ -165,12 +185,7 @@ export function StreetMiniMap({ main, getEye, onExit, filters }: {
     void import("@/lib/map/restrooms").then((mod) => {
       const info = mod.restroomInfo(f);
       if (!info) return;
-      pushPanel({
-        id: `restroom:${info.lon.toFixed(5)},${info.lat.toFixed(5)}`,
-        title: info.name,
-        subtitle: "Public restroom",
-        details: <RestroomDetails restroom={info} />,
-      });
+      openRestroom(info);
     });
   };
 
@@ -218,6 +233,17 @@ export function StreetMiniMap({ main, getEye, onExit, filters }: {
           You · {facing}
         </div>
       </button>
+      {nearest ? (
+        <button
+          type="button"
+          data-testid="minimap-nearest-restroom"
+          onClick={() => openRestroom(nearest.info, `${whereLabel(nearest.metres, nearest.bearing)} from you`)}
+          className="flex h-7 items-center gap-1 rounded-full border border-border bg-card px-[var(--sp-3)] text-[12px] font-semibold text-foreground shadow-md"
+        >
+          <span aria-hidden className="inline-block" style={{ transform: `rotate(${Math.round(nearest.bearing)}deg)` }}>↑</span>
+          Nearest restroom · {whereLabel(nearest.metres, nearest.bearing)}
+        </button>
+      ) : null}
     </div>
   );
 }

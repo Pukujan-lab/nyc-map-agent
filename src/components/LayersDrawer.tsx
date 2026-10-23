@@ -8,6 +8,7 @@ import { RestroomDetails } from "@/components/RestroomCard";
 import { currentOrigin } from "@/lib/geo/directionsFromHere";
 import { startSharing, stopSharing, useSharedLocation } from "@/lib/geo/sharedLocation";
 import { getMapInstance, onMapInstance } from "@/lib/map/mapInstance";
+import { eyeOrCenter } from "@/lib/map/streetPick";
 import { formatStreetText } from "@/lib/streetName";
 import { SUBWAY_ROUTES, setOptions, useMapOptions } from "@/lib/map/mapOptions";
 import { PLACE_CATEGORIES, setPlaces, usePlaces } from "@/lib/map/places";
@@ -101,7 +102,7 @@ export function LayersDrawer({
   const flags = useFlags();
   const { chips, showPanel } = usePanel();
   const [toggledOn, toggle] = useFeatureToggles();
-  const { restrooms, setRestrooms, city3d, setCity3d, eco, setEco, setCaveatsOpen, navigate, flyTo } = useMapState();
+  const { restrooms, setRestrooms, city3d, setCity3d, eco, setEco, setCaveatsOpen, navigate, flyTo, walking } = useMapState();
   const { routePicking, routeStart, setRoutePicking } = useDataView();
   const places = usePlaces();
   const opts = useMapOptions();
@@ -159,17 +160,20 @@ export function LayersDrawer({
   const findNearestRestroom = () => {
     void (async () => {
       const { closestRestroom, formatMetres, loadRestrooms } = await import("@/lib/map/restrooms");
+      // Street view: the walker's eye. Otherwise My location. Failing both, the camera position
+      // (not the map centre, which sits far down the look ray when the camera is tilted).
       const shared = currentOrigin() ?? (await startSharing());
       const map = getMapInstance();
-      const centre = map ? { lon: map.getCenter().lng, lat: map.getCenter().lat } : null;
-      const from = shared ?? centre;
+      const cam = map ? eyeOrCenter(map) : null;
+      const from = shared ?? (cam ? { lon: cam.lng, lat: cam.lat } : null);
       if (!from) return;
       const hit = closestRestroom(await loadRestrooms(), [from.lon, from.lat]);
       if (!hit) return;
       setRestrooms(true);
-      flyTo({ lon: hit.info.lon, lat: hit.info.lat, zoom: 16 });
+      // The walk loop owns the camera at street level; flying it would fight the walker.
+      if (!walking) flyTo({ lon: hit.info.lon, lat: hit.info.lat, zoom: 16 });
       onOpenChange(false);
-      const where = shared ? "you" : "the map centre";
+      const where = shared ? "you" : "the map";
       const distanceLabel = `${formatMetres(hit.metres)} from ${where}`;
       showPanel({
         id: `restroom:${hit.info.lon.toFixed(5)},${hit.info.lat.toFixed(5)}`,

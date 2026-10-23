@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Footprints } from "lucide-react";
 import { DirectionsFromHere } from "@/components/DirectionsFromHere";
 import { Button } from "@/components/ui/button";
-import { sharedCoords, startSharing } from "@/lib/geo/sharedLocation";
+import { currentOrigin } from "@/lib/geo/directionsFromHere";
+import { startSharing } from "@/lib/geo/sharedLocation";
 import { useDataView } from "@/lib/store/DataViewContext";
 import type { RestroomInfo } from "./layers";
 
@@ -25,7 +26,7 @@ export function RestroomDetails({ restroom, distanceLabel }: { restroom: Restroo
     void (async () => {
       try {
         // The tap is the gesture that may show the browser's location prompt.
-        const here = sharedCoords() ?? (await startSharing());
+        const here = currentOrigin() ?? (await startSharing());
         if (!here) {
           setNote("Location isn't shared. Allow it, or use My location, then try again.");
           return;

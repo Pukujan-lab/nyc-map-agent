@@ -142,11 +142,28 @@ export function coneRotation(bearing: number): number {
 }
 
 const FACING = ["north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest"] as const;
+const SHORT = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] as const;
+
+function octant(bearing: number): number {
+  return Math.round((((bearing % 360) + 360) % 360) / 45) % 8;
+}
 
 /** Compass phrase for the street-view inset. Pure. */
 export function facingLabel(bearing: number): string {
-  const deg = ((bearing % 360) + 360) % 360;
-  return `Facing ${FACING[Math.round(deg / 45) % 8]}`;
+  return `Facing ${FACING[octant(bearing)]}`;
+}
+
+/** Compass bearing in degrees from one lon/lat to another (flat approximation, fine for blocks). Pure. */
+export function bearingTo(from: [number, number], to: [number, number]): number {
+  const dx = (to[0] - from[0]) * Math.cos((from[1] * Math.PI) / 180);
+  const dy = to[1] - from[1];
+  return ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
+}
+
+/** "480 m NE": distance and eight-point compass for the nearest-restroom chip. Pure. */
+export function whereLabel(metres: number, bearing: number): string {
+  const d = metres < 950 ? `${Math.max(10, Math.round(metres / 10) * 10)} m` : `${(metres / 1000).toFixed(1)} km`;
+  return `${d} ${SHORT[octant(bearing)]}`;
 }
 
 const poiIds = new WeakMap<MapLibreMap, string[]>();

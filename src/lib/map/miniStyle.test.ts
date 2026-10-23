@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StyleSpecification } from "maplibre-gl";
-import { coneRotation, facingLabel, insetFilters, keepInMini, miniStyle, pointLayerOn } from "./miniStyle";
+import { bearingTo, coneRotation, facingLabel, insetFilters, keepInMini, miniStyle, pointLayerOn, whereLabel } from "./miniStyle";
 
 describe("street mini map", () => {
   it("keeps land, water, streets and subway; drops labels and 3D", () => {
@@ -178,5 +178,20 @@ describe("street mini map", () => {
     const s = miniStyle({ version: 8, sources: {}, layers: [{ id: "background", type: "background" }] } as StyleSpecification);
     expect("glyphs" in s).toBe(false);
     expect("sprite" in s).toBe(false);
+  });
+});
+
+describe("nearest restroom chip", () => {
+  it("gives the compass bearing between two points", () => {
+    expect(Math.round(bearingTo([-73.98, 40.75], [-73.98, 40.76]))).toBe(0);
+    expect(Math.round(bearingTo([-73.98, 40.75], [-73.97, 40.75]))).toBe(90);
+    expect(Math.round(bearingTo([-73.98, 40.75], [-73.98, 40.74]))).toBe(180);
+    expect(Math.round(bearingTo([-73.98, 40.75], [-73.99, 40.75]))).toBe(270);
+  });
+  it("words distance and direction", () => {
+    expect(whereLabel(480, 10)).toBe("480 m N");
+    expect(whereLabel(484, 50)).toBe("480 m NE");
+    expect(whereLabel(1500, 270)).toBe("1.5 km W");
+    expect(whereLabel(3, 90)).toBe("10 m E");
   });
 });
