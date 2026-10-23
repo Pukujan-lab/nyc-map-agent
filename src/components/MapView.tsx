@@ -147,6 +147,7 @@ function eyeCamera(map: MaplibreMapInstance, eye: Eye): CameraOptions {
 import { useMapState } from "@/lib/store/MapStateContext";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 import { WalkControls } from "./WalkControls";
+import { StreetBubble } from "@/features/streetbubble/StreetBubble";
 import { useQuickLayer } from "@/lib/quickLayers";
 import { QuickLayers } from "./QuickLayers";
 import { StreetMiniMap } from "./StreetMiniMap";
@@ -1565,6 +1566,7 @@ export function MapView({
           }}
         />
       ) : null}
+      {walking ? <StreetBubble street={streetHere} /> : null}
       {walking && ready && mapRef.current ? (
         <StreetMiniMap main={mapRef.current.getMap()} getEye={getEye} onExit={stopWalk} />
       ) : null}
