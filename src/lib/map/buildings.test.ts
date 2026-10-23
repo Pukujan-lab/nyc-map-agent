@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hiddenWhenFlat, isFootprint } from "./buildings";
+import { hiddenWhenFlat, isFootprint, wantsFlatBuildings } from "./buildings";
 
 describe("calm buildings", () => {
   it("hides extruded basemap buildings and block shading when flat", () => {
@@ -10,6 +10,10 @@ describe("calm buildings", () => {
   it("uses the basemap footprint layer for flat buildings", () => {
     expect(isFootprint({ id: "building", type: "fill", "source-layer": "building" })).toBe(true);
     expect(isFootprint({ id: "water", type: "fill", "source-layer": "water" })).toBe(false);
+  });
+  it("keeps flat buildings flat at street level until 3D is chosen", () => {
+    expect(wantsFlatBuildings("flat")).toBe(true);
+    expect(wantsFlatBuildings("3d")).toBe(false);
   });
 });
 

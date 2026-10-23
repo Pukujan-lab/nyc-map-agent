@@ -9,10 +9,11 @@ import { useFlags } from "@/lib/flags";
 import { useFeatureToggles } from "@/lib/featureToggles";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { MapCompass } from "./MapCompass";
+import { ViewSwitcher } from "./ViewSwitcher";
 import { applyReadable } from "@/lib/map/readable";
 import { applyPlaces, placesStale, usePlaces, withQuickPlaces } from "@/lib/map/places";
 import { useMapOptions } from "@/lib/map/mapOptions";
-import { applyBuildings } from "@/lib/map/buildings";
+import { applyBuildings, wantsFlatBuildings } from "@/lib/map/buildings";
 import { applyMapTheme, buildingEdge, setThemeCoords, usePalette } from "@/lib/theme";
 import { sharedCoords } from "@/lib/geo/sharedLocation";
 
@@ -109,6 +110,12 @@ function namedStreetLines(map: MaplibreMapInstance): NamedLine[] {
   return out;
 }
 
+/** Metres between two points. A look stays under a street-tile rescan; a short walk does not. */
+function movedM(a: { lng: number; lat: number }, b: { lng: number; lat: number }): number {
+  const kx = 111_320 * Math.cos((b.lat * Math.PI) / 180);
+  return Math.hypot((a.lng - b.lng) * kx, (a.lat - b.lat) * 111_320);
+}
+
 /** The walker's eye: where they stand, which way they face, how far they look up or down. */
 interface Eye {
   lon: number;
@@ -144,7 +151,7 @@ import { QuickLayers } from "./QuickLayers";
 import { StreetMiniMap } from "./StreetMiniMap";
 import { nearestCorner, type CornerSign } from "@/lib/map/corner";
 import { kioskSources, pickAt as pickFurniture } from "@/lib/map/streetPick";
-import { formatStreetPair } from "@/lib/streetName";
+import { formatStreetPair, formatStreetText } from "@/lib/streetName";
 import { parseAt, streetLabel, streetPosition, type NamedLine } from "@/lib/map/streetPos";
 import { MAX_HEIGHT_M, pitchForHeight, STREET_LEVEL_M } from "@/lib/map/cameraHeight";
 import { hoverBlocked } from "@/lib/map/hover";
@@ -245,7 +252,7 @@ export function MapView({
   const [corner, setCorner] = useState<string | null>(null);
   /** "Grand Street & Essex Street": street underfoot and nearest cross street, throttled. */
   const [streetHere, setStreetHere] = useState<string | null>(null);
-  const { showPanel, closeAll, content: panelContent, minimized: panelMinimized, drawerOpen } = usePanel();
+  const { showPanel, emptyMapTap, content: panelContent, minimized: panelMinimized, drawerOpen } = usePanel();
   // The hover card is a mouse affordance; on touch / narrow screens the sheet
   // already shows the same numbers.
   const canHover = useMediaQuery("(hover: hover) and (pointer: fine) and (min-width: 1024px)");
@@ -462,10 +469,10 @@ export function MapView({
   const places = usePlaces();
   const opts = useMapOptions();
   const t = usePalette();
-  // Flat pale footprints unless the person picked 3D buildings in Map detail (#174).
-  // Street level always gets real buildings: a flat footprint seen from 1.7 m is
-  // invisible, which left walking with only sky and ground.
-  const flatBuildings = opts.buildings !== "3d" && !walking;
+  // Flat footprints at every level, including street view. 3D buildings is what
+  // extrudes the basemap and turns on the textured city. Ignoring Flat during a
+  // walk loaded that city under Simple streets too.
+  const flatBuildings = wantsFlatBuildings(opts.buildings);
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!map || !ready) return;
@@ -635,7 +642,8 @@ export function MapView({
       }
       // Tap priority: transit (train, bus, station, entrance) first, then
       // restrooms, then events and other feature pins; analytics areas last
-      // and only in Advanced. An empty tap closes the panels.
+      // and only in Advanced. An empty tap closes a details sheet. The layers
+      // drawer stays open; a train or bus tap closes that.
       const clicked = mapRef.current?.getMap();
       const hitsAny = (ids: string[]) => {
         const live = ids.filter((id) => clicked?.getLayer(id));
@@ -663,7 +671,7 @@ export function MapView({
       if (hit) {
         showPanel({
           id: `restroom:${hit.name}`,
-          title: hit.name,
+          title: formatStreetText(hit.name),
           subtitle: "Public restroom",
           details: <RestroomDetails restroom={hit} />,
         });
@@ -721,8 +729,9 @@ export function MapView({
           }
         }
         // Street level never opens the neighbourhood / complaints card: a
-        // tap on a facade or the pavement just clears the panels.
-        closeAll();
+        // tap on a facade or the pavement clears a details sheet. The layers
+        // drawer stays open.
+        emptyMapTap();
         return;
       }
       const school = city3dMod.current?.schoolAt(event.target, event.point.x, event.point.y);
@@ -733,8 +742,8 @@ export function MapView({
       // Neighbourhood / block complaint picks are analytics: Advanced only.
       const picked = analytics ? pickAt(event.point.x, event.point.y, event.lngLat) : null;
       if (!picked) {
-        // An empty-map tap closes the drawer and the sheet.
-        closeAll();
+        // An empty-map tap closes a details sheet. The layers drawer stays open.
+        emptyMapTap();
         return;
       }
       if (picked.kind === "block") {
@@ -743,7 +752,7 @@ export function MapView({
         selectNta(picked.datum.ntaCode);
       }
     },
-    [pickAt, selectBlock, selectNta, routePicking, setRoutePoint, showPanel, closeAll, city3d, walking, analytics, streetArtOn],
+    [pickAt, selectBlock, selectNta, routePicking, setRoutePoint, showPanel, emptyMapTap, city3d, walking, analytics, streetArtOn],
   );
 
   const handleMoveEnd = useCallback(() => {
@@ -1096,22 +1105,32 @@ export function MapView({
       setCorner(null);
       return;
     }
+    let at = { lng: 0, lat: 0 };
+    let dirty = true;
     const update = () => {
       if (!map.getSource("city3d")) return;
+      const eye = eyeRef.current;
+      const here = eye ? { lng: eye.lon, lat: eye.lat } : map.getCenter();
+      // jumpTo fires moveend every frame of a look. The corner names do not change until you walk.
+      if (!dirty && movedM(here, at) < 15) return;
+      dirty = false;
+      at = { lng: here.lng, lat: here.lat };
       const signs: CornerSign[] = [];
       for (const f of map.querySourceFeatures("city3d", { sourceLayer: "signs" })) {
         if (f.geometry.type !== "Point") continue;
         const p = f.properties as { a?: string; b?: string };
         if (p.a && p.b) signs.push({ lng: f.geometry.coordinates[0], lat: f.geometry.coordinates[1], a: p.a, b: p.b });
       }
-      const { lng, lat } = map.getCenter();
-      const label = nearestCorner(signs, lng, lat);
+      const label = nearestCorner(signs, here.lng, here.lat);
       setCorner(label ? formatStreetPair(label) : null);
     };
     // Sign tiles arrive after the walk starts; a custom layer repaints every
     // frame, so "idle" may never fire — listen for the source instead.
     const onData = (e: { sourceId?: string; isSourceLoaded?: boolean }) => {
-      if (e.sourceId === "city3d" && e.isSourceLoaded) update();
+      if (e.sourceId === "city3d" && e.isSourceLoaded) {
+        dirty = true;
+        update();
+      }
     };
     update();
     map.on("moveend", update);
@@ -1130,21 +1149,26 @@ export function MapView({
       setStreetHere(null);
       return;
     }
-    let last = "";
+    let lines: ReturnType<typeof namedStreetLines> = [];
+    let at = { lng: 0, lat: 0 };
+    let placed = false;
     const update = () => {
       const eye = eyeRef.current;
       const c = eye ? { lng: eye.lon, lat: eye.lat } : map.getCenter();
-      const key = `${c.lng.toFixed(5)},${c.lat.toFixed(5)}`;
-      if (key === last) return;
-      last = key;
-      const label = streetLabel(streetPosition(namedStreetLines(map), c.lng, c.lat));
+      // The street underfoot is stable while you only turn your head. Reread tiles after a short walk.
+      if (!placed || movedM(c, at) >= 15) {
+        lines = namedStreetLines(map);
+        at = { lng: c.lng, lat: c.lat };
+        placed = true;
+      }
+      const label = streetLabel(streetPosition(lines, c.lng, c.lat));
       setStreetHere((prev) => (prev === label ? prev : label));
     };
     update();
     const id = window.setInterval(update, 350);
     const onData = (e: { sourceId?: string; isSourceLoaded?: boolean }) => {
       if (e.sourceId === "openmaptiles" && e.isSourceLoaded) {
-        last = "";
+        placed = false;
         update();
       }
     };
@@ -1430,7 +1454,8 @@ export function MapView({
           center.lng - (back * Math.sin(rad)) / (111_320 * cosLat),
           center.lat - (back * Math.cos(rad)) / 111_320,
         );
-        map.jumpTo(map.calculateCameraOptionsFromTo(eye, heightM, center, 0));
+        // One scene, smooth moves between levels.
+        map.easeTo({ ...map.calculateCameraOptionsFromTo(eye, heightM, center, 0), duration: reducedMotion ? 0 : 900 });
         setTilted(pitch > 0);
       };
       if (walking) {
@@ -1529,6 +1554,7 @@ export function MapView({
           {FEATURES.map((f) => (f.MapLayer ? <f.MapLayer key={f.id} /> : null))}
         </Suspense>
         {walking ? null : <MapCompass />}
+        <ViewSwitcher />
       </MapLibreMap>
 
 

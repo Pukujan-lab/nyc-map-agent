@@ -28,6 +28,7 @@ const LANDMARKS: Landmark[] = [
   { label: "Central Park", at: [-73.9654, 40.7829], aliases: ["central park"] },
   { label: "Washington Square Park", at: [-73.9973, 40.7308], aliases: ["washington square park", "washington square"] },
   { label: "JFK Airport", at: [-73.7781, 40.6413], aliases: ["jfk", "jfk airport", "kennedy airport"] },
+  { label: "Rockaway Beach (Beach 98 St boardwalk)", at: [-73.8197, 40.5833], aliases: ["rockaway beach", "rockaway beach boardwalk", "the rockaways", "rockaways", "rockaway boardwalk"] },
   { label: "LaGuardia Airport", at: [-73.8740, 40.7769], aliases: ["laguardia", "lga", "laguardia airport"] },
 ];
 

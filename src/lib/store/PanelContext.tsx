@@ -80,8 +80,10 @@ interface PanelValue {
   minimized: boolean;
   minimize: () => void;
   restore: () => void;
-  /** A tap on empty map: closes the drawer and the sheet. */
+  /** Chat and the trip assistant: close the drawer and the details sheet. */
   closeAll: () => void;
+  /** A tap on empty map: close a details sheet. The layers drawer stays open. */
+  emptyMapTap: () => void;
   /** Esc / Back: close the top panel, else stop the active mode. True if it acted. */
   dismissTop: () => boolean;
   /** Follow / Navigate active: owns the top HUD (phone sheet drops to peek). */
@@ -152,6 +154,11 @@ export function PanelProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "closeDrawer" });
     clearSheet();
   }, [clearSheet]);
+  const emptyMapTap = useCallback(() => {
+    if (slot.drawerOpen) return;
+    dispatch({ type: "emptyTap" });
+    clearSheet();
+  }, [slot.drawerOpen, clearSheet]);
   const setMode = useCallback((id: string, stop: (() => void) | null) => {
     setModes((prev) => {
       if (stop) return { ...prev, [id]: stop };
@@ -251,13 +258,14 @@ export function PanelProvider({ children }: { children: ReactNode }) {
       minimize,
       restore,
       closeAll,
+      emptyMapTap,
       dismissTop,
       modeActive,
       setMode,
       register,
       registerSearch,
     }),
-    [content, showPanel, closePanel, chipMap, searchMap, snap, collapsed, slot, sheet, setDrawerOpen, toggleDrawer, minimize, restore, closeAll, dismissTop, modeActive, setMode, register, registerSearch],
+    [content, showPanel, closePanel, chipMap, searchMap, snap, collapsed, slot, sheet, setDrawerOpen, toggleDrawer, minimize, restore, closeAll, emptyMapTap, dismissTop, modeActive, setMode, register, registerSearch],
   );
   return <PanelContext.Provider value={value}>{children}</PanelContext.Provider>;
 }

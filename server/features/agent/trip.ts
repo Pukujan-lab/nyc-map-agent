@@ -1,5 +1,6 @@
 /** Compose one door-to-door trip from the thin services + the transit planner. */
-import type { Leg, LngLatTuple, Trip } from "../../../src/features/agent/schema";
+import { formatStreetText } from "../../../src/lib/streetName";
+import type { Leg, LngLatTuple, Trip, TripCore } from "../../../src/features/agent/schema";
 import { elevatorStatus, hazardsAt, reverseGeocode, routeWalk, serviceAlerts, stationServiceChanges, weatherAt, type WalkResult } from "./services";
 import { sameStation, type ServiceChange } from "../../../src/lib/transit/serviceChanges";
 import { distM, octant, openDataEntrances, stubPlanner, type AvoidStop, type Entrance, type Station, type StationEntrances, type TransitPlanner } from "./transit";
@@ -20,14 +21,14 @@ export function toNyLocal(d: Date): string {
   return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
 }
 
-async function safe<T>(p: Promise<T>, fallback: T): Promise<T> {
+export async function safe<T>(p: Promise<T>, fallback: T): Promise<T> {
   try { return await p; } catch { return fallback; }
 }
 
-const walkLeg = (kind: "walk" | "transfer", label: string, w: WalkResult): Leg => ({ kind, label, coords: w.coords, durationS: w.durationS, distanceM: w.distanceM, turns: w.turns });
-const straight = (a: LngLatTuple, b: LngLatTuple): WalkResult => ({ coords: [a, b], distanceM: distM(a, b), durationS: distM(a, b) / 1.35, turns: [] });
+export const walkLeg = (kind: "walk" | "transfer", label: string, w: WalkResult): Leg => ({ kind, label, coords: w.coords, durationS: w.durationS, distanceM: w.distanceM, turns: w.turns });
+export const straight = (a: LngLatTuple, b: LngLatTuple): WalkResult => ({ coords: [a, b], distanceM: distM(a, b), durationS: distM(a, b) / 1.35, turns: [] });
 
-async function portalFor(st: Station, ents: Entrance[], toward: LngLatTuple, mode: "entry" | "exit", outages: string[]) {
+export async function portalFor(st: Station, ents: Entrance[], toward: LngLatTuple, mode: "entry" | "exit", outages: string[]) {
   const usable = ents.filter((e) => (mode === "entry" ? e.entry : e.exit));
   const pick = (usable.length ? usable : ents).sort((a, b) => distM(a.at, toward) - distM(b.at, toward))[0];
   const at = pick?.at ?? st.at;
@@ -82,7 +83,7 @@ export async function buildTrip(
 
   if (!plan) {
     const w = await safe(routeWalk(origin.at, destination.at), straight(origin.at, destination.at));
-    legs.push(walkLeg("walk", `Walk to ${destination.label}`, w));
+    legs.push(walkLeg("walk", `Walk to ${formatStreetText(destination.label)}`, w));
   } else {
     const first = plan.rides[0];
     const last = plan.rides[plan.rides.length - 1];
@@ -104,10 +105,10 @@ export async function buildTrip(
     legs.push({ kind: "enter", station: ref(first.from), portal: enter, label: `Enter ${first.from.name} at the ${enter.label}${note(first)}` });
     plan.rides.forEach((r, i) => {
       if (i > 0) legs.push(walkLeg("transfer", `Transfer to the ${r.route} at ${r.from.name}${note(r)}`, straight(plan.rides[i - 1].to.at, r.from.at)));
-      legs.push({ kind: "ride", route: r.route, label: `${r.route} train ${r.from.name} → ${r.to.name}`, coords: r.coords, durationS: r.durationS, stops: r.stops, underground: !/elevated|viaduct|embankment/i.test(r.from.structure), geometrySource: r.geometrySource });
+      legs.push({ kind: "ride", mode: "subway", fromStop: r.from.name, toStop: r.to.name, numStops: r.stops.length || undefined, route: r.route, label: `${r.route} train ${r.from.name} → ${r.to.name}`, coords: r.coords, durationS: r.durationS, stops: r.stops, underground: !/elevated|viaduct|embankment/i.test(r.from.structure), geometrySource: r.geometrySource });
     });
     legs.push({ kind: "exit", station: ref(last.to), portal: exit, label: `Use the ${exit.label} at ${last.to.name}` });
-    legs.push(walkLeg("walk", `Walk to ${destination.label}`, w2));
+    legs.push(walkLeg("walk", `Walk from ${last.to.name} to ${formatStreetText(destination.label)}`, w2));
     exitAdvice = `Use the ${exit.label} at ${last.to.name}.${exit.elevatorOnly ? " It is elevator-only." : ""}${exit.outage ? ` Heads up: ${exit.outage}.` : ""}`;
     alerts = await safe(serviceAlerts(routes, Math.floor(depart.getTime() / 1000)), []);
   }
@@ -124,12 +125,20 @@ export async function buildTrip(
     exitAdvice,
     context: [],
     stubbed: plan ? stubbed : [],
+    planner: "fallback",
+    alternatives: [],
   };
 }
 
 /** Short, token-cheap view of a trip for the model. */
+const mins = (a: string, b: string) => Math.round((Date.parse(`${b}:00Z`) - Date.parse(`${a}:00Z`)) / 60000);
+const summary = (t: TripCore) => t.legs.filter((l) => l.kind === "ride").map((l) => (l.kind === "ride" ? `${l.route} ${l.mode}` : "")).join(" → ") || "walk";
 export function tripBrief(t: Trip) {
   return {
+    planner: t.planner,
+    summary: summary(t),
+    totalMin: mins(t.departIso, t.arriveIso),
+    alternatives: t.alternatives.map((a) => ({ tripId: a.id, summary: summary(a), depart: a.departIso, arrive: a.arriveIso, totalMin: mins(a.departIso, a.arriveIso), arrivesLaterByMin: mins(t.arriveIso, a.arriveIso) })),
     tripId: t.id,
     depart: t.departIso,
     arrive: t.arriveIso,

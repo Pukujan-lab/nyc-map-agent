@@ -75,13 +75,13 @@ export function StreetMiniMap({ main, getEye, onExit }: {
 
   if (hidden) {
     return (
-      <button type="button" onClick={() => setHidden(false)} className="absolute bottom-[calc(var(--edge)+96px)] lg:bottom-[calc(var(--edge)+36px)] right-[var(--edge)] z-20 h-8 rounded-full border border-border bg-card px-[var(--sp-3)] text-[12px] font-semibold text-foreground shadow-md">
+      <button type="button" onClick={() => setHidden(false)} className="absolute bottom-[calc(var(--edge)+168px)] lg:bottom-[calc(var(--edge)+36px)] right-[var(--edge)] z-20 h-8 rounded-full border border-border bg-card px-[var(--sp-3)] text-[12px] font-semibold text-foreground shadow-md">
         Show map
       </button>
     );
   }
   return (
-    <div data-testid="street-minimap" data-vehicles={dots.length} className="absolute bottom-[calc(var(--edge)+96px)] lg:bottom-[calc(var(--edge)+36px)] right-[var(--edge)] z-20 flex flex-col items-end gap-[var(--sp-1)]">
+    <div data-testid="street-minimap" data-vehicles={dots.length} className="absolute bottom-[calc(var(--edge)+168px)] lg:bottom-[calc(var(--edge)+36px)] right-[var(--edge)] z-20 flex flex-col items-end gap-[var(--sp-1)]">
       <button type="button" onClick={() => setHidden(true)} className="h-7 rounded-full border border-border bg-card px-[var(--sp-3)] text-[12px] font-semibold text-foreground shadow-md">
         Hide map
       </button>

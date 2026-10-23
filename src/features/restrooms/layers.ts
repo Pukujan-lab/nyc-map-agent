@@ -4,8 +4,9 @@ import { eyeOrCenter } from "@/lib/map/streetPick";
 /**
  * Public restrooms (NYC Open Data i7jb-7jku, ingested into Octo core.restrooms)
  * as one MapLibre symbol layer. The city-wide list from /api/restrooms is
- * fetched once; only the closest few to the map centre are drawn.
- * Click opens a small card; there is no hover tooltip.
+ * fetched once. Neighbourhood zoom draws the closest few. Street zoom (17 and
+ * closer) keeps the restrooms within a few blocks, which is what the 3D kiosks
+ * can draw. Click opens a small card; there is no hover tooltip.
  */
 export const RESTROOMS_LAYER = "restrooms";
 const SOURCE = "restrooms";
@@ -40,8 +41,14 @@ function restroomIcon(): ImageData {
   return ctx.getImageData(0, 0, size, size);
 }
 
-/** How many restrooms are shown: the closest few to the map centre. */
+/** How many restrooms are shown at neighbourhood zoom: the closest few. */
 export const NEAREST_COUNT = 5;
+/** Street zoom matches the 3D kiosk layer. */
+export const STREET_ZOOM = 17;
+/** A bit past the kiosk draw radius so the next block is already in the source. */
+export const STREET_RADIUS_M = 300;
+/** Same cap as the kiosk meshes. */
+export const STREET_CAP = 24;
 const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 
 /** Rough metres between two lon/lat points (equirectangular; fine at city scale). */
@@ -68,26 +75,74 @@ export function nearestRestrooms(
   return { type: "FeatureCollection", features: scored.slice(0, n).map(([, f]) => f) };
 }
 
+/**
+ * What the restroom source should hold. Neighbourhood zoom stays at the closest
+ * few. Street zoom holds every restroom within {@link STREET_RADIUS_M}, capped,
+ * so a walk shows the block in front of you.
+ */
+export function restroomsForView(
+  all: GeoJSON.FeatureCollection,
+  center: [number, number],
+  zoom: number,
+): GeoJSON.FeatureCollection {
+  if (zoom < STREET_ZOOM) return nearestRestrooms(all, center);
+  const near = nearestRestrooms(all, center, STREET_CAP);
+  return {
+    type: "FeatureCollection",
+    features: near.features.filter((f) => {
+      if (f.geometry?.type !== "Point") return false;
+      const [lon, lat] = f.geometry.coordinates as [number, number];
+      return metres(center, [lon, lat]) <= STREET_RADIUS_M;
+    }),
+  };
+}
+
+function restroomKey(f: GeoJSON.Feature): string {
+  if (f.geometry?.type !== "Point") return "";
+  const [lon, lat] = f.geometry.coordinates as [number, number];
+  const name = typeof f.properties?.name === "string" ? f.properties.name : "";
+  return `${name}@${lon.toFixed(5)},${lat.toFixed(5)}`;
+}
+
 let cityWide: Promise<GeoJSON.FeatureCollection> | null = null;
 const wired = new WeakSet<MapLibreMap>();
 
-/** Re-pick the nearest few whenever the map stops moving. */
+/** Re-pick whenever the map stops moving. Skip the write when the same restrooms are already showing. */
 function wireNearest(map: MapLibreMap): void {
   if (wired.has(map)) return;
   wired.add(map);
   cityWide ??= fetch(`${window.location.origin}/api/restrooms`)
     .then((r) => (r.ok ? (r.json() as Promise<GeoJSON.FeatureCollection>) : EMPTY))
     .catch(() => EMPTY);
+  let shown = "";
+  let at = { lng: 0, lat: 0 };
+  let atZoom = -1;
+  let dirty = true;
   const update = () => {
+    // Around the viewer: at street level the centre is far down the look ray.
+    const c = eyeOrCenter(map);
+    const z = map.getZoom();
+    // A look does not move the eye. Skip the city-wide sort until it does, or the style reloads.
+    if (!dirty && Math.abs(z - atZoom) < 0.05 && metres([c.lng, c.lat], [at.lng, at.lat]) < 15) return;
+    dirty = false;
+    at = { lng: c.lng, lat: c.lat };
+    atZoom = z;
     void cityWide!.then((all) => {
       const src = map.getSource<GeoJSONSource>(SOURCE);
-      // Around the viewer: at street level the centre is far down the look ray.
-      const c = eyeOrCenter(map);
-      src?.setData(nearestRestrooms(all, [c.lng, c.lat]));
+      if (!src) return;
+      const next = restroomsForView(all, [c.lng, c.lat], z);
+      const key = next.features.map(restroomKey).join("|");
+      if (key === shown) return;
+      shown = key;
+      src.setData(next);
     });
   };
   map.on("moveend", update);
-  map.on("styledata", () => { if (map.getSource(SOURCE)) update(); });
+  map.on("styledata", () => {
+    if (!map.getSource(SOURCE)) return;
+    dirty = true;
+    update();
+  });
   update();
 }
 

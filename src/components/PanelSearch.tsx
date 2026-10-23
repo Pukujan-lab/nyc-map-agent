@@ -1,6 +1,7 @@
+import { formatStreetText } from "@/lib/streetName";
 import { useCombobox } from "downshift";
 import { Search } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState, type KeyboardEvent } from "react";
 import { useAddressSuggestions } from "@/lib/api/geosearch";
 import type { NtaBoundary } from "@/lib/api/nta";
 import { neighborhoodCameraTarget } from "@/lib/map/neighborhoodJump";
@@ -8,12 +9,17 @@ import { useMapState } from "@/lib/store/MapStateContext";
 import { usePanel, type SearchHit } from "@/lib/store/PanelContext";
 import { cn } from "@/lib/utils";
 
+/** The Ask button lives beside the field, so it calls in through this handle. */
+export type PanelSearchHandle = { ask: () => void };
+
 /**
  * One search bar for neighborhoods, addresses (NYC GeoSearch) and anything a
  * feature registers with `usePanelSearch` (e.g. transit stations).
+ * Enter picks a highlighted place. Enter with nothing highlighted, and the
+ * Ask button, send the typed text into Ask the map.
  */
-export function PanelSearch({ boundaries }: { boundaries: NtaBoundary[] | null }) {
-  const { selectNta, flyTo } = useMapState();
+export const PanelSearch = forwardRef<PanelSearchHandle, { boundaries: NtaBoundary[] | null }>(function PanelSearch({ boundaries }, ref) {
+  const { selectNta, flyTo, seedChat, setChatOpen } = useMapState();
   const { searchProviders, closePanel } = usePanel();
   const [text, setText] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -43,7 +49,7 @@ export function PanelSearch({ boundaries }: { boundaries: NtaBoundary[] | null }
       q.length >= 3
         ? (addresses ?? []).slice(0, 5).map((a) => ({
             id: `addr:${a.id}`,
-            label: a.label,
+            label: formatStreetText(a.label),
             kind: "Address",
             onSelect: () => {
               closePanel();
@@ -53,6 +59,17 @@ export function PanelSearch({ boundaries }: { boundaries: NtaBoundary[] | null }
         : [];
     return [...hoods, ...extra, ...addr];
   }, [text, boundaries, searchProviders, addresses, selectNta, flyTo, closePanel]);
+
+  const ask = useCallback(() => {
+    const q = text.trim();
+    if (!q) {
+      setChatOpen(true);
+      return;
+    }
+    seedChat(q);
+    setText("");
+  }, [text, seedChat, setChatOpen]);
+  useImperativeHandle(ref, () => ({ ask }), [ask]);
 
   const { isOpen, getInputProps, getMenuProps, getItemProps, getLabelProps, highlightedIndex } =
     useCombobox<SearchHit>({
@@ -73,7 +90,16 @@ export function PanelSearch({ boundaries }: { boundaries: NtaBoundary[] | null }
       </label>
       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
       <input
-        {...getInputProps()}
+        {...getInputProps({
+          onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => {
+            if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+            // A highlighted row is a place. Anything else is a question.
+            if (isOpen && items.length > 0 && highlightedIndex >= 0) return;
+            event.preventDefault();
+            (event.nativeEvent as globalThis.KeyboardEvent & { preventDownshiftDefault?: boolean }).preventDownshiftDefault = true;
+            ask();
+          },
+        })}
         placeholder="Search neighborhoods, addresses, stations"
         className="h-10 w-full rounded-full border border-input bg-card pl-9 pr-3 text-sm shadow-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
       />
@@ -101,4 +127,4 @@ export function PanelSearch({ boundaries }: { boundaries: NtaBoundary[] | null }
       </ul>
     </div>
   );
-}
+});

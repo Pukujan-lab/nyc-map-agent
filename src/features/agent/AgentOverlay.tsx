@@ -1,4 +1,4 @@
-import { Bus, Car, Footprints, Headphones, Mic, MicOff, MoreVertical, Pause, Play, Send, SkipForward, X } from "lucide-react";
+import { Bus, Car, Footprints, Headphones, LocateFixed, Mic, MicOff, MoreVertical, Pause, Play, Send, SkipForward, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useFlag } from "@/lib/flags";
 import { getMapInstance } from "@/lib/map/mapInstance";
 import { useMapState } from "@/lib/store/MapStateContext";
+import { setFollowed } from "@/lib/transit/follow";
 import { usePanel } from "@/lib/store/PanelContext";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { cn } from "@/lib/utils";
@@ -26,15 +27,16 @@ import { spokenSummary } from "@/lib/voice/tts";
 import { executeCommand, type ExecutorContext } from "./executor";
 import type { Trip, TripMode } from "./schema";
 import { askAgent } from "./stream";
-import { TripSummary } from "./TripSummary";
+import { TripSummary, selectAlternative } from "./TripSummary";
 import { showTrip } from "./tripLayer";
 import { sharedCoords, startSharing, stopSharing, useSharedLocation } from "@/lib/geo/sharedLocation";
 import { usePlayer, type Speed } from "./usePlayer";
 import { useWakePhrase } from "./useWakePhrase";
 import { useHandsFree } from "./useHandsFree";
 import { closeAsk, useAskRequest } from "@/lib/agent/streetContext";
+import { needsSharedOrigin, ORIGIN_PROMPT, replyAsksForOrigin } from "./needsOrigin";
 
-interface Msg { id: string; role: "user" | "assistant"; content: string }
+interface Msg { id: string; role: "user" | "assistant"; content: string; offerLocation?: boolean }
 
 const MODES: Array<{ id: TripMode; label: string; Icon: typeof Bus }> = [
   { id: "walk", label: "Walk", Icon: Footprints },
@@ -43,7 +45,7 @@ const MODES: Array<{ id: TripMode; label: string; Icon: typeof Bus }> = [
 ];
 
 export default function AgentOverlay() {
-  const { chatOpen, setChatOpen, flyTo, startWalk } = useMapState();
+  const { chatOpen, setChatOpen, flyTo, startWalk, stopWalk, chatSeed, clearSeed } = useMapState();
   const { showPanel, closeAll } = usePanel();
   // One panel at a time (#225): opening Ask closes the drawer and any sheet.
   useEffect(() => {
@@ -60,22 +62,34 @@ export default function AgentOverlay() {
   const [mapTime, setMapTime] = useState<string | null>(null);
   const shared = useSharedLocation();
   const abort = useRef<AbortController | null>(null);
+  const messagesRef = useRef<Msg[]>([]);
+  messagesRef.current = messages;
+  /** The question waiting on a shared location, so the button can ask it again. */
+  const pendingQuestion = useRef<string | null>(null);
   const [handsFree, setHandsFree] = useState(false);
   const askReq = useAskRequest();
   const compact = askReq !== null;
 
   const speech = useSpeech({ onFinalTranscript: (t) => void send(t) });
   const player = usePlayer((text) => speech.speak(text));
+  // Ask, the route fit, and the preview all move the camera. Follow and street
+  // view let go first, without the Stop following glide back.
+  const handoffCamera = () => {
+    setFollowed(null);
+    player.release();
+    stopWalk();
+    getMapInstance()?.stop();
+  };
 
   const ctx: ExecutorContext = {
-    flyTo: (lon, lat, zoom) => flyTo({ lon, lat, zoom }),
-    showTrip: (t) => { setTrip(t); const m = getMapInstance(); if (m) showTrip(m, t); },
+    flyTo: (lon, lat, zoom) => { handoffCamera(); flyTo({ lon, lat, zoom }); },
+    showTrip: (t) => { handoffCamera(); setTrip(t); const m = getMapInstance(); if (m) showTrip(m, t); },
     openTrip: (t) => {
       setTrip(t);
-      showPanel({ id: `agent:trip:${t.id}`, title: `To ${t.destination.label}`, subtitle: `${t.departIso.slice(11)} → ${t.arriveIso.slice(11)}`, summary: <TripSummary trip={t} compact />, details: <TripSummary trip={t} bodyOnly /> });
+      showPanel({ id: `agent:trip:${t.id}`, title: `To ${t.destination.label}`, subtitle: `${t.departIso.slice(11)} → ${t.arriveIso.slice(11)}`, summary: <TripSummary trip={t} compact onSelect={(alt) => ctxRef.current.openTrip(selectAlternative(t, alt))} />, details: <TripSummary trip={t} bodyOnly /> });
     },
-    enterStreetView: (lon, lat) => startWalk({ lon, lat }),
-    playFlythrough: (t, speed) => { setTrip(t); setChatOpen(false); player.start(t, speed); },
+    enterStreetView: (lon, lat) => { handoffCamera(); startWalk({ lon, lat }); },
+    playFlythrough: (t, speed) => { handoffCamera(); setTrip(t); setChatOpen(false); player.start(t, speed); },
     setTime: (iso) => setMapTime(iso),
   };
   const ctxRef = useRef(ctx);
@@ -87,14 +101,26 @@ export default function AgentOverlay() {
     if (!q || busy) return;
     setInput("");
     if (!askReq) setChatOpen(true);
-    const history: Msg[] = [...messages, { id: crypto.randomUUID(), role: "user", content: q }];
+    // A second tap of the same question, after Use my location, keeps the one user bubble.
+    const continuing = messagesRef.current.some((m) => m.offerLocation);
+    const prior = messagesRef.current.filter((m) => !m.offerLocation);
+    const lastUser = [...prior].reverse().find((m) => m.role === "user");
+    const history: Msg[] = continuing && lastUser?.content === q ? prior : [...prior, { id: crypto.randomUUID(), role: "user", content: q }];
+    // Only a position the person chose to share; never asked for here. Street view already has a spot.
+    const location = sharedCoords();
+    if (!askReq && !location && needsSharedOrigin(q)) {
+      pendingQuestion.current = q;
+      const reply: Msg = { id: crypto.randomUUID(), role: "assistant", content: ORIGIN_PROMPT, offerLocation: true };
+      setMessages([...history, reply]);
+      speech.speak(spokenSummary(reply.content), { bargeIn: handsFree });
+      return;
+    }
+    pendingQuestion.current = null;
     const reply: Msg = { id: crypto.randomUUID(), role: "assistant", content: "" };
     setMessages([...history, reply]);
     setBusy(true);
     abort.current?.abort();
     abort.current = new AbortController();
-    // Only a position the person chose to share with My location; never asked for here.
-    const location = sharedCoords();
     let spoken = "";
     try {
       for await (const ev of askAgent({ messages: history.map(({ role, content }) => ({ role, content })), location, mode, now: new Date().toISOString(), ...(askReq ? { context: askReq.context } : {}) }, abort.current.signal)) {
@@ -111,11 +137,34 @@ export default function AgentOverlay() {
       setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, content: x.content || "The assistant is unavailable right now." } : x)));
     } finally {
       setBusy(false);
+      // The model still asked for a start: put the same button on its reply.
+      if (!askReq && spoken && !sharedCoords() && replyAsksForOrigin(spoken)) {
+        pendingQuestion.current = q;
+        setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, offerLocation: true } : x)));
+      }
       // Short spoken answer; the full detail stays on screen. In hands-free the
       // person can talk over it to interrupt.
       if (spoken) speech.speak(spokenSummary(spoken), { bargeIn: handsFree });
     }
-  }, [busy, messages, mode, setChatOpen, speech, askReq, handsFree, closeAll]);
+  }, [busy, mode, setChatOpen, speech, askReq, handsFree, closeAll]);
+
+  // The reply button and the footer chip both share location, then ask the waiting question.
+  const enableLocation = useCallback(async () => {
+    const coords = await startSharing();
+    const q = pendingQuestion.current;
+    if (!coords || !q) return;
+    pendingQuestion.current = null;
+    void send(q);
+  }, [send]);
+
+  // ChatPanel is unmounted while this overlay replaces it, so the top bar's
+  // question has to be sent from here or Ask the map opens on the examples.
+  useEffect(() => {
+    if (!chatSeed) return;
+    const text = chatSeed.text;
+    clearSeed();
+    void send(text);
+  }, [chatSeed, clearSeed, send]);
 
   const turnOffHandsFree = useCallback(() => setHandsFree(false), []);
   useHandsFree({ on: handsFree, supported: speech.sttSupported, listening: speech.listening, busy, speaking: speech.speaking, error: speech.error, start: speech.startListening, stop: speech.stopListening, turnOff: turnOffHandsFree });
@@ -175,7 +224,7 @@ export default function AgentOverlay() {
             <DropdownMenuSeparator />
             <p className="px-2 py-1.5 text-xs text-muted-foreground">
               {speech.sttSupported
-                ? "Hold a conversation by voice: tap the mic, or turn on “Hey map”. Your location is sent only after you tap My location, and only for that question."
+                ? "Hold a conversation by voice: tap the mic, or turn on “Hey map”. Your location is sent only after you tap Use my location, and only for that question."
                 : "Voice input is not available in this browser, so type instead. Answers can still be spoken."}
             </p>
           </DropdownMenuContent>
@@ -203,12 +252,18 @@ export default function AgentOverlay() {
           messages.map((m) => (
             <div key={m.id} className={cn("max-w-[90%] rounded-lg px-3 py-2 text-sm", m.role === "user" ? "ml-auto bg-primary text-primary-foreground" : "bg-muted")}>
               {m.content || (busy ? "…" : "")}
+              {m.offerLocation && shared.status !== "on" ? (
+                <Button type="button" size="sm" className="mt-2 h-8 w-full gap-1.5" disabled={shared.status === "asking"} onClick={() => void enableLocation()}>
+                  <LocateFixed className="h-4 w-4" aria-hidden="true" />
+                  {shared.status === "asking" ? "Finding you…" : "Use my location"}
+                </Button>
+              ) : null}
             </div>
           ))
         )}
         {trip ? (
           <div className="rounded-lg border p-3">
-            <TripSummary trip={trip} mapTime={mapTime} />
+            <TripSummary trip={trip} mapTime={mapTime} onSelect={(alt) => ctx.showTrip(selectAlternative(trip, alt))} />
             <Button size="sm" className="mt-3 w-full gap-2" onClick={() => ctx.playFlythrough(trip, 10)}><Play className="h-4 w-4" /> Preview trip</Button>
           </div>
         ) : null}
@@ -225,8 +280,8 @@ export default function AgentOverlay() {
         ) : (
           <>
             <span>{shared.status === "denied" ? "Location is blocked in this browser." : shared.status === "asking" ? "Finding your location…" : "Your location is not shared."}</span>
-            <Button type="button" size="sm" variant="outline" className="h-7 shrink-0 rounded-full px-2.5 text-xs" disabled={shared.status === "asking"} onClick={() => void startSharing()}>
-              Use my location
+            <Button type="button" size="sm" variant="outline" className="h-7 shrink-0 gap-1 rounded-full px-2.5 text-xs" disabled={shared.status === "asking"} onClick={() => void enableLocation()}>
+              <LocateFixed className="h-3.5 w-3.5" aria-hidden="true" /> Use my location
             </Button>
           </>
         )}
@@ -305,20 +360,17 @@ export default function AgentOverlay() {
 /** The one slim preview bar: play/pause, speed, skip leg, close. No tooltips. */
 function PlaybackBar(p: { playing: boolean; speed: Speed; callout: string; step: string; onToggle: () => void; onSpeed: (s: Speed) => void; onSkip: () => void; onClose: () => void }) {
   return (
-    <div className="pointer-events-auto fixed bottom-4 left-1/2 z-40 flex w-[min(560px,calc(100vw-2rem))] -translate-x-1/2 items-center gap-1 rounded-full border bg-card/95 px-2 py-1 shadow-lg backdrop-blur-md" role="region" aria-label="Trip preview">
+    <div className="pointer-events-auto fixed bottom-4 left-1/2 z-[70] flex w-[min(560px,calc(100vw-2rem))] -translate-x-1/2 items-center gap-1 rounded-full border bg-card/95 px-2 py-1 shadow-lg backdrop-blur-md" role="region" aria-label="Trip preview">
       <Button size="icon" variant="ghost" className="h-8 w-8 rounded-full" aria-label={p.playing ? "Pause preview" : "Play preview"} onClick={p.onToggle}>
         {p.playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
       </Button>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button size="sm" variant="ghost" className="h-8 rounded-full px-2 text-xs tabular-nums" aria-label={`Speed ${p.speed}x`}>{p.speed}x</Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
-          <DropdownMenuRadioGroup value={String(p.speed)} onValueChange={(v) => p.onSpeed(Number(v) as Speed)}>
-            {[2, 10, 30].map((s) => <DropdownMenuRadioItem key={s} value={String(s)}>{s}x</DropdownMenuRadioItem>)}
-          </DropdownMenuRadioGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <div className="flex items-center" role="group" aria-label="Playback speed">
+        {([2, 10, 30] as const).map((s) => (
+          <Button key={s} type="button" size="sm" variant={p.speed === s ? "default" : "ghost"} className="h-8 rounded-full px-2 text-xs tabular-nums" aria-pressed={p.speed === s} onClick={() => p.onSpeed(s)}>
+            {s}x
+          </Button>
+        ))}
+      </div>
       <Button size="icon" variant="ghost" className="h-8 w-8 rounded-full" aria-label="Skip to next leg" onClick={p.onSkip}><SkipForward className="h-4 w-4" /></Button>
       <div className="min-w-0 flex-1 truncate px-1 text-sm" aria-live="polite">{p.callout}</div>
       <Badge variant="secondary" className="tabular-nums">{p.step}</Badge>

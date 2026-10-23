@@ -4,8 +4,8 @@
  * snapped to its route shape and tracked as distance-along-shape:
  *
  *   - between reports it dead-reckons forward at an estimated cruise speed
- *     (last two reports, clamped, blended with a route default or a learned
- *     segment speed), easing into stops for a typical dwell;
+ *     (last two reports, clamped, blended with a route default, or with the
+ *     learned stop-to-stop speed for this hour of the week when there is one), easing into stops for a typical dwell;
  *   - a new report never teleports it: the displayed position speed-adjusts
  *     toward the new estimate over ~4 s and never moves backward, unless it
  *     is more than 150 m ahead of (or very far behind) the estimate, in which
@@ -19,13 +19,29 @@ export type LonLat = [number, number];
 export type RouteGeom = { route: string; lines: LonLat[][]; offsets?: number[][]; stops: Array<{ id: string; lon: number; lat: number }> };
 export type BusReport = { id: string; route: string; lon: number; lat: number; bearing: number | null; t: number };
 export type BusFrame = { lon: number; lat: number; bearing: number; alpha: number };
-/** Learned speeds/dwell (PR 2); any field may be missing, then defaults apply. */
+/**
+ * Learned times from /api/transit-bus-segments; either may be missing, then defaults apply.
+ * Stop ids are GTFS ids without the Bus Time "MTA_" prefix.
+ */
 export type BusHistory = {
-  /** Median cruise speed (m/s) on the segment that starts at stop `from`. */
-  speed?: (route: string, from: string, to: string) => number | undefined;
+  /** Median seconds from leaving stop `from` to leaving stop `to` (includes the dwell at `to`). */
+  travel?: (route: string, from: string, to: string) => number | undefined;
   /** Median dwell (s) at a stop. */
   dwell?: (route: string, stop: string) => number | undefined;
 };
+
+/**
+ * Cruise speed that makes a braking-and-accelerating leg of L metres take
+ * `seconds` (travel minus dwell): solves L/v + v/a = T for the realistic root.
+ */
+export function speedFromTravel(L: number, seconds: number, dwell: number): number | undefined {
+  const T = seconds - dwell;
+  if (!(L > 0) || !(T > 2)) return undefined;
+  const disc = ACCEL * ACCEL * T * T - 4 * ACCEL * L;
+  const v = disc >= 0 ? (ACCEL * T - Math.sqrt(disc)) / 2 : L / T;
+  return clamp(v, MIN_SPEED, MAX_SPEED);
+}
+const stopKey = (id: string) => id.replace(/^MTA_/, "");
 
 export const BLEND_S = 4;
 export const BACKWARD_FADE_M = 150;
@@ -145,18 +161,24 @@ export function deadReckon(sh: Shape, route: string, s0: number, v: number, movi
     const stop = k >= 0 && k < sh.stops.length ? sh.stops[k] : undefined;
     const end = stop ? stop.s : sh.len;
     const from = k > 0 ? sh.stops[k - 1].id : undefined;
-    const learned = from && stop ? hist?.speed?.(route, from, stop.id) : undefined;
-    const vs = learned && learned > 0 ? clamp(learned, MIN_SPEED, MAX_SPEED) : v;
+    const secs = from && stop ? hist?.travel?.(route, stopKey(from), stopKey(stop.id)) : undefined;
+    const learned = secs !== undefined && k > 0 && stop ? speedFromTravel(stop.s - sh.stops[k - 1].s, secs, dwellAt(hist, route, stop.id, dwellDefault)) : undefined;
+    // Learned speed replaces the default; the live two-report estimate still nudges it.
+    const vs = learned ? clamp(0.7 * learned + 0.3 * v, MIN_SPEED, MAX_SPEED) : v;
     const [d, legT] = legMotion(end - s, vs, v0, t);
     if (t < legT || !stop) return s + d;
     s = end; t -= legT; v0 = 0;
-    t -= hist?.dwell?.(route, stop.id) ?? dwellDefault;
+    t -= dwellAt(hist, route, stop.id, dwellDefault);
     k++;
   }
   return s;
 }
 
-const clamp = (x: number, a: number, b: number) => Math.max(a, Math.min(b, x));
+function clamp(x: number, a: number, b: number) { return Math.max(a, Math.min(b, x)); }
+function dwellAt(hist: BusHistory | undefined, route: string, stop: string, def: number) {
+  const d = hist?.dwell?.(route, stopKey(stop));
+  return d !== undefined && d >= 0 ? clamp(d, 0, 90) : def;
+}
 
 type State = {
   route: string; shape: number; s: number; t: number; v: number; moving: boolean; dwellLeft: number;
@@ -210,7 +232,7 @@ export class BusEstimator {
       }
     }
     const atStop = sh.stops.find((st) => Math.abs(st.s - bestP.s) < 20);
-    if (atStop && !moving) dwellLeft = (this.hist?.dwell?.(b.route, atStop.id) ?? DWELL_S) / 2;
+    if (atStop && !moving) dwellLeft = dwellAt(this.hist, b.route, atStop.id, DWELL_S) / 2;
     const fresh: State = { route: b.route, shape: best, s: bestP.s, t: b.t, v, moving, dwellLeft, disp: bestP.s, at: nowS, alpha: 1, fade: "none" };
     if (prev && prev.route === b.route && prev.shape === best) {
       fresh.disp = prev.disp; fresh.at = prev.at; fresh.alpha = prev.alpha; fresh.fade = prev.fade; fresh.hdg = prev.hdg;

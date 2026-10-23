@@ -7,8 +7,7 @@ test("street level shows a mini map whose heading cone turns with the camera", a
   await page.goto("/");
   await expect(page.locator("canvas.maplibregl-canvas").first()).toBeVisible();
   await page.waitForResponse((r) => r.url().includes("/api/aggregate"));
-  await page.locator("button", { hasText: /^Layers & filters$/ }).click();
-  await page.getByRole("button", { name: "Street view", exact: true }).click();
+  await page.getByTestId("view-switcher").getByRole("button", { name: "Street", exact: true }).click();
   const mini = page.getByTestId("street-minimap");
   await expect(mini).toBeVisible({ timeout: 15_000 });
   const cone = page.getByTestId("minimap-cone");

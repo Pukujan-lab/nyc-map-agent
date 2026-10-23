@@ -98,7 +98,7 @@ export function LayersDrawer({
   const flags = useFlags();
   const { chips } = usePanel();
   const [toggledOn, toggle] = useFeatureToggles();
-  const { restrooms, setRestrooms, walking, startWalk, stopWalk, city3d, setCity3d, eco, setEco, setCaveatsOpen, navigate, flyTo } = useMapState();
+  const { restrooms, setRestrooms, city3d, setCity3d, eco, setEco, setCaveatsOpen, navigate, flyTo } = useMapState();
   const { routePicking, routeStart, setRoutePicking } = useDataView();
   const places = usePlaces();
   const opts = useMapOptions();
@@ -146,7 +146,6 @@ export function LayersDrawer({
     const c = registered.get(id);
     if (c) around.push({ id, label: c.label, on: c.active, onClick: c.onToggle });
   }
-  if (flags.streetLevel) around.push({ id: "street", label: walking ? "Leave street view" : "Street view", on: walking, onClick: () => { if (walking) stopWalk(); else { startWalk(); onOpenChange(false); } } });
   around.push(
     shared.status === "on"
       ? { id: "loc", label: "Stop sharing location", on: true, onClick: () => stopSharing() }

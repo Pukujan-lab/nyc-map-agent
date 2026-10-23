@@ -20,11 +20,13 @@ import * as street from "../api/street";
 import * as vehicleModels from "../api/vehicle-models/[mode]";
 import * as weather from "./features/weather/routes";
 import * as hazards from "./features/hazards/routes";
+import * as ferry from "./features/ferry/routes";
 import * as traffic from "./features/traffic/routes";
 import * as parking from "./features/parking/routes";
 import * as agent from "./features/agent/routes";
 import * as transit from "./features/transit/routes";
 import * as transitSegments from "./features/transit/segments";
+import * as transitBusSegments from "./features/transit/busSegments";
 import * as events from "./features/events/routes";
 import * as placeToilets from "./features/place-toilets/routes";
 import * as storefronts from "./features/storefronts/routes";
@@ -45,12 +47,14 @@ const routes: Array<[string, Handler]> = [
   ["/api/vehicle-models/:mode", vehicleModels],
   ["/api/weather", weather],
   ["/api/hazards", hazards],
+  ["/api/ferry", ferry],
   ["/api/traffic/along", { GET: traffic.GET_ALONG }],
   ["/api/traffic", traffic],
   ["/api/parking/near", { GET: parking.GET_NEAR }],
   ["/api/parking/rules", { GET: parking.GET_RULES }],
   ["/api/parking", parking],
   ["/api/transit-segments", transitSegments],
+  ["/api/transit-bus-segments", transitBusSegments],
   ["/api/transit", transit],
   ["/api/transit/:system", transit],
   ["/api/events", events],

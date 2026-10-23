@@ -1,10 +1,11 @@
+import { formatStreetText } from "@/lib/streetName";
 import { liveProgress } from "./monotonic";
 import { BusEstimator } from "./busEstimate";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { Layer, Source, useMap } from "react-map-gl/maplibre";
-import type { Map as MaplibreMap, MapLayerMouseEvent } from "maplibre-gl";
+import { LngLat, type Map as MaplibreMap, type MapLayerMouseEvent } from "maplibre-gl";
 import { Accessibility, Navigation2, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -18,19 +19,20 @@ import {
   type SystemId,
   type Vehicle,
 } from "./model";
-import { alertedRoutes, useAlerts, useBusRoute, useBusShapes, useBuses, useStarred, useTransitData, useTransitMeta, useTransitToggles, useXrayData, useSegmentHistory } from "./hooks";
+import { alertedRoutes, useAlerts, useBusRoute, useBusSegmentHistory, useBusShapes, useBuses, useStarred, useTransitData, useTransitMeta, useTransitToggles, useXrayData, useSegmentHistory } from "./hooks";
 import { useXray, xrayPrims } from "./xray";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { useFlag } from "@/lib/flags";
 import { usePanel, usePanelChip, usePanelMode, usePanelSearch, type SearchProvider } from "@/lib/store/PanelContext";
-import { setFollowed, useFollowed } from "./follow";
+import { followRig, rememberFollowOrigin, setFollowMode, setFollowed, stableHeading, takeFollowRestore, useFollowMode, useFollowed } from "./follow";
 import { publishSubway } from "@/lib/agent/streetContext";
 import { publishLiveDots } from "@/lib/transit/liveVehicles";
-import { setStreetXray, useStreetXray } from "@/lib/transit/streetXray";
+import { XRAY_VEIL_M, setStreetXray, useStreetXray, xrayVeilDisc } from "@/lib/transit/streetXray";
+import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 
 const stopFollow = () => setFollowed(null);
-import { SYSTEM_LABELS } from "./model";
-import { StationDetails, VehicleDetails } from "./TransitCard";
+import { SYSTEM_LABELS, cellKey } from "./model";
+import { FollowCard, StationDetails } from "./TransitCard";
 import { TransitStatusDetails } from "./TransitStatus";
 import { alertGeometry, setAlertFocus, stationChanges, useAlertFocus } from "./alertFocus";
 import { LinesDrawer } from "./LinesDrawer";
@@ -45,10 +47,18 @@ const VEHICLE_CREDITS = "3D vehicles: R142 by yarankepang, XD40 by kieranfarr, P
 const TRANSIT_CLICK_LAYERS = ["transit-bullet", "transit-bus-badge", "transit-bus-badge-full", "transit-bus-badge-selected", "transit-vehicle-2d", "transit-vehicle-hit", "transit-access", "transit-entrance", "transit-station"];
 
 const MAX_VEHICLES = 400;
+/** In 3D, labels and bullets on raised track lift by about a viaduct's height on screen. */
+const RAISED_LIFT_PX = 26;
+const RAISED_LIFT_EM = 2.8;
+/** True when a point sits on (or right beside) raised subway track. */
+function onRaisedTrack(cells: Set<string>, p: GeoJSON.Position): boolean {
+  for (const dx of [-1, 0, 1]) for (const dy of [-1, 0, 1]) if (cells.has(cellKey([p[0] + dx / 2400, p[1] + dy / 2400]))) return true;
+  return false;
+}
 /** Street level: live vehicles within this distance of the walker. */
 const STREET_RADIUS_M = 600;
-/** Street-level X-ray draws underground trains this far below the ground plane. */
-const STREET_XRAY_DEPTH_M = -12;
+/** X-ray draws underground trains this far below the ground plane. */
+const XRAY_DEPTH_M = -12;
 /** Where the walker stands: at street level the map centre sits at most ~10 m ahead of the eye. */
 function streetEye(map: MaplibreMap): { lon: number; lat: number } {
   const c = map.getCenter();
@@ -119,14 +129,15 @@ export default function TransitLayer() {
   const enabled = useFlag("transit");
   const { current } = useMap();
   const map = current?.getMap();
-  const { tilted, walking, startWalk } = useMapState();
+  const { tilted, walking, startWalk, stopWalk, setTilted } = useMapState();
+  const reducedMotion = usePrefersReducedMotion();
   const three = tilted || walking;
   // Dev-only: lets headless QA enter street level at a point.
   useEffect(() => {
     if (import.meta.env.DEV) (window as unknown as { __walk?: unknown }).__walk = startWalk;
   }, [startWalk]);
   const { on, set, panelOpen, setPanelOpen } = useTransitToggles();
-  const { content, showPanel } = usePanel();
+  const { content, showPanel, setDrawerOpen } = usePanel();
   const meta = useTransitMeta();
   const rail = (["subway", "lirr", "mnr"] as SystemId[]).filter((s) => on.has(s));
   const busOn = on.has("bus") && meta.data?.bus === true;
@@ -139,13 +150,13 @@ export default function TransitLayer() {
   // The panel owns what is open; a vehicle stays "selected" while its panel is up.
   const selectedKey = content?.id.startsWith("transit:vehicle:") ? content.id.slice(16) : undefined;
   const followedKey = useFollowed();
-  const following = followedKey !== null && followedKey === selectedKey;
-  useEffect(() => { if (followedKey && followedKey !== selectedKey) setFollowed(null); }, [followedKey, selectedKey]);
   const display = useRef(new Map<string, Vehicle>());
   // Buses: snapped to their route shape and dead-reckoned between 30 s GPS reports.
   const busEst = useRef(new BusEstimator());
   const [busRoutes, setBusRoutes] = useState<string[]>([]);
   const busShapes = useBusShapes(busRoutes);
+  const busHistory = useBusSegmentHistory(busRoutes);
+  useEffect(() => busEst.current.setHistory(busHistory), [busHistory]);
   useEffect(() => {
     for (const g of busShapes) busEst.current.setRoute(g);
     const list = buses.data?.buses ?? [];
@@ -216,9 +227,11 @@ export default function TransitLayer() {
     features: statics.flatMap((s) => s.stations.features.map((f) => {
       // Subway stations carry a compact row of route bullets for their label (#177).
       const routes = s.system === "subway" ? String(f.properties.routes ?? "").split(/[\s,]+/).filter((r) => r && !r.endsWith("X")) : [];
-      return { ...f, properties: { ...f.properties, system: s.system, row: routes.length ? stationRowId([...new Set(routes)]) : "" } };
+      // Raised (elevated / viaduct) stations: their labels float above the platform in 3D.
+      const raisedSt = s.system === "subway" && onRaisedTrack(raised.raisedCells, f.geometry.coordinates);
+      return { ...f, properties: { ...f.properties, system: s.system, raised: raisedSt, row: routes.length ? stationRowId([...new Set(routes)]) : "" } };
     })),
-  }), [staticKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }), [staticKey, raised]); // eslint-disable-line react-hooks/exhaustive-deps
   const viaduct = raised.decks;
   const piers = raised.piers;
   const entrances = data.subway?.stat?.entrances ?? EMPTY;
@@ -354,12 +367,12 @@ export default function TransitLayer() {
         for (const trip of lv.trips) {
           const est = estimateTrain(st, trip, now, liveProgress, s === "subway" ? history : undefined);
           const v = est && s !== "subway" ? { ...est, grade: "grade" as const } : est;
-          if (v && (inView(v) || v.key === selectedKey)) out.push(v);
+          if (v && (inView(v) || v.key === selectedKey || v.key === followedKey)) out.push(v);
         }
       }
       for (const bus of buses.data?.buses ?? []) {
         const v: Vehicle = { key: `bus:${bus.id}`, system: "bus", route: bus.route, label: bus.route, color: "#0039A6", lon: bus.lon, lat: bus.lat, bearing: bus.bearing ?? 0, grade: "grade", dir: bus.dir, nextStop: bus.next ?? undefined };
-        if (inView(v) || v.key === selectedKey) out.push(v);
+        if (inView(v) || v.key === selectedKey || v.key === followedKey) out.push(v);
       }
       const routes = [...new Set(out.filter((v) => v.system === "bus").map((v) => v.route))].sort().slice(0, 80);
       setBusRoutes((prev) => (prev.join() === routes.join() ? prev : routes));
@@ -370,7 +383,7 @@ export default function TransitLayer() {
     tick();
     const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
-  }, [map, rail.join(","), data, buses.data, selectedKey, history, walking]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [map, rail.join(","), data, buses.data, selectedKey, followedKey, history, walking]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Tween displayed positions and headings toward the targets (~20 fps).
   useEffect(() => {
@@ -452,7 +465,7 @@ export default function TransitLayer() {
     type: "FeatureCollection",
     features: [
       ...busRoute.data.lines.map((l): GeoJSON.Feature => ({ type: "Feature", properties: { kind: "line", route: busRoute.data.route }, geometry: { type: "LineString", coordinates: l } })),
-      ...busRoute.data.stops.map((st): GeoJSON.Feature => ({ type: "Feature", properties: { kind: "stop", name: st.name }, geometry: { type: "Point", coordinates: [st.lon, st.lat] } })),
+      ...busRoute.data.stops.map((st): GeoJSON.Feature => ({ type: "Feature", properties: { kind: "stop", name: formatStreetText(st.name) }, geometry: { type: "Point", coordinates: [st.lon, st.lat] } })),
     ],
   }), [busRoute.data, selBusRoute]);
   // 3D: one three.js custom layer in the map's canvas, loaded on first tilt.
@@ -521,47 +534,99 @@ export default function TransitLayer() {
     const id = window.setTimeout(push, 1200); // the three layer loads on the first tilt
     return () => window.clearTimeout(id);
   }, [xrayStation, three]);
-  // Street level hides underground trains unless X-ray is on; then they glow below a see-through ground.
-  const streetXray = useStreetXray();
+  // Underground trains draw in 3D only with X-ray on (their route bullets always show);
+  // then they glow below a see-through ground and buildings, at every level.
+  const xrayOn = useStreetXray();
+  const flatVeilKey = useRef("");
+  const [flatVeil, setFlatVeil] = useState(EMPTY);
+  useEffect(() => {
+    if (!map || three || !xrayOn) return;
+    const sync = () => {
+      const e = streetEye(map);
+      const key = `${e.lon.toFixed(3)},${e.lat.toFixed(3)}`;
+      if (key === flatVeilKey.current) return;
+      flatVeilKey.current = key;
+      setFlatVeil(xrayVeilDisc(e.lon, e.lat));
+    };
+    sync();
+    map.on("moveend", sync);
+    return () => {
+      map.off("moveend", sync);
+    };
+  }, [map, three, xrayOn]);
   useEffect(() => {
     if (!three) return;
     v3d.current?.update(
       vehicles
         // The followed (boarded) train always draws, whatever its grade.
-        .filter((v) => v.key === followedKey || !(walking && !streetXray && v.grade === "underground"))
+        .filter((v) => v.key === followedKey || xrayOn || v.grade !== "underground")
         .map((v) => {
           const ghost = v.grade === "underground";
-          return { lon: v.lon, lat: v.lat, bearing: v.bearing, z: ghost && walking ? STREET_XRAY_DEPTH_M : v.z ?? 0, color: v.system === "bus" ? "#f8fafc" : v.color, kind: v.system === "bus" ? "bus" : v.system === "subway" ? "subway" : "rail", ghost };
+          return { lon: v.lon, lat: v.lat, bearing: v.bearing, z: ghost ? XRAY_DEPTH_M : v.z ?? 0, color: v.system === "bus" ? "#f8fafc" : v.color, kind: v.system === "bus" ? "bus" : v.system === "subway" ? "subway" : "rail", ghost };
         }),
     );
-  }, [vehicles, three, walking, streetXray, followedKey]);
+  }, [vehicles, three, xrayOn, followedKey]);
   useEffect(() => {
-    if (!map || !walking || !streetXray) { v3d.current?.setGroundVeil(null); return; }
+    if (!map || !three || !xrayOn) { v3d.current?.setGroundVeil(null); return; }
     const sync = () => {
       const v = v3d.current;
       if (!v) return;
-      // Draw after the street-level city layer, whose pavement would otherwise paint over the glow.
+      // Draw after the city layers, whose pavement and walls would otherwise paint over the glow.
       const ids = map.getLayersOrder();
       if (map.getLayer(v.layer.id) && ids[ids.length - 1] !== v.layer.id) map.moveLayer(v.layer.id);
       const e = streetEye(map);
-      v.setGroundVeil([e.lon, e.lat], STREET_RADIUS_M);
+      v.setGroundVeil([e.lon, e.lat], XRAY_VEIL_M);
     };
     sync();
     const late = window.setTimeout(sync, 1200); // the three layer loads on the first tilt
     map.on("move", sync);
     return () => { window.clearTimeout(late); map.off("move", sync); v3d.current?.setGroundVeil(null); };
-  }, [map, walking, streetXray]);
-  useEffect(() => { if (!walking) setStreetXray(false); }, [walking]);
-  // Riding an underground train: X-ray turns on by itself so the train you boarded stays in view.
-  const followedUnder = following && vehicles.find((v) => v.key === followedKey)?.grade === "underground";
-  useEffect(() => { if (followedUnder && walking) setStreetXray(true); }, [followedUnder, walking]);
+  }, [map, three, walking, xrayOn]);
 
-  // Follow mode: ease the camera onto the tweened vehicle; drag or Esc exits.
-  const followed = following ? vehicles.find((v) => v.key === selectedKey) : undefined;
+  // Follow mode: tap a train or bus (map or street level) and the camera rides along.
+  const followMode = useFollowMode();
+  const followed = followedKey ? vehicles.find((v) => v.key === followedKey) : undefined;
+  const following = Boolean(followedKey);
+  // Riding an underground train: X-ray turns on by itself so the train you boarded stays in view.
+  const followedUnder = followed?.grade === "underground";
+  useEffect(() => { if (followedUnder) setStreetXray(true); }, [followedUnder]);
+  // Following needs the 3D scene: leave street level (one scene, the camera just moves) and tilt.
+  useEffect(() => {
+    if (!following) return;
+    if (walking) stopWalk();
+    setTilted(true);
+  }, [following]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Snapshot the view before the chase camera moves it. Stop following eases back here.
+  useEffect(() => {
+    if (!map || !followedKey) return;
+    const c = map.getCenter();
+    rememberFollowOrigin({ center: [c.lng, c.lat], zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() });
+  }, [map, followedKey]);
+  // One pose per displayed vehicle. A fresh glide every update piled up and
+  // fought the trip preview. A heading that flips almost backward waits out.
+  const headingKey = useRef<string | null>(null);
+  const headingHold = useRef({ bearing: 0, streak: 0 });
   useEffect(() => {
     if (!map || !followed) return;
-    map.easeTo({ center: [followed.lon, followed.lat], bearing: three ? followed.bearing : map.getBearing(), duration: 250, easing: (t) => t });
-  }, [map, followed, three]);
+    if (headingKey.current !== followed.key) {
+      headingKey.current = followed.key;
+      headingHold.current = stableHeading(null, followed.bearing, 0);
+    } else {
+      headingHold.current = stableHeading(headingHold.current.bearing, followed.bearing, headingHold.current.streak);
+    }
+    const { eye, look } = followRig(followMode, headingHold.current.bearing, followed.z ?? 0);
+    const at = (dx: number, dy: number) => new LngLat(followed.lon + dx / (111_320 * Math.cos((followed.lat * Math.PI) / 180)), followed.lat + dy / 111_320);
+    const cam = map.calculateCameraOptionsFromTo(at(eye[0], eye[1]), eye[2], at(look[0], look[1]), look[2]);
+    map.jumpTo(cam);
+  }, [map, followed, followMode]);
+  useEffect(() => {
+    if (!map || followedKey) return;
+    const back = takeFollowRestore();
+    if (!back.restore) return;
+    const c = map.getCenter();
+    const cam = back.cam ?? { center: [c.lng, c.lat] as [number, number], zoom: Math.min(map.getZoom(), 13), bearing: 0, pitch: 0 };
+    map.easeTo({ center: cam.center, zoom: cam.zoom, bearing: cam.bearing, pitch: cam.pitch, duration: reducedMotion ? 0 : 700 });
+  }, [map, followedKey, reducedMotion]);
   useEffect(() => {
     if (!map || !following) return;
     // Esc and Back go through the panel slot (top panel first, then Follow).
@@ -571,7 +636,7 @@ export default function TransitLayer() {
   }, [map, following]);
   usePanelMode("follow", following ? stopFollow : null);
 
-  // Clicks on transit features.
+  // Clicks on transit features: a vehicle starts Follow straight away (no popup).
   useEffect(() => {
     if (!map) return;
     const onClick = (e: MapLayerMouseEvent) => {
@@ -579,20 +644,19 @@ export default function TransitLayer() {
       const f = layers.length ? map.queryRenderedFeatures(e.point, { layers })[0] : undefined;
       if (!f?.properties) return;
       if (f.layer.id.startsWith("transit-vehicle") || f.layer.id === "transit-bullet" || f.layer.id.startsWith("transit-bus-badge")) {
-        const key = String(f.properties.key);
-        const [system] = key.split(":");
-        const label = String(f.properties.label ?? "").trim();
-        showPanel({ id: `transit:vehicle:${key}`, title: `${SYSTEM_LABELS[system as SystemId] ?? "Bus"} ${label}`.trim(), subtitle: "Live vehicle", peek: label ? `${label} · live` : undefined, details: <VehicleDetails vehicleKey={key} /> });
-      } else {
-        // Entrances carry the station's GTFS id, so they open the same card.
-        const system = (f.layer.id === "transit-entrance" ? "subway" : f.properties.system) as SystemId;
-        openStation(system, String(f.properties.id), String(f.properties.name));
+        setDrawerOpen(false);
+        setFollowMode("chase");
+        setFollowed(String(f.properties.key));
+        return;
       }
+      // Entrances carry the station's GTFS id, so they open the same card.
+      const system = (f.layer.id === "transit-entrance" ? "subway" : f.properties.system) as SystemId;
+      openStation(system, String(f.properties.id), String(f.properties.name));
       setFollowed(null);
     };
     map.on("click", onClick);
     return () => { map.off("click", onClick); };
-  }, [map, openStation, showPanel]);
+  }, [map, openStation, setDrawerOpen]);
 
   // Notices for alerts touching starred lines or stations (in-app + optional browser).
   const notified = useRef(new Set<string>());
@@ -625,14 +689,24 @@ export default function TransitLayer() {
     </button>, document.body) : null;
   return (
     <>
+      {followed ? <FollowCard vehicle={followed} /> : null}
       {linesButton}
       <Source id="transit-lines" type="geojson" data={lines}>
+        {/* X-ray: tunnels read as solid, glowing runs; otherwise a faint dashed hint. */}
         <Layer id="transit-line-under" type="line" filter={["==", ["get", "grade"], "underground"]}
-          paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 16, 2.5], "line-opacity": 0.45, "line-dasharray": [2, 2] }} />
+          paint={xrayOn
+            ? { "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 2, 16, 6], "line-opacity": 0.95, "line-blur": 1 }
+            : { "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 16, 2.5], "line-opacity": 0.45, "line-dasharray": [2, 2] }} />
         <Layer id="transit-line" type="line" filter={three ? ["==", ["get", "grade"], "grade"] : ["!=", ["get", "grade"], "underground"]}
           layout={{ "line-cap": "round", "line-join": "round" }}
           paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, focus ? 1.8 : 1.5, 16, focus ? 4.8 : 4], "line-opacity": dimLines }} />
       </Source>
+      {xrayOn && !three ? (
+        // Top-down X-ray: the ground and buildings fade so the tunnels below read through.
+        <Source id="transit-xray-veil" type="geojson" data={flatVeil}>
+          <Layer id="transit-xray-veil" type="fill" beforeId="transit-line-under" paint={{ "fill-color": "#0b1220", "fill-opacity": 0.55 }} />
+        </Source>
+      ) : null}
       {focus ? (
         <Source id={FOCUS_VEIL_ID} type="geojson" data={WORLD}>
           <Layer id={FOCUS_VEIL_ID} type="fill" beforeId="transit-line-under"
@@ -657,8 +731,10 @@ export default function TransitLayer() {
             Collision detection drops overlapping labels so they never pile up. */}
         <Layer id="transit-station-label" type="symbol" minzoom={11}
           filter={["all", ["==", ["get", "system"], "subway"], ["any", [">=", ["zoom"], 15], ["==", ["get", "id"], hoverStation], ["==", ["get", "id"], openStationId]]]}
-          layout={{ "icon-image": ["get", "row"], "icon-size": ["interpolate", ["linear"], ["zoom"], 13, 0.8, 17, 1], "icon-anchor": "top", "icon-offset": [0, 6],
-            "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-anchor": "bottom", "text-offset": [0, -0.6], "text-max-width": 9,
+          layout={{ "icon-image": ["get", "row"], "icon-size": ["interpolate", ["linear"], ["zoom"], 13, 0.8, 17, 1], "icon-anchor": "top",
+            "icon-offset": (three ? ["case", ["get", "raised"], ["literal", [0, -RAISED_LIFT_PX]], ["literal", [0, 6]]] : [0, 6]) as [number, number],
+            "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-anchor": "bottom",
+            "text-offset": (three ? ["case", ["get", "raised"], ["literal", [0, -RAISED_LIFT_EM]], ["literal", [0, -0.6]]] : [0, -0.6]) as [number, number], "text-max-width": 9,
             "symbol-sort-key": ["case", ["any", ["==", ["get", "id"], hoverStation], ["==", ["get", "id"], openStationId]], 0, 1] }}
           paint={{ "text-color": theme.dark ? "#f2f1ed" : "#111111", "text-halo-color": theme.land, "text-halo-width": 1.6 }} />
       </Source>
@@ -723,11 +799,14 @@ export default function TransitLayer() {
         {/* Subway trains: route bullets with a heading notch on the rim. */}
         <Layer id="transit-bullet-notch" type="symbol" filter={["==", ["get", "system"], "subway"]}
           layout={{ "icon-image": NOTCH_ICON, "icon-rotate": ["get", "bearing"], "icon-rotation-alignment": "map", "icon-allow-overlap": true, "icon-ignore-placement": true,
-            "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.5, 16, 0.8], "icon-offset": [0, -26] }}
+            "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.5, 16, 0.8],
+            "icon-offset": (three ? ["case", ["==", ["get", "grade"], "elevated"], ["literal", [0, -26 - RAISED_LIFT_PX]], ["literal", [0, -26]]] : [0, -26]) as [number, number] }}
           paint={{ "icon-opacity": bulletAlpha }} />
         <Layer id="transit-bullet" type="symbol" filter={["==", ["get", "system"], "subway"]}
-          layout={{ "icon-image": ["get", "bullet"], "icon-allow-overlap": true, "icon-ignore-placement": true, "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.55, 14, 0.75, 17, 0.95] }}
-          paint={{ "icon-opacity": ["*", bulletAlpha, ["case", ["==", ["get", "grade"], "underground"], 0.7, 1]] as unknown as number }} />
+          layout={{ "icon-image": ["get", "bullet"], "icon-allow-overlap": true, "icon-ignore-placement": true,
+            // Elevated trains: the bullet floats above the viaduct deck, not on the street below.
+            "icon-offset": (three ? ["case", ["==", ["get", "grade"], "elevated"], ["literal", [0, -RAISED_LIFT_PX]], ["literal", [0, 0]]] : [0, 0]) as [number, number], "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.55, 14, 0.75, 17, 0.95] }}
+          paint={{ "icon-opacity": ["*", bulletAlpha, ["case", ["==", ["get", "grade"], "underground"], xrayOn ? 1 : 0.7, 1]] as unknown as number }} />
         {/* Buses: SQUARE badges, so they never read as round subway bullets. Zoomed out
             only the borough prefix (all shown, so each heading notch has its badge); from z15 or for the
             selected route the badge widens to the full route, with collision detection. */}
