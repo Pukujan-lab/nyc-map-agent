@@ -76,6 +76,13 @@ export function holdShuttle(alertId: string | null): void {
 
 type BusShow = { why: "shuttle" | "trip" | "page" | "off"; routes: string[] };
 
+/** Trains stay. Buses stay only while their route is one of the routes still on. */
+export function shownVehicles<T extends { system: string; route: string }>(vehicles: readonly T[], routes: readonly string[]): T[] {
+  if (!routes.length) return vehicles.filter((v) => v.system !== "bus");
+  const allow = new Set(routes.map((r) => r.toUpperCase()));
+  return vehicles.filter((v) => v.system !== "bus" || allow.has(v.route.toUpperCase()));
+}
+
 /** Shuttle wins over a trip, and a trip wins over the corridor page. */
 export function busesToShow(pageRoutes: string[], pins: { trip: string[] | null; shuttle: string[] | null } = snap): BusShow {
   if (pins.shuttle?.length) return { why: "shuttle", routes: pins.shuttle };
