@@ -17,13 +17,13 @@ async function getJson<T>(url: string): Promise<T> {
 
 export type TransitLayerId = SystemId | "bus";
 
-/** Live subway and buses are on when the URL says nothing (the default view). */
-const DEFAULT_TRANSIT = "subway,bus";
+/** Live subway is on when the URL says nothing. Buses stay off until a corridor page, a trip, or a replacement shuttle asks for them. */
+const DEFAULT_TRANSIT = "subway";
 const parseTransit = (raw: string | null) =>
   new Set((raw ?? DEFAULT_TRANSIT).split(",").filter((id) => id && id !== "none"));
 
 /**
- * `?transit=subway,lirr` in the URL (absent = subway + buses, `none` = off);
+ * `?transit=subway,lirr` in the URL (absent = subway, `none` = off). `?busPage=` is one corridor page.
  * `?transitPanel=1` opens the status drawer.
  */
 export function useTransitToggles() {
@@ -35,6 +35,7 @@ export function useTransitToggles() {
         const next = new URLSearchParams(prev);
         const cur = parseTransit(next.get("transit"));
         if (value) cur.add(id); else cur.delete(id);
+        if (id === "bus" && !value) next.delete("busPage");
         const joined = cur.size ? [...cur].join(",") : "none";
         if (joined === DEFAULT_TRANSIT) next.delete("transit"); else next.set("transit", joined);
         return next;
@@ -51,7 +52,21 @@ export function useTransitToggles() {
       }, { replace: true }),
     [setParams],
   );
-  return { on, set, panelOpen, setPanelOpen };
+  const busPage = params.get("busPage");
+  const setBusPage = useCallback(
+    (id: string | null) =>
+      setParams((prev) => {
+        const next = new URLSearchParams(prev);
+        const cur = parseTransit(next.get("transit"));
+        if (id) { cur.add("bus"); next.set("busPage", id); }
+        else { cur.delete("bus"); next.delete("busPage"); }
+        const joined = cur.size ? [...cur].join(",") : "none";
+        if (joined === DEFAULT_TRANSIT) next.delete("transit"); else next.set("transit", joined);
+        return next;
+      }, { replace: true }),
+    [setParams],
+  );
+  return { on, set, panelOpen, setPanelOpen, busPage, setBusPage };
 }
 
 export function useTransitMeta() {
@@ -82,14 +97,38 @@ export function useTransitData(systems: SystemId[]) {
   return out;
 }
 
-export function useBuses(enabled: boolean) {
+/** Live positions for at most one page of routes. An empty list does not ask for the fleet. */
+export function useBuses(enabled: boolean, routes: string[]) {
+  const list = [...new Set(routes.map((r) => r.toUpperCase()))].sort().slice(0, 20);
+  const key = list.join(",");
   return useQuery({
-    queryKey: ["transit", "bus"],
-    queryFn: () => getJson<{ at: number; buses: Bus[] }>(`${API_BASE}/api/transit/bus`),
+    queryKey: ["transit", "bus", key],
+    queryFn: () => getJson<{ at: number; buses: Bus[] }>(`${API_BASE}/api/transit/bus?${new URLSearchParams({ routes: key })}`),
     refetchInterval: REFRESH,
-    enabled,
+    enabled: enabled && list.length > 0,
     retry: false,
   });
+}
+
+type BusPage = { id: string; label: string; routes: string[] };
+type BusGroup = { id: string; label: string; pages: BusPage[] };
+/** Borough pages. Fetched when the filter is open or a page is already selected, so the list stays out of the bundle. */
+export function useBusLines(enabled: boolean) {
+  return useQuery({
+    queryKey: ["transit", "bus-lines"],
+    queryFn: () => getJson<{ groups: BusGroup[] }>(`${API_BASE}/api/transit/bus-lines`),
+    staleTime: Infinity,
+    enabled,
+    retry: 1,
+  });
+}
+export function routesForPage(groups: BusGroup[] | undefined, pageId: string | null): string[] {
+  if (!pageId || !groups) return [];
+  for (const g of groups) {
+    const page = g.pages.find((p) => p.id === pageId);
+    if (page) return page.routes;
+  }
+  return [];
 }
 
 export type BusCall = { id: string; name: string; eta: number | null; away: string };
@@ -138,6 +177,8 @@ export type TransitAlert = {
   id: string; kind: "planned" | "delay" | "notice"; type: string; reroute: boolean; text: string; agency: string; routes: string[]; stops: string[];
   /** Added in #253; optional so older cached payloads still parse. */
   description?: string; start?: number; end?: number; period?: string; direction?: string; directionIds?: number[]; via?: string[]; skipNames?: string[]; changes?: ServiceChange[];
+  /** Bus routes standing in for this train, when the alert names a shuttle. */
+  replacement?: string[];
 };
 export type Outage = { id: string; station: string; routes: string[]; stops: string[]; equipment: "Elevator" | "Escalator"; serving: string; reason: string; since: string; back: string; ada: "yes" | "no" | "not-ada"; alternative: string };
 export function useAlerts(enabled: boolean) {

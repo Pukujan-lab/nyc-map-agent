@@ -131,9 +131,9 @@ export const ROUTES = {
   "/api/transit": jsonRoute("/api/transit", "Live transit capabilities ({ bus })"),
   "/api/transit/:system": jsonRoute(
     "/api/transit/{system}",
-    "Live MTA GTFS-rt (subway / lirr / mnr trips, bus positions, alerts + elevator outages), cached ~15 s; bus-trip?vehicle= (one bus's headsign + upcoming stops), bus-route?route= (route shape + stops) and bus-stops?lat=&lon= (stops within ~300 m with the routes serving each)",
-    z.object({ vehicle: z.string().max(40).optional(), route: z.string().max(8).optional(), lat: z.string().max(12).optional(), lon: z.string().max(12).optional() }),
-    z.object({ system: z.enum(["subway", "lirr", "mnr", "bus", "alerts", "bus-trip", "bus-route", "bus-stops"]).openapi({ param: { name: "system", in: "path" }, example: "subway" }) }),
+    "Live MTA GTFS-rt (subway / lirr / mnr trips, bus positions, alerts + elevator outages), cached ~15 s; bus?routes=Q1,Q2 filters the cached fleet to at most 20 routes; bus-lines is the borough page catalog; bus-trip?vehicle= (one bus's headsign + upcoming stops), bus-route?route= (route shape + stops) and bus-stops?lat=&lon= (stops within ~300 m with the routes serving each)",
+    z.object({ vehicle: z.string().max(40).optional(), route: z.string().max(8).optional(), routes: z.string().max(240).optional(), lat: z.string().max(12).optional(), lon: z.string().max(12).optional() }),
+    z.object({ system: z.enum(["subway", "lirr", "mnr", "bus", "bus-lines", "alerts", "bus-trip", "bus-route", "bus-stops"]).openapi({ param: { name: "system", in: "path" }, example: "subway" }) }),
   ),
   "/api/events": createRoute({
     method: "get",

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseProse, slimAlert } from "./alerts";
+import { parseProse, replacementBuses, slimAlert } from "./alerts";
 
 describe("MTA alert slimming", () => {
   it("keeps Mercury period, direction ids and skipped-stop ids", () => {
@@ -23,5 +23,22 @@ describe("MTA alert slimming", () => {
     const p = parseProse("[F] is rerouted via Court Sq [E] between Roosevelt Av, Queens and Canal St, then via the [A] to Jay St-MetroTech\nNo [F] service at 21 St-Queensbridge, Roosevelt Island, East Broadway and York St.", "F");
     expect(p.via).toEqual(["E", "A"]);
     expect(p.skipNames).toEqual(["21 St-Queensbridge", "Roosevelt Island", "East Broadway", "York St"]);
+  });
+  it("reads a shuttle bus and the stretch of the line it covers", () => {
+    const text = "No [6] between Hunts Point Av and 125 St\nFree T102 shuttle buses make all stops between 125 St and Hunts Point Av.";
+    expect(replacementBuses(text)).toEqual({ routes: ["T102"], between: ["Hunts Point Av", "125 St"] });
+    const a = slimAlert({
+      id: "lmm:planned_work:34162",
+      alert: {
+        active_period: [{ start: 100 }],
+        informed_entity: [{ agency_id: "MTASBWY", route_id: "6" }],
+        header_text: { translation: [{ text: "No [6] between Hunts Point Av and 125 St", language: "en" }] },
+        description_text: { translation: [{ text: "Free T102 shuttle buses make all stops between 125 St and Hunts Point Av.", language: "en" }] },
+        "transit_realtime.mercury_alert": { alert_type: "Planned - Shuttle Bus" },
+      },
+    }, 150)!;
+    expect(a.replacement).toEqual(["T102"]);
+    expect(a.skipNames).toEqual(["Hunts Point Av", "125 St"]);
+    expect(a.via).toEqual([]);
   });
 });

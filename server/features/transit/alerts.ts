@@ -48,6 +48,8 @@ export type SlimAlert = {
   skipNames: string[];
   /** Station-level skips and platform changes (direction-aware). */
   changes: ServiceChange[];
+  /** Bus routes named as the replacement ("T102 shuttle buses"). */
+  replacement: string[];
 };
 
 const en = (t?: Translated) => t?.translation?.find((x) => x.language === "en")?.text ?? "";
@@ -56,6 +58,25 @@ const uniq = <T,>(xs: Array<T | undefined>) => [...new Set(xs.filter((x): x is T
 /** "a, b, c and d." -> ["a", "b", "c", "d"] */
 function nameList(s: string): string[] {
   return s.replace(/\.$/, "").split(/,\s*|\s+and\s+/).map((x) => x.trim()).filter((x) => x && x.length < 60);
+}
+
+const cleanEnd = (s: string) => s.replace(/\.$/, "").replace(/^(?:the|and)\s+/i, "").trim();
+
+/**
+ * A bus standing in for a train. "Free T102 shuttle buses make all stops
+ * between 125 St and Hunts Point Av", and "No [6] between Hunts Point Av and 125 St".
+ */
+export function replacementBuses(text: string): { routes: string[]; between: string[] } {
+  const routes: string[] = [];
+  const between: string[] = [];
+  const closed = /No \[[A-Z0-9]+\](?: service| trains?)? between\s+(.+?)\s+and\s+([^,.\n]+)/i.exec(text);
+  if (closed) between.push(cleanEnd(closed[1]), cleanEnd(closed[2]));
+  for (const m of text.matchAll(/\b([A-Z]{1,3}\d{1,4})\s+shuttle buses?\b([^.\n]*)/gi)) {
+    routes.push(m[1].toUpperCase());
+    const gap = /between\s+(.+?)\s+and\s+([^,.\n]+)/i.exec(m[2]);
+    if (gap) between.push(cleanEnd(gap[1]), cleanEnd(gap[2]));
+  }
+  return { routes: uniq(routes), between: uniq(between) };
 }
 
 /** Parse the free-text parts the feed only carries in prose. */
@@ -84,6 +105,7 @@ export function slimAlert(e: MercuryAlert, now: number): SlimAlert | null {
   const planned = /^planned/i.test(type) || /maintenance|track work|repairs|construction/i.test(text);
   const kind = planned ? "planned" : /delay|reduced/i.test(type) ? "delay" : "notice";
   const all = `${text}\n${description}`;
+  const repl = replacementBuses(all);
   // Reroutes / skipped stops: the informed stops are the ones affected.
   const reroute = /reroute|detour|skipped|express to local|local to express|suspend/i.test(type) || /running via|rerouted|skip|bypass/i.test(text);
   const ents = a.informed_entity ?? [];
@@ -106,6 +128,8 @@ export function slimAlert(e: MercuryAlert, now: number): SlimAlert | null {
     ...parseProse(all, routes[0]),
     // The header names the reroute; the description often describes other services' changes too.
     via: parseProse(text, routes[0]).via.length ? parseProse(text, routes[0]).via : parseProse(all, routes[0]).via,
+    skipNames: uniq([...parseProse(all, routes[0]).skipNames, ...repl.between]),
     changes: serviceChanges({ id: e.id, text, routes }),
+    replacement: repl.routes,
   };
 }

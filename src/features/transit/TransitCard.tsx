@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { Accessibility, Crosshair, ScanEye, Star, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { arrivalsAt, directionLabel, estimateTrain, minutesUntil, stationOf, type LiveSystem, type StaticSystem, type SystemId, type Vehicle } from "./model";
-import { useAlerts, useBusRoute, useBusTrip, useBuses, useNow, useStarred, useTransitData, type Outage } from "./hooks";
+import { useAlerts, useBusRoute, useBusTrip, useNow, useStarred, useTransitData, type Outage } from "./hooks";
 import { setFollowed, stopFollowing, useFollowed } from "./follow";
 import { useSharedLocation } from "@/lib/geo/sharedLocation";
 import { getXray, setXray, useXray } from "./xray";
@@ -188,14 +188,14 @@ export function VehicleDetails({ vehicleKey }: { vehicleKey: string }) {
   const tripId = rest.join(":");
   const rail = system === "bus" ? [] : [system as SystemId];
   const data = useTransitData(rail);
-  const buses = useBuses(system === "bus");
+  const busTrip = useBusTrip(system === "bus" ? tripId : undefined);
   const now = useNow();
   const followed = useFollowed();
   let v: Vehicle | null | undefined;
   let upcoming: Array<{ id: string; name: string; eta: number | null }> = [];
   if (system === "bus") {
-    const b = buses.data?.buses.find((x) => x.id === tripId);
-    if (b) v = { key: vehicleKey, system: "bus", route: b.route, label: b.route, color: "#0039A6", lon: b.lon, lat: b.lat, bearing: b.bearing ?? 0, grade: "grade", dir: b.dir, nextStop: b.next ?? undefined };
+    const route = busTrip.data?.route;
+    if (route) v = { key: vehicleKey, system: "bus", route, label: route, color: "#0039A6", lon: 0, lat: 0, bearing: 0, grade: "grade", dir: null };
   } else {
     const st = data[system as SystemId]?.stat, trip = data[system as SystemId]?.live?.trips.find((t) => t.id === tripId);
     v = st && trip ? estimateTrain(st, trip, now, liveProgress) : undefined;

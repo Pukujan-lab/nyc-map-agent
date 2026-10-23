@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useFlag } from "@/lib/flags";
 import { getMapInstance } from "@/lib/map/mapInstance";
 import { useMapState } from "@/lib/store/MapStateContext";
+import { revealTripBuses } from "@/lib/transit/busReveal";
 import { setFollowed } from "@/lib/transit/follow";
 import { usePanel } from "@/lib/store/PanelContext";
 import { useMediaQuery } from "@/lib/useMediaQuery";
@@ -83,13 +84,14 @@ export default function AgentOverlay() {
 
   const ctx: ExecutorContext = {
     flyTo: (lon, lat, zoom) => { handoffCamera(); flyTo({ lon, lat, zoom }); },
-    showTrip: (t) => { handoffCamera(); setTrip(t); const m = getMapInstance(); if (m) showTrip(m, t); },
+    showTrip: (t) => { handoffCamera(); revealTripBuses(t); setTrip(t); const m = getMapInstance(); if (m) showTrip(m, t); },
     openTrip: (t) => {
+      revealTripBuses(t);
       setTrip(t);
       showPanel({ id: `agent:trip:${t.id}`, title: `To ${t.destination.label}`, subtitle: `${t.departIso.slice(11)} → ${t.arriveIso.slice(11)}`, summary: <TripSummary trip={t} compact onSelect={(alt) => ctxRef.current.openTrip(selectAlternative(t, alt))} />, details: <TripSummary trip={t} bodyOnly /> });
     },
     enterStreetView: (lon, lat) => { handoffCamera(); startWalk({ lon, lat }); },
-    playFlythrough: (t, speed) => { handoffCamera(); setTrip(t); setChatOpen(false); player.start(t, speed); },
+    playFlythrough: (t, speed) => { handoffCamera(); revealTripBuses(t); setTrip(t); setChatOpen(false); player.start(t, speed); },
     setTime: (iso) => setMapTime(iso),
   };
   const ctxRef = useRef(ctx);

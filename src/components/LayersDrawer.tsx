@@ -126,12 +126,14 @@ export function LayersDrawer({
   for (const c of chips) add(c);
 
   const directing = routePicking !== null || routeStart !== null;
-  const filtersOn = places.size + opts.routes.length + layerChips.filter((c) => c.active).length + (opts.stationsOnly ? 1 : 0);
+  const filtersOn = places.size + opts.routes.length + layerChips.filter((c) => c.active).length + (opts.stationsOnly ? 1 : 0) + (registered.get("liveBuses")?.active ? 1 : 0);
   const clearAll = () => {
     setPlaces(new Set());
     setOptions({ routes: [], stationsOnly: false });
     setTransitFocusOff();
     for (const c of layerChips) if (c.active && c.id !== "transit") c.onToggle();
+    const buses = registered.get("liveBuses");
+    if (buses?.active) buses.onToggle();
   };
   const togglePlace = (id: string) => {
     const next = new Set(places);
@@ -201,7 +203,7 @@ export function LayersDrawer({
           </div>
         </Section>
 
-        {q.trim() && !match("nearby stations arrivals") ? null : (
+        {q.trim() && !match("nearby stations arrivals") && !match("bus") && !match("queens") && !match("bronx") && !match("brooklyn") && !match("staten island") ? null : (
           <div>
           {FEATURES.filter((f) => f.HomeSection && flags[f.id]).map((f) => {
             const S = f.HomeSection!;

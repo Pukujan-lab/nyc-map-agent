@@ -29,6 +29,26 @@ describe("bus sheet endpoints", () => {
   });
 });
 
+describe("bus pages", () => {
+  afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
+  it("serves the borough catalog without a Bus Time key", async () => {
+    vi.stubEnv("MTA_BUSTIME_KEY", "");
+    const body = await (await GET(new Request("http://x/api/transit/bus-lines"))).json() as { groups: Array<{ pages: Array<{ routes: string[] }> }> };
+    const routes = body.groups.flatMap((g) => g.pages.flatMap((p) => p.routes));
+    expect(routes).toContain("Q1");
+    expect(routes).not.toContain("T102");
+    expect(routes.some((r) => r.startsWith("T"))).toBe(false);
+  });
+  it("refuses an empty, oversized, or invalid route list before calling Bus Time", async () => {
+    vi.stubEnv("MTA_BUSTIME_KEY", "k");
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    expect((await GET(new Request("http://x/api/transit/bus?routes=nope"))).status).toBe(400);
+    expect((await GET(new Request("http://x/api/transit/bus?routes=" + Array.from({ length: 21 }, (_, i) => `Q${i + 1}`).join(",")))).status).toBe(400);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
 describe("bus-stops", () => {
   afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
   it("rejects points outside NYC", async () => {
