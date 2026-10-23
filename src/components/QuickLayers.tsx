@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { Switch } from "@/components/ui/switch";
 import { useFeatureToggles } from "@/lib/featureToggles";
+import { setOptions, useMapOptions } from "@/lib/map/mapOptions";
 import { useTransitFocus } from "@/lib/map/transitFocus";
 import { setQuickLayer, useQuickLayer, type QuickId } from "@/lib/quickLayers";
 
@@ -20,6 +21,7 @@ export function QuickLayers() {
   const [open, setOpen] = useState(false);
   const { restrooms, setRestrooms } = useMapState();
   const [focus, setFocus] = useTransitFocus();
+  const opts = useMapOptions();
   const [on, toggle] = useFeatureToggles();
   const x0 = useRef<number | null>(null);
   const t = (id: "events" | "parking", label: string): Row => [label, on.has(id), () => toggle(id)];
@@ -27,6 +29,7 @@ export function QuickLayers() {
     useRow("businesses", "Businesses"),
     useRow("streetArt", "Street art"),
     ["Transit Focus", focus, setFocus],
+    ["Roads", opts.roads, (v) => setOptions({ roads: v })],
     useRow("xray", "X-ray"),
     ["Restrooms", restrooms, setRestrooms],
     t("events", "Events"),

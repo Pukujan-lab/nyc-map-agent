@@ -85,6 +85,22 @@ export function busBadgeId(text: string, color: string, alert = false): string {
   return `${BUS_PREFIX}${text}|${color.replace("#", "")}|${alert ? 1 : 0}`;
 }
 
+/**
+ * Zoom stops for a bus badge, as [zoom, size, ...]. The image is about 28 css
+ * px at size 1, and a subway bullet is 32. A borough filter keeps the count
+ * down, so the badge can sit at that same size instead of a speck.
+ */
+export const BUS_ICON_STOPS = {
+  prefix: [10, 0.58, 14, 0.92],
+  full: [15, 1.05, 18, 1.35],
+  selected: [10, 0.95, 16, 1.3],
+  notch: [10, 0.55, 14, 0.9, 15, 1.05, 18, 1.35],
+} as const;
+
+export function busIconSize(kind: keyof typeof BUS_ICON_STOPS): number {
+  return ["interpolate", ["linear"], ["zoom"], ...BUS_ICON_STOPS[kind]] as unknown as number;
+}
+
 function alertMark(ctx: CanvasRenderingContext2D, x: number, y: number) {
   ctx.beginPath();
   ctx.arc(x, y, 9, 0, Math.PI * 2);

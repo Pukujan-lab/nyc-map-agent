@@ -7,6 +7,8 @@ import { useSyncExternalStore } from "react";
 export interface MapOptions {
   /** "simple" = pale streets without casings or minor names (the default). */
   streets: "simple" | "full";
+  /** False hides the road paint and road names so the transit lines are the map. */
+  roads: boolean;
   streetNames: boolean;
   /** "flat" = pale 2D footprints, no extrusion (the default); "3d" = extruded and textured. */
   buildings: "flat" | "3d";
@@ -15,13 +17,14 @@ export interface MapOptions {
   stationsOnly: boolean;
 }
 export const OPTIONS_KEY = "nma.mapOptions";
-export const DEFAULT_OPTIONS: MapOptions = { streets: "simple", streetNames: true, buildings: "flat", routes: [], stationsOnly: false };
+export const DEFAULT_OPTIONS: MapOptions = { streets: "simple", roads: true, streetNames: true, buildings: "flat", routes: [], stationsOnly: false };
 
 export function readOptions(storage: Pick<Storage, "getItem"> | undefined = globalThis.localStorage): MapOptions {
   try {
     const raw = JSON.parse(storage?.getItem(OPTIONS_KEY) ?? "{}") as Partial<MapOptions>;
     return {
       streets: raw.streets === "full" ? "full" : "simple",
+      roads: raw.roads !== false,
       streetNames: raw.streetNames !== false,
       buildings: raw.buildings === "3d" ? "3d" : "flat",
       routes: Array.isArray(raw.routes) ? raw.routes.filter((r): r is string => typeof r === "string") : [],
