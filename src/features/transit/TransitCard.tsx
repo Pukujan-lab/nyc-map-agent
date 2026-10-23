@@ -1,15 +1,17 @@
 import { formatStreetText } from "@/lib/streetName";
 import { liveProgress } from "./monotonic";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Accessibility, Crosshair, ScanEye, Star, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { arrivalsAt, directionLabel, estimateTrain, minutesUntil, stationOf, type LiveSystem, type StaticSystem, type SystemId, type Vehicle } from "./model";
-import { useAlerts, useBusRoute, useBusTrip, useNow, useStarred, useTransitData, type Outage } from "./hooks";
+import { arrivalsAt, directionLabel, estimateTrain, minutesUntil, stationOf, SYSTEM_LABELS, type LiveSystem, type StaticSystem, type SystemId, type Vehicle } from "./model";
+import { useAlerts, useBusRoute, useBusTrip, useNow, useStarred, useTransitData, type Outage, type TransitAlert } from "./hooks";
 import { setFollowed, stopFollowing, useFollowed } from "./follow";
 import { useSharedLocation } from "@/lib/geo/sharedLocation";
 import { getXray, setXray, useXray } from "./xray";
 import { AlertRow } from "./AlertCard";
 import { stationChanges } from "./alertFocus";
+import { alertTimeLabel, classifyRouteAlerts, plainAlert, skipNamesFor } from "./followInfo";
+import { usePanel } from "@/lib/store/PanelContext";
 
 type Data = Partial<Record<SystemId, { stat?: StaticSystem; live?: LiveSystem }>>;
 
@@ -29,6 +31,41 @@ const stopName = (data: Data, system: SystemId | "bus", stop?: string) => {
   return data[system]?.stat?.stations.features.find((f) => f.properties.id === id)?.properties.name ?? stop;
 };
 
+const rowBtn = "mt-1 block w-full rounded-md border border-border bg-card px-2 py-1.5 text-left text-xs font-medium hover:border-[hsl(var(--acc))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+/** Stations a skip covers, and the alert's time when it has one. */
+function SkipPlaces({ alert, route }: { alert: TransitAlert | undefined; route: string }) {
+  const names = skipNamesFor(alert, route);
+  const time = alertTimeLabel(alert);
+  return (
+    <div data-testid="skip-places" className="mt-1 rounded-md bg-muted px-2 py-1.5 text-xs">
+      <div className="font-semibold">Where this trip skips</div>
+      {names.length ? <ul className="mt-1 list-disc pl-4">{names.map((n) => <li key={n}>{n}</li>)}</ul> : <p className="mt-1">This station.</p>}
+      <p className="mt-1">{time ?? "No time given"}</p>
+    </div>
+  );
+}
+
+/** Map click on Skipped: every skip at that station, with places and time. */
+export function SkipDetails({ stationId }: { stationId: string }) {
+  const data = useTransitData(["subway"]);
+  const alerts = useAlerts(true);
+  const st = data.subway?.stat;
+  const change = st ? stationChanges(alerts.data?.alerts ?? [], st).get(stationId) : undefined;
+  const list = alerts.data?.alerts ?? [];
+  if (!change?.skips.length) return <p className="text-sm text-muted-foreground">No skip is listed for this station right now.</p>;
+  return (
+    <div className="space-y-3 text-sm">
+      {change.skips.map((k) => (
+        <div key={`${k.alertId}|${k.route}`}>
+          <div className="font-semibold">{k.label}</div>
+          <SkipPlaces alert={list.find((a) => a.id === k.alertId)} route={k.route} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** Panel body for a station: next arrivals by line and direction, outages, planned work. */
 export function StationDetails({ system, id }: { system: SystemId; id: string }) {
   const data = useTransitData([system]);
@@ -45,6 +82,8 @@ export function StationDetails({ system, id }: { system: SystemId; id: string })
   const doors = system === "subway" ? (st?.entrances?.features ?? []).filter((f) => f.properties.id === id) : [];
   const lineAlerts = (alerts?.alerts ?? []).filter((a) => a.kind === "delay" && a.routes.some((r) => routes.includes(r)));
   const change = system === "subway" && st ? stationChanges(alerts?.alerts ?? [], st).get(id) : undefined;
+  const [openSkip, setOpenSkip] = useState<string | null>(null);
+  const alertById = new Map((alerts?.alerts ?? []).map((a) => [a.id, a]));
   return (
     <div className="space-y-3 text-sm">
       {routes.length ? (
@@ -52,12 +91,20 @@ export function StationDetails({ system, id }: { system: SystemId; id: string })
           {routes.map((r) => <RouteBullet key={r} system={system} route={r} data={data} />)}
         </div>
       ) : null}
-      {change?.skips.map((k) => (
-        <div key={`${k.alertId}|${k.route}`} data-testid="station-skip" className="flex items-center gap-2 rounded-md border-2 border-[#d4183d] px-2 py-1.5 text-xs font-semibold">
-          <RouteBullet system={system} route={k.route} data={data} />
-          <span><s>{k.end === null ? "Skipped both directions" : `Skipped ${k.toward}-bound`}</s>{k.end === null ? "" : ` · ${k.other}-bound stops`}</span>
-        </div>
-      ))}
+      {change?.skips.map((k) => {
+        const key = `${k.alertId}|${k.route}`;
+        const open = openSkip === key;
+        return (
+          <div key={key}>
+            <button type="button" data-testid="station-skip" aria-expanded={open} onClick={() => setOpenSkip(open ? null : key)}
+              className="flex w-full items-center gap-2 rounded-md border-2 border-[#d4183d] px-2 py-1.5 text-left text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <RouteBullet system={system} route={k.route} data={data} />
+              <span><s>{k.end === null ? "Skipped both directions" : `Skipped ${k.toward}-bound`}</s>{k.end === null ? "" : ` · ${k.other}-bound stops`}</span>
+            </button>
+            {open ? <SkipPlaces alert={alertById.get(k.alertId)} route={k.route} /> : null}
+          </div>
+        );
+      })}
       {change?.platform.map((p) => (
         <div key={`${p.alertId}|${p.route}`} data-testid="station-platform" className="flex items-center gap-2 rounded-md border-2 border-[hsl(var(--acc))] bg-[hsl(var(--acc)/0.2)] px-2 py-1.5 text-xs font-semibold">
           <RouteBullet system={system} route={p.route} data={data} />
@@ -251,32 +298,86 @@ export function OutageRow({ o }: { o: Outage }) {
 }
 
 /**
- * Follow mode's slim card (top centre, never blocks the view): route, next
- * stop, ETA and any delay. The camera switcher and "Stop following" live in
- * the view switcher at the bottom.
+ * Follow mode's card (top centre): the delay, upcoming stops and notices are
+ * buttons. The camera switcher and "Stop following" stay in the view switcher.
  */
 export function FollowCard({ vehicle }: { vehicle: Vehicle }) {
   const now = useNow();
   const sys = vehicle.system === "bus" ? [] : [vehicle.system];
   const data = useTransitData(sys);
   const alerts = useAlerts(true);
-  const delay = (alerts.data?.alerts ?? []).find((a) => a.routes.includes(vehicle.route) && a.kind !== "planned");
+  const { showPanel, setSnap } = usePanel();
+  const tripId = vehicle.key.split(":").slice(1).join(":");
+  const busTrip = useBusTrip(vehicle.system === "bus" ? tripId : undefined);
+  const grouped = classifyRouteAlerts(alerts.data?.alerts ?? [], vehicle.route);
+  const railTrip = vehicle.system === "bus" ? undefined : data[vehicle.system]?.live?.trips.find((t) => t.id === tripId);
+  const stops = vehicle.system === "bus"
+    ? (busTrip.data?.calls ?? []).slice(0, 6).map((c) => ({ id: c.id, name: formatStreetText(c.name), eta: c.eta }))
+    : (railTrip?.stops ?? []).filter(([, t]) => t >= now - 30).slice(0, 6).map(([id, t]) => ({ id, name: stopName(data, vehicle.system, id) ?? id, eta: t }));
   const next = vehicle.stopped?.kind === "at" ? vehicle.stopped.stop : vehicle.nextStop;
+  const nextName = next ? (stopName(data, vehicle.system, next) ?? next) : "—";
+  const head = vehicle.system === "bus" ? stops[0] : undefined;
+  const headId = head?.id ?? next;
+  const headName = head?.name ?? nextName;
+  const headEta = head ? head.eta : (vehicle.eta ?? null);
+  const openAlert = (a: TransitAlert) => {
+    void import("./AlertCard").then(({ presentAlert }) => {
+      presentAlert(a);
+      setSnap("half");
+    });
+  };
+  const openStop = (id: string, name: string, eta: number | null) => {
+    if (vehicle.system === "bus") {
+      showPanel({
+        id: `transit:bus-stop:${id}`,
+        title: name,
+        subtitle: `${vehicle.route} stop`,
+        details: <p className="text-sm">{eta ? <><span className="tabular-nums">{minutesUntil(eta, now)}</span> min</> : "No time given"}</p>,
+      });
+    } else {
+      const sid = stationOf(vehicle.system, id);
+      showPanel({
+        id: `transit:station:${vehicle.system}:${sid}`,
+        title: name,
+        subtitle: `${SYSTEM_LABELS[vehicle.system]} station`,
+        details: <StationDetails system={vehicle.system} id={sid} />,
+      });
+    }
+    setSnap("half");
+  };
   return (
-    <div data-testid="follow-card" className="pointer-events-none absolute left-1/2 top-16 z-30 w-[min(92vw,420px)] -translate-x-1/2 lg:top-3">
-      <div className="pointer-events-auto flex items-center gap-[var(--sp-2)] rounded-xl border border-border bg-card/95 px-[var(--sp-3)] py-1.5 text-[12px] shadow-lg backdrop-blur-md">
-        <RouteBullet system={vehicle.system} route={vehicle.route} data={data} />
-        <div className="min-w-0 flex-1">
-          <div className="truncate font-semibold">
+    <div data-testid="follow-card" className="pointer-events-none absolute left-1/2 top-16 z-30 w-[min(92vw,420px)] -translate-x-1/2">
+      <div className="pointer-events-auto max-h-[46vh] overflow-y-auto rounded-xl border border-border bg-card/95 px-[var(--sp-3)] py-1.5 text-[12px] shadow-lg backdrop-blur-md">
+        <div className="flex items-center gap-[var(--sp-2)]">
+          <RouteBullet system={vehicle.system} route={vehicle.route} data={data} />
+          <button type="button" className="min-w-0 flex-1 truncate text-left font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={() => headId && openStop(headId, headName, headEta)}>
             {vehicle.stopped?.kind === "at" ? "At " : "Next "}
-            {next ? stopName(data, vehicle.system, next) : "—"}
+            {headName}
             {vehicle.eta && vehicle.stopped?.kind !== "at" ? <span className="tabular-nums text-muted-foreground"> · {minutesUntil(vehicle.eta, now)} min</span> : null}
-          </div>
-          <div className="truncate text-[11px] text-muted-foreground">
-            {delay ? <><span className="font-semibold text-foreground">{delay.reroute ? "Detour" : "Delay"}:</span> {delay.text}</> : "No delays reported"}
-          </div>
+          </button>
+          <span className="shrink-0 text-[11px] font-medium text-muted-foreground">{vehicle.grade === "underground" ? "Underground" : vehicle.grade === "elevated" ? "Elevated" : "At grade"}</span>
         </div>
-        <span className="shrink-0 text-[11px] font-medium text-muted-foreground">{vehicle.grade === "underground" ? "Underground" : vehicle.grade === "elevated" ? "Elevated" : "At grade"}</span>
+        <div className="mt-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Delay</div>
+        {grouped.delays.length ? grouped.delays.slice(0, 3).map((a) => (
+          <button key={a.id} type="button" data-testid="follow-delay" className={rowBtn} onClick={() => openAlert(a)}>
+            <span className="font-semibold">{a.reroute ? "Detour" : "Delay"}</span> {plainAlert(a.text)}
+          </button>
+        )) : <p className="text-[11px] text-muted-foreground">No delay reported</p>}
+        <div className="mt-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Stops</div>
+        {vehicle.system === "bus" && busTrip.isLoading ? <p className="text-[11px] text-muted-foreground">Loading stops…</p> : null}
+        {stops.length ? stops.map((s) => (
+          <button key={s.id} type="button" data-testid="follow-stop" className={rowBtn} onClick={() => openStop(s.id, s.name, s.eta)}>
+            <span className="font-semibold">Stop</span> {s.name}
+            {s.eta ? <span className="tabular-nums text-muted-foreground"> · {minutesUntil(s.eta, now)} min</span> : <span className="text-muted-foreground"> · No time given</span>}
+          </button>
+        )) : vehicle.system === "bus" && busTrip.isLoading ? null : <p className="text-[11px] text-muted-foreground">No upcoming stops</p>}
+        <div className="mt-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Notices</div>
+        {grouped.notices.length ? grouped.notices.slice(0, 3).map((a) => (
+          <button key={a.id} type="button" data-testid="follow-notice" className={rowBtn} onClick={() => openAlert(a)}>
+            <span className="font-semibold">{a.kind === "planned" ? "Planned work" : "Notice"}</span> {plainAlert(a.text)}
+          </button>
+        )) : <p className="text-[11px] text-muted-foreground">No notices</p>}
       </div>
     </div>
   );

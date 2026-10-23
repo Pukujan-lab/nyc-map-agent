@@ -28,11 +28,21 @@ describe("monotonic train progress", () => {
     expect(lats[lats.length - 1]).toBeCloseTo(40.71, 4); // at B on the new ETA
   });
 
-  it("holds at the next listed stop until the feed drops it, then continues", () => {
+  it("leaves after the dwell even while the feed still lists that stop", () => {
     const tr = new ProgressTracker();
-    const late = estimateTrain(sys, trip([["BN", 200], ["CN", 300]]), 280, tr)!; // ETA passed, B still listed
-    expect(late.lat).toBeCloseTo(40.71, 4);
-    const gone = estimateTrain(sys, trip([["CN", 300]]), 285, tr)!;
+    // Arrival 200, default dwell 30 s, so it should have left at 230. B is still listed at 280.
+    const late = estimateTrain(sys, trip([["BN", 200], ["CN", 300]]), 280, tr)!;
+    expect(late.lat).toBeGreaterThan(40.712);
+    expect(late.lat).toBeLessThan(40.72);
+    expect(late.stopped).toBeUndefined();
+  });
+
+  it("keeps a long departure the feed itself reports", () => {
+    const tr = new ProgressTracker();
+    const held = estimateTrain(sys, trip([["BN", 200, 400], ["CN", 520]]), 280, tr)!;
+    expect(held.lat).toBeCloseTo(40.71, 4);
+    expect(held.stopped).toMatchObject({ kind: "at", stop: "BN" });
+    const gone = estimateTrain(sys, trip([["BN", 200, 400], ["CN", 520]]), 410, tr)!;
     expect(gone.lat).toBeGreaterThan(40.71);
   });
 

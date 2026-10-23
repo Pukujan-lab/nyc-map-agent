@@ -111,9 +111,14 @@ export function estimateTrain(sys: StaticSystem, trip: LiveTrip, now: number, tr
   const onward = pts[Math.min(mo.i + 1, pts.length - 1)];
   const forward = Math.sign(onward.m - pts[mo.i].m) || Math.sign(pts[mo.i].m - (pts[mo.i - 1]?.m ?? pts[mo.i].m)) || 1;
   if (tracker && mo.phase !== "terminal") {
-    // Never pass the first stop the feed still lists (departure unconfirmed).
+    // Cap at the stop not yet left: this platform during its dwell, or the next
+    // stop once that dwell is over. A head stop can stay listed for minutes
+    // after the train should have gone; that must not pin it to the platform.
+    // A later departure from the feed still holds for the whole reported gap.
     const tripFwd = Math.sign(pts[pts.length - 1].m - pts[0].m) || forward;
-    m = tracker.update({ key: `${sys.system}:${trip.id}`, route: trip.route, forward: tripFwd, m, holdM: livePts[0].m, holdEta: livePts[0].arr }, now);
+    const hold = pts[Math.min(nextI, pts.length - 1)];
+    const liveHold = livePts[Math.min(nextI, livePts.length - 1)];
+    m = tracker.update({ key: `${sys.system}:${trip.id}`, route: trip.route, forward: tripFwd, m, holdM: hold.m, holdEta: liveHold.arr }, now);
   }
   const stopped: Vehicle["stopped"] =
     mo.phase === "origin" ? { kind: "departs", stop: pts[0].id, t: mo.departs }
