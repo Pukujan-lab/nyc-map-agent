@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { usePanel, type PanelContent } from "@/lib/store/PanelContext";
 import { alertGeometry, routeEnds, setAlertFocus } from "./alertFocus";
+import { setFollowed } from "./follow";
 import { otherDirection } from "@/lib/transit/serviceChanges";
 import { useTransitData, type TransitAlert } from "./hooks";
 
@@ -27,6 +28,8 @@ function useOpenAlert(): (a: TransitAlert) => void {
   const { content, showPanel } = usePanel();
   return useCallback(
     (a: TransitAlert) => {
+      // In place, not Stop following: that ease would pull the camera off the alert.
+      setFollowed(null);
       const prev: PanelContent | null = content && !content.id.startsWith("transit:alert:") ? content : null;
       const back = () => {
         setAlertFocus(null);

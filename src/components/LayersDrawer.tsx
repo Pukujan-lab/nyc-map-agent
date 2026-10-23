@@ -9,6 +9,7 @@ import { onMapInstance } from "@/lib/map/mapInstance";
 import { SUBWAY_ROUTES, setOptions, useMapOptions } from "@/lib/map/mapOptions";
 import { PLACE_CATEGORIES, setPlaces, usePlaces } from "@/lib/map/places";
 import { setTransitFocusOff } from "@/lib/map/transitFocus";
+import { setFollowed } from "@/lib/transit/follow";
 import { useDataView } from "@/lib/store/DataViewContext";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { usePanel, type PanelChip } from "@/lib/store/PanelContext";
@@ -294,7 +295,7 @@ export function LayersDrawer({
       </div>
       <div className="grid grid-cols-2 gap-[var(--sp-2)] border-t border-border px-[var(--sp-4)] py-[var(--sp-3)]">
         <button type="button" onClick={clearAll} className="h-11 rounded-full border border-border bg-card text-[14px] font-semibold">Clear all</button>
-        <button type="button" onClick={() => onOpenChange(false)} className="h-11 rounded-full bg-acc text-[14px] font-semibold text-acc-foreground">Show map</button>
+        <button type="button" onClick={() => { setFollowed(null); onOpenChange(false); }} className="h-11 rounded-full bg-acc text-[14px] font-semibold text-acc-foreground">Show map</button>
       </div>
     </div>
   );

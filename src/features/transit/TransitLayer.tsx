@@ -26,6 +26,7 @@ import { useMapState } from "@/lib/store/MapStateContext";
 import { useFlag } from "@/lib/flags";
 import { usePanel, usePanelChip, usePanelMode, usePanelSearch, type SearchProvider } from "@/lib/store/PanelContext";
 import { followRig, rememberFollowOrigin, setFollowMode, setFollowed, stableHeading, takeFollowRestore, useFollowMode, useFollowed } from "./follow";
+import { followActionForMapClick } from "./followClick";
 import { publishSubway } from "@/lib/agent/streetContext";
 import { busesToShow, holdShuttle, registerBusToggle, setShuttleBuses, shownVehicles, useBusPins } from "@/lib/transit/busReveal";
 import { publishLiveDots } from "@/lib/transit/liveVehicles";
@@ -696,22 +697,24 @@ export default function TransitLayer() {
   }, [map, following]);
   usePanelMode("follow", following ? stopFollow : null);
 
-  // Clicks on transit features: a vehicle starts Follow straight away (no popup).
+  // A train or bus starts Follow. Any other map click, including empty map, drops it in place.
   useEffect(() => {
     if (!map) return;
     const onClick = (e: MapLayerMouseEvent) => {
       const layers = TRANSIT_CLICK_LAYERS.filter((id) => map.getLayer(id));
       const f = layers.length ? map.queryRenderedFeatures(e.point, { layers })[0] : undefined;
-      if (!f?.properties) return;
-      if (f.layer.id.startsWith("transit-vehicle") || f.layer.id === "transit-bullet" || f.layer.id.startsWith("transit-bus-badge")) {
+      const decision = followActionForMapClick(f?.properties ? { layerId: f.layer.id, key: f.properties.key } : null);
+      if (decision.action === "start") {
         setDrawerOpen(false);
         setFollowMode("chase");
-        setFollowed(String(f.properties.key));
+        setFollowed(decision.key);
         return;
       }
-      // Entrances carry the station's GTFS id, so they open the same card.
-      const system = (f.layer.id === "transit-entrance" ? "subway" : f.properties.system) as SystemId;
-      openStation(system, String(f.properties.id), String(f.properties.name));
+      if (f?.properties) {
+        // Entrances carry the station's GTFS id, so they open the same card.
+        const system = (f.layer.id === "transit-entrance" ? "subway" : f.properties.system) as SystemId;
+        openStation(system, String(f.properties.id), String(f.properties.name));
+      }
       setFollowed(null);
     };
     map.on("click", onClick);

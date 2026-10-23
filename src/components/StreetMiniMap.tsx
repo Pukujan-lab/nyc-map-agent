@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import maplibregl, { type GeoJSONSource, type Map as MapLibreMap } from "maplibre-gl";
 import { coneRotation, miniStyle } from "@/lib/map/miniStyle";
+import { setFollowed } from "@/lib/transit/follow";
 import { dotsNear, useLiveDots } from "@/lib/transit/liveVehicles";
 
 const DOTS = "mini-live-vehicles";
@@ -75,7 +76,7 @@ export function StreetMiniMap({ main, getEye, onExit }: {
 
   if (hidden) {
     return (
-      <button type="button" onClick={() => setHidden(false)} className="absolute bottom-[calc(var(--edge)+168px)] lg:bottom-[calc(var(--edge)+36px)] right-[var(--edge)] z-20 h-8 rounded-full border border-border bg-card px-[var(--sp-3)] text-[12px] font-semibold text-foreground shadow-md">
+      <button type="button" onClick={() => { setFollowed(null); setHidden(false); }} className="absolute bottom-[calc(var(--edge)+168px)] lg:bottom-[calc(var(--edge)+36px)] right-[var(--edge)] z-20 h-8 rounded-full border border-border bg-card px-[var(--sp-3)] text-[12px] font-semibold text-foreground shadow-md">
         Show map
       </button>
     );
