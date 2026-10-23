@@ -25,7 +25,7 @@ export const hasMapillaryToken = MAPILLARY_TOKEN.length > 0;
 
 const GRAPH_URL = "https://graph.mapillary.com/images";
 const FIELDS =
-  "id,captured_at,geometry,computed_geometry,is_pano,thumb_1024_url";
+  "id,captured_at,geometry,computed_geometry,is_pano,thumb_1024_url,sequence";
 
 const pointSchema = z.object({
   type: z.literal("Point"),
@@ -39,6 +39,7 @@ const imageSchema = z.object({
   computed_geometry: pointSchema.nullish(),
   is_pano: z.boolean().nullish(),
   thumb_1024_url: z.string().nullish(),
+  sequence: z.string().nullish(),
 });
 
 const responseSchema = z.object({ data: z.array(imageSchema) });
@@ -51,6 +52,8 @@ export interface MapillaryImage {
   lat: number;
   isPano: boolean;
   thumbnailUrl: string | null;
+  /** Sequence the photo belongs to, when the API reported it. */
+  sequenceId: string | null;
   /** Straight-line distance from the requested point, in metres. */
   distance: number;
 }
@@ -146,6 +149,7 @@ export async function findNearestImage(
       lat,
       isPano: row.is_pano ?? false,
       thumbnailUrl: row.thumb_1024_url ?? null,
+      sequenceId: row.sequence ?? null,
       distance,
     };
   }

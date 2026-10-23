@@ -34,6 +34,13 @@ import {
   mapillaryImageLink,
   metresBetween,
 } from "@/lib/api/mapillary";
+import {
+  PREFETCH_AHEAD,
+  createThumbPrefetcher,
+  fetchSequenceImageIds,
+  fetchThumbUrls,
+  nextImageIds,
+} from "@/lib/api/mapillaryPrefetch";
 import { formatCount, formatDate } from "@/lib/format";
 import type { BlockDatum } from "@/lib/layers";
 import { useMapState } from "@/lib/store/MapStateContext";
@@ -154,8 +161,21 @@ export function StreetViewSheet({
         instance.resize();
       });
 
-      instance.on("image", () => {
+      // Look ahead along the sequence and warm the next few thumbnails so
+      // stepping does not show a blank frame. Best effort: errors are dropped.
+      const prefetcher = createThumbPrefetcher({ resolveUrls: fetchThumbUrls });
+      let sequenceIds: string[] | null = null;
+      const prefetchAhead = async (currentId: string) => {
+        if (!image.sequenceId) return;
+        sequenceIds ??= await fetchSequenceImageIds(image.sequenceId);
+        await prefetcher.prefetch(
+          nextImageIds(sequenceIds, currentId, PREFETCH_AHEAD),
+        );
+      };
+
+      instance.on("image", (event) => {
         if (!cancelled) setReady(true);
+        void prefetchAhead(event.image.id).catch(() => undefined);
 
         // Walking the sequence moves away from the block, and the footer says
         // so rather than pretending the photos still describe this square.
