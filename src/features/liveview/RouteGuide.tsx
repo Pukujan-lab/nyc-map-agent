@@ -2,13 +2,14 @@ import "./nav.css";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowUp, CornerUpLeft, CornerUpRight, Flag, LocateFixed, Navigation, Square, Undo2 } from "lucide-react";
 import type { Map as MapLibreMap } from "maplibre-gl";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { onMapInstance } from "@/lib/map/mapInstance";
 import { LOOK_CENTER_DISTANCE_M, poseAlongRoute } from "@/lib/map/walk";
 import { useDataView } from "@/lib/store/DataViewContext";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { installNavLayers, readNavColors, removeNavLayers, roadNameAt, updateNavLayers } from "./layers";
+import { poiSummary, poisAlongRoute, type RestroomFeature } from "./routePois";
 import { distanceAlong, fetchGuidedRoute, formatMetres, metresLeft, progressAt, type RouteStep } from "./steps";
 
 const MILE = 1609.344;
@@ -60,6 +61,21 @@ export default function RouteGuide() {
   });
 
   const active = Boolean(route) && (walking || navigating);
+
+  // Public restrooms (deployed /api/restrooms GeoJSON), only while guidance is on.
+  const { data: restrooms } = useQuery({
+    queryKey: ["walk-pois-restrooms"],
+    enabled: active,
+    staleTime: 10 * 60_000,
+    retry: 0,
+    queryFn: async ({ signal }): Promise<RestroomFeature[]> => {
+      const r = await fetch("/api/restrooms", { signal });
+      if (!r.ok) return [];
+      const json = (await r.json()) as { features?: RestroomFeature[] };
+      return json.features ?? [];
+    },
+  });
+  const pois = useMemo(() => (route ? poisAlongRoute(route, { restrooms }) : null), [route, restrooms]);
 
   // Layers live while guidance is active; re-added after a style reload and on theme change.
   useEffect(() => {
@@ -184,6 +200,7 @@ export default function RouteGuide() {
   if (!route) return null;
 
   const left = here ? metresLeft(route, here) : route.steps.reduce((s, x) => s + x.distance, 0);
+  const nearby = pois && progress ? poiSummary(pois, along, progress.metresToNext) : [];
 
   return (
     <>
@@ -196,6 +213,13 @@ export default function RouteGuide() {
                 {progress.instruction}, {formatMetres(progress.metresToNext)}
               </div>
               <div className="text-xs tabular-nums text-muted-foreground">{(left / MILE).toFixed(2)} mi to go</div>
+              {nearby.length > 0 ? (
+                <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground" aria-label="Along the way">
+                  {nearby.map((p) => (
+                    <li key={p.text} className="truncate">{p.text}</li>
+                  ))}
+                </ul>
+              ) : null}
             </div>
           </div>
         </div>
