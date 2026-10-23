@@ -14,6 +14,7 @@ import {
   raisedTrack,
   viaductBays,
   entranceInstances,
+  dedupeTrackLines,
   splitRaised,
   type StaticSystem,
   type SystemId,
@@ -241,8 +242,9 @@ export default function TransitLayer() {
   const lines = useMemo<GeoJSON.FeatureCollection>(() => ({
     type: "FeatureCollection",
     // Commuter rail is drawn at grade; subway ground lines step aside under raised track.
+    // Branch shapes share a trunk, so collapse them before the dash can stack.
     features: statics.flatMap((s) => {
-      const fs = s.lines.features.map((f) => ({ ...f, properties: { ...f.properties, system: s.system, grade: s.system !== "subway" ? ("grade" as const) : f.properties.grade } }));
+      const fs = dedupeTrackLines(s.lines.features.map((f) => ({ ...f, properties: { ...f.properties, system: s.system, grade: s.system !== "subway" ? ("grade" as const) : f.properties.grade } })));
       return s.system === "subway" ? splitRaised(fs, raised.raisedCells) : fs;
     }),
   }), [staticKey, raised]); // eslint-disable-line react-hooks/exhaustive-deps

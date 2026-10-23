@@ -23,7 +23,8 @@ describe("transit model", () => {
   });
 });
 
-import { trackHeightProfile } from "./model";
+import { readFileSync } from "node:fs";
+import { dedupeTrackLines, trackHeightProfile } from "./model";
 describe("track height profile", () => {
   it("ramps up to the Manhattan Bridge deck and back down", () => {
     const c: Array<[number, number]> = [[-74.0, 40.718], [-73.9944, 40.7136], [-73.9906, 40.7075], [-73.9862, 40.7032], [-73.98, 40.69]];
@@ -45,6 +46,43 @@ describe("myrtle viaduct", () => {
     expect(p.grade).toEqual(["elevated", "elevated", "elevated"]);
     expect(p.h[0]).toBe(8);
     expect(p.h[2]).toBe(8);
+  });
+});
+
+const track = (grade: string, coords: Array<[number, number]>, route = "A"): GeoJSON.Feature<GeoJSON.LineString> => ({
+  type: "Feature",
+  properties: { route, color: "#0062CF", grade },
+  geometry: { type: "LineString", coordinates: coords },
+});
+
+describe("deduped track lines", () => {
+  const trunk: Array<[number, number]> = [[-73.9, 40.67], [-73.89, 40.67], [-73.88, 40.67]];
+  it("draws a stacked trunk once and keeps a branch that leaves it", () => {
+    const out = dedupeTrackLines([
+      track("underground", trunk),
+      track("underground", trunk, "C"),
+      track("underground", [...trunk].reverse()),
+      track("underground", [[-73.9, 40.67], [-73.89, 40.67], [-73.88, 40.66]]),
+    ]);
+    expect(out).toHaveLength(2);
+    expect(out.some((f) => f.geometry.coordinates.at(-1)?.[1] === 40.66)).toBe(true);
+  });
+  it("does not fold the elevated run into the underground dash", () => {
+    const out = dedupeTrackLines([
+      track("underground", trunk),
+      track("elevated", [[-73.88, 40.67], [-73.87, 40.67]]),
+    ]);
+    expect(out.map((f) => (f.properties as { grade: string }).grade).sort()).toEqual(["elevated", "underground"]);
+  });
+  it("draws the shared Fulton trunk once and keeps the Rockaway branch", () => {
+    const raw = JSON.parse(readFileSync("public/transit/subway.json", "utf8")) as { lines: { features: GeoJSON.Feature<GeoJSON.LineString>[] } };
+    const before = raw.lines.features.filter((f) => f.properties!.color === "#0062CF" && f.properties!.grade === "underground" && f.geometry.coordinates.some((p) => Math.abs(p[0] + 73.87211) < 0.0004 && Math.abs(p[1] - 40.67538) < 0.0004));
+    const out = dedupeTrackLines(raw.lines.features);
+    const at = (lon: number, lat: number, grade: string) => out.filter((f) => f.properties!.color === "#0062CF" && f.properties!.grade === grade && f.geometry.coordinates.some((p) => Math.abs(p[0] - lon) < 0.0004 && Math.abs(p[1] - lat) < 0.0004));
+    expect(before.length).toBeGreaterThan(1);
+    expect(at(-73.87211, 40.67538, "underground")).toHaveLength(1);
+    expect(at(-73.85899, 40.67937, "elevated")).toHaveLength(1);
+    expect(out.some((f) => f.properties!.color === "#0062CF" && f.geometry.coordinates.some((p) => p[1] < 40.65))).toBe(true);
   });
 });
 
