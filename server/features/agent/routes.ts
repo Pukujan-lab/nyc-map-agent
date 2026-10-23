@@ -79,8 +79,11 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
           maxRetries: 1,
           // The default handler console.logs the raw provider error; keep logs to the request id only.
           onError: ({ error }) => {
-            const id = (error as { responseHeaders?: Record<string, string> }).responseHeaders?.["x-inferhub-request-id"];
-            console.warn(`[agent] model call failed${id ? ` (x-inferhub-request-id ${id})` : ""}`);
+            const e = error as { responseHeaders?: Record<string, string>; statusCode?: number; message?: string };
+            const id = e.responseHeaders?.["x-inferhub-request-id"];
+            // Status and the provider's own message say why (busy market, price limit, bad model); the key and request never appear in either.
+            const why = [e.statusCode ? `HTTP ${e.statusCode}` : null, typeof e.message === "string" ? e.message.replace(/\b(sk|ih|Bearer)[-_ ]?[\w.-]{8,}/gi, "[redacted]").slice(0, 160) : null].filter(Boolean).join(" ");
+            console.warn(`[agent] model call failed${why ? `: ${why}` : ""}${id ? ` (x-inferhub-request-id ${id})` : ""}`);
           },
         });
         for await (const part of result.fullStream) {
