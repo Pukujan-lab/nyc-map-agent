@@ -14,6 +14,9 @@ export interface FlagMeta {
   tier: FlagTier;
   default: boolean;
   label: string;
+  /** Required for temporary (beta / rollout) flags: who removes it, and by when (YYYY-MM-DD). */
+  owner?: string;
+  expires?: string;
 }
 
 export const FLAGS = {
@@ -22,6 +25,13 @@ export const FLAGS = {
   search: { tier: "basic", default: true, label: "Search" },
   directions: { tier: "basic", default: true, label: "Walking directions" },
   liveview: { tier: "basic", default: true, label: "Navigation arrows and Live View" },
+  liveviewAr: {
+    tier: "basic",
+    default: false,
+    label: "Live View (Beta): camera and compass scaffold",
+    owner: "Pukujan",
+    expires: "2027-03-31",
+  },
   transit: { tier: "basic", default: true, label: "Live transit" },
   places: { tier: "basic", default: true, label: "Places" },
   restrooms: { tier: "basic", default: true, label: "Public restrooms" },
