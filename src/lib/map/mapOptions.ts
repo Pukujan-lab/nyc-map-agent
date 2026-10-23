@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { setBusStopsShown } from "./streetPick";
 
 /**
  * Map detail and transit-line choices from the Layers & filters drawer (#171),
@@ -15,9 +16,11 @@ export interface MapOptions {
   /** Subway routes picked in Transit lines; empty = all lines, muted. */
   routes: string[];
   stationsOnly: boolean;
+  /** False hides basemap bus-stop icons and the street-level poles. Live buses stay. */
+  busStops: boolean;
 }
 export const OPTIONS_KEY = "nma.mapOptions";
-export const DEFAULT_OPTIONS: MapOptions = { streets: "simple", roads: true, streetNames: true, buildings: "flat", routes: [], stationsOnly: false };
+export const DEFAULT_OPTIONS: MapOptions = { streets: "simple", roads: true, streetNames: true, buildings: "flat", routes: [], stationsOnly: false, busStops: true };
 
 export function readOptions(storage: Pick<Storage, "getItem"> | undefined = globalThis.localStorage): MapOptions {
   try {
@@ -29,6 +32,7 @@ export function readOptions(storage: Pick<Storage, "getItem"> | undefined = glob
       buildings: raw.buildings === "3d" ? "3d" : "flat",
       routes: Array.isArray(raw.routes) ? raw.routes.filter((r): r is string => typeof r === "string") : [],
       stationsOnly: raw.stationsOnly === true,
+      busStops: raw.busStops !== false,
     };
   } catch {
     return DEFAULT_OPTIONS;
@@ -36,9 +40,11 @@ export function readOptions(storage: Pick<Storage, "getItem"> | undefined = glob
 }
 
 let options = readOptions();
+setBusStopsShown(options.busStops);
 const listeners = new Set<() => void>();
 export function setOptions(patch: Partial<MapOptions>): void {
   options = { ...options, ...patch };
+  setBusStopsShown(options.busStops);
   try {
     localStorage.setItem(OPTIONS_KEY, JSON.stringify(options));
   } catch {

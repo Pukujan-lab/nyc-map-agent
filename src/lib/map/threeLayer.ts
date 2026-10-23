@@ -9,7 +9,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { cornerOffset, crossingsNear, dirOf, streetBearingAt, toLocal, type NamedStreet } from "./signPlacement";
-import { eyeOrCenter, kioskSources, setPickTargets, type PickTarget } from "./streetPick";
+import { busStopsShown, eyeOrCenter, kioskSources, setPickTargets, subscribeBusStops, type PickTarget } from "./streetPick";
 import { LANDMARKS } from "./landmarks";
 import { atlasCell, facadeCategory } from "./storefrontCategory";
 import maplibregl, { type CustomLayerInterface, type CustomRenderMethodInput, type Map as MaplibreMap } from "maplibre-gl";
@@ -1156,8 +1156,10 @@ export function createFurnitureLayer(): CustomLayerInterface {
   let fetchedAt: { lng: number; lat: number } | null = null;
   let lastCheck = 0;
   let shown = "";
+  let unsubStops: (() => void) | null = null;
 
   const loadStops = (eye: { lng: number; lat: number }) => {
+    if (!busStopsShown()) return;
     if (fetchedAt && Math.hypot(...toLocal(eye.lng, eye.lat, fetchedAt)) < 120) return;
     fetchedAt = eye;
     const q = new URLSearchParams({ lat: eye.lat.toFixed(4), lon: eye.lng.toFixed(4) });
@@ -1244,14 +1246,17 @@ export function createFurnitureLayer(): CustomLayerInterface {
       return;
     }
     const eye = eyeLngLat(map);
-    const near = stops
-      .map((s) => ({ s, d: Math.hypot(...toLocal(s.lon, s.lat, eye)) }))
-      .filter((x) => x.d < BUS_RADIUS_M)
-      .sort((a, b) => a.d - b.d)
-      .slice(0, BUS_MAX)
-      .map((x) => x.s);
+    const showBus = busStopsShown();
+    const near = showBus
+      ? stops
+        .map((s) => ({ s, d: Math.hypot(...toLocal(s.lon, s.lat, eye)) }))
+        .filter((x) => x.d < BUS_RADIUS_M)
+        .sort((a, b) => a.d - b.d)
+        .slice(0, BUS_MAX)
+        .map((x) => x.s)
+      : [];
     const ks = kiosks(eye);
-    const key = near.map((s) => s.id).join(",") + "|" + ks.map((k) => k.id).join(",") + `|${eye.lng.toFixed(4)},${eye.lat.toFixed(4)}`;
+    const key = `${showBus ? 1 : 0}|` + near.map((s) => s.id).join(",") + "|" + ks.map((k) => k.id).join(",") + `|${eye.lng.toFixed(4)},${eye.lat.toFixed(4)}`;
     if (key === shown) return;
     shown = key;
     eyeAt = eye;
@@ -1351,11 +1356,18 @@ export function createFurnitureLayer(): CustomLayerInterface {
       renderer = sharedRenderer(mp, gl);
       mp.on("moveend", onMove);
       mp.on("sourcedata", onData);
+      unsubStops?.();
+      unsubStops = subscribeBusStops(() => {
+        shown = "";
+        refresh();
+      });
       refresh();
     },
     onRemove(mp) {
       mp.off("moveend", onMove);
       mp.off("sourcedata", onData);
+      unsubStops?.();
+      unsubStops = null;
       setPickTargets([]);
       for (const x of all) {
         x.geometry.dispose();

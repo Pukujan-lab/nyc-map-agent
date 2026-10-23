@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Map as MapLibreMap } from "maplibre-gl";
-import { pickAt, setPickTargets } from "./streetPick";
+import { busStopsShown, pickAt, setBusStopsShown, setPickTargets, subscribeBusStops } from "./streetPick";
 
 // A fake eye-level map: looking north, horizon at y = 300, ground point 10 m ahead at y = 470.
 const map = {
@@ -25,5 +25,18 @@ describe("pickAt", () => {
   it("misses beside it and above it", () => {
     expect(pickAt(map, 900, 400)).toBeNull();
     expect(pickAt(map, 640, 150)).toBeNull();
+  });
+});
+
+describe("bus stop poles", () => {
+  it("notifies the furniture layer when the switch changes", () => {
+    const seen: boolean[] = [];
+    const stop = subscribeBusStops(() => seen.push(busStopsShown()));
+    setBusStopsShown(false);
+    setBusStopsShown(false);
+    setBusStopsShown(true);
+    stop();
+    expect(seen).toEqual([false, true]);
+    expect(busStopsShown()).toBe(true);
   });
 });
