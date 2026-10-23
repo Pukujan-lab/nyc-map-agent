@@ -42,6 +42,7 @@ import { LinesDrawer } from "./LinesDrawer";
 import { lineOpacity, useMapOptions } from "@/lib/map/mapOptions";
 import { NOTCH_ICON, addBulletImage, lineColor as lineColorOf, stationRowId, bulletId, busBadgeId, busIconSize, busPrefix } from "@/lib/transit/bullets";
 import { usePalette } from "@/lib/theme";
+import { RAISED_LIFT_PX, STOP_LIFT_PX, alertCameraAction, paintAboveVehicles, trainIconOffset } from "./layerOrder";
 import { FOCUS_OPACITY, FOCUS_VEIL_ID, WORLD, focusVeil, useTransitFocus } from "@/lib/map/transitFocus";
 
 /** Layers a click on the map should hand to transit instead of the area pick. */
@@ -50,38 +51,7 @@ const VEHICLE_CREDITS = "3D vehicles: R142 by yarankepang, XD40 by kieranfarr, P
 const TRANSIT_CLICK_LAYERS = ["transit-skip", "transit-alert-skipped", "transit-bus-badge-follow", "transit-bullet", "transit-bus-badge", "transit-bus-badge-full", "transit-bus-badge-selected", "transit-vehicle-2d", "transit-vehicle-hit", "transit-vehicle-hit-stop", "transit-vehicle-hit-raised", "transit-access", "transit-entrance", "transit-station-label", "transit-station-raised", "transit-station"];
 
 const MAX_VEHICLES = 400;
-/** In 3D, labels and bullets on raised track lift by about a viaduct's height on screen. */
-const RAISED_LIFT_PX = 26;
 const RAISED_LIFT_EM = 2.8;
-/** A dwelling train lifts this far so the station name and dot stay readable and clickable. */
-const STOP_LIFT_PX = 52;
-/** These stay above the 3D vehicle layer: the station, its train bullet, skip marks, and the followed bus badge. */
-const ABOVE_VEHICLE_LAYERS = ["transit-bullet-notch", "transit-bullet", "transit-station", "transit-station-raised", "transit-station-label", "transit-skip", "transit-alert-skipped", "transit-bus-badge-follow"];
-
-/** Keep station names and the followed bus badge painted after the 3D vehicles. */
-function paintAboveVehicles(map: MaplibreMap, vehicleLayerId?: string) {
-  const overlay = ABOVE_VEHICLE_LAYERS.filter((id) => map.getLayer(id));
-  const vid = vehicleLayerId && map.getLayer(vehicleLayerId) ? vehicleLayerId : undefined;
-  const tail = vid ? [vid, ...overlay] : overlay;
-  if (!tail.length) return;
-  const ids = map.getLayersOrder();
-  const got = ids.slice(-tail.length);
-  if (tail.every((id, i) => got[i] === id)) return;
-  if (vid) map.moveLayer(vid);
-  for (const id of overlay) map.moveLayer(id);
-}
-
-/** Screen offset for a train bullet or its heading notch. Dwelling trains clear the station. */
-function trainIconOffset(three: boolean, notch: number) {
-  const y = (lift: number) => ["literal", [0, -(lift + notch)]] as unknown as [number, number];
-  if (!three) return ["case", ["==", ["get", "atStop"], 1], y(STOP_LIFT_PX), y(0)] as unknown as [number, number];
-  return ["case",
-    ["all", ["==", ["get", "grade"], "elevated"], ["==", ["get", "atStop"], 1]], y(RAISED_LIFT_PX + STOP_LIFT_PX),
-    ["==", ["get", "atStop"], 1], y(STOP_LIFT_PX),
-    ["==", ["get", "grade"], "elevated"], y(RAISED_LIFT_PX),
-    y(0),
-  ] as unknown as [number, number];
-}
 /** True when a point sits on (or right beside) raised subway track. */
 function onRaisedTrack(cells: Set<string>, p: GeoJSON.Position): boolean {
   for (const dx of [-1, 0, 1]) for (const dy of [-1, 0, 1]) if (cells.has(cellKey([p[0] + dx / 2400, p[1] + dy / 2400]))) return true;
@@ -358,15 +328,20 @@ export default function TransitLayer() {
       skipped: fc((alertGeo?.skipped ?? []).map((x) => ({ type: "Feature", properties: { id: x.id, name: oneWay ? `${x.name} · ${oneWay}-bound skipped` : x.name, icon: oneWay ? "transit-skip-half" : "transit-skip-x" }, geometry: { type: "Point", coordinates: x.coord } }))),
     };
   }, [alertGeo, alertFocus]);  
+  const followedRef = useRef(followedKey);
+  followedRef.current = followedKey;
   const savedCam = useRef<{ center: [number, number]; zoom: number; bearing: number; pitch: number } | null>(null);
   useEffect(() => {
     if (!map) return;
-    if (alertGeo?.bounds) {
+    const act = alertCameraAction({ hasBounds: Boolean(alertGeo?.bounds), hasFocus: Boolean(alertFocus), hasSaved: Boolean(savedCam.current), following: Boolean(followedRef.current) });
+    if (act === "fit" && alertGeo?.bounds) {
       if (!savedCam.current) { const c = map.getCenter(); savedCam.current = { center: [c.lng, c.lat], zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() }; }
       const wide = window.innerWidth >= 768;
       map.fitBounds(alertGeo.bounds, { padding: wide ? { top: 90, bottom: 60, left: 440, right: 80 } : { top: 90, bottom: Math.round(window.innerHeight * 0.45), left: 30, right: 30 }, maxZoom: 15.5, duration: 900, bearing: 0, pitch: 0 });
-    } else if (!alertFocus && savedCam.current) {
+    } else if (act === "restore" && savedCam.current) {
       map.easeTo({ ...savedCam.current, duration: 700 });
+      savedCam.current = null;
+    } else if (act === "drop" && !alertFocus) {
       savedCam.current = null;
     }
   }, [map, alertGeo, alertFocus]);
@@ -732,10 +707,13 @@ export default function TransitLayer() {
   useEffect(() => {
     if (!map) return;
     const lift = () => paintAboveVehicles(map, v3d.current?.layer.id);
+    // One check per frame, not one per move event.
+    let raf = 0;
+    const soon = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; lift(); }); };
     lift();
-    map.on("move", lift);
+    map.on("move", soon);
     map.on("styledata", lift);
-    return () => { map.off("move", lift); map.off("styledata", lift); };
+    return () => { if (raf) cancelAnimationFrame(raf); map.off("move", soon); map.off("styledata", lift); };
   }, [map]);
 
   // Clicks on transit features: a vehicle starts Follow straight away (no popup).
