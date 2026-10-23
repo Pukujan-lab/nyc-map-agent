@@ -4,8 +4,11 @@ import { useFeatureToggles } from "@/lib/featureToggles";
 import { isFlagId, useFlags } from "@/lib/flags";
 import type { NtaBoundary } from "@/lib/api/nta";
 import { NtaIndex } from "@/lib/geo/ntaIndex";
+import { RestroomDetails } from "@/components/RestroomCard";
+import { currentOrigin } from "@/lib/geo/directionsFromHere";
 import { startSharing, stopSharing, useSharedLocation } from "@/lib/geo/sharedLocation";
-import { onMapInstance } from "@/lib/map/mapInstance";
+import { getMapInstance, onMapInstance } from "@/lib/map/mapInstance";
+import { formatStreetText } from "@/lib/streetName";
 import { SUBWAY_ROUTES, setOptions, useMapOptions } from "@/lib/map/mapOptions";
 import { PLACE_CATEGORIES, setPlaces, usePlaces } from "@/lib/map/places";
 import { setTransitFocusOff } from "@/lib/map/transitFocus";
@@ -96,7 +99,7 @@ export function LayersDrawer({
   onOpenSources: () => void;
 }) {
   const flags = useFlags();
-  const { chips } = usePanel();
+  const { chips, showPanel } = usePanel();
   const [toggledOn, toggle] = useFeatureToggles();
   const { restrooms, setRestrooms, city3d, setCity3d, eco, setEco, setCaveatsOpen, navigate, flyTo } = useMapState();
   const { routePicking, routeStart, setRoutePicking } = useDataView();
@@ -153,6 +156,29 @@ export function LayersDrawer({
       ? { id: "loc", label: "Stop sharing location", on: true, onClick: () => stopSharing() }
       : { id: "loc", label: shared.status === "asking" ? "Finding you…" : "My location", onClick: () => void startSharing().then((c) => { if (c) flyTo({ lon: c.lon, lat: c.lat, zoom: 16 }); }) },
   );
+  const findNearestRestroom = () => {
+    void (async () => {
+      const { closestRestroom, formatMetres, loadRestrooms } = await import("@/lib/map/restrooms");
+      const shared = currentOrigin() ?? (await startSharing());
+      const map = getMapInstance();
+      const centre = map ? { lon: map.getCenter().lng, lat: map.getCenter().lat } : null;
+      const from = shared ?? centre;
+      if (!from) return;
+      const hit = closestRestroom(await loadRestrooms(), [from.lon, from.lat]);
+      if (!hit) return;
+      setRestrooms(true);
+      flyTo({ lon: hit.info.lon, lat: hit.info.lat, zoom: 16 });
+      onOpenChange(false);
+      const where = shared ? "you" : "the map centre";
+      const distanceLabel = `${formatMetres(hit.metres)} from ${where}`;
+      showPanel({
+        id: `restroom:${hit.info.lon.toFixed(5)},${hit.info.lat.toFixed(5)}`,
+        title: formatStreetText(hit.info.name),
+        subtitle: distanceLabel,
+        details: <RestroomDetails restroom={hit.info} distanceLabel={distanceLabel} />,
+      });
+    })();
+  };
 
   const placeItems = PLACE_CATEGORIES.filter((c) => match(c.label) || c.subs.some((s) => match(s.label)));
   const routeItems = SUBWAY_ROUTES.filter((r) => !q.trim() || match(`${r} train`) || match("subway") || match("lines"));
@@ -189,7 +215,7 @@ export function LayersDrawer({
         />
       </div>
       <div className="min-h-0 flex-1 space-y-[var(--sp-5)] overflow-y-auto overscroll-contain px-[var(--sp-4)] pb-[var(--sp-6)] pt-[var(--sp-3)]">
-        <Section title="Getting around" hidden={!around.some((a) => match(a.label))}>
+        <Section title="Getting around" hidden={!around.some((a) => match(a.label)) && !(flags.restrooms && match("Nearest restroom"))}>
           <div className="grid grid-cols-2 gap-[var(--sp-2)]">
             {around.filter((a) => match(a.label)).map((a) =>
               a.primary ? (
@@ -200,6 +226,11 @@ export function LayersDrawer({
                 <Pill key={a.id} on={a.on} onClick={a.onClick} className="h-11 text-[14px]">{a.label}</Pill>
               ),
             )}
+            {flags.restrooms && match("Nearest restroom") ? (
+              <button type="button" onClick={findNearestRestroom} className="col-span-2 h-11 rounded-full border border-border bg-card text-[14px] font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                Nearest restroom
+              </button>
+            ) : null}
           </div>
         </Section>
 

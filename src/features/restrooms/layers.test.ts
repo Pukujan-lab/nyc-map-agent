@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NEAREST_COUNT, STREET_CAP, nearestRestrooms, restroomsForView } from "./layers";
+import { NEAREST_COUNT, STREET_CAP, closestRestroom, formatMetres, nearestRestrooms, restroomAnchor, restroomsForView, spreadRestrooms } from "./layers";
 
 const pt = (name: string, lon: number, lat: number): GeoJSON.Feature => ({
   type: "Feature",
@@ -62,5 +62,70 @@ describe("restroomsForView", () => {
     expect(out.features).toHaveLength(STREET_CAP);
     expect(names(out)[0]).toBe("n0");
     expect(names(out)).not.toContain("far");
+  });
+  it("ignores a wide view at street zoom and still drops the far restroom", () => {
+    const crowded: GeoJSON.FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        pt("near", center[0], center[1]),
+        pt("far", center[0], center[1] + 0.01),
+      ],
+    };
+    const out = restroomsForView(crowded, center, 17, { west: -180, south: -90, east: 180, north: 90 });
+    expect(names(out)).toEqual(["near"]);
+  });
+});
+
+describe("spreadRestrooms", () => {
+  it("samples both edges of a crowded view", () => {
+    const features: GeoJSON.Feature[] = [];
+    for (let x = 0; x < 9; x += 1) {
+      for (let y = 0; y < 9; y += 1) features.push(pt(`p${x}-${y}`, -74.05 + x * 0.015, 40.7 + y * 0.01));
+    }
+    const out = spreadRestrooms(
+      { type: "FeatureCollection", features },
+      { west: -74.05, south: 40.7, east: -73.93, north: 40.78 },
+      [-73.99, 40.74],
+      9,
+    );
+    expect(out.features).toHaveLength(9);
+    const lons = out.features.map((f) => (f.geometry as GeoJSON.Point).coordinates[0]);
+    const lats = out.features.map((f) => (f.geometry as GeoJSON.Point).coordinates[1]);
+    expect(Math.min(...lons)).toBeLessThan(-74.02);
+    expect(Math.max(...lons)).toBeGreaterThan(-73.96);
+    expect(Math.max(...lats) - Math.min(...lats)).toBeGreaterThan(0.04);
+  });
+});
+
+describe("closestRestroom", () => {
+  it("returns the nearest point and a walking distance", () => {
+    const hit = closestRestroom(
+      { type: "FeatureCollection", features: [pt("Far", -73.8, 40.72), pt("Near", -73.99, 40.74)] },
+      [-73.99, 40.7401],
+    );
+    expect(hit?.info.name).toBe("Near");
+    expect(hit?.info.lon).toBeCloseTo(-73.99);
+    expect(hit?.info.lat).toBeCloseTo(40.74);
+    expect(hit!.metres).toBeGreaterThan(0);
+    expect(hit!.metres).toBeLessThan(30);
+  });
+});
+
+describe("restroomAnchor", () => {
+  it("sits above bus badges and just under the vehicle layer", () => {
+    expect(restroomAnchor(["bus", "restrooms"])).toBe("stay");
+    expect(restroomAnchor(["restrooms", "bus"])).toBe("top");
+    expect(restroomAnchor(["restrooms", "three-vehicles"])).toBe("stay");
+    expect(restroomAnchor(["restrooms", "bus", "three-vehicles"])).toBe("before-vehicles");
+    expect(restroomAnchor(["bus"])).toBe("stay");
+  });
+});
+
+describe("formatMetres", () => {
+  it("rounds short walks to tens of metres and longer ones to kilometres", () => {
+    expect(formatMetres(12)).toBe("10 m");
+    expect(formatMetres(104)).toBe("100 m");
+    expect(formatMetres(1500)).toBe("1.5 km");
+    expect(formatMetres(12000)).toBe("12 km");
   });
 });
