@@ -746,11 +746,11 @@ export default function TransitLayer() {
     <>
       {followed ? <FollowCard vehicle={followed} /> : null}
       <Source id="transit-lines" type="geojson" data={lines}>
-        {/* X-ray: tunnels read as solid, glowing runs; otherwise a faint dashed hint. */}
+        {/* X-ray on stays a solid glow. Off: a dash as wide as the at-grade stroke (zoom 10 → 1.5, 16 → 4), opacity 0.45. */}
         <Layer id="transit-line-under" type="line" filter={["==", ["get", "grade"], "underground"]}
           paint={xrayOn
             ? { "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 2, 16, 6], "line-opacity": 0.95, "line-blur": 1 }
-            : { "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 16, 2.5], "line-opacity": 0.45, "line-dasharray": [2, 2] }} />
+            : { "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1.5, 16, 4], "line-opacity": 0.45, "line-dasharray": [2, 2] }} />
         <Layer id="transit-line" type="line" filter={three ? ["==", ["get", "grade"], "grade"] : ["!=", ["get", "grade"], "underground"]}
           layout={{ "line-cap": "round", "line-join": "round" }}
           paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, focus ? 1.8 : 1.5, 16, focus ? 4.8 : 4], "line-opacity": dimLines }} />
