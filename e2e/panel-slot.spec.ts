@@ -127,3 +127,62 @@ test("Esc and Back close the top panel first", async ({ page }) => {
   // The app is still here: Back closed a panel, it did not leave the page.
   await expect(page.locator("canvas.maplibregl-canvas").first()).toBeVisible();
 });
+
+type Box = { x: number; y: number; width: number; height: number };
+
+function overlaps(a: Box, b: Box): boolean {
+  return a.x < b.x + b.width - 1 && a.x + a.width > b.x + 1 && a.y < b.y + b.height - 1 && a.y + a.height > b.y + 1;
+}
+
+async function mustBox(locator: ReturnType<Page["locator"]>): Promise<Box> {
+  const box = await locator.boundingBox();
+  expect(box).toBeTruthy();
+  return box!;
+}
+
+/** Follow the parked bus, then check the card and the Lines button at this size. */
+async function expectFollowChromeClear(page: Page) {
+  const card = page.getByTestId("follow-card");
+  const topbar = page.getByTestId("topbar");
+  const layersBtn = page.getByTestId("layers-button");
+  const menu = page.getByTestId("quick-layers");
+  const lines = page.getByTestId("lines-button");
+  const chase = page.getByTestId("view-switcher").getByRole("button", { name: "Chase", exact: true });
+  const stop = page.getByRole("button", { name: "Stop following" }).first();
+  await expect(card).toBeVisible();
+  await expect(lines).toBeVisible();
+  await expect.poll(async () => {
+    const cardBox = await card.boundingBox();
+    const barBox = await topbar.boundingBox();
+    if (!cardBox || !barBox) return false;
+    return cardBox.y >= barBox.y + barBox.height - 1 && !overlaps(cardBox, barBox);
+  }).toBe(true);
+  const cardBox = await mustBox(card);
+  const grade = await mustBox(card.getByText("At grade"));
+  expect(grade.x).toBeGreaterThanOrEqual(cardBox.x - 1);
+  expect(grade.x + grade.width).toBeLessThanOrEqual(cardBox.x + cardBox.width + 1);
+  const linesBox = await mustBox(lines);
+  const chaseBox = await mustBox(chase);
+  const stopBox = await mustBox(stop);
+  expect(Math.abs(linesBox.y + linesBox.height / 2 - (chaseBox.y + chaseBox.height / 2))).toBeLessThan(8);
+  expect(Math.abs(linesBox.y + linesBox.height / 2 - (stopBox.y + stopBox.height / 2))).toBeLessThan(8);
+  expect(linesBox.x).toBeGreaterThan(stopBox.x);
+  const layersBox = await mustBox(layersBtn);
+  const menuBox = await mustBox(menu);
+  expect(overlaps(cardBox, layersBox)).toBe(false);
+  expect(overlaps(cardBox, menuBox)).toBe(false);
+  expect(overlaps(linesBox, menuBox)).toBe(false);
+}
+
+test("follow card stays clear of Layers and Lines stays on the action row", async ({ page }) => {
+  await open(page);
+  await expect.poll(async () => {
+    await tapMap(page, 0.5, BUS_Y);
+    return page.getByTestId("follow-card").count();
+  }, { timeout: 30_000 }).toBeGreaterThan(0);
+  await page.getByTestId("layers-button").click();
+  await expect(page.getByTestId("quick-layers")).toBeVisible();
+  await expectFollowChromeClear(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expectFollowChromeClear(page);
+});
