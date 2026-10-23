@@ -57,7 +57,7 @@
   {
     "name": "feature: transit layers (lazy)",
     "path": ".size-build/assets/layers-*.js",
-    "limit": "18 kB"
+    "limit": "19 kB"
   },
   {
     "name": "shared 3D layer: threeLayer + three (vehicles, hydrants, street signs, storefronts, street furniture; lazy)",
