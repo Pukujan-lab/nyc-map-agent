@@ -135,7 +135,21 @@ export function MapPanel({
   const [walkStart, setWalkStart] = useState({ walking, selection });
   if (walkStart.walking !== walking) setWalkStart({ walking, selection });
   const pickedAtStreet = selection !== walkStart.selection && !!(selectedNtaCode || selectedBlockKey);
-  if (walking && !content && !pickedAtStreet) return null;
+  const panelHidden = walking && !content && !pickedAtStreet;
+  const showSheet = !!(content || place) && !panelHidden && !layersOpen && !minimized;
+  // The view controls sit in the map beside the desktop sheet or layers drawer,
+  // and step out of the way when the phone sheet is half or full.
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    const leftColumn = isDesktop && (showSheet || layersOpen);
+    root.style.setProperty("--sheet-left", leftColumn ? "calc(var(--edge) + 360px)" : "0px");
+    root.style.setProperty("--controls-display", !isDesktop && showSheet && (snap === "half" || snap === "full") ? "none" : "flex");
+    return () => {
+      root.style.removeProperty("--sheet-left");
+      root.style.removeProperty("--controls-display");
+    };
+  }, [isDesktop, showSheet, layersOpen, snap]);
+  if (panelHidden) return null;
 
   const body = content ? (
     <>
@@ -188,12 +202,12 @@ export function MapPanel({
       data-testid="peek-chip"
       onClick={restore}
       aria-label={`Restore ${peekLabel}`}
-      className="absolute bottom-[calc(var(--edge)+env(safe-area-inset-bottom))] left-[var(--edge)] z-40 h-10 max-w-[calc(100%-var(--edge)*2-120px)] truncate rounded-full border border-primary bg-card px-[var(--sp-4)] text-[14px] font-semibold text-foreground shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="absolute bottom-[calc(var(--edge)+env(safe-area-inset-bottom))] left-[var(--edge)] z-40 h-10 max-w-[calc(100%-var(--edge)*2-120px)] truncate rounded-full border border-primary bg-card px-[var(--sp-4)] text-[14px] font-semibold text-foreground shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:max-w-[340px]"
     >
       {peekLabel}
     </button>
   ) : null;
-  const showSheet = !!body && !layersOpen && !minimized;
+
 
   if (isDesktop) {
     return (

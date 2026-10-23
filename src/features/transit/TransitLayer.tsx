@@ -2,7 +2,7 @@ import { formatStreetText } from "@/lib/streetName";
 import { liveProgress } from "./monotonic";
 import { BusEstimator } from "./busEstimate";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal, flushSync } from "react-dom";
+import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { Layer, Source, useMap } from "react-map-gl/maplibre";
 import { LngLat, type Map as MaplibreMap, type MapLayerMouseEvent } from "maplibre-gl";
@@ -19,14 +19,16 @@ import {
   type SystemId,
   type Vehicle,
 } from "./model";
-import { alertedRoutes, useAlerts, useBusRoute, useBusSegmentHistory, useBusShapes, useBuses, useStarred, useTransitData, useTransitMeta, useTransitToggles, useXrayData, useSegmentHistory } from "./hooks";
+import { alertedRoutes, routesForPage, useAlerts, useBusLines, useBusRoute, useBusSegmentHistory, useBusShapes, useBuses, useStarred, useTransitData, useTransitMeta, useTransitToggles, useXrayData, useSegmentHistory } from "./hooks";
 import { useXray, xrayPrims } from "./xray";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { useFlag } from "@/lib/flags";
 import { usePanel, usePanelChip, usePanelMode, usePanelSearch, type SearchProvider } from "@/lib/store/PanelContext";
 import { followRig, rememberFollowOrigin, setFollowMode, setFollowed, stableHeading, takeFollowRestore, useFollowMode, useFollowed } from "./follow";
 import { publishSubway } from "@/lib/agent/streetContext";
+import { busesToShow, holdShuttle, registerBusToggle, setShuttleBuses, useBusPins } from "@/lib/transit/busReveal";
 import { publishLiveDots } from "@/lib/transit/liveVehicles";
+import { setLinesControl } from "@/lib/transit/linesControl";
 import { XRAY_VEIL_M, setStreetXray, useStreetXray, xrayVeilDisc } from "@/lib/transit/streetXray";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 
@@ -69,6 +71,8 @@ function metresApart(a: { lon: number; lat: number }, b: { lon: number; lat: num
   return Math.hypot((a.lon - b.lon) * k * Math.cos((a.lat * Math.PI) / 180), (a.lat - b.lat) * k);
 }
 const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
+/** Stable "no buses" result so the draw loop does not restart every render. */
+const BUS_OFF = { why: "off" as const, routes: [] as string[] };
 const ICONS: Record<string, { node: JSX.Element; sdf: boolean }> = {
   "transit-arrow": { node: <Navigation2 fill="#fff" color="#fff" strokeWidth={1.5} size={48} />, sdf: true },
   "transit-access": { node: <Accessibility color="#2563eb" strokeWidth={2.5} size={40} />, sdf: false },
@@ -136,15 +140,24 @@ export default function TransitLayer() {
   useEffect(() => {
     if (import.meta.env.DEV) (window as unknown as { __walk?: unknown }).__walk = startWalk;
   }, [startWalk]);
-  const { on, set, panelOpen, setPanelOpen } = useTransitToggles();
-  const { content, showPanel, setDrawerOpen } = usePanel();
+  const { on, set, panelOpen, setPanelOpen, busPage } = useTransitToggles();
+  const { content, showPanel, setDrawerOpen, drawerOpen } = usePanel();
   const meta = useTransitMeta();
   const rail = (["subway", "lirr", "mnr"] as SystemId[]).filter((s) => on.has(s));
-  const busOn = on.has("bus") && meta.data?.bus === true;
+  const alertFocus = useAlertFocus();
+  const pins = useBusPins();
+  const busLines = useBusLines(Boolean(busPage) || drawerOpen);
+  // `on` is a new Set every render. The boolean and the pin snapshot are what actually change.
+  const busWanted = on.has("bus");
+  const show = useMemo(
+    () => (busWanted ? busesToShow(routesForPage(busLines.data?.groups, busPage), pins) : BUS_OFF),
+    [busWanted, busPage, busLines.data, pins],
+  );
+  const busOn = meta.data?.bus === true && show.routes.length > 0;
   const data = useTransitData(rail);
   const subwayRoutes = useMemo(() => [...new Set((data.subway?.live?.trips ?? []).map((t) => t.route))].sort(), [data.subway?.live]);
   const history = useSegmentHistory(subwayRoutes);
-  const buses = useBuses(busOn);
+  const buses = useBuses(busOn, show.routes);
   const alerts = useAlerts(rail.length > 0 || panelOpen);
   const stars = useStarred();
   // The panel owns what is open; a vehicle stays "selected" while its panel is up.
@@ -153,16 +166,16 @@ export default function TransitLayer() {
   const display = useRef(new Map<string, Vehicle>());
   // Buses: snapped to their route shape and dead-reckoned between 30 s GPS reports.
   const busEst = useRef(new BusEstimator());
-  const [busRoutes, setBusRoutes] = useState<string[]>([]);
-  const busShapes = useBusShapes(busRoutes);
-  const busHistory = useBusSegmentHistory(busRoutes);
+  const busShapes = useBusShapes(show.routes);
+  const busHistory = useBusSegmentHistory(show.routes);
   useEffect(() => busEst.current.setHistory(busHistory), [busHistory]);
   useEffect(() => {
     for (const g of busShapes) busEst.current.setRoute(g);
-    const list = buses.data?.buses ?? [];
+    const allow = new Set(show.routes.map((r) => r.toUpperCase()));
+    const list = (buses.data?.buses ?? []).filter((b) => allow.has(b.route.toUpperCase()));
     for (const b of list) busEst.current.report(b);
     busEst.current.retain(new Set(list.map((b) => b.id)));
-  }, [buses.data, busShapes]);
+  }, [buses.data, busShapes, show.routes]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
 
   const openStation = useCallback(
@@ -177,21 +190,26 @@ export default function TransitLayer() {
   }, [panelOpen, showPanel, setPanelOpen]);
   const anyOn = on.size > 0;
   const toggleChip = useCallback(() => {
-    if (anyOn) (["subway", "lirr", "mnr", "bus"] as const).forEach((id) => set(id, false));
-    else { set("subway", true); set("bus", true); }
-  }, [anyOn, set]);
+    if (anyOn) {
+      holdShuttle(alertFocus?.id ?? null);
+      (["subway", "lirr", "mnr", "bus"] as const).forEach((id) => set(id, false));
+    } else set("subway", true);
+  }, [anyOn, set, alertFocus]);
   usePanelChip({ id: "transit", label: "Transit", active: anyOn, onToggle: toggleChip });
   const [focus, setFocus] = useTransitFocus();
   const toggleFocus = useCallback(() => {
-    if (!focus && !anyOn) { set("subway", true); set("bus", true); }
+    if (!focus && !anyOn) set("subway", true);
     setFocus(!focus);
   }, [focus, anyOn, set, setFocus]);
   const opts = useMapOptions();
   const lineAlpha = lineOpacity(opts.routes, focus) as number;
   const toggleTrains = useCallback(() => set("subway", !on.has("subway")), [on, set]);
-  const toggleBuses = useCallback(() => set("bus", !on.has("bus")), [on, set]);
+  const toggleBuses = useCallback(() => {
+    if (show.routes.length > 0) { holdShuttle(alertFocus?.id ?? null); set("bus", false); return; }
+    setDrawerOpen(true);
+  }, [show.routes.length, alertFocus, set, setDrawerOpen]);
   usePanelChip({ id: "liveTrains", label: "Live trains", active: on.has("subway"), onToggle: toggleTrains });
-  usePanelChip(meta.data?.bus === true ? { id: "liveBuses", label: "Live buses", active: on.has("bus"), onToggle: toggleBuses } : null);
+  usePanelChip(meta.data?.bus === true ? { id: "liveBuses", label: "Live buses", active: show.routes.length > 0, onToggle: toggleBuses } : null);
   usePanelChip({ id: "transitFocus", label: "Transit Focus", active: focus && anyOn, onToggle: toggleFocus });
 
   // Icons, including after a style swap.
@@ -283,7 +301,12 @@ export default function TransitLayer() {
   }, [alerts.data, stations, staticKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Alert focus (#253): fly to the affected stretch, dim the rest, Back restores the camera.
-  const alertFocus = useAlertFocus();
+  // A shuttle named by the alert replaces every other bus on the map.
+  useEffect(() => {
+    const routes = alertFocus?.replacement ?? [];
+    const applied = setShuttleBuses(alertFocus?.id ?? null, routes);
+    if (applied && routes.length && !busWanted) set("bus", true);
+  }, [alertFocus, busWanted, set]);
   const alertGeo = useMemo(() => {
     const sub = statics.find((s) => s.system === "subway");
     return alertFocus && sub ? alertGeometry(alertFocus, sub) : null;
@@ -319,6 +342,15 @@ export default function TransitLayer() {
     else if (shownAlert.current === want) setAlertFocus(null);
   }, [content?.id, alertFocus]);
   const openLines = useCallback(() => showPanel({ id: "transit:lines", title: "Lines", subtitle: "Tap lines to show only those", details: <LinesDrawer /> }), [showPanel]);
+  useEffect(() => {
+    if (!enabled) return;
+    setLinesControl(openLines);
+    return () => setLinesControl(null);
+  }, [enabled, openLines]);
+  useEffect(() => {
+    registerBusToggle(() => set("bus", true));
+    return () => registerBusToggle(null);
+  }, [set]);
 
   const searchStations = useCallback<SearchProvider>(
     (q) => {
@@ -370,12 +402,12 @@ export default function TransitLayer() {
           if (v && (inView(v) || v.key === selectedKey || v.key === followedKey)) out.push(v);
         }
       }
-      for (const bus of buses.data?.buses ?? []) {
+      const allow = new Set(show.routes.map((r) => r.toUpperCase()));
+      for (const bus of allow.size ? buses.data?.buses ?? [] : []) {
+        if (!allow.has(bus.route.toUpperCase())) continue;
         const v: Vehicle = { key: `bus:${bus.id}`, system: "bus", route: bus.route, label: bus.route, color: "#0039A6", lon: bus.lon, lat: bus.lat, bearing: bus.bearing ?? 0, grade: "grade", dir: bus.dir, nextStop: bus.next ?? undefined };
         if (inView(v) || v.key === selectedKey || v.key === followedKey) out.push(v);
       }
-      const routes = [...new Set(out.filter((v) => v.system === "bus").map((v) => v.route))].sort().slice(0, 80);
-      setBusRoutes((prev) => (prev.join() === routes.join() ? prev : routes));
       const c = eye ?? { lon: map.getCenter().lng, lat: map.getCenter().lat };
       out.sort((a, z) => Math.hypot(a.lon - c.lon, a.lat - c.lat) - Math.hypot(z.lon - c.lon, z.lat - c.lat));
       targets.current = out.slice(0, MAX_VEHICLES);
@@ -383,7 +415,7 @@ export default function TransitLayer() {
     tick();
     const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
-  }, [map, rail.join(","), data, buses.data, selectedKey, followedKey, history, walking]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [map, rail.join(","), data, buses.data, selectedKey, followedKey, history, walking, show.routes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Tween displayed positions and headings toward the targets (~20 fps).
   useEffect(() => {
@@ -461,13 +493,24 @@ export default function TransitLayer() {
   }), [vehicles, alerted, theme]);
   const selBusRoute = (selectedKey?.startsWith("bus:") ? vehicles.find((v) => v.key === selectedKey)?.route : undefined) ?? "";
   const busRoute = useBusRoute(selBusRoute || undefined);
-  const busRouteFc = useMemo<GeoJSON.FeatureCollection>(() => !selBusRoute || !busRoute.data ? EMPTY : ({
-    type: "FeatureCollection",
-    features: [
-      ...busRoute.data.lines.map((l): GeoJSON.Feature => ({ type: "Feature", properties: { kind: "line", route: busRoute.data.route }, geometry: { type: "LineString", coordinates: l } })),
-      ...busRoute.data.stops.map((st): GeoJSON.Feature => ({ type: "Feature", properties: { kind: "stop", name: formatStreetText(st.name) }, geometry: { type: "Point", coordinates: [st.lon, st.lat] } })),
-    ],
-  }), [busRoute.data, selBusRoute]);
+  const busRouteFc = useMemo<GeoJSON.FeatureCollection>(() => {
+    const features: GeoJSON.Feature[] = [];
+    const drawn = selBusRoute ? busRoute.data : undefined;
+    if (drawn) {
+      features.push(
+        ...drawn.lines.map((l): GeoJSON.Feature => ({ type: "Feature", properties: { kind: "line", route: drawn.route }, geometry: { type: "LineString", coordinates: l } })),
+        ...drawn.stops.map((st): GeoJSON.Feature => ({ type: "Feature", properties: { kind: "stop", name: formatStreetText(st.name) }, geometry: { type: "Point", coordinates: [st.lon, st.lat] } })),
+      );
+    }
+    // The replacement shuttle is drawn even before a bus is tapped, so the gap has a road.
+    if (show.why === "shuttle") {
+      for (const g of busShapes) {
+        if (g.route === selBusRoute) continue;
+        for (const l of g.lines) features.push({ type: "Feature", properties: { kind: "line", route: g.route }, geometry: { type: "LineString", coordinates: l } });
+      }
+    }
+    return { type: "FeatureCollection", features };
+  }, [busRoute.data, selBusRoute, show.why, busShapes]);
   // 3D: one three.js custom layer in the map's canvas, loaded on first tilt.
   const entr = useRef<ReturnType<typeof entranceInstances>>([]);
   const bays = useRef<ReturnType<typeof viaductBays>>([]);
@@ -682,15 +725,9 @@ export default function TransitLayer() {
   const dimLines = (alertFocus ? 0.12 : lineAlpha);
   // Isolated lines: their stations stay, the rest fade.
   const stationAlpha = (opts.routes.length ? ["case", ["any", ...opts.routes.map((r) => ["in", ` ${r} `, ["concat", " ", ["get", "routes"], " "]])], 1, 0.15] : 1) as number;
-  const linesButton = typeof document !== "undefined" ? createPortal(
-    <button type="button" onClick={openLines} data-testid="lines-button"
-      className="fixed right-3 top-1/2 z-30 h-9 -translate-y-1/2 rounded-full border border-border bg-card px-4 text-[13px] font-semibold text-foreground shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-      Lines{opts.routes.length ? ` · ${opts.routes.length}` : ""}
-    </button>, document.body) : null;
   return (
     <>
       {followed ? <FollowCard vehicle={followed} /> : null}
-      {linesButton}
       <Source id="transit-lines" type="geojson" data={lines}>
         {/* X-ray: tunnels read as solid, glowing runs; otherwise a faint dashed hint. */}
         <Layer id="transit-line-under" type="line" filter={["==", ["get", "grade"], "underground"]}

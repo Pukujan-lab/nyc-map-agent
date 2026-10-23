@@ -24,10 +24,17 @@ async function open(page: Page, size = PHONE) {
   await page.setViewportSize(size);
   await mockNetwork(page);
   await page.route("**/api/transit", (r) => r.fulfill({ contentType: "application/json", body: JSON.stringify({ bus: true }) }));
-  await page.route("**/api/transit/bus", (r) =>
-    r.fulfill({ contentType: "application/json", body: JSON.stringify({ at: Math.floor(Date.now() / 1000), buses: [{ ...BUS, t: Math.floor(Date.now() / 1000) }] }) }),
-  );
-  await page.goto("/?transit=bus");
+  // Buses stay off until one page is named. This page is just the B62 the tap needs.
+  await page.route(/\/api\/transit\/bus/, async (r) => {
+    const path = new URL(r.request().url()).pathname;
+    if (path.endsWith("/bus-lines")) {
+      await r.fulfill({ contentType: "application/json", body: JSON.stringify({ groups: [{ id: "brooklyn", label: "Brooklyn", pages: [{ id: "brooklyn-1", label: "B62", routes: ["B62"] }] }] }) });
+      return;
+    }
+    if (!path.endsWith("/bus")) { await r.fallback(); return; }
+    await r.fulfill({ contentType: "application/json", body: JSON.stringify({ at: Math.floor(Date.now() / 1000), buses: [{ ...BUS, t: Math.floor(Date.now() / 1000) }] }) });
+  });
+  await page.goto("/?transit=bus&busPage=brooklyn-1");
   await expect(page.locator("canvas.maplibregl-canvas").first()).toBeVisible();
   await page.waitForResponse((r) => r.url().includes("/api/aggregate"));
 }

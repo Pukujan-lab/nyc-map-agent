@@ -4,7 +4,9 @@ import { ScanEye } from "lucide-react";
 import { useFlag } from "@/lib/flags";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { setFollowMode, stopFollowing, useFollowMode, useFollowed, type FollowMode } from "@/lib/transit/follow";
+import { useLinesControl } from "@/lib/transit/linesControl";
 import { setStreetXray, useStreetXray } from "@/lib/transit/streetXray";
+import { useMapOptions } from "@/lib/map/mapOptions";
 import { cn } from "@/lib/utils";
 
 /** Camera levels: eye height (Street), ~60 m oblique (Mid), ~300 m tilted (Up), flat north-up (Top). */
@@ -63,10 +65,13 @@ export function ViewSwitcher() {
     if (walking) { stopWalk(); window.setTimeout(() => navigate("north"), 750); } else navigate("north");
   };
   const train = followed !== null && !followed.startsWith("bus:");
+  const openLines = useLinesControl();
+  const isolated = useMapOptions().routes.length;
   return (
     <div
       data-testid="view-switcher"
-      className="pointer-events-none absolute bottom-[calc(var(--edge)+96px)] left-1/2 z-[45] flex w-[calc(100%-var(--edge)*2)] max-w-[640px] -translate-x-1/2 flex-wrap items-center justify-center gap-[var(--sp-2)] lg:bottom-[calc(var(--edge)+36px)] lg:w-auto"
+      style={{ display: "var(--controls-display, flex)" }}
+      className="pointer-events-none absolute bottom-[calc(var(--edge)+96px)] left-[max(var(--edge),var(--sheet-left,0px))] right-[var(--edge)] z-[35] flex flex-wrap items-center justify-center gap-[var(--sp-2)] lg:bottom-[calc(var(--edge)+36px)] lg:right-[calc(var(--edge)+340px)]"
     >
       <div role="group" aria-label={followed ? "Follow camera" : "View level"} className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-border bg-card p-0.5 shadow-md">
         {followed
@@ -86,6 +91,11 @@ export function ViewSwitcher() {
       {followed ? (
         <button type="button" onClick={() => stopFollowing()} className={cn(seg, "pointer-events-auto border border-border bg-card text-foreground shadow-md hover:bg-muted")}>
           Stop following
+        </button>
+      ) : null}
+      {openLines ? (
+        <button type="button" onClick={openLines} data-testid="lines-button" className={cn(seg, "pointer-events-auto border border-border bg-card text-foreground shadow-md hover:bg-muted")}>
+          Lines{isolated ? ` · ${isolated}` : ""}
         </button>
       ) : null}
     </div>

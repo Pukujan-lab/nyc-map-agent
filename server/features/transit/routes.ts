@@ -5,7 +5,8 @@
  *
  *   /api/transit          → { bus: boolean } (is MTA_BUSTIME_KEY set?)
  *   /api/transit/subway|lirr|mnr → trips with upcoming stop times
- *   /api/transit/bus      → bus vehicle positions (404 without the key)
+ *   /api/transit/bus      → bus vehicle positions (404 without the key). `?routes=Q1,Q2` keeps at most 20 routes.
+ *   /api/transit/bus-lines → borough pages of route ids (no live positions)
  *   /api/transit/alerts   → MTA service alerts + elevator/escalator outages
  *   /api/transit/bus-trip?vehicle=&route= → one bus: headsign + upcoming stops with ETAs (SIRI)
  *   /api/transit/bus-route?route=        → one route's shape + stops, on demand (Bus Time OBA)
@@ -13,6 +14,7 @@
  */
 import GtfsRealtimeBindings from "gtfs-realtime-bindings";
 import { json } from "../../../api/_lib/http";
+import { busCatalog, filterBuses, parseBusRoutes } from "./busLines";
 import { conflate, loadCenterlines } from "./conflate";
 import { slimAlert, type MercuryAlert, type SlimAlert } from "./alerts";
 
@@ -244,9 +246,13 @@ export async function GET(request: Request): Promise<Response> {
   const busKey = process.env.MTA_BUSTIME_KEY;
   try {
     if (!system) return json({ bus: Boolean(busKey) }, { maxAge: 60, browserMaxAge: 60 });
+    if (system === "bus-lines") return json(busCatalog(), { maxAge: 86_400, browserMaxAge: 86_400 });
     if (system === "bus") {
       if (!busKey) return json({ error: "bus_unavailable" }, { status: 404 });
-      return json(await cached("bus", () => loadBuses(busKey)), { maxAge: 15, browserMaxAge: 10 });
+      const picked = parseBusRoutes(new URL(request.url).searchParams.get("routes"));
+      if (picked === "bad") return json({ error: "bad_route" }, { status: 400 });
+      const body = await cached("bus", () => loadBuses(busKey)) as { at: number; buses: Array<{ route: string }> };
+      return json(picked ? { at: body.at, buses: filterBuses(body.buses, picked) } : body, { maxAge: 15, browserMaxAge: 10 });
     }
     if (system === "bus-stops") {
       if (!busKey) return json({ error: "bus_unavailable" }, { status: 404 });

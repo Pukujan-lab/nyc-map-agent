@@ -3004,7 +3004,7 @@
     },
     "/api/v1/transit/{system}": {
       "get": {
-        "summary": "Live MTA GTFS-rt (subway / lirr / mnr trips, bus positions, alerts + elevator outages), cached ~15 s; bus-trip?vehicle= (one bus's headsign + upcoming stops), bus-route?route= (route shape + stops) and bus-stops?lat=&lon= (stops within ~300 m with the routes serving each)",
+        "summary": "Live MTA GTFS-rt (subway / lirr / mnr trips, bus positions, alerts + elevator outages), cached ~15 s; bus?routes=Q1,Q2 filters the cached fleet to at most 20 routes; bus-lines is the borough page catalog; bus-trip?vehicle= (one bus's headsign + upcoming stops), bus-route?route= (route shape + stops) and bus-stops?lat=&lon= (stops within ~300 m with the routes serving each)",
         "parameters": [
           {
             "schema": {
@@ -3014,6 +3014,7 @@
                 "lirr",
                 "mnr",
                 "bus",
+                "bus-lines",
                 "alerts",
                 "bus-trip",
                 "bus-route",
@@ -3041,6 +3042,15 @@
             },
             "required": false,
             "name": "route",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 240
+            },
+            "required": false,
+            "name": "routes",
             "in": "query"
           },
           {
@@ -3098,7 +3108,7 @@
     },
     "/api/transit/{system}": {
       "get": {
-        "summary": "Live MTA GTFS-rt (subway / lirr / mnr trips, bus positions, alerts + elevator outages), cached ~15 s; bus-trip?vehicle= (one bus's headsign + upcoming stops), bus-route?route= (route shape + stops) and bus-stops?lat=&lon= (stops within ~300 m with the routes serving each) (alias of /api/v1/transit/{system})",
+        "summary": "Live MTA GTFS-rt (subway / lirr / mnr trips, bus positions, alerts + elevator outages), cached ~15 s; bus?routes=Q1,Q2 filters the cached fleet to at most 20 routes; bus-lines is the borough page catalog; bus-trip?vehicle= (one bus's headsign + upcoming stops), bus-route?route= (route shape + stops) and bus-stops?lat=&lon= (stops within ~300 m with the routes serving each) (alias of /api/v1/transit/{system})",
         "deprecated": true,
         "parameters": [
           {
@@ -3109,6 +3119,7 @@
                 "lirr",
                 "mnr",
                 "bus",
+                "bus-lines",
                 "alerts",
                 "bus-trip",
                 "bus-route",
@@ -3136,6 +3147,15 @@
             },
             "required": false,
             "name": "route",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 240
+            },
+            "required": false,
+            "name": "routes",
             "in": "query"
           },
           {

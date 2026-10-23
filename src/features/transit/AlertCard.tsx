@@ -75,6 +75,9 @@ function AlertCard({ alert: a, onBack }: { alert: TransitAlert; onBack: () => vo
         {a.type ? <span className="text-xs text-muted-foreground">{a.type}</span> : null}
       </div>
       <p className="font-medium">{plain(a.text)}</p>
+      {a.replacement?.length ? (
+        <p className="font-medium">Shuttle bus {a.replacement.join(", ")} covers the gap. The map is showing that bus.</p>
+      ) : null}
       {a.description ? (
         <div className="text-xs text-muted-foreground">
           <p className={`whitespace-pre-line ${more ? "" : "line-clamp-3"}`}>{plain(a.description)}</p>
