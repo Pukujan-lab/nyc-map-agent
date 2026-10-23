@@ -184,73 +184,6 @@
           "features"
         ]
       },
-      "PlaceToilet": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "example": "osm:node/123"
-          },
-          "name": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string",
-            "description": "OSM amenity (restaurant, cafe, fast_food, bar, pub) or 'shop'"
-          },
-          "access": {
-            "type": "string",
-            "enum": [
-              "anyone",
-              "customers"
-            ],
-            "description": "anyone = toilets:access yes|permissive|public; customers = customers or untagged"
-          },
-          "accessTagged": {
-            "type": "boolean",
-            "description": "false when OSM has no toilets:access tag"
-          },
-          "wheelchair": {
-            "type": [
-              "boolean",
-              "null"
-            ]
-          },
-          "changingTable": {
-            "type": [
-              "boolean",
-              "null"
-            ]
-          },
-          "fee": {
-            "type": [
-              "boolean",
-              "null"
-            ]
-          },
-          "source": {
-            "type": "string",
-            "enum": [
-              "openstreetmap"
-            ]
-          },
-          "url": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "kind",
-          "access",
-          "accessTagged",
-          "wheelchair",
-          "changingTable",
-          "fee",
-          "source",
-          "url"
-        ]
-      },
       "PlaceToiletsResponse": {
         "type": "object",
         "properties": {
@@ -316,6 +249,73 @@
         "required": [
           "type",
           "features"
+        ]
+      },
+      "PlaceToilet": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "osm:node/123"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "description": "OSM amenity (restaurant, cafe, fast_food, bar, pub) or 'shop'"
+          },
+          "access": {
+            "type": "string",
+            "enum": [
+              "anyone",
+              "customers"
+            ],
+            "description": "anyone = toilets:access yes|permissive|public; customers = customers or untagged"
+          },
+          "accessTagged": {
+            "type": "boolean",
+            "description": "false when OSM has no toilets:access tag"
+          },
+          "wheelchair": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "changingTable": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "fee": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "openstreetmap"
+            ]
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "access",
+          "accessTagged",
+          "wheelchair",
+          "changingTable",
+          "fee",
+          "source",
+          "url"
         ]
       },
       "AgentRequest": {
@@ -3223,6 +3223,7 @@
               "example": "-74.02,40.70,-73.93,40.80"
             },
             "required": false,
+            "description": "west,south,east,north",
             "name": "bbox",
             "in": "query"
           },
@@ -3233,6 +3234,7 @@
               "description": "Default: now"
             },
             "required": false,
+            "description": "Default: now",
             "name": "from",
             "in": "query"
           },
@@ -3243,6 +3245,7 @@
               "description": "Default: 7 days after from"
             },
             "required": false,
+            "description": "Default: 7 days after from",
             "name": "to",
             "in": "query"
           },
@@ -3254,6 +3257,7 @@
               "example": "fair,market"
             },
             "required": false,
+            "description": "Comma-separated kinds",
             "name": "kind",
             "in": "query"
           }
@@ -3305,6 +3309,7 @@
               "example": "-74.02,40.70,-73.93,40.80"
             },
             "required": false,
+            "description": "west,south,east,north",
             "name": "bbox",
             "in": "query"
           },
@@ -3315,6 +3320,7 @@
               "description": "Default: now"
             },
             "required": false,
+            "description": "Default: now",
             "name": "from",
             "in": "query"
           },
@@ -3325,6 +3331,7 @@
               "description": "Default: 7 days after from"
             },
             "required": false,
+            "description": "Default: 7 days after from",
             "name": "to",
             "in": "query"
           },
@@ -3336,6 +3343,7 @@
               "example": "fair,market"
             },
             "required": false,
+            "description": "Comma-separated kinds",
             "name": "kind",
             "in": "query"
           }

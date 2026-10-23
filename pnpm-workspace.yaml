@@ -393,4 +393,3 @@ auditConfig:
     - GHSA-r28c-9q8g-f849 # postcss via vite
     - GHSA-vfj7-8cjw-p6xm # braces via tailwindcss>chokidar (dev)
     - GHSA-jrc7-96c5-q579 # maplibre-gl <=6.4.0 -> maplibre 6 (pinned 5.24 in AI_RULES; needs review)
-    - GHSA-mrhx-c7xc-m3w5 # zod <4.6.6 memory use on oversized input; no 3.x patch -> zod 4 (#344)

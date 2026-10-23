@@ -11,7 +11,7 @@ export const OverpassElement = z.object({
   lat: z.number().optional(),
   lon: z.number().optional(),
   center: z.object({ lat: z.number(), lon: z.number() }).optional(),
-  tags: z.record(z.string()).default({}),
+  tags: z.record(z.string(), z.string()).default({}),
 });
 export type OverpassElement = z.infer<typeof OverpassElement>;
 export const OverpassResponse = z.object({ elements: z.array(OverpassElement) });
