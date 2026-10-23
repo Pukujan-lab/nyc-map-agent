@@ -68,6 +68,31 @@ export const VEHICLE_MODELS: Record<VehicleMode, { url: string; length: number }
   bus: { url: "/api/vehicle-models/bus", length: 12.2 }, // New Flyer XD40, 40 ft
 };
 
+/**
+ * The glTF keeps its own livery (the subway car still reads as a generic train).
+ * Use it only when 3D buildings are on and eco is off. Otherwise the route-colored
+ * box is enough. Pitch is not an input: Top view must not turn the model on.
+ */
+export function showVehicleModel(eco: boolean, buildings: "flat" | "3d"): boolean {
+  return !eco && buildings === "3d";
+}
+
+/** `nma.mapOptions` matches mapOptions.ts. That module imports React, which must stay out of this chunk. */
+const MAP_OPTIONS_KEY = "nma.mapOptions";
+
+function vehicleModelsWanted(): boolean {
+  let eco = false;
+  try {
+    eco = typeof location !== "undefined" && new URLSearchParams(location.search).get("eco") === "1";
+  } catch { /* no location in node tests */ }
+  let buildings: "flat" | "3d" = "flat";
+  try {
+    const raw = JSON.parse(globalThis.localStorage?.getItem(MAP_OPTIONS_KEY) ?? "{}") as { buildings?: unknown };
+    if (raw.buildings === "3d") buildings = "3d";
+  } catch { /* private mode or a bad value */ }
+  return showVehicleModel(eco, buildings);
+}
+
 /** meshopt/quantized glTF stores positions as normalized ints; transforms would clamp them, so expand to float first. */
 function dequantize(g: THREE.BufferGeometry): THREE.BufferGeometry {
   for (const name of ["position", "normal"]) {
@@ -245,10 +270,10 @@ export function createVehicleLayer() {
   const local = new THREE.Matrix4().makeTranslation(origin.x, origin.y, origin.z).scale(new THREE.Vector3(s, -s, s));
 
   const make = (geom: THREE.BufferGeometry, ghost: boolean) => {
-    // Ghosts glow: unlit, full route colour, drawn through the ground and buildings.
+    // Unlit route color, same idea as the underground boxes. Lambert faces flip light and dark as a car turns, which reads as a flash.
     const mat = ghost
       ? new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.8, depthTest: false, depthWrite: false })
-      : new THREE.MeshLambertMaterial({});
+      : new THREE.MeshBasicMaterial({});
     const mesh = new THREE.InstancedMesh(geom, mat, CAP);
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     mesh.frustumCulled = false;
@@ -268,14 +293,26 @@ export function createVehicleLayer() {
   /** Loaded glTF parts per mode, one InstancedMesh each; empty until the model arrives. */
   const models: Record<VehicleMode, THREE.InstancedMesh[]> = { subway: [], rail: [], bus: [] };
   let last: VehicleInstance[] = [];
+  let modelsRequested = false;
   function loadModels() {
+    // onAdd runs again whenever the layer is removed and put back (Follow drops street level, then the chase pitch turns the layer on).
+    // A second load used to leave the first meshes in the scene, frozen where the train was, and the two copies strobed while they overlapped.
+    if (modelsRequested || !vehicleModelsWanted()) return;
+    modelsRequested = true;
     // The meshopt decoder is only needed for these models: keep it out of the shared 3D chunk.
     void import("three/examples/jsm/libs/meshopt_decoder.module.js").then(({ MeshoptDecoder }) => {
     const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
     for (const mode of Object.keys(VEHICLE_MODELS) as VehicleMode[]) {
       loader.load(VEHICLE_MODELS[mode].url, (gltf) => {
+        if (models[mode].length) return;
         models[mode] = vehicleParts(gltf.scene, VEHICLE_MODELS[mode].length).map(({ geometry, material }) => {
-          const mesh = new THREE.InstancedMesh(geometry, material, CAP);
+          // The subway emissive map is a noisy sign atlas. It strobes as the camera moves, and the baked word stays "train".
+          const lit = material as THREE.MeshStandardMaterial;
+          if (lit.emissive) { lit.emissive.set(0); lit.emissiveMap = null; lit.emissiveIntensity = 0; }
+          lit.transparent = false;
+          lit.depthWrite = true;
+          lit.opacity = 1;
+          const mesh = new THREE.InstancedMesh(geometry, lit, CAP);
           mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
           mesh.frustumCulled = false;
           mesh.count = 0;
@@ -283,6 +320,7 @@ export function createVehicleLayer() {
           return mesh;
         });
         boxes[mode].count = 0;
+        boxes[mode].visible = false;
         update(last);
       }, undefined, () => { /* keep the box for this mode */ });
     }
@@ -459,17 +497,24 @@ export function createVehicleLayer() {
       renderer.resetState();
       if (veil.visible) renderer.clearDepth();
       renderer.render(scene, camera);
+      renderer.resetState();
     },
   };
+
+  /** Metres above the given z so a body is not coplanar with the pavement or the viaduct deck (that pair strobes). */
+  const BODY_CLEAR_M = 0.4;
 
   /** Push the tweened vehicles (already culled and capped by the caller). */
   function update(vehicles: VehicleInstance[]) {
     last = vehicles;
+    loadModels();
+    const detailed = vehicleModelsWanted();
     const n: Record<VehicleMode, number> = { subway: 0, rail: 0, bus: 0 };
     let g = 0;
     for (const v of vehicles) {
       const mc = MercatorCoordinate.fromLngLat([v.lon, v.lat], 0);
-      p.set((mc.x - origin.x) / s, -(mc.y - origin.y) / s, v.z);
+      // Ghosts stay at the caller's depth. Solid bodies lift just clear of the surface they sit on.
+      p.set((mc.x - origin.x) / s, -(mc.y - origin.y) / s, v.ghost ? v.z : v.z + BODY_CLEAR_M);
       q.setFromAxisAngle(zAxis, (-v.bearing * Math.PI) / 180);
       m4.compose(p, q, one);
       if (v.ghost) {
@@ -480,17 +525,25 @@ export function createVehicleLayer() {
       }
       const i = n[v.kind]++;
       if (i >= CAP) continue;
-      const parts = models[v.kind];
-      // A loaded model keeps its own livery; the box stand-in carries the route colour.
+      const parts = detailed ? models[v.kind] : [];
+      // A loaded model keeps its own livery; the box stand-in carries the route color.
       if (parts.length) for (const part of parts) part.setMatrixAt(i, m4);
       else { boxes[v.kind].setMatrixAt(i, m4); boxes[v.kind].setColorAt(i, color.set(v.color)); }
     }
     for (const mode of Object.keys(n) as VehicleMode[]) {
       const count = Math.min(n[mode], CAP);
-      for (const mesh of models[mode].length ? models[mode] : [boxes[mode]]) {
+      const useModel = detailed && models[mode].length > 0;
+      const active = useModel ? models[mode] : [boxes[mode]];
+      const inactive = useModel ? [boxes[mode]] : models[mode];
+      for (const mesh of active) {
+        mesh.visible = true;
         mesh.count = count;
         mesh.instanceMatrix.needsUpdate = true;
         if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      }
+      for (const mesh of inactive) {
+        mesh.visible = false;
+        mesh.count = 0;
       }
     }
     ghosts.count = Math.min(g, CAP);

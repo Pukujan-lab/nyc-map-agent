@@ -204,6 +204,10 @@ export const STRUCTURES: Structure[] = [
   { id: "williamsburg-bridge", kind: "bridge", deck: 38, routes: ["J", "M", "Z"], line: [[-73.9807, 40.7166], [-73.9712, 40.7135], [-73.9617, 40.7104]] },
   // 1 train's Manhattan Valley Viaduct over 125 St, ~16 m.
   { id: "manhattan-valley-viaduct", kind: "viaduct", deck: 16, routes: ["1"], line: [[-73.9620, 40.8105], [-73.9585, 40.8158], [-73.9561, 40.8205]] },
+  // 3 train's Harlem–148 St terminal. The open-air match calls this pocket a tunnel, so the car sat under the el.
+  { id: "harlem-148", kind: "viaduct", deck: VIADUCT_TOP, routes: ["3"], line: [[-73.9349, 40.8232], [-73.9357, 40.8235], [-73.9365, 40.8239]] },
+  // 7 and 7X at Flushing–Main St. The match calls the first 450 m a tunnel, then a short street-level gap, so the car sat under the el.
+  { id: "flushing-main", kind: "viaduct", deck: VIADUCT_TOP, routes: ["7", "7X"], line: [[-73.83003, 40.7596], [-73.83303, 40.75858], [-73.83649, 40.75781]] },
   // M train on the Myrtle Avenue viaduct. The open-air match calls the Middle
   // Village terminal street level, so the first 650 m sat on the pavement.
   { id: "myrtle-viaduct", kind: "viaduct", deck: VIADUCT_TOP, routes: ["M"], line: [[-73.8896, 40.7114], [-73.8900, 40.7103], [-73.8906, 40.7091], [-73.8915, 40.7081], [-73.8924, 40.7073], [-73.8937, 40.7067], [-73.8953, 40.7063]] },
@@ -221,6 +225,8 @@ export function structureAt(p: [number, number], within = 60, route?: string): S
 }
 
 const MAX_GRADE = 0.035; // 3.5 % ramps from portals / up to decks
+/** Short underground pocket at a shape end that opens onto open track. St George is 374 m. A real tunnel is kilometres, so this does not lift one. */
+const TERMINAL_TAIL_M = 400;
 const profiles = new WeakMap<object, { h: Float32Array; grade: Grade[] }>();
 /**
  * Track height (metres above ground) for every vertex of a route's shape:
@@ -234,7 +240,7 @@ export function trackHeightProfile(sys: StaticSystem, route: string): { m: numbe
   if (!shape) return null;
   let p = profiles.get(shape);
   if (!p) {
-    const n = shape.c.length, h = new Float32Array(n), grade = shape.g.slice();
+    const n = shape.c.length, h = new Float32Array(n), grade = shape.g.slice(), raw = grade.slice();
     for (let i = 0; i < n; i++) {
       const s = sys.system === "subway" ? structureAt(shape.c[i], 60, route) : undefined;
       if (s) { grade[i] = "elevated"; h[i] = s.deck; }
@@ -246,6 +252,19 @@ export function trackHeightProfile(sys: StaticSystem, route: string): { m: numbe
     for (let i = n - 2; i >= 0; i--) h[i] = Math.max(h[i], h[i + 1] - MAX_GRADE * (shape.m[i + 1] - shape.m[i]));
     // A ramp out of a tunnel is above ground: treat it as elevated, not a ghost.
     for (let i = 0; i < n; i++) if (h[i] > 1 && grade[i] === "underground") grade[i] = "elevated";
+    // A short underground pocket at either end, opening onto track OSM already called open, is a mis-tagged terminal (St George). Flushing and Harlem–148 St are structures above: their raw neighbor is not the viaduct.
+    const promoteTail = (i0: number, i1: number, neighbor: number) => {
+      if (raw[neighbor] === "underground" || (shape.m[i1] ?? 0) - (shape.m[i0] ?? 0) > TERMINAL_TAIL_M) return;
+      const open: Grade = raw[neighbor] === "elevated" ? "elevated" : "grade";
+      const hN = open === "elevated" ? Math.max(h[neighbor], VIADUCT_TOP) : 0;
+      for (let k = i0; k <= i1; k++) { grade[k] = open; h[k] = hN; }
+    };
+    let lead = 0;
+    while (lead < n && grade[lead] === "underground") lead++;
+    if (lead > 0 && lead < n) promoteTail(0, lead - 1, lead);
+    let last = n - 1;
+    while (last >= 0 && grade[last] === "underground") last--;
+    if (last >= 0 && last < n - 1) promoteTail(last + 1, n - 1, last);
     p = { h, grade };
     profiles.set(shape, p);
   }

@@ -49,6 +49,37 @@ describe("myrtle viaduct", () => {
   });
 });
 
+describe("open terminal tails", () => {
+  it("lifts a short underground pocket that opens onto elevated track", () => {
+    const c: Array<[number, number]> = [[-73.83, 40.76], [-73.834, 40.758], [-73.84, 40.756]];
+    const s = { ...sys, shapes: { 7: { c, m: [0, 370, 1100], g: ["underground", "underground", "elevated"] as const } } } as unknown as StaticSystem;
+    const p = trackHeightProfile(s, "7")!;
+    expect(p.grade[0]).toBe("elevated");
+    expect(p.h[0]).toBe(8);
+  });
+  it("leaves a long tunnel approach underground", () => {
+    const c: Array<[number, number]> = [[-74.0, 40.75], [-73.95, 40.75], [-73.9, 40.75]];
+    const s = { ...sys, shapes: { 7: { c, m: [0, 4200, 8400], g: ["underground", "underground", "elevated"] as const } } } as unknown as StaticSystem;
+    const p = trackHeightProfile(s, "7")!;
+    expect(p.grade[0]).toBe("underground");
+    expect(p.h[0]).toBe(0);
+  });
+  it("puts the 7 at Flushing–Main St and the 3 at Harlem–148 St on the viaduct", () => {
+    const raw = JSON.parse(readFileSync("public/transit/subway.json", "utf8")) as StaticSystem;
+    const sub = { ...raw, system: "subway" as const };
+    const seven = trackHeightProfile(sub, "7")!;
+    const three = trackHeightProfile(sub, "3")!;
+    const sir = trackHeightProfile(sub, "SI")!;
+    expect(seven.grade[0]).toBe("elevated");
+    expect(seven.h[0]).toBe(8);
+    expect(seven.grade[400]).toBe("underground");
+    expect(seven.h[400]).toBe(0);
+    expect(three.grade.at(-1)).toBe("elevated");
+    expect(three.h.at(-1)).toBe(8);
+    expect(sir.grade[0]).not.toBe("underground");
+  });
+});
+
 const track = (grade: string, coords: Array<[number, number]>, route = "A"): GeoJSON.Feature<GeoJSON.LineString> => ({
   type: "Feature",
   properties: { route, color: "#0062CF", grade },
