@@ -11,6 +11,7 @@ import { useMediaQuery } from "@/lib/useMediaQuery";
 import { MapCompass } from "./MapCompass";
 import { ViewSwitcher } from "./ViewSwitcher";
 import { applyReadable } from "@/lib/map/readable";
+import { busStopIconOpacity, busStopTextOpacity } from "@/lib/map/busStops";
 import { applyPlaces, placesStale, usePlaces, withQuickPlaces } from "@/lib/map/places";
 import { useMapOptions } from "@/lib/map/mapOptions";
 import { applyBuildings, wantsFlatBuildings } from "@/lib/map/buildings";
@@ -482,13 +483,10 @@ export function MapView({
       if (/^highway-name-major$/.test(l.id)) map.setLayoutProperty(l.id, "visibility", opts.roads && opts.streetNames ? "visible" : "none");
       // Transit-first open: neighbourhood / quarter names only with the analytics on.
       if (l.id === "label_other") map.setLayoutProperty(l.id, "visibility", analytics ? "visible" : "none");
-      // Bus stop icons only from zoom 15, where a stop is a place you can walk to.
+      // Bus stop icons from zoom 15, names from 17. The Layers switch hides both.
       if (l.id === "poi_transit") {
-        const busFade = ["step", ["zoom"], ["case", ["==", ["get", "class"], "bus"], 0, 1], 15, 1];
-        map.setPaintProperty(l.id, "icon-opacity", busFade as never);
-        // Stop names only up close (17+): at 15–16 the icon alone marks the stop.
-        const busText = ["step", ["zoom"], ["case", ["==", ["get", "class"], "bus"], 0, 1], 17, 1];
-        map.setPaintProperty(l.id, "text-opacity", busText as never);
+        map.setPaintProperty(l.id, "icon-opacity", busStopIconOpacity(opts.busStops) as never);
+        map.setPaintProperty(l.id, "text-opacity", busStopTextOpacity(opts.busStops) as never);
       }
     }
     const shownPlaces = withQuickPlaces(places, { businesses, health, parksPlaces, citibike });

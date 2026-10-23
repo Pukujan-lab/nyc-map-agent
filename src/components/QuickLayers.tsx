@@ -30,6 +30,7 @@ export function QuickLayers() {
     useRow("streetArt", "Street art"),
     ["Transit Focus", focus, setFocus],
     ["Roads", opts.roads, (v) => setOptions({ roads: v })],
+    ["Bus stops", opts.busStops, (v) => setOptions({ busStops: v })],
     useRow("xray", "X-ray"),
     ["Restrooms", restrooms, setRestrooms],
     t("events", "Events"),
