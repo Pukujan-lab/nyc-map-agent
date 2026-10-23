@@ -61,6 +61,8 @@ function onRaisedTrack(cells: Set<string>, p: GeoJSON.Position): boolean {
 }
 /** Street level: live vehicles within this distance of the walker. */
 const STREET_RADIUS_M = 600;
+/** Street level: station names show within this distance of the walker. */
+const STREET_LABEL_M = 220;
 /** X-ray draws underground trains this far below the ground plane. */
 const XRAY_DEPTH_M = -12;
 /** Where the walker stands: at street level the map centre sits at most ~10 m ahead of the eye. */
@@ -138,6 +140,19 @@ export default function TransitLayer() {
   const { tilted, walking, startWalk, stopWalk, setTilted } = useMapState();
   const reducedMotion = usePrefersReducedMotion();
   const three = tilted || walking;
+  // Street level: where the walker stands, refreshed as they move (~25 m steps), for the station-name filter.
+  const [eyeAt, setEyeAt] = useState<[number, number] | null>(null);
+  useEffect(() => {
+    if (!map || !walking) { setEyeAt(null); return; }
+    const sync = () => {
+      const e = streetEye(map);
+      const q = (v: number) => Math.round(v * 4000) / 4000;
+      setEyeAt((p) => (p && p[0] === q(e.lon) && p[1] === q(e.lat) ? p : [q(e.lon), q(e.lat)]));
+    };
+    sync();
+    map.on("moveend", sync);
+    return () => { map.off("moveend", sync); };
+  }, [map, walking]);
   // Dev-only: lets headless QA enter street level at a point.
   useEffect(() => {
     if (import.meta.env.DEV) (window as unknown as { __walk?: unknown }).__walk = startWalk;
@@ -750,6 +765,8 @@ export default function TransitLayer() {
   // Route bullets stay on in every view but street level: symbols draw above the 3D
   // buildings, so a train is never lost behind a tower or under the ground when tilted.
   const hide2d = walking;
+  // Street level: a station name is useful only near the walker; far ones would stand on the horizon.
+  const nearEye: unknown[] = walking && eyeAt ? [["<", ["distance", { type: "Point", coordinates: eyeAt }], STREET_LABEL_M]] : [];
   const bulletAlpha = (alertFocus ? ["case", ["in", ["get", "route"], ["literal", alertFocus.routes]], 1, 0.15] : opts.routes.length ? ["case", ["in", ["get", "route"], ["literal", [...opts.routes]]], 1, 0.15] : 1) as number;
   const dimLines = (alertFocus ? 0.12 : lineAlpha);
   // Isolated lines: their stations stay, the rest fade.
@@ -803,10 +820,12 @@ export default function TransitLayer() {
         {/* Name + route bullets: every station from z15, or the hovered / open one at any zoom.
             Collision detection drops overlapping labels so they never pile up. */}
         <Layer id="transit-station-label" type="symbol" minzoom={11}
-          filter={["all", ["==", ["get", "system"], "subway"], ["any", ["all", [">=", ["zoom"], 15], ["==", ["get", "labelled"], true]], ["==", ["get", "id"], hoverStation], ["==", ["get", "id"], openStationId]]]}
-          layout={{ "icon-image": ["get", "row"], "icon-size": ["interpolate", ["linear"], ["zoom"], 13, 0.8, 17, 1], "icon-anchor": "top",
+          filter={["all", ["==", ["get", "system"], "subway"], ...nearEye, ["any", ["all", [">=", ["zoom"], 15], ["==", ["get", "labelled"], true]], ["==", ["get", "id"], hoverStation], ["==", ["get", "id"], openStationId]]] as never}
+          layout={{ "icon-image": ["get", "row"], "icon-size": walking ? 1.35 : ["interpolate", ["linear"], ["zoom"], 13, 0.8, 17, 1], "icon-anchor": "top",
+            // At eye level the camera is nearly flat, so collision boxes squash together and would drop the name; only the walker's nearby stations draw, so let them overlap.
+            "text-allow-overlap": walking, "icon-allow-overlap": walking, "text-pitch-alignment": "viewport",
             "icon-offset": (three ? ["case", ["get", "raised"], ["literal", [0, -RAISED_LIFT_PX]], ["literal", [0, 6]]] : [0, 6]) as [number, number],
-            "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-anchor": "bottom",
+            "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": walking ? 15 : 11, "text-anchor": "bottom",
             "text-offset": (three ? ["case", ["get", "raised"], ["literal", [0, -RAISED_LIFT_EM]], ["literal", [0, -0.6]]] : [0, -0.6]) as [number, number], "text-max-width": 9,
             "symbol-sort-key": ["case", ["any", ["==", ["get", "id"], hoverStation], ["==", ["get", "id"], openStationId]], 0, 1] }}
           paint={{ "text-color": theme.dark ? "#f2f1ed" : "#111111", "text-halo-color": theme.land, "text-halo-width": 1.6 }} />

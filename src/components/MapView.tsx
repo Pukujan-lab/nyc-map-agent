@@ -1079,7 +1079,8 @@ export function MapView({
     // so they step aside while walking; our own route markers stay.
     const own = new Set(Object.keys(SOURCE_IDS).map((k) => SOURCE_IDS[k as keyof typeof SOURCE_IDS] as string));
     for (const layer of map.getStyle().layers ?? []) {
-      if (layer.type !== "symbol" || own.has((layer as { source?: string }).source ?? "")) continue;
+      // Transit layers (station names + route bullets, #186) stand in the 3D scene and stay.
+      if (layer.type !== "symbol" || own.has((layer as { source?: string }).source ?? "") || layer.id.startsWith("transit-")) continue;
       map.setLayoutProperty(layer.id, "visibility", walking ? "none" : "visible");
     }
   }, [ready, walking, styleEpoch]);
