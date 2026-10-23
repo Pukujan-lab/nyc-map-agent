@@ -37,6 +37,17 @@ describe("track height profile", () => {
 });
 
 import { raisedTrack } from "./model";
+describe("myrtle viaduct", () => {
+  it("lifts the Middle Village terminal onto the viaduct", () => {
+    const c: Array<[number, number]> = [[-73.8896, 40.7114], [-73.8906, 40.7091], [-73.8937, 40.7067]];
+    const s = { ...sys, shapes: { M: { c, m: [0, 280, 560], g: ["grade", "grade", "underground"] as const } } } as unknown as StaticSystem;
+    const p = trackHeightProfile(s, "M")!;
+    expect(p.grade).toEqual(["elevated", "elevated", "elevated"]);
+    expect(p.h[0]).toBe(8);
+    expect(p.h[2]).toBe(8);
+  });
+});
+
 describe("raised track", () => {
   it("puts a deck at bridge height and no piers on the bridge", () => {
     const c: Array<[number, number]> = [[-73.9944, 40.7136], [-73.9906, 40.7075], [-73.9862, 40.7032]];
