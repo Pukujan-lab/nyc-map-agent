@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import { useSearchParams } from "react-router-dom";
 import { lookupFrom, type SegmentLookup, type SegmentRow } from "./history";
 import type { BusHistory } from "./busEstimate";
+import { parseBusCap, parseBusLines } from "@/lib/transit/busReveal";
 import { RAIL_SYSTEMS, type Bus, type LiveSystem, type StaticSystem, type SystemId , type XrayStation } from "./model";
 
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
@@ -17,13 +18,13 @@ async function getJson<T>(url: string): Promise<T> {
 
 export type TransitLayerId = SystemId | "bus";
 
-/** Live subway is on when the URL says nothing. Buses stay off until a corridor page, a trip, or a replacement shuttle asks for them. */
+/** Live subway is on when the URL says nothing. Buses stay off until picked lines, a trip, or a replacement shuttle ask for them. */
 const DEFAULT_TRANSIT = "subway";
 const parseTransit = (raw: string | null) =>
   new Set((raw ?? DEFAULT_TRANSIT).split(",").filter((id) => id && id !== "none"));
 
 /**
- * `?transit=subway,lirr` in the URL (absent = subway, `none` = off). `?busPage=` is one corridor page.
+ * `?transit=subway,lirr` in the URL (absent = subway, `none` = off). `?busLines=Q1,B41` are the picked bus lines (at most 20), `?busCap=3` the buses shown per line. An old `?busPage=` link still opens that page's lines.
  * `?transitPanel=1` opens the status drawer.
  */
 export function useTransitToggles() {
@@ -35,7 +36,7 @@ export function useTransitToggles() {
         const next = new URLSearchParams(prev);
         const cur = parseTransit(next.get("transit"));
         if (value) cur.add(id); else cur.delete(id);
-        if (id === "bus" && !value) next.delete("busPage");
+        if (id === "bus" && !value) { next.delete("busPage"); next.delete("busLines"); }
         const joined = cur.size ? [...cur].join(",") : "none";
         if (joined === DEFAULT_TRANSIT) next.delete("transit"); else next.set("transit", joined);
         return next;
@@ -53,20 +54,34 @@ export function useTransitToggles() {
     [setParams],
   );
   const busPage = params.get("busPage");
-  const setBusPage = useCallback(
-    (id: string | null) =>
+  const busLines = useMemo(() => parseBusLines(params.get("busLines")), [params]);
+  const busCap = parseBusCap(params.get("busCap"));
+  /** Picking a line turns Live buses on; clearing the last one leaves it on and empty. */
+  const setBusLines = useCallback(
+    (lines: string[]) =>
       setParams((prev) => {
         const next = new URLSearchParams(prev);
         const cur = parseTransit(next.get("transit"));
-        if (id) { cur.add("bus"); next.set("busPage", id); }
-        else { cur.delete("bus"); next.delete("busPage"); }
+        const clean = parseBusLines(lines.join(","));
+        next.delete("busPage");
+        if (clean.length) { cur.add("bus"); next.set("busLines", clean.join(",")); } else next.delete("busLines");
         const joined = cur.size ? [...cur].join(",") : "none";
         if (joined === DEFAULT_TRANSIT) next.delete("transit"); else next.set("transit", joined);
         return next;
       }, { replace: true }),
     [setParams],
   );
-  return { on, set, panelOpen, setPanelOpen, busPage, setBusPage };
+  const setBusCap = useCallback(
+    (n: number) =>
+      setParams((prev) => {
+        const next = new URLSearchParams(prev);
+        const cap = parseBusCap(String(n));
+        if (cap === parseBusCap(null)) next.delete("busCap"); else next.set("busCap", String(cap));
+        return next;
+      }, { replace: true }),
+    [setParams],
+  );
+  return { on, set, panelOpen, setPanelOpen, busPage, busLines, setBusLines, busCap, setBusCap };
 }
 
 export function useTransitMeta() {
