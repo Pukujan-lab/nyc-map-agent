@@ -661,7 +661,19 @@ export function MapView({
           id: `restroom:${name}`,
           title: name,
           subtitle: "Public restroom",
-          details: <RestroomDetails restroom={{ name, status: str("status"), hours: str("hours"), accessibility: str("accessibility"), operator: str("operator") }} />,
+          details: (
+            <RestroomDetails
+              restroom={{
+                name,
+                status: str("status"),
+                hours: str("hours"),
+                accessibility: str("accessibility"),
+                operator: str("operator"),
+                lon: kiosk.lng,
+                lat: kiosk.lat,
+              }}
+            />
+          ),
         });
         return;
       }

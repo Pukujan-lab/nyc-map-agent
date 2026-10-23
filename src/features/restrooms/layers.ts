@@ -18,6 +18,8 @@ export interface RestroomInfo {
   hours: string | null;
   accessibility: string | null;
   operator: string | null;
+  lon: number;
+  lat: number;
 }
 
 /** A plain "WC" disc drawn once on a canvas: no icon font, no SVG asset. */
@@ -182,7 +184,18 @@ export function restroomAt(map: MapLibreMap, x: number, y: number): RestroomInfo
   if (!map.getLayer(RESTROOMS_LAYER)) return null;
   const f = map.queryRenderedFeatures([[x - 8, y - 8], [x + 8, y + 8]], { layers: [RESTROOMS_LAYER] })[0];
   if (!f) return null;
+  if (f.geometry?.type !== "Point") return null;
+  const [lon, lat] = f.geometry.coordinates;
+  if (typeof lon !== "number" || typeof lat !== "number") return null;
   const p = f.properties as Record<string, unknown>;
   const s = (k: string) => (typeof p[k] === "string" && p[k] ? (p[k]) : null);
-  return { name: s("name") ?? "Public restroom", status: s("status"), hours: s("hours"), accessibility: s("accessibility"), operator: s("operator") };
+  return {
+    name: s("name") ?? "Public restroom",
+    status: s("status"),
+    hours: s("hours"),
+    accessibility: s("accessibility"),
+    operator: s("operator"),
+    lon,
+    lat,
+  };
 }
