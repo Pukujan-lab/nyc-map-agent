@@ -148,7 +148,6 @@ import { useMapState } from "@/lib/store/MapStateContext";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 import { WalkControls } from "./WalkControls";
 import { useQuickLayer } from "@/lib/quickLayers";
-import { QuickLayers } from "./QuickLayers";
 import { StreetMiniMap } from "./StreetMiniMap";
 import { nearestCorner, type CornerSign } from "@/lib/map/corner";
 import { kioskSources, pickAt as pickFurniture } from "@/lib/map/streetPick";
@@ -1544,7 +1543,6 @@ export function MapView({
       </MapLibreMap>
 
 
-      <QuickLayers />
       {walking ? (
         <WalkControls
           place={walkPlace}

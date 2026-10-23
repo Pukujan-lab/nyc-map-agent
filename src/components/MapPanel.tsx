@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { PanelSearch, type PanelSearchHandle } from "./PanelSearch";
 import { FEATURES } from "@/features";
 import { LayersDrawer } from "./LayersDrawer";
+import { QuickLayers } from "./QuickLayers";
 
 /** Mobile snap points: peek shows the summary only. */
 /** One row (title + number) plus the grab handle. */
@@ -38,8 +39,8 @@ function FeatureTopBar() {
 
 /**
  * Layout A (#171) top bar: "Where to?" search with Ask, one labelled
- * "Layers & filters" button and a small Transit on / off pill. Everything else
- * is in the LayersDrawer.
+ * "Layers & filters" button, a small Transit on / off pill and the quick
+ * "Layers" dropdown, all on one row. Everything else is in the LayersDrawer.
  */
 function TopBar({ boundaries, status, onLayers }: { boundaries: NtaBoundary[] | null; status?: ReactNode; onLayers: () => void }) {
   const searchRef = useRef<PanelSearchHandle>(null);
@@ -80,6 +81,9 @@ function TopBar({ boundaries, status, onLayers }: { boundaries: NtaBoundary[] | 
             {transit.active ? "Transit on" : "Transit off"}
           </button>
         ) : null}
+        <div className="ml-auto">
+          <QuickLayers />
+        </div>
       </div>
       <FeatureTopBar />
     </div>
