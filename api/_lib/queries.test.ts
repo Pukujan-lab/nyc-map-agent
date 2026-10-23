@@ -26,4 +26,16 @@ describe("blocksQuery", () => {
     expect(cd.sql).toContain("a.boro_cd::text AS area");
     expect(cd.sql).not.toContain("LEFT JOIN");
   });
+
+  it("serves block-keyed sources by tax block id at block level only", () => {
+    const { sql, params } = blocksQuery({ source: "311", window: "90d", level: "block", borough: "Brooklyn", nta: "BK0101" });
+    expect(sql).toContain("FROM raw.source_block_cells");
+    expect(sql).toContain("JOIN core.tax_blocks");
+    expect(sql).not.toContain("block_month");
+    expect(sql).toContain("k.boro = $3");
+    expect(sql).toContain("k.nta2020 = $4");
+    expect(params).toEqual(["311", "90 days", 3, "BK0101"]);
+    expect(blocksQuery({ source: "311", window: "90d", level: "nta" }).sql).toContain("marts.block_month");
+    expect(blocksQuery({ source: "trees", window: "90d", level: "block" }).sql).toContain("marts.block_month");
+  });
 });

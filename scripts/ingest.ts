@@ -15,7 +15,9 @@
 import { BLOCK_GRID_DEG } from "../src/lib/geo/blocks";
 import { representativePoint } from "../src/lib/datasets/fetchSource";
 import { SOURCES, type GeometrySource, type GridSource, type SourceConfig } from "../src/lib/datasets/registry";
+import { isBlockKeyed } from "../src/lib/datasets/blockKeyed";
 import { octoQuery } from "../api/_lib/octo";
+import { ingestBlockCounts } from "./block-counts";
 import { collectEvents, upsertEvents } from "../server/features/events/ingest";
 import { collectPlaceToilets, replacePlaceToilets } from "../server/features/place-toilets/ingest";
 import { loadEnv } from "./env";
@@ -212,6 +214,11 @@ async function ingestCells(s: GridSource | GeometrySource): Promise<number> {
     { source_id: "text", month: "date", r: "integer", c: "integer", category: "text", n: "double precision" },
     cells.map((c) => ({ ...c, source_id: s.id })),
   );
+  // Sources the map shades by real tax block also get a point-in-block join (#120).
+  if (s.kind === "grid" && isBlockKeyed(s.id)) {
+    const blockRows = await ingestBlockCounts(s, { soqlAll, months: monthStarts(since()), windowStart: since().slice(0, 10) });
+    console.log(`${s.id}: ${blockRows} block-month rows`);
+  }
   return cells.length;
 }
 

@@ -9,7 +9,24 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DuckDBConnection } from "@duckdb/node-api";
 import type { BlockCell, CountPair, DatasetId } from "../src/lib/geo/types";
+import { octoQuery } from "../api/_lib/octo";
 import { spatialDuck, sqlString } from "./duck";
+
+/** nyc-blocks.geojson: BLOCKS_GEOJSON if set, else the copy published through Octo files. */
+export async function publishedBlocksFile(dir: string): Promise<string> {
+  if (process.env.BLOCKS_GEOJSON) return process.env.BLOCKS_GEOJSON;
+  const { rows } = await octoQuery<{ parts: unknown }>("SELECT parts FROM core.published_assets WHERE name = 'nyc-blocks.geojson'");
+  if (!rows[0]) throw new Error("nyc-blocks.geojson is not published: run pnpm build:block-tiles && pnpm publish:block-tiles.");
+  const parts = (typeof rows[0].parts === "string" ? JSON.parse(rows[0].parts) : rows[0].parts) as Array<{ url: string }>;
+  const chunks = await Promise.all(parts.map(async (p) => {
+    const res = await fetch(p.url);
+    if (!res.ok) throw new Error(`blocks download ${res.status}`);
+    return Buffer.from(await res.arrayBuffer());
+  }));
+  const file = join(dir, "nyc-blocks.geojson");
+  writeFileSync(file, Buffer.concat(chunks));
+  return file;
+}
 
 /** One record, already filtered to the window. */
 export interface BlockPoint {
@@ -23,8 +40,42 @@ export interface BlockPoint {
   cyclists: number;
 }
 
+/** Pre-rolled points: a location and how many records sit there. */
+export interface WeightedPoint {
+  lat: number;
+  lon: number;
+  n: number;
+}
+
+/** Static facts about one tax block (core.tax_blocks). */
+export interface TaxBlock {
+  id: number;
+  label: string;
+  nta2020: string;
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+  areaM2: number;
+}
+
 export interface BlockJoin {
   join(dataset: DatasetId, points: BlockPoint[]): Promise<BlockCell[]>;
+  /** Total of `n` per block id: inside a block, else the nearest eligible block within ~40 m. */
+  count(points: WeightedPoint[]): Promise<Map<number, number>>;
+  blocks(): Promise<TaxBlock[]>;
+}
+
+/** Sums counts per block id from join rows; ids and counts that are not finite are dropped. */
+export function sumByBlock(rows: Array<{ id: unknown; n: unknown }>): Map<number, number> {
+  const out = new Map<number, number>();
+  for (const r of rows) {
+    const id = Number(r.id);
+    const n = Number(r.n);
+    if (!Number.isInteger(id) || !Number.isFinite(n) || n <= 0) continue;
+    out.set(id, (out.get(id) ?? 0) + n);
+  }
+  return out;
 }
 
 /** Same as aggregateCore: per block, the top three addresses / streets. */
@@ -55,6 +106,36 @@ export async function blockJoin(blocksGeoJson: string, ntaGeoJson: string): Prom
   const dir = mkdtempSync(join(tmpdir(), "block-join-"));
 
   return {
+    async count(points) {
+      if (points.length === 0) return new Map();
+      const csv = join(dir, `count-${Date.now()}.csv`);
+      writeFileSync(csv, "lat,lon,n\n" + points.map((p) => `${p.lat},${p.lon},${p.n}`).join("\n"));
+      const reader = await con.runAndReadAll(`
+        WITH pts AS (
+          SELECT row_number() OVER () AS rid, *, ST_Point(lon, lat) AS pt
+          FROM read_csv(${sqlString(csv)}, header = true, columns = {'lat': 'DOUBLE', 'lon': 'DOUBLE', 'n': 'DOUBLE'})
+        ), inside AS (
+          SELECT p.rid, b.id FROM pts p JOIN blocks b ON ST_Contains(b.geom, p.pt)
+        ), near AS (
+          SELECT rid, id FROM (
+            SELECT p.rid, b.id, row_number() OVER (PARTITION BY p.rid ORDER BY ST_Distance(b.geom, p.pt), b.id) AS k
+            FROM (SELECT * FROM pts p0 WHERE NOT EXISTS (SELECT 1 FROM inside i WHERE i.rid = p0.rid)) p
+            JOIN blocks b ON ST_DWithin(b.geom, p.pt, ${NEAR_DEG}) WHERE b.no_snap = 0)
+          WHERE k = 1
+        ), hit AS (
+          -- A point on a shared edge can sit in two blocks: credit the lowest id once.
+          SELECT rid, min(id) AS id FROM (SELECT * FROM inside UNION ALL SELECT * FROM near) GROUP BY rid
+        )
+        SELECT h.id, sum(p.n) AS n FROM hit h JOIN pts p USING (rid) GROUP BY h.id`);
+      return sumByBlock(reader.getRowObjectsJson() as Array<{ id: unknown; n: unknown }>);
+    },
+    async blocks() {
+      const reader = await con.runAndReadAll("SELECT id, label, coalesce(nta2020, '') AS nta2020, w, s, e, n, area_m2 FROM block_meta");
+      return (reader.getRowObjectsJson() as Array<Record<string, string | number>>).map((r): TaxBlock => ({
+        id: Number(r.id), label: String(r.label), nta2020: String(r.nta2020),
+        west: Number(r.w), south: Number(r.s), east: Number(r.e), north: Number(r.n), areaM2: Number(r.area_m2),
+      }));
+    },
     async join(dataset, points) {
       const csv = join(dir, `${dataset}.csv`);
       writeFileSync(

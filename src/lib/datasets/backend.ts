@@ -4,6 +4,7 @@ import { parseDistrictBoundaries } from "@/lib/api/districts";
 import type { NtaIndex } from "@/lib/geo/ntaIndex";
 import type { AggregateResult, DatasetId } from "@/lib/geo/types";
 import type { WindowId } from "@/lib/windows";
+import { isBlockKeyed } from "./blockKeyed";
 import { addCell, emptyCounts, type SourceCounts } from "./fetchSource";
 import type { SourceConfig } from "./registry";
 
@@ -54,6 +55,29 @@ export function blocksPath(source: SourceConfig, windowId: WindowId, filters: Da
 }
 
 const blockRow = z.object({ r: z.coerce.number(), c: z.coerce.number(), n: z.coerce.number() });
+/** Block-keyed sources: one row per real tax block, id = boro * 100000 + block (the block tiles' feature id). */
+const taxBlockRow = z.object({
+  block_id: z.coerce.number().int(),
+  n: z.coerce.number(),
+  lat: z.coerce.number(),
+  lon: z.coerce.number(),
+  nta2020: z.string().nullish(),
+});
+type TaxBlockRow = z.infer<typeof taxBlockRow>;
+
+/** Fills `out` from BBL-keyed rows; neighborhood totals are the sum of their blocks. */
+export function addTaxBlocks(out: SourceCounts, rows: TaxBlockRow[]): void {
+  for (const row of rows) {
+    if (!(row.n > 0)) continue;
+    const ntaCode = row.nta2020 ?? "";
+    const key = String(row.block_id);
+    const existing = out.blocks[key];
+    if (existing) existing.count += row.n;
+    else out.blocks[key] = { lat: row.lat, lon: row.lon, ntaCode, count: row.n };
+    if (ntaCode) out.byNta[ntaCode] = (out.byNta[ntaCode] ?? 0) + row.n;
+    out.total += row.n;
+  }
+}
 
 /** Same SourceCounts shape as the Socrata path, so the map code does not care where data came from. */
 export async function fetchOctoCounts(
@@ -64,10 +88,15 @@ export async function fetchOctoCounts(
   signal?: AbortSignal,
 ): Promise<SourceCounts> {
   const path = blocksPath(source, windowId, filters);
-  const body = z
-    .object({ rows: z.array(blockRow), truncated: z.boolean().optional() })
-    .parse(await getJson(path, signal));
+  const payload = await getJson(path, signal);
   const out = emptyCounts(source.id, [{ label: `${source.label} (Octo)`, query: `${API_BASE}${path}` }]);
+  if (isBlockKeyed(source.id)) {
+    const keyed = z.object({ rows: z.array(taxBlockRow), truncated: z.boolean().optional() }).parse(payload);
+    out.truncated = Boolean(keyed.truncated);
+    addTaxBlocks(out, keyed.rows);
+    return out;
+  }
+  const body = z.object({ rows: z.array(blockRow), truncated: z.boolean().optional() }).parse(payload);
   out.truncated = Boolean(body.truncated);
   for (const row of body.rows) addCell(out, index, row.r, row.c, row.n);
   return out;

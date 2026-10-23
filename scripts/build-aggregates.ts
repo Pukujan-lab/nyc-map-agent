@@ -13,7 +13,7 @@
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { blockJoin, type BlockPoint } from "./block-join";
+import { blockJoin, publishedBlocksFile, type BlockPoint } from "./block-join";
 import { octoQuery } from "../api/_lib/octo";
 import { parseNtaBoundaries } from "../src/lib/api/nta";
 import { NOISE_FIELDS } from "../src/lib/api/noise";
@@ -76,22 +76,6 @@ function toPoint(dataset: DatasetId, r: Record<string, string>): BlockPoint {
   };
 }
 
-/** nyc-blocks.geojson: BLOCKS_GEOJSON if set, else the copy published through Octo files. */
-async function blocksFile(dir: string): Promise<string> {
-  if (process.env.BLOCKS_GEOJSON) return process.env.BLOCKS_GEOJSON;
-  const { rows } = await octoQuery<{ parts: unknown }>("SELECT parts FROM core.published_assets WHERE name = 'nyc-blocks.geojson'");
-  if (!rows[0]) throw new Error("nyc-blocks.geojson is not published: run pnpm build:block-tiles && pnpm publish:block-tiles.");
-  const parts = (typeof rows[0].parts === "string" ? JSON.parse(rows[0].parts) : rows[0].parts) as Array<{ url: string }>;
-  const chunks = await Promise.all(parts.map(async (p) => {
-    const res = await fetch(p.url);
-    if (!res.ok) throw new Error(`blocks download ${res.status}`);
-    return Buffer.from(await res.arrayBuffer());
-  }));
-  const file = join(dir, "nyc-blocks.geojson");
-  writeFileSync(file, Buffer.concat(chunks));
-  return file;
-}
-
 async function writeBlockStats(dataset: DatasetId, windowId: WindowId, cells: AggregateResult["blocks"]) {
   await octoQuery("DELETE FROM marts.block_stats WHERE dataset = $1 AND window_id = $2", [dataset, windowId]);
   for (let i = 0; i < cells.length; i += 2000) {
@@ -132,7 +116,7 @@ async function main() {
       geometry: typeof r.geometry === "string" ? JSON.parse(r.geometry) : r.geometry,
     })),
   }));
-  const blocks = await blockJoin(await blocksFile(dir), ntaFile);
+  const blocks = await blockJoin(await publishedBlocksFile(dir), ntaFile);
   for (const [dataset, windowId] of JOBS) {
     const t0 = Date.now();
     const bounds = windowBounds(windowId);
