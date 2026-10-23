@@ -6,6 +6,10 @@ describe("map options", () => {
     expect(readOptions({ getItem: () => null })).toEqual(DEFAULT_OPTIONS);
     expect(readOptions({ getItem: () => JSON.stringify({ streets: "full", routes: ["L", 3] }) })).toMatchObject({ streets: "full", routes: ["L"] });
   });
+  it("hides roads only when that choice is saved", () => {
+    expect(readOptions({ getItem: () => null }).roads).toBe(true);
+    expect(readOptions({ getItem: () => JSON.stringify({ roads: false }) }).roads).toBe(false);
+  });
   it("keeps 3D buildings only when chosen", () => {
     expect(readOptions({ getItem: () => JSON.stringify({ buildings: "3d" }) }).buildings).toBe("3d");
     expect(readOptions({ getItem: () => JSON.stringify({ buildings: true }) }).buildings).toBe("flat");

@@ -17,4 +17,15 @@ describe("readable transit basemap", () => {
     expect(readableChange({ id: "road_one_way_arrow", type: "symbol" })).toEqual({ visibility: "none" });
     expect(readableChange({ id: "highway-name-major", type: "symbol" })?.textColor).toBeTruthy();
   });
+  it("hides the road paint and the road names, and leaves the rail", () => {
+    for (const id of ["road_minor", "bridge_street", "tunnel_motorway"]) {
+      expect(readableChange({ id, type: "line", "source-layer": t }, "off")).toEqual({ visibility: "none" });
+    }
+    expect(readableChange({ id: "road_area_pattern", type: "fill", "source-layer": t }, "off")).toEqual({ visibility: "none" });
+    expect(readableChange({ id: "highway-name-major", type: "symbol" }, "off")).toEqual({ visibility: "none" });
+    expect(readableChange({ id: "highway-shield-us-interstate", type: "symbol" }, "off")).toEqual({ visibility: "none" });
+    expect(readableChange({ id: "road_major_rail", type: "line", "source-layer": t }, "off")).toBeNull();
+    expect(readableChange({ id: "road_transit_rail_hatching", type: "line", "source-layer": t }, "off")).toBeNull();
+    expect(readableChange({ id: "water", type: "fill" }, "off")).toBeNull();
+  });
 });

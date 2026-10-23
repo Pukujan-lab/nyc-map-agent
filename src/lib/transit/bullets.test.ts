@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bulletFace, bulletId, busBadgeId, busPrefix } from "./bullets";
+import { bulletFace, bulletId, busBadgeId, BUS_ICON_STOPS, busPrefix } from "./bullets";
 
 describe("route bullets", () => {
   it("label locals, expresses and shuttles", () => {
@@ -30,5 +30,10 @@ describe("bus badges", () => {
   it("encodes text, colour and alert in the image id", () => {
     expect(busBadgeId("M42", "#5F6B7A", true)).toBe("busbadge|M42|5F6B7A|1");
     expect(busBadgeId("M", "#5F6B7A")).toBe("busbadge|M|5F6B7A|0");
+  });
+  it("draws a borough badge about as large as a subway bullet", () => {
+    expect(BUS_ICON_STOPS.prefix[1]).toBeGreaterThanOrEqual(0.55);
+    expect(BUS_ICON_STOPS.prefix[3]).toBeGreaterThanOrEqual(0.9);
+    expect(BUS_ICON_STOPS.selected[1]).toBeGreaterThanOrEqual(0.9);
   });
 });

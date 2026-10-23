@@ -476,9 +476,10 @@ export function MapView({
     const map = mapRef.current?.getMap();
     if (!map || !ready) return;
     applyMapTheme(map, t);
-    applyReadable(map, opts.streets === "simple" || transitFocus, { street: t.street, major: t.major, label: t.label_ });
+    const streetLook = opts.roads ? (opts.streets === "simple" || transitFocus ? "simple" : "full") : "off";
+    applyReadable(map, streetLook, { street: t.street, major: t.major, label: t.label_ });
     for (const l of map.getStyle()?.layers ?? []) {
-      if (/^highway-name-major$/.test(l.id)) map.setLayoutProperty(l.id, "visibility", opts.streetNames ? "visible" : "none");
+      if (/^highway-name-major$/.test(l.id)) map.setLayoutProperty(l.id, "visibility", opts.roads && opts.streetNames ? "visible" : "none");
       // Transit-first open: neighbourhood / quarter names only with the analytics on.
       if (l.id === "label_other") map.setLayoutProperty(l.id, "visibility", analytics ? "visible" : "none");
       // Bus stop icons only from zoom 15, where a stop is a place you can walk to.
