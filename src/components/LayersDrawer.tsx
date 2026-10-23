@@ -7,6 +7,7 @@ import { NtaIndex } from "@/lib/geo/ntaIndex";
 import { sharedCoords, startSharing, stopSharing, useSharedLocation } from "@/lib/geo/sharedLocation";
 import { getMapInstance, onMapInstance } from "@/lib/map/mapInstance";
 import { clearSavedPlace, saveSavedPlace, useSavedPlaces } from "@/lib/map/savedPlaces";
+import { spotAt, spotPillLabel } from "@/lib/map/savedSpot";
 import { SUBWAY_ROUTES, setOptions, useMapOptions } from "@/lib/map/mapOptions";
 import { PLACE_CATEGORIES, setPlaces, usePlaces } from "@/lib/map/places";
 import { setTransitFocusOff } from "@/lib/map/transitFocus";
@@ -196,17 +197,14 @@ export function LayersDrawer({
           <div className="flex flex-wrap gap-[var(--sp-2)]">
             {(["home", "work"] as const).flatMap((kind) => {
               const spot = saved[kind];
-              const title = kind === "home" ? "Home" : "Work";
               const here = () => {
                 const c = getMapInstance()?.getCenter();
-                if (!c) return;
-                const label = hood && hood !== "New York" ? hood : title;
-                saveSavedPlace(kind, { label, lon: c.lng, lat: c.lat });
+                if (c) saveSavedPlace(kind, spotAt(kind, c.lng, c.lat, hood));
               };
               return [
-                spot ? <Pill key={`${kind}-go`} on onClick={() => flyTo({ lon: spot.lon, lat: spot.lat, zoom: 16 })}>{spot.label === title ? title : `${title} · ${spot.label}`}</Pill> : null,
+                spot ? <Pill key={`${kind}-go`} on onClick={() => flyTo({ lon: spot.lon, lat: spot.lat, zoom: 16 })}>{spotPillLabel(kind, spot)}</Pill> : null,
                 <Pill key={`${kind}-save`} onClick={here}>{spot ? `Move ${kind} here` : `Save ${kind} here`}</Pill>,
-                shared.status === "on" ? <Pill key={`${kind}-gps`} onClick={() => { const c = sharedCoords(); if (c) saveSavedPlace(kind, { label: "My location", lon: c.lon, lat: c.lat }); }}>Save {kind} as my location</Pill> : null,
+                shared.status === "on" ? <Pill key={`${kind}-gps`} onClick={() => { const c = sharedCoords(); if (c) saveSavedPlace(kind, spotAt(kind, c.lon, c.lat, "My location")); }}>Save {kind} as my location</Pill> : null,
                 spot ? <Pill key={`${kind}-clear`} onClick={() => clearSavedPlace(kind)}>Clear {kind}</Pill> : null,
               ];
             })}

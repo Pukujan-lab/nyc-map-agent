@@ -19,3 +19,15 @@ export function asSavedSpot(raw: unknown): SavedSpot | null {
   if (r.lon < SAVED_LON_MIN || r.lon > SAVED_LON_MAX || r.lat < SAVED_LAT_MIN || r.lat > SAVED_LAT_MAX) return null;
   return { label, lon: r.lon, lat: r.lat };
 }
+
+const TITLE = { home: "Home", work: "Work" } as const;
+
+/** The spot the "Save here" buttons store: the neighbourhood name when known, else Home or Work. */
+export function spotAt(kind: "home" | "work", lon: number, lat: number, hood?: string | null): SavedSpot {
+  return { label: hood && hood !== "New York" ? hood : TITLE[kind], lon, lat };
+}
+
+/** The pill text for a saved spot: "Home" or "Home · Astoria". */
+export function spotPillLabel(kind: "home" | "work", spot: SavedSpot): string {
+  return spot.label === TITLE[kind] ? TITLE[kind] : `${TITLE[kind]} · ${spot.label}`;
+}
