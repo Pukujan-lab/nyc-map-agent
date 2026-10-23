@@ -27,7 +27,7 @@ import { useFlag } from "@/lib/flags";
 import { usePanel, usePanelChip, usePanelMode, usePanelSearch, type SearchProvider } from "@/lib/store/PanelContext";
 import { followRig, rememberFollowOrigin, setFollowMode, setFollowed, stableHeading, takeFollowRestore, useFollowMode, useFollowed } from "./follow";
 import { publishSubway } from "@/lib/agent/streetContext";
-import { busesToShow, holdShuttle, registerBusToggle, setShuttleBuses, shownVehicles, useBusPins } from "@/lib/transit/busReveal";
+import { busesToShow, capPerLine, holdShuttle, registerBusToggle, setShuttleBuses, shownVehicles, useBusPins } from "@/lib/transit/busReveal";
 import { publishLiveDots } from "@/lib/transit/liveVehicles";
 import { setLinesControl } from "@/lib/transit/linesControl";
 import { XRAY_VEIL_M, setStreetXray, useStreetXray, xrayForFollow, xrayVeilDisc } from "@/lib/transit/streetXray";
@@ -141,18 +141,19 @@ export default function TransitLayer() {
   useEffect(() => {
     if (import.meta.env.DEV) (window as unknown as { __walk?: unknown }).__walk = startWalk;
   }, [startWalk]);
-  const { on, set, panelOpen, setPanelOpen, busPage } = useTransitToggles();
+  const { on, set, panelOpen, setPanelOpen, busPage, busLines: pickedLines, busCap } = useTransitToggles();
   const { content, showPanel, setDrawerOpen, drawerOpen } = usePanel();
   const meta = useTransitMeta();
   const rail = (["subway", "lirr", "mnr"] as SystemId[]).filter((s) => on.has(s));
   const alertFocus = useAlertFocus();
   const pins = useBusPins();
   const busLines = useBusLines(Boolean(busPage) || drawerOpen);
+  const lineList = useMemo(() => (pickedLines.length ? pickedLines : routesForPage(busLines.data?.groups, busPage)), [pickedLines, busLines.data, busPage]);
   // `on` is a new Set every render. The boolean and the pin snapshot are what actually change.
   const busWanted = on.has("bus");
   const show = useMemo(
-    () => (busWanted ? busesToShow(routesForPage(busLines.data?.groups, busPage), pins) : BUS_OFF),
-    [busWanted, busPage, busLines.data, pins],
+    () => (busWanted ? busesToShow(lineList, pins) : BUS_OFF),
+    [busWanted, lineList, pins],
   );
   const busOn = meta.data?.bus === true && show.routes.length > 0;
   // The draw loop reads this, so a stale timer cannot keep a bus after Live buses turns off.
@@ -179,10 +180,16 @@ export default function TransitLayer() {
   useEffect(() => {
     for (const g of busShapes) busEst.current.setRoute(g);
     const allow = new Set(show.routes.map((r) => r.toUpperCase()));
-    const list = (buses.data?.buses ?? []).filter((b) => allow.has(b.route.toUpperCase()));
+    const inRoutes = (buses.data?.buses ?? []).filter((b) => allow.has(b.route.toUpperCase()));
+    // Buses per line: the nearest to the map, plus the one being followed so Follow never loses its bus.
+    const c = map?.getCenter();
+    const kept = new Set(capPerLine(inRoutes, busCap, c ? { lon: c.lng, lat: c.lat } : null).map((b) => b.id));
+    const list = inRoutes.filter((b) => kept.has(b.id) || `bus:${b.id}` === followedKey);
     for (const b of list) busEst.current.report(b);
     busEst.current.retain(new Set(list.map((b) => b.id)));
-  }, [buses.data, busShapes, show.routes]);
+    // The map is read once per refresh, not on every move: re-running on `map` would reshuffle buses as you pan.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buses.data, busShapes, show.routes, busCap]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
 
   const openStation = useCallback(
