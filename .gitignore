@@ -5,6 +5,7 @@ node_modules/
 .dyad/
 public/tiles/nyc-city.pmtiles
 public/tiles/nyc-blocks.*
+public/tiles/3d/
 .size-build/
 .e2e-build/
 playwright-report/
