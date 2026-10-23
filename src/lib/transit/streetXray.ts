@@ -27,6 +27,17 @@ export function xrayVeilDisc(lon: number, lat: number, radiusM = XRAY_VEIL_M): G
 }
 let on = false;
 const subs = new Set<() => void>();
+
+/**
+ * X-ray follows the train you boarded. Underground turns it on, open track
+ * turns it off, and stepping off (Stop following, drag, or Esc) turns it off.
+ * Null leaves a manual choice alone, which is the case when nobody is riding.
+ */
+export function xrayForFollow(wasFollowing: boolean, following: boolean, underground: boolean | null): boolean | null {
+  if (!following) return wasFollowing ? false : null;
+  return underground;
+}
+
 export function setStreetXray(value: boolean) {
   if (on === value) return;
   on = value;

@@ -204,6 +204,9 @@ export const STRUCTURES: Structure[] = [
   { id: "williamsburg-bridge", kind: "bridge", deck: 38, routes: ["J", "M", "Z"], line: [[-73.9807, 40.7166], [-73.9712, 40.7135], [-73.9617, 40.7104]] },
   // 1 train's Manhattan Valley Viaduct over 125 St, ~16 m.
   { id: "manhattan-valley-viaduct", kind: "viaduct", deck: 16, routes: ["1"], line: [[-73.9620, 40.8105], [-73.9585, 40.8158], [-73.9561, 40.8205]] },
+  // M train on the Myrtle Avenue viaduct. The open-air match calls the Middle
+  // Village terminal street level, so the first 650 m sat on the pavement.
+  { id: "myrtle-viaduct", kind: "viaduct", deck: VIADUCT_TOP, routes: ["M"], line: [[-73.8896, 40.7114], [-73.8900, 40.7103], [-73.8906, 40.7091], [-73.8915, 40.7081], [-73.8924, 40.7073], [-73.8937, 40.7067], [-73.8953, 40.7063]] },
 ];
 
 function metresToSegment(p: [number, number], a: [number, number], b: [number, number]): number {

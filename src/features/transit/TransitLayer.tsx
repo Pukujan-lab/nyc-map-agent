@@ -29,7 +29,7 @@ import { publishSubway } from "@/lib/agent/streetContext";
 import { busesToShow, holdShuttle, registerBusToggle, setShuttleBuses, useBusPins } from "@/lib/transit/busReveal";
 import { publishLiveDots } from "@/lib/transit/liveVehicles";
 import { setLinesControl } from "@/lib/transit/linesControl";
-import { XRAY_VEIL_M, setStreetXray, useStreetXray, xrayVeilDisc } from "@/lib/transit/streetXray";
+import { XRAY_VEIL_M, setStreetXray, useStreetXray, xrayForFollow, xrayVeilDisc } from "@/lib/transit/streetXray";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 
 const stopFollow = () => setFollowed(null);
@@ -630,9 +630,14 @@ export default function TransitLayer() {
   const followMode = useFollowMode();
   const followed = followedKey ? vehicles.find((v) => v.key === followedKey) : undefined;
   const following = Boolean(followedKey);
-  // Riding an underground train: X-ray turns on by itself so the train you boarded stays in view.
-  const followedUnder = followed?.grade === "underground";
-  useEffect(() => { if (followedUnder) setStreetXray(true); }, [followedUnder]);
+  // X-ray matches the track under the train you boarded, and turns off when you step off.
+  const followedUnder = followed ? followed.grade === "underground" : null;
+  const wasFollowing = useRef(false);
+  useEffect(() => {
+    const next = xrayForFollow(wasFollowing.current, Boolean(followedKey), followedUnder);
+    wasFollowing.current = Boolean(followedKey);
+    if (next !== null) setStreetXray(next);
+  }, [followedKey, followedUnder]);
   // Following needs the 3D scene: leave street level (one scene, the camera just moves) and tilt.
   useEffect(() => {
     if (!following) return;
