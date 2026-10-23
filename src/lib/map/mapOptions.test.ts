@@ -14,6 +14,10 @@ describe("map options", () => {
     expect(readOptions({ getItem: () => null }).busStops).toBe(true);
     expect(readOptions({ getItem: () => JSON.stringify({ busStops: false }) }).busStops).toBe(false);
   });
+  it("hides landmarks only when that choice is saved", () => {
+    expect(readOptions({ getItem: () => null }).landmarks).toBe(true);
+    expect(readOptions({ getItem: () => JSON.stringify({ landmarks: false }) }).landmarks).toBe(false);
+  });
   it("keeps 3D buildings only when chosen", () => {
     expect(readOptions({ getItem: () => JSON.stringify({ buildings: "3d" }) }).buildings).toBe("3d");
     expect(readOptions({ getItem: () => JSON.stringify({ buildings: true }) }).buildings).toBe("flat");

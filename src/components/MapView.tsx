@@ -12,6 +12,9 @@ import { MapCompass } from "./MapCompass";
 import { ViewSwitcher } from "./ViewSwitcher";
 import { applyReadable } from "@/lib/map/readable";
 import { busStopIconOpacity, busStopTextOpacity } from "@/lib/map/busStops";
+import { LandmarkSheet } from "@/components/LandmarkSheet";
+import { cityLandmarkById, type CityLandmark } from "@/lib/map/cityLandmarks";
+import { LANDMARK_LABEL, LANDMARK_LAYER, syncLandmarks } from "@/lib/map/landmarkLayer";
 import { applyPlaces, placesStale, usePlaces, withQuickPlaces } from "@/lib/map/places";
 import { useMapOptions } from "@/lib/map/mapOptions";
 import { applyBuildings, wantsFlatBuildings } from "@/lib/map/buildings";
@@ -253,7 +256,7 @@ export function MapView({
   const [corner, setCorner] = useState<string | null>(null);
   /** "Grand Street & Essex Street": street underfoot and nearest cross street, throttled. */
   const [streetHere, setStreetHere] = useState<string | null>(null);
-  const { showPanel, emptyMapTap, content: panelContent, minimized: panelMinimized, drawerOpen } = usePanel();
+  const { showPanel, setSnap, emptyMapTap, content: panelContent, minimized: panelMinimized, drawerOpen } = usePanel();
   // The hover card is a mouse affordance; on touch / narrow screens the sheet
   // already shows the same numbers.
   const canHover = useMediaQuery("(hover: hover) and (pointer: fine) and (min-width: 1024px)");
@@ -504,6 +507,14 @@ export function MapView({
     };
   }, [ready, styleEpoch, transitFocus, places, businesses, health, parksPlaces, citibike, opts, t, flatBuildings, analytics]);
 
+  // Citywide landmark dots. A style reload drops custom sources, so this
+  // re-adds them whenever the basemap epoch or the Landmarks switch changes.
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map || !ready) return;
+    return syncLandmarks(map, opts.landmarks);
+  }, [ready, styleEpoch, opts.landmarks]);
+
   const handleLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
     if (!map) return;
@@ -692,12 +703,34 @@ export function MapView({
       }
       // Other feature layers (events, parking…) open their own panel.
       if (hitsAny(FEATURES.filter((f) => f.id !== "transit").flatMap((f) => f.clickLayers ?? []))) return;
+      const openLandmark = (mark: CityLandmark) => {
+        showPanel({
+          id: `landmark:${mark.id}`,
+          title: mark.name,
+          subtitle: `${mark.borough} · Landmark`,
+          details: <LandmarkSheet mark={mark} />,
+        });
+        setSnap("half");
+      };
+      // Landmark dots sit under a train tap and above an empty-map tap, in
+      // every camera, so a named building still says where you are.
+      if (opts.landmarks && clicked && hitsAny([LANDMARK_LAYER, LANDMARK_LABEL])) {
+        const live = [LANDMARK_LAYER, LANDMARK_LABEL].filter((id) => clicked.getLayer(id));
+        const feat = clicked.queryRenderedFeatures([event.point.x, event.point.y], { layers: live })[0];
+        const mark = feat ? cityLandmarkById(String(feat.properties?.id ?? "")) : undefined;
+        if (mark) {
+          openLandmark(mark);
+          return;
+        }
+      }
       // Eye level: cast the camera ray through the tap and open whatever it
       // hits first (landmark model, storefront, building), like overhead.
       if (walking) {
         const hit = eyePick(event.target, event.point.x, event.point.y);
         if (hit?.kind === "landmark") {
-          showPanel({ id: `landmark:${hit.landmark.id}`, title: hit.landmark.name, subtitle: "Landmark" });
+          const mark = cityLandmarkById(hit.landmark.id);
+          if (mark) openLandmark(mark);
+          else showPanel({ id: `landmark:${hit.landmark.id}`, title: hit.landmark.name, subtitle: "Landmark" });
           return;
         }
         if (hit?.kind === "building") {
@@ -741,7 +774,7 @@ export function MapView({
         selectNta(picked.datum.ntaCode);
       }
     },
-    [pickAt, selectBlock, selectNta, routePicking, setRoutePoint, showPanel, emptyMapTap, city3d, walking, analytics],
+    [pickAt, selectBlock, selectNta, routePicking, setRoutePoint, showPanel, setSnap, emptyMapTap, city3d, walking, analytics, opts.landmarks],
   );
 
   const handleMoveEnd = useCallback(() => {

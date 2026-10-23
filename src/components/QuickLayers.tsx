@@ -31,6 +31,7 @@ export function QuickLayers() {
     ["Transit Focus", focus, setFocus],
     ["Roads", opts.roads, (v) => setOptions({ roads: v })],
     ["Bus stops", opts.busStops, (v) => setOptions({ busStops: v })],
+    ["Landmarks", opts.landmarks, (v) => setOptions({ landmarks: v })],
     useRow("xray", "X-ray"),
     ["Restrooms", restrooms, setRestrooms],
     t("events", "Events"),
