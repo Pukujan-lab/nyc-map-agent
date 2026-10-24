@@ -959,7 +959,9 @@ export default function TransitLayer() {
   const underAlpha = (lineSel ? ["case", ["in", ["get", "route"], ["literal", isoRoutes]], 0.95, 0.08] : 0.45) as number;
   // The selected line's trains read larger than the dimmed rest.
   const bulletScale = (lineSel ? ["case", ["in", ["get", "route"], ["literal", isoRoutes]], 1.3, 1] : 1) as unknown;
-  const onLine = (lineSel ? ["all", ["==", ["get", "system"], "subway"], ["in", ` ${lineSel} `, ["concat", " ", ["get", "routes"], " "]]] : ["==", 1, 0]) as never;
+  // No line picked: match nothing. A legacy ["==", 1, 0] filter is a style error, and one
+  // during load made MapView swap the whole basemap to the raster fallback.
+  const onLine = (lineSel ? ["all", ["==", ["get", "system"], "subway"], ["in", ` ${lineSel} `, ["concat", " ", ["get", "routes"], " "]]] : ["boolean", false]) as never;
   // An open notice names its skipped stations itself (transit-alert-skipped): the line's own label skips them, so each name shows once.
   const namedByAlert = (alertGeo?.skipped ?? []).map((x) => String(x.id));
   const lineStopName = (namedByAlert.length ? ["all", onLine, ["!", ["in", ["to-string", ["get", "id"]], ["literal", namedByAlert]]]] : onLine) as never;
