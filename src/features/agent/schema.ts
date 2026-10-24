@@ -156,14 +156,37 @@ export type MapAction = z.infer<typeof mapAction>;
 export const MAX_ACTIONS = 6;
 
 /**
+ * Where an answer's data came from and how old it is (#375). Built by the
+ * server from the feeds its tools read, never by the model.
+ */
+export const dataSource = z.object({
+  id: z.string().max(40),
+  label: z.string().max(80),
+  /** ISO time the data describes (feed timestamp or dataset update); null when the source gives none. */
+  asOf: z.string().nullable(),
+  url: z.string().url().optional(),
+  /** Older than this source's threshold (live transit 2 min, daily datasets 3 days). */
+  stale: z.boolean().default(false),
+  /** A limit worth showing, e.g. "Crash data runs weeks to months behind." */
+  note: z.string().max(120).optional(),
+});
+export type DataSource = z.infer<typeof dataSource>;
+
+/**
  * One NDJSON line streamed by POST /api/agent. Clients drop lines they cannot
- * parse, so an older client simply ignores the newer "actions" line.
+ * parse, so an older client simply ignores the newer "actions" and "sources" lines.
  */
 export const streamEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("text"), text: z.string() }),
   z.object({ type: z.literal("tool"), name: z.string() }),
   z.object({ type: z.literal("command"), command }),
   z.object({ type: z.literal("actions"), actions: z.array(mapAction).max(MAX_ACTIONS) }),
+  z.object({
+    type: z.literal("sources"),
+    sources: z.array(dataSource).max(12),
+    /** Figures the reply stated although no data tool returned anything (the server's "no guessing" check). */
+    unverified: z.array(z.string().max(20)).max(10).default([]),
+  }),
   z.object({
     type: z.literal("done"),
     model: z.string(),
