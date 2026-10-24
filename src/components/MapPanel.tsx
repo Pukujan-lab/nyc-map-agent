@@ -12,11 +12,11 @@ import { PanelSearch, type PanelSearchHandle } from "./PanelSearch";
 import { FEATURES } from "@/features";
 import { LayersDrawer } from "./LayersDrawer";
 
-/** Mobile snap points: peek shows the summary only. */
-/** One row (title + number) plus the grab handle. */
-const PEEK = "92px";
-const SNAPS: Array<string | number> = [PEEK, 0.5, 1];
-const SNAP_BY_NAME: Record<SheetSnap, string | number> = { peek: PEEK, half: 0.5, full: 1 };
+/**
+ * Mobile peek snap: one row (title + number) plus the grab handle, raised by the
+ * home chat bar's height so the bar does not hide it.
+ */
+const peekAbove = (chatBar: number) => `${92 + chatBar}px`;
 const nameOf = (point: string | number | null): SheetSnap =>
   point === 1 ? "full" : point === 0.5 ? "half" : "peek";
 
@@ -138,6 +138,8 @@ export function MapPanel({
   if (walkStart.walking !== walking) setWalkStart({ walking, selection });
   const pickedAtStreet = selection !== walkStart.selection && !!(selectedNtaCode || selectedBlockKey);
   const panelHidden = walking && !content && !pickedAtStreet;
+  const chatBar = typeof document === "undefined" ? 0 : parseInt(getComputedStyle(document.documentElement).getPropertyValue("--chat-bar-h"), 10) || 0;
+  const peek = peekAbove(chatBar);
   const showSheet = !!(content || place) && !panelHidden && !layersOpen && !minimized;
   // The view controls sit in the map beside the desktop sheet or layers drawer,
   // and step out of the way when the phone sheet is half or full.
@@ -242,8 +244,8 @@ export function MapPanel({
         open
         modal={false}
         dismissible={false}
-        snapPoints={SNAPS}
-        activeSnapPoint={SNAP_BY_NAME[snap]}
+        snapPoints={[peek, 0.5, 1]}
+        activeSnapPoint={snap === "peek" ? peek : snap === "half" ? 0.5 : 1}
         setActiveSnapPoint={(point) => setSnap(nameOf(point))}
       >
         <Drawer.Portal>
