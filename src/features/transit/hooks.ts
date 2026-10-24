@@ -233,6 +233,17 @@ export function useBusTrip(vehicle: string | undefined) {
 }
 export type BusStopInfo = { id: string; name: string; lat: number; lon: number; dir: string; routes: string[] };
 export type BusArrival = { route: string; destination: string; eta: number | null; away: string };
+/** The routes serving the most of these stops, busiest first, at most `max`. Pure, for tests. */
+export function routesFromStops(stops: Pick<BusStopInfo, "routes">[], max = 6): string[] {
+  const count = new Map<string, number>();
+  for (const s of stops) for (const r of new Set(s.routes)) count.set(r, (count.get(r) ?? 0) + 1);
+  return [...count.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, max).map(([r]) => r);
+}
+/** Bus routes near a point, for the Live buses switch: no picking a line first. */
+export async function fetchBusRoutesNear(point: { lon: number; lat: number }, max = 6): Promise<string[]> {
+  const { stops } = await getJson<{ stops: BusStopInfo[] }>(`${API_BASE}/api/transit/bus-stops?${new URLSearchParams({ lat: String(point.lat), lon: String(point.lon) })}`);
+  return routesFromStops(stops ?? [], max);
+}
 /** Stops around a tapped point with the routes serving each (grid-cached on the server). */
 export function useBusStopsNear(point: { lon: number; lat: number } | undefined) {
   return useQuery({
