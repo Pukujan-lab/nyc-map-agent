@@ -11,6 +11,8 @@ export type ShareStatus = "off" | "asking" | "on" | "denied" | "unavailable";
 export interface SharedLocation {
   status: ShareStatus;
   coords: { lon: number; lat: number } | null;
+  /** The browser's accuracy radius for `coords`, in metres (a sudden jump hints at a station or tunnel). */
+  accuracy?: number | null;
 }
 
 type Geo = Pick<Geolocation, "watchPosition" | "clearWatch">;
@@ -41,7 +43,7 @@ export function startSharing(g: Geo | null = geo()): Promise<SharedLocation["coo
       (p) => {
         if (watchId === null) return;
         const coords = { lon: p.coords.longitude, lat: p.coords.latitude };
-        set({ status: "on", coords });
+        set({ status: "on", coords, accuracy: Number.isFinite(p.coords.accuracy) ? p.coords.accuracy : null });
         if (first) { first = false; resolve(coords); }
       },
       () => {
