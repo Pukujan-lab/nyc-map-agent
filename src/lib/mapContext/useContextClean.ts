@@ -5,6 +5,7 @@ import { getMapInstance, onMapInstance } from "@/lib/map/mapInstance";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { usePanel } from "@/lib/store/PanelContext";
 import { useFollowed } from "@/lib/transit/follow";
+import { useSelectedLine } from "@/lib/transit/selectedLine";
 import { ContextOverrides, layersOf, planOps } from "./apply";
 import { pickContext, setMapContext, useMapContextState, type MapContext } from "./context";
 
@@ -29,6 +30,7 @@ function useContextAdapters(enabled: boolean): void {
   const { walking, chatOpen } = useMapState();
   const { content } = usePanel();
   const panelId = content?.id ?? null;
+  const selectedLine = useSelectedLine()?.route ?? null;
   const [route, setRoute] = useState<{ key: string; route: string } | null>(null);
 
   // The follow store knows only the vehicle key; its route is on the map. Look until it is drawn.
@@ -48,8 +50,8 @@ function useContextAdapters(enabled: boolean): void {
 
   const followedRoute = route && route.key === followedKey ? route.route : null;
   useEffect(() => {
-    setMapContext(enabled ? pickContext({ followedKey, followedRoute, walking, panelId, chatOpen }) : { kind: "browsing" });
-  }, [enabled, followedKey, followedRoute, walking, panelId, chatOpen]);
+    setMapContext(enabled ? pickContext({ followedKey, followedRoute, walking, panelId, chatOpen, selectedLine }) : { kind: "browsing" });
+  }, [enabled, followedKey, followedRoute, walking, panelId, chatOpen, selectedLine]);
 }
 
 const BROWSING: MapContext = { kind: "browsing" };

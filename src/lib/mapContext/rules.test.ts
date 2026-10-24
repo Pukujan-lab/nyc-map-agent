@@ -23,6 +23,11 @@ describe("pickContext", () => {
     expect(pickContext({ ...base, panelId: "transit:station:subway:A57" }).kind).toBe("browsing");
     expect(pickContext({ ...base, chatOpen: true }).kind).toBe("agent");
   });
+  it("shows a selected line like riding it, below an actual follow or trip", () => {
+    expect(pickContext({ ...base, selectedLine: "A", walking: true })).toEqual({ kind: "following", system: "subway", route: "A" });
+    expect(pickContext({ ...base, selectedLine: "A", followedKey: "subway:1_F..N", followedRoute: "F" })).toEqual(subwayF);
+    expect(pickContext({ ...base, selectedLine: "A", panelId: "agent:trip:1" }).kind).toBe("trip");
+  });
   it("keys a follow by its route, so a new line re-arms the clean map", () => {
     expect(contextKey(subwayF)).not.toBe(contextKey({ ...subwayF, route: "A" }));
   });
