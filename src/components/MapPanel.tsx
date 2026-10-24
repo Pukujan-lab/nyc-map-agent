@@ -1,5 +1,5 @@
 import { ArrowLeft } from "lucide-react";
-import { useFlags } from "@/lib/flags";
+import { useFlag, useFlags } from "@/lib/flags";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { peekChipLabel } from "@/lib/store/panelSlot";
 import { Drawer } from "vaul";
@@ -109,6 +109,8 @@ export function MapPanel({
   onOpenSources: () => void;
 }) {
   const { walking, selectedNtaCode, selectedBlockKey } = useMapState();
+  // Agent-first home (#370): the chat bar replaces search, so there is no top bar.
+  const home = useFlag("agentHome");
   const {
     content, closePanel, snap, setSnap, setCollapsed,
     drawerOpen: layersOpen, setDrawerOpen: setLayersOpen, toggleDrawer,
@@ -149,6 +151,13 @@ export function MapPanel({
       root.style.removeProperty("--controls-display");
     };
   }, [isDesktop, showSheet, layersOpen, snap]);
+  // No top bar: the sheet, the drawer and the status chip start at the top edge.
+  useLayoutEffect(() => {
+    if (!home) return;
+    const root = document.documentElement;
+    root.style.setProperty("--topbar-h", "0px");
+    return () => { root.style.removeProperty("--topbar-h"); };
+  }, [home]);
   if (panelHidden) return null;
 
   const body = content ? (
@@ -193,7 +202,7 @@ export function MapPanel({
   const drawer = (
     <LayersDrawer open={layersOpen} onOpenChange={setLayersOpen} isDesktop={isDesktop} hudActive={modeActive} boundaries={boundaries} onOpenControls={onOpenControls} onOpenSources={onOpenSources} />
   );
-  const top = <TopBar boundaries={boundaries} status={status} onLayers={toggleDrawer} />;
+  const top = home ? null : <TopBar boundaries={boundaries} status={status} onLayers={toggleDrawer} />;
   // The minimized sheet: one labelled chip that restores on tap.
   const peekLabel = content ? peekChipLabel(content.title, content.peek) : "Place";
   const chip = body && minimized && !layersOpen ? (
@@ -212,7 +221,7 @@ export function MapPanel({
   if (isDesktop) {
     return (
       <>
-        <div className="absolute left-[var(--edge)] top-[var(--edge)] z-40 w-[clamp(360px,46vw,720px)]">{top}</div>
+        {top ? <div className="absolute left-[var(--edge)] top-[var(--edge)] z-40 w-[clamp(360px,46vw,720px)]">{top}</div> : null}
         {drawer}
         {chip}
         {showSheet ? (
@@ -226,7 +235,7 @@ export function MapPanel({
 
   return (
     <>
-      <div className="absolute z-30" style={{ top: "calc(env(safe-area-inset-top) + var(--edge))", left: "max(var(--edge), env(safe-area-inset-left))", right: "max(var(--edge), env(safe-area-inset-right))" }}>{top}</div>
+      {top ? <div className="absolute z-30" style={{ top: "calc(env(safe-area-inset-top) + var(--edge))", left: "max(var(--edge), env(safe-area-inset-left))", right: "max(var(--edge), env(safe-area-inset-right))" }}>{top}</div> : null}
       {drawer}
       {chip}
       {showSheet ? <Drawer.Root
