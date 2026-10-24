@@ -340,6 +340,8 @@ export default function AgentOverlay() {
   // The reply button and the footer chip both share location, then ask the waiting question.
   const enableLocation = useCallback(async () => {
     const coords = await startSharing();
+    // Show where we found you at once; the answer takes a few seconds more.
+    if (coords) getMapInstance()?.flyTo({ center: [coords.lon, coords.lat], zoom: 16, duration: 900, offset: [0, window.innerWidth < 640 ? -Math.round(window.innerHeight * 0.3) : 0] });
     const q = pendingQuestion.current;
     if (!coords || !q) return;
     pendingQuestion.current = null;
@@ -379,10 +381,10 @@ export default function AgentOverlay() {
     const r = a.restroom;
     showPoints(m, [{ at: [r.lon, r.lat], name: formatStreetText(r.name) }], "#2563eb");
     const me = sharedCoords();
-    // On phones the answer sheet covers the lower ~60% and the quick bar the right edge.
+    // The answer covers the lower ~60% on phones and the left column on desktop; the quick bar the right edge.
     const phone = window.innerWidth < 640;
     const bottom = Math.round(window.innerHeight * (phone ? 0.62 : 0.2));
-    if (me) m.fitBounds([[Math.min(me.lon, r.lon), Math.min(me.lat, r.lat)], [Math.max(me.lon, r.lon), Math.max(me.lat, r.lat)]], { padding: { top: 110, bottom, left: 40, right: phone ? 84 : 48 }, maxZoom: 17, duration: 900 });
+    if (me) m.fitBounds([[Math.min(me.lon, r.lon), Math.min(me.lat, r.lat)], [Math.max(me.lon, r.lon), Math.max(me.lat, r.lat)]], { padding: { top: 110, bottom, left: phone ? 40 : Math.min(420, window.innerWidth * 0.44) + 48, right: phone ? 84 : 96 }, maxZoom: 17, duration: 900 });
     else m.flyTo({ center: [r.lon, r.lat], zoom: 16, duration: 900, offset: [0, -Math.round(bottom / 2)] });
   }, [lastActions, home]);
   // A trip planned between saved Home and Work becomes the daily card's usual line (kept on this device).

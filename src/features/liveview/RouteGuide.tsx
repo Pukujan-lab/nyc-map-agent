@@ -190,8 +190,16 @@ export default function RouteGuide() {
       map.off("dragstart", off);
     };
   }, [map, navigating, walking]);
+  // Tilt heading-up once when guidance starts; after that only keep you centred, so a
+  // view picked from Change view (Top, Aerial) is not undone by the next location fix.
+  const framed = useRef(false);
+  useEffect(() => { if (!navigating) framed.current = false; }, [navigating]);
   useEffect(() => {
+    // Street walk frames itself; leaving it for Top or Aerial is a view choice to keep.
+    if (walking) framed.current = true;
     if (!map || !navigating || walking || !fix || !centered) return;
+    if (framed.current) { map.easeTo({ center: [fix.lon, fix.lat], duration: 600 }); return; }
+    framed.current = true;
     map.easeTo({ center: [fix.lon, fix.lat], bearing: heading, pitch: 55, zoom: Math.max(map.getZoom(), 17), duration: 600 });
   }, [map, navigating, walking, fix, centered, heading]);
 

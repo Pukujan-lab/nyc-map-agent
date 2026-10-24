@@ -26,7 +26,7 @@ const CLASSIFY: [RegExp, LayerGroup][] = [
   [/^transit-(line|line-under|viaduct|pier)$/, "subwayLines"],
   [/^transit-(station|station-raised|station-label|access|entrance)$/, "stations"],
   [/^poi_transit$/, "stations"],
-  [/^transit-(bullet|bullet-notch|vehicle-2d|vehicle-hit)$/, "trains"],
+  [/^transit-(bullet|bullet-notch|train-dot|vehicle-2d|vehicle-hit)$/, "trains"],
   [/^transit-bus-route-/, "busRoute"],
   [/^transit-bus-/, "buses"],
   [/^transit-(work|work-line|skip|alert-affected|alert-reroute|alert-skipped)$/, "serviceChanges"],
