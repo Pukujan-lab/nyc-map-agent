@@ -67,7 +67,7 @@ export const AllQuery = z.object({
   dow: z.coerce.number().int().min(1).max(7).optional(),
   hour: z.coerce.number().int().min(0).max(23).optional(),
 });
-export const AllResponse = z.object({ dow: z.number().int(), hour: z.number().int(), routes: z.record(z.array(Segment)) });
+export const AllResponse = z.object({ dow: z.number().int(), hour: z.number().int(), routes: z.record(z.string(), z.array(Segment)) });
 export type AllSegmentsResponse = z.infer<typeof AllResponse>;
 
 export async function GET_ALL(request: Request): Promise<Response> {
