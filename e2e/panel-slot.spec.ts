@@ -110,8 +110,12 @@ test("an empty map tap closes a details sheet", async ({ page }) => {
   await expect(sheet(page)).toBeVisible();
   const bar = (await layers(page).boundingBox())!;
   const canvas = (await page.locator("canvas.maplibregl-canvas").first().boundingBox())!;
-  await page.mouse.click(canvas.x + 8, bar.y + bar.height + 24);
-  await expect(sheet(page)).toHaveCount(0);
+  // Opening the place flies the camera there, and a tap mid-flight only stops
+  // the flight: tap again until the map has settled and the tap lands.
+  await expect.poll(async () => {
+    await page.mouse.click(canvas.x + 8, bar.y + bar.height + 24);
+    return sheet(page).count();
+  }, { timeout: 10_000 }).toBe(0);
 });
 
 test("Esc and Back close the top panel first", async ({ page }) => {
