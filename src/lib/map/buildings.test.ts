@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hiddenWhenFlat, isFootprint, wantsFlatBuildings } from "./buildings";
+import { cityDetail, hiddenWhenFlat, isFootprint, mapLevel, wantsFlatBuildings } from "./buildings";
 
 describe("calm buildings", () => {
   it("hides extruded basemap buildings and block shading when flat", () => {
@@ -24,5 +24,21 @@ describe("building contrast (#2)", () => {
       expect(contrastRatio(p.land, p.building)).toBeGreaterThanOrEqual(1.15);
       expect(contrastRatio(p.land, buildingEdge(p))).toBeGreaterThanOrEqual(1.6);
     }
+  });
+});
+
+describe("Top view is flat 2D (#364)", () => {
+  it("names the level from walking and tilt", () => {
+    expect(mapLevel(false, false)).toBe("top");
+    expect(mapLevel(false, true)).toBe("tilted");
+    expect(mapLevel(true, false)).toBe("street");
+    expect(mapLevel(true, true)).toBe("street");
+  });
+  it("draws no extrusion, skyline or textured city from straight above, even with 3D buildings", () => {
+    expect(cityDetail({ level: "top", flat: false, eco: false, city3d: true })).toEqual({ extrude: false, skyline: false, textured: false });
+  });
+  it("brings 3D back when tilted or walking", () => {
+    expect(cityDetail({ level: "tilted", flat: false, eco: false, city3d: false })).toEqual({ extrude: true, skyline: true, textured: false });
+    expect(cityDetail({ level: "street", flat: false, eco: false, city3d: true })).toEqual({ extrude: true, skyline: true, textured: true });
   });
 });
