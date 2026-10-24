@@ -40,6 +40,7 @@ Virtual travel through NYC to find businesses and food and where they are, espec
 - **Top view is a flat 2D map.** 3D belongs to tilted and street-level views.
 - **Fast and cheap to run.** Few backend calls; the server syncs upstream feeds, clients read from our server.
 - **Always answer.** The agent has fallback models, rate limits against abuse, and tells you (and says aloud) when something is slow.
+- **Remembers you, on your terms.** The app learns your daily pattern and the agent remembers earlier conversations, kept on your phone by default. The agent receives only short summaries a question needs, never full history or exact coordinates. A "What we remember" screen lets people see, pause or delete each kind of memory, or delete everything, and links to the plain-language data policy (`docs/PRIVACY.md`, draft in #384).
 - **Never make up numbers.** Every figure comes from a data query, and the app shows each dataset's limits (311 counts are what people reported; crash data runs months behind).
 
 ## Where to read next
