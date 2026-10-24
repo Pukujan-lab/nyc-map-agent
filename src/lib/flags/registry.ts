@@ -38,6 +38,7 @@ export const FLAGS = {
   blockDensity: { tier: "basic", default: true, label: "Shade blocks per hectare" },
   daylight: { tier: "basic", default: true, label: "Time-of-day lighting" },
   weather: { tier: "basic", default: true, label: "Live weather" },
+  streetWeather: { tier: "basic", default: false, label: "Street weather: rain or snow in street view and a trip heads-up (in review)" },
   traffic: { tier: "basic", default: true, label: "Live traffic (DOT sensor corridors)" },
   parking: { tier: "basic", default: false, label: "Parking garages and street rules" },
   hazards: { tier: "advanced", default: true, label: "Weather alerts and street flooding" },

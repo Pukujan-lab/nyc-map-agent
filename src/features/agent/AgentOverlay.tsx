@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
+import { setAmbient } from "@/lib/ambient";
 import { useFlag } from "@/lib/flags";
 import { getMapInstance } from "@/lib/map/mapInstance";
 import { useMapState } from "@/lib/store/MapStateContext";
@@ -82,6 +83,11 @@ export default function AgentOverlay() {
   const [mode, setMode] = useState<TripMode>("transit");
   const [wake, setWake] = useState(false);
   const [mapTime, setMapTime] = useState<string | null>(null);
+  // Street weather forecasts the trip's departure hour instead of now.
+  useEffect(() => {
+    setAmbient({ tripDepart: trip?.departIso ?? null });
+    return () => setAmbient({ tripDepart: null });
+  }, [trip]);
   const shared = useSharedLocation();
   const abort = useRef<AbortController | null>(null);
   const messagesRef = useRef<Msg[]>([]);

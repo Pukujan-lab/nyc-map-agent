@@ -45,6 +45,7 @@ const routes: Array<[string, Handler]> = [
   ["/api/sources", sources],
   ["/api/street", street],
   ["/api/vehicle-models/:mode", vehicleModels],
+  ["/api/weather/hour", { GET: weather.GET_HOUR }],
   ["/api/weather", weather],
   ["/api/hazards", hazards],
   ["/api/ferry", ferry],
