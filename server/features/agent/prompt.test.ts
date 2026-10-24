@@ -49,3 +49,15 @@ describe("system prompt: smarter instructions", () => {
     for (const t of tools.filter((t) => !NON_DATA_TOOLS.has(t))) expect(prompt, t).toContain(t);
   });
 });
+
+describe("system prompt: the owner's standing rules", () => {
+  it("never suggests businesses or things to do unless asked", () => {
+    expect(prompt).toMatch(/Never suggest businesses, food, cafés, shops, events or other things to do unless the user asks/);
+  });
+
+  it("keeps data views and remembered habits to what the user asked", () => {
+    expect(prompt).toMatch(/Open data views \(311 complaints, crashes, research data\) only when the user asks/);
+    expect(prompt).toMatch(/use it only for the question asked/);
+    expect(prompt).toMatch(/What we remember/);
+  });
+});
