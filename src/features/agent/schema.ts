@@ -69,7 +69,9 @@ export const leg = z.discriminatedUnion("kind", [
 ]);
 export type Leg = z.infer<typeof leg>;
 
-export const weatherChip = z.object({ time: z.string(), tempC: z.number(), precipPct: z.number(), summary: z.string() });
+const optNum = z.number().nullable().optional();
+/** Forecast at the departure hour. The optional fields feed the street-weather heads-up (older answers lack them). */
+export const weatherChip = z.object({ time: z.string(), tempC: z.number(), precipPct: z.number(), summary: z.string(), code: optNum, feelsLikeC: optNum, precipMm: optNum, windKmh: optNum, gustKmh: optNum });
 
 export const tripMode = z.enum(["walk", "transit", "drive"]);
 export type TripMode = z.infer<typeof tripMode>;

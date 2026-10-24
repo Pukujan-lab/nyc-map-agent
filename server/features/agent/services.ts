@@ -4,6 +4,7 @@
  */
 import { formatStreetText } from "../../../src/lib/streetName";
 import { serviceChanges, type ServiceChange } from "../../../src/lib/transit/serviceChanges";
+import { coarsen } from "../../../src/lib/weather/street";
 import { z } from "zod";
 import type { LngLatTuple } from "../../../src/features/agent/schema";
 import { bestCandidate, matchLandmark, matchStation, type GeoCandidate } from "./places";
@@ -84,19 +85,26 @@ export async function routeWalk(a: LngLatTuple, b: LngLatTuple): Promise<WalkRes
 
 /* ---------- weather_forecast: Open-Meteo hourly (free, keyless) ---------- */
 const WMO: Record<number, string> = { 0: "Clear", 1: "Mostly clear", 2: "Partly cloudy", 3: "Overcast", 45: "Fog", 48: "Fog", 51: "Drizzle", 53: "Drizzle", 55: "Drizzle", 61: "Light rain", 63: "Rain", 65: "Heavy rain", 71: "Light snow", 73: "Snow", 75: "Heavy snow", 80: "Showers", 81: "Showers", 82: "Heavy showers", 95: "Thunderstorm", 96: "Thunderstorm", 99: "Thunderstorm" };
-const meteoSchema = z.object({ hourly: z.object({ time: z.array(z.string()), temperature_2m: z.array(z.number()), precipitation_probability: z.array(z.number().nullable()), weather_code: z.array(z.number()) }) });
-export async function weatherAt([lon, lat]: LngLatTuple, localIso: string) {
-  const q = new URLSearchParams({ latitude: String(lat), longitude: String(lon), hourly: "temperature_2m,precipitation_probability,weather_code", timezone: "America/New_York", forecast_days: "7" });
+const nullableSeries = z.array(z.number().nullable()).optional();
+const meteoSchema = z.object({ hourly: z.object({ time: z.array(z.string()), temperature_2m: z.array(z.number()), precipitation_probability: z.array(z.number().nullable()), weather_code: z.array(z.number()), apparent_temperature: nullableSeries, precipitation: nullableSeries, wind_speed_10m: nullableSeries, wind_gusts_10m: nullableSeries }) });
+export async function weatherAt(at: LngLatTuple, localIso: string) {
+  // About 1 km is enough for a forecast (docs/PRIVACY.md, "More precision than needed").
+  const { lat, lon } = coarsen(at[1], at[0]);
+  const q = new URLSearchParams({ latitude: String(lat), longitude: String(lon), hourly: "temperature_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,wind_speed_10m,wind_gusts_10m", timezone: "America/New_York", forecast_days: "7" });
   const h = meteoSchema.parse(await getJson(`https://api.open-meteo.com/v1/forecast?${q}`)).hourly;
   const hour = localIso.slice(0, 13);
   const i = Math.max(0, h.time.findIndex((t) => t.startsWith(hour)));
-  return { time: h.time[i], tempC: h.temperature_2m[i], precipPct: h.precipitation_probability[i] ?? 0, summary: WMO[h.weather_code[i]] ?? "Mixed" };
+  return {
+    time: h.time[i], tempC: h.temperature_2m[i], precipPct: h.precipitation_probability[i] ?? 0, summary: WMO[h.weather_code[i]] ?? "Mixed",
+    code: h.weather_code[i], feelsLikeC: h.apparent_temperature?.[i] ?? null, precipMm: h.precipitation?.[i] ?? null, windKmh: h.wind_speed_10m?.[i] ?? null, gustKmh: h.wind_gusts_10m?.[i] ?? null,
+  };
 }
 
 /* ---------- hazards: NWS active alerts at a point ---------- */
 const nwsSchema = z.object({ features: z.array(z.object({ properties: z.object({ headline: z.string().nullable().optional(), event: z.string() }) })) });
-export async function hazardsAt([lon, lat]: LngLatTuple): Promise<string[]> {
-  const data = nwsSchema.parse(await getJson(`https://api.weather.gov/alerts/active?point=${lat.toFixed(4)},${lon.toFixed(4)}`));
+export async function hazardsAt(at: LngLatTuple): Promise<string[]> {
+  const { lat, lon } = coarsen(at[1], at[0]);
+  const data = nwsSchema.parse(await getJson(`https://api.weather.gov/alerts/active?point=${lat},${lon}`));
   return data.features.map((f) => f.properties.headline ?? f.properties.event);
 }
 

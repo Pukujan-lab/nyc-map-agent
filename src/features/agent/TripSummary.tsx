@@ -1,7 +1,25 @@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
 import { Ship } from "lucide-react";
+import { useFlags } from "@/lib/flags";
+import { headsUpFacts, recommend, type HourWeather } from "@/lib/weather/street";
 import type { Leg, Trip, TripCore } from "./schema";
+
+/** "Take an umbrella (52°F · 70% rain, 1.2 mm)" for the departure hour, behind the streetWeather flag. */
+function WeatherHeadsUp({ trip }: { trip: Trip }) {
+  const flags = useFlags();
+  const w = trip.weather;
+  if (!flags.streetWeather || !w) return null;
+  const h: HourWeather = {
+    time: w.time, tempC: w.tempC, precipPct: w.precipPct, code: w.code ?? null, feelsLikeC: w.feelsLikeC ?? null,
+    precipMm: w.precipMm ?? null, windKmh: w.windKmh ?? null, gustKmh: w.gustKmh ?? null, cloudPct: null, visibilityM: null,
+  };
+  return (
+    <p className="font-medium" data-testid="trip-weather-headsup">
+      {recommend(h, trip.hazards).text} <span className="font-normal text-muted-foreground">({headsUpFacts(h).join(" · ")})</span>
+    </p>
+  );
+}
 
 const fmt = (local: string) => local.slice(11, 16);
 const mins = (a: string, b: string) => Math.round((Date.parse(`${b}:00Z`) - Date.parse(`${a}:00Z`)) / 60000);
@@ -78,6 +96,7 @@ export function TripSummary({ trip, compact, mapTime, bodyOnly, onSelect }: { tr
         {w ? <Badge variant="outline">{w.summary} · {Math.round(w.tempC)}°C · {w.precipPct}% rain</Badge> : null}
         {mapTime ? <Badge variant="outline">Map time {mapTime.replace("T", " ")}</Badge> : null}
       </div>}
+      {bodyOnly ? null : <WeatherHeadsUp trip={trip} />}
       {trip.exitAdvice && !bodyOnly ? <p className="font-medium">{trip.exitAdvice}</p> : null}
       {compact ? <OtherOptions trip={trip} onSelect={onSelect} /> : (
         <>

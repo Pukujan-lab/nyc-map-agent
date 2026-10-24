@@ -13,7 +13,7 @@ import { Query as HazardsQuery } from "./features/hazards/routes";
 import { NearQuery as ParkingNearQuery } from "./features/parking/routes";
 import { BrandsBox as StorefrontBrandsQuery, LogoQuery as StorefrontLogoQuery } from "./features/storefronts/routes";
 import { AlongQuery as TrafficAlongQuery } from "./features/traffic/routes";
-import { Query as WeatherQuery } from "./features/weather/routes";
+import { HourQuery as WeatherHourQuery, Query as WeatherQuery } from "./features/weather/routes";
 import { Query as SegmentsQuery, Response_ as SegmentsResponse } from "./features/transit/segments";
 import { Query as BusSegmentsQuery, Response_ as BusSegmentsResponse } from "./features/transit/busSegments";
 import { EventsResponse, Query as EventsQuery } from "./features/events/schema";
@@ -104,6 +104,7 @@ export const ROUTES = {
   "/api/restrooms": jsonRoute("/api/restrooms", "Public restrooms GeoJSON"),
   "/api/sources": jsonRoute("/api/sources", "Source registry metadata and freshness"),
   "/api/street": jsonRoute("/api/street", "Street noise / crash stats", StreetQuery),
+  "/api/weather/hour": jsonRoute("/api/weather/hour", "One forecast hour (Open-Meteo) and active NWS alerts near a point, rounded to about 1 km", WeatherHourQuery),
   "/api/weather": jsonRoute("/api/weather", "Current weather near a point (Open-Meteo, NWS fallback)", WeatherQuery),
   "/api/hazards": jsonRoute("/api/hazards", "Active NWS alerts for NYC and flooded FloodNet sensors", HazardsQuery),
   "/api/ferry": jsonRoute("/api/ferry", "NYC Ferry and Staten Island Ferry routes, piers, and live or estimated vessels"),
