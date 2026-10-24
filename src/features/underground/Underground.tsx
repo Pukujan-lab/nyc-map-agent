@@ -12,7 +12,7 @@ import { useMapState } from "@/lib/store/MapStateContext";
 import { useActiveTrip } from "@/lib/transit/activeTrip";
 import type { StreetUnit } from "@/lib/transit/equipment";
 import { useFollowed } from "@/lib/transit/follow";
-import { setStationHelp } from "@/lib/underground/stationHelp";
+import { setStationHelp, setStationHelpVisible } from "@/lib/underground/stationHelp";
 import { LANDMARKS } from "@/lib/map/landmarks";
 import { SurfaceCalibration } from "./SurfaceCalibration";
 import { SURFACE_CAL_MS, disagreementTrigger, lateOpenTrigger, movementCorrection, openedAfterTrip } from "./surface";
@@ -150,7 +150,7 @@ export default function Underground() {
   const followed = useFollowed();
   const center = useMapCenter();
   const shared = useSharedLocation();
-  const { seedChat, setChatOpen } = useMapState();
+  const { seedChat, setChatOpen, chatOpen } = useMapState();
   const [store, setStore] = useState<PackStore | null>(() => loadStore());
   const [mode, setModeRaw] = useState<Mode>(() => read<Mode>(MODE_KEY, "idle"));
   const setMode = (m: Mode) => {
@@ -161,6 +161,11 @@ export default function Underground() {
   const [chosen, setChosen] = useState(0);
   const [now, setNow] = useState(() => Date.now());
   const [more, setMore] = useState(false);
+
+  useEffect(() => {
+    setStationHelpVisible(mode !== "idle");
+    return () => setStationHelpVisible(false);
+  }, [mode]);
 
   // One-time "Are you in the station?" (above ground only).
   const [ask, setAsk] = useState<Station | null>(null);
@@ -355,11 +360,27 @@ export default function Underground() {
 
   // Exits on the map; offline it draws on the station area's saved tiles (pinch zoom works as usual).
   useEffect(() => {
-    const map = getMapInstance();
-    if (!map) return;
-    if (pack && mode !== "idle" && mode !== "ride" && mode !== "which") drawOnMap(map, pack, chosen);
-    else clearMap(map);
+    let clear: (() => void) | undefined;
+    const unsubscribe = onMapInstance((map) => {
+      clear?.();
+      if (!map) return;
+      const draw = () => {
+        if (pack && mode !== "idle" && mode !== "ride" && mode !== "which") drawOnMap(map, pack, chosen);
+        else clearMap(map);
+      };
+      if (map.isStyleLoaded()) draw();
+      else void map.once("load", draw);
+      clear = () => { map.off("load", draw); clearMap(map); };
+    });
+    return () => { unsubscribe(); clear?.(); };
   }, [pack, mode, chosen]);
+
+  useEffect(() => {
+    if (!home || mode !== "station" || !pack) return;
+    return onMapInstance((map) => {
+      map?.easeTo({ center: pack.station.at, zoom: 17, pitch: 0, bearing: 0, offset: [0, 100], duration: 600 });
+    });
+  }, [home, mode, pack?.station.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The safety line stays with the pointer for its first 10 seconds.
   useEffect(() => {
@@ -471,7 +492,7 @@ export default function Underground() {
   };
 
   /** "I'm in the station" or Yes: switch to the exit list (and the ride, on a subway trip). Never tracks. */
-  const enterStation = (at?: Pt) => {
+  const enterStation = (at?: Pt, stationOnly = false) => {
     setAsk(null);
     const near = at ?? nearby?.at ?? center?.at ?? null;
     if (sys && (!store || (!trip && online))) {
@@ -481,7 +502,7 @@ export default function Underground() {
         if (online) void saveTiles(s);
       }
     }
-    if (stops.length && sys) {
+    if (!stationOnly && stops.length && sys) {
       const here = near ? stops.reduce((b, s, i) => (metres(s.at, near) < metres(stops[b].at, near) ? i : b), 0) : 0;
       setProgress(startProgress(stops, Date.now(), here));
       setMode("ride");
@@ -492,10 +513,21 @@ export default function Underground() {
     else if (store?.packs[0]) showStation(store.packs[0].station.id);
   };
   // The home's Find exit button opens the same station view as "I'm in the station".
-  const enterRef = useRef(enterStation);
-  enterRef.current = enterStation;
+  const openStationHelp = (id?: string) => {
+    const st = id && sys ? sys.stations.features.find((f) => String(f.properties.id) === id) : null;
+    if (st && sys) {
+      const near = st.geometry.coordinates as Pt;
+      if (!packFor(store, id!)) {
+        const next = buildStore(sys, units, { trip: null, near, ...readMap(getMapInstance()), status: store?.status ?? null });
+        if (next) persist({ ...next, destination: store?.destination ?? null, packs: [...(store?.packs ?? []), ...next.packs] });
+      }
+      showStation(id!);
+    } else enterStation(undefined, true);
+  };
+  const enterRef = useRef(openStationHelp);
+  enterRef.current = openStationHelp;
   useEffect(() => {
-    setStationHelp(() => enterRef.current());
+    setStationHelp((id) => enterRef.current(id));
     return () => setStationHelp(null);
   }, []);
 
@@ -600,6 +632,8 @@ export default function Underground() {
     setQueue((q) => enqueue(q, text, Date.now()));
     setDescribe(null);
   };
+
+  if (home && chatOpen) return null;
 
   // ---------- idle ----------
   if (mode === "idle") {

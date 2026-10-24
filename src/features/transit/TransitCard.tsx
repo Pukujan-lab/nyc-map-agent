@@ -345,6 +345,7 @@ export function FollowCard({ vehicle }: { vehicle: Vehicle }) {
       : undefined);
   const destLoading = vehicle.system === "bus" && busTrip.isLoading && !busTrip.data;
   const openAlert = (a: TransitAlert) => {
+    if (home) setFollowed(null);
     presentAlert(a);
     setSnap("half");
   };
@@ -411,7 +412,7 @@ export function FollowCard({ vehicle }: { vehicle: Vehicle }) {
           {!grouped.delays.length && !grouped.notices.length ? <p className="px-1 text-[13px] text-slate-300">No notices reported</p> : null}
         </div>
         <div className="grid grid-cols-2 gap-2">
-          {vehicle.system === "bus" ? <button type="button" className="task-action bg-sky-500" onClick={() => ask(`Where should I get off the ${vehicle.route} bus for my trip?`)}>Where to get off</button> : <button type="button" className="task-action" onClick={() => { if (stationHelp) { setFollowed(null); stationHelp(); } else ask(`Which exit should I take at ${headName}?`); }}>Exit help</button>}
+          {vehicle.system === "bus" ? <button type="button" className="task-action bg-sky-500" onClick={() => ask(`Where should I get off the ${vehicle.route} bus for my trip?`)}>Where to get off</button> : <button type="button" className="task-action" onClick={() => { if (stationHelp) { setFollowed(null); stationHelp(headId ? stationOf(vehicle.system === "bus" ? "subway" : vehicle.system, headId) : undefined); } else ask(`Which exit should I take at ${headName}?`); }}>Exit help</button>}
           <button type="button" className="task-action task-secondary" onClick={() => ask(`What are the other ways to make my ${vehicle.route} trip?`)}>Other ways</button>
         </div>
       </section> : null}

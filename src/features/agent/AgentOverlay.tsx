@@ -19,7 +19,9 @@ import { setAmbient } from "@/lib/ambient";
 import { useFlag } from "@/lib/flags";
 import { getMapInstance } from "@/lib/map/mapInstance";
 import { useDataView } from "@/lib/store/DataViewContext";
-import { setSelectedLine } from "@/lib/transit/selectedLine";
+import { followTripRoute } from "@/lib/transit/routeFollow";
+import { followUpQuestion } from "./followUpQuestion";
+import { setSelectedLine, useSelectedLine } from "@/lib/transit/selectedLine";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { publishActiveTrip } from "@/lib/transit/activeTrip";
 import { revealTripBuses } from "@/lib/transit/busReveal";
@@ -51,7 +53,7 @@ import { rememberChat, rememberLookup } from "@/lib/memory/memory";
 import { useVoicePrefs } from "@/lib/voice/voicePrefs";
 import { useFollowed } from "@/lib/transit/follow";
 import { useLinesControl } from "@/lib/transit/linesControl";
-import { useStationHelp } from "@/lib/underground/stationHelp";
+import { useStationHelp, useStationHelpVisible } from "@/lib/underground/stationHelp";
 import { applyStep, statusLine, type AgentStep } from "./agentSteps";
 import { speechTag, statusLang } from "./statusLines";
 import { needsSharedOrigin, ORIGIN_PROMPT, replyAsksForOrigin } from "./needsOrigin";
@@ -83,8 +85,10 @@ export default function AgentOverlay() {
   const undergroundOn = useFlag("underground");
   const places = useHomeWork();
   const followed = useFollowed();
+  const selectedLine = useSelectedLine();
   const openLines = useLinesControl();
   const stationHelp = useStationHelp();
+  const stationHelpVisible = useStationHelpVisible();
   const homeInput = useRef<HTMLInputElement>(null);
   const [lang] = useState(browserLang);
   // One panel at a time (#225): opening Ask closes the drawer and any sheet.
@@ -115,8 +119,6 @@ export default function AgentOverlay() {
   /** The question waiting on a shared location, so the button can ask it again. */
   const pendingQuestion = useRef<string | null>(null);
   const [handsFree, setHandsFree] = useState(false);
-  /** The answer whose extra map buttons Other options has revealed. */
-  const [moreActions, setMoreActions] = useState<string | null>(null);
   const askReq = useAskRequest();
   const compact = askReq !== null;
 
@@ -588,16 +590,8 @@ export default function AgentOverlay() {
         ? { label: "Walk me there", run: () => { const r = first.restroom; void send(`Walk me from here to ${formatStreetText(r.name)} ${at(r)}`); } }
         : { label: first.label, run: () => runAction(first) }
       : null;
-    const onNearby = () => {
-      const pl = placeOf();
-      void send(pl ? `What's near ${pl.name} ${at(pl)}? Landmarks, food and the closest subway station.` : "What's nearby? Landmarks, food and the closest subway station.");
-    };
-    const [showMore, setShowMore] = [moreActions === reply?.id, (v: boolean) => setMoreActions(v ? reply?.id ?? null : null)];
-    const onOther = () => {
-      if (actions.length > 1) return setShowMore(!showMore);
-      if (trip?.alternatives.length) return ctx.openTrip(trip);
-      void send("What are my other options?");
-    };
+    const onNearby = () => { void send(followUpQuestion("nearby", placeOf())); };
+    const onOther = () => { void send(followUpQuestion("other", placeOf())); };
     const homeAnswer = (
       <AnswerCard
         question={lastUser?.content ?? null}
@@ -610,7 +604,6 @@ export default function AgentOverlay() {
         onOther={onOther}
         extra={
           <>
-            {showMore ? <AnswerActions actions={actions.slice(1)} onRun={runAction} /> : null}
             {reply?.offerLocation && shared.status !== "on" ? (
               <Button type="button" className="h-12 w-full gap-1.5 rounded-full" disabled={shared.status === "asking"} onClick={() => void enableLocation()}>
                 <LocateFixed className="h-4 w-4" aria-hidden="true" />
@@ -654,7 +647,7 @@ export default function AgentOverlay() {
     };
     const panelUp = panelContent !== null && !panelMinimized;
     const answerOpen = chatOpen && messages.length > 0;
-    const showIdle = !followingRoute && !player.state.active && !walking && !streetViewOpen && !answerOpen && !busy && !handsFree && !drawerOpen && !panelUp && followed === null;
+    const showIdle = !selectedLine && !stationHelpVisible && !followingRoute && !player.state.active && !walking && !streetViewOpen && !answerOpen && !busy && !handsFree && !drawerOpen && !panelUp && followed === null;
     const idle = showIdle ? (
       <>
         <DailyCard places={places} onAsk={(q) => void send(q)} onFly={(sp) => flyTo({ lon: sp.lon, lat: sp.lat, zoom: 16 })} onShowStations={(points) => actionCtx.showPoints(points, { color: TROUBLE_COLOR.problem, title: "Delay" })} />
@@ -679,7 +672,7 @@ export default function AgentOverlay() {
           onCloseAnswer={() => setChatOpen(false)}
           answer={homeAnswer}
           idle={idle}
-          // The bar stays on every screen; only street level and the trip preview take the bottom.
+          // Task controls sit above the persistent chat bar.
           hidden={false}
           lift={!isDesktop && panelContent !== null && panelMinimized}
         />
@@ -690,7 +683,10 @@ export default function AgentOverlay() {
           onUse={() => {
             player.release();
             const ride = trip.legs.find((l) => l.kind === "ride");
-            if (ride?.mode === "subway") { setSelectedLine(ride.route); return; }
+            if (ride && (ride.mode === "subway" || ride.mode === "bus")) {
+              if (followTripRoute({ system: ride.mode, route: ride.route, at: ride.coords[0] })) return;
+              if (ride.mode === "subway") { setSelectedLine(ride.route); return; }
+            }
             if (trip.mode === "walk") {
               setRoutePoint("start", { lon: trip.origin.at[0], lat: trip.origin.at[1] });
               setRoutePoint("end", { lon: trip.destination.at[0], lat: trip.destination.at[1] });

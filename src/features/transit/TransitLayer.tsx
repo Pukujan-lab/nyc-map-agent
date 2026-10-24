@@ -26,6 +26,7 @@ import { useXray, xrayPrims } from "./xray";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { useFlag } from "@/lib/flags";
 import { usePanel, usePanelChip, usePanelMode, usePanelSearch, type SearchProvider } from "@/lib/store/PanelContext";
+import { pickRouteVehicle, registerRouteFollower } from "@/lib/transit/routeFollow";
 import { followRig, rememberFollowOrigin, setFollowMode, setFollowed, stableHeading, takeFollowRestore, useFollowMode, useFollowed } from "./follow";
 import { followActionForMapClick } from "./followClick";
 import { publishSubway } from "@/lib/agent/streetContext";
@@ -904,6 +905,19 @@ export default function TransitLayer() {
       if (stars.notify && "Notification" in window && Notification.permission === "granted") new Notification("NYC transit", { body: a.text });
     }
   }, [alerts.data, stars]);
+
+  useEffect(() => {
+    registerRouteFollower((request) => {
+      const pick = pickRouteVehicle([...display.current.values()], request);
+      if (!pick) return false;
+      setDrawerOpen(false);
+      setSelectedLine(request.system === "subway" ? lineOf(request.route) : null, pick.key);
+      setFollowMode("chase");
+      setFollowed(pick.key);
+      return true;
+    });
+    return () => registerRouteFollower(null);
+  }, [setDrawerOpen]);
 
   // "Follow a train" on the line panel: the tapped train, else the one nearest the map centre.
   const followLine = useCallback(() => {
