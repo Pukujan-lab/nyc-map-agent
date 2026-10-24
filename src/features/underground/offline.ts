@@ -35,21 +35,36 @@ export function registerOfflineWorker(): void {
 
 const STREET_CLASSES = new Set(["minor", "service", "tertiary", "secondary", "primary", "trunk", "pedestrian", "living_street"]);
 
-/** Where two named streets meet near `at`: the vertex of one closest to the other. */
-function meetPoint(lines: NamedLine[], a: string, b: string, at: Pt): Pt | null {
-  let best: { p: Pt; d: number } | null = null;
-  const bs = lines.filter((l) => l.name === b);
+/** The segment of a named street nearest `at`. */
+function nearestSeg(lines: NamedLine[], name: string, at: Pt): [Pt, Pt] | null {
+  let best: { s: [Pt, Pt]; d: number } | null = null;
   for (const l of lines) {
-    if (l.name !== a) continue;
-    for (const v of l.coords) {
-      if (metres(v, at) > 120) continue;
-      for (const m of bs) for (const w of m.coords) {
-        const d = metres(v, w);
-        if (d <= 20 && (!best || d < best.d)) best = { p: v, d };
-      }
+    if (l.name !== name) continue;
+    for (let i = 1; i < l.coords.length; i++) {
+      const s: [Pt, Pt] = [l.coords[i - 1], l.coords[i]];
+      const mid: Pt = [(s[0][0] + s[1][0]) / 2, (s[0][1] + s[1][1]) / 2];
+      const d = Math.min(metres(s[0], at), metres(s[1], at), metres(mid, at));
+      if (!best || d < best.d) best = { s, d };
     }
   }
-  return best?.p ?? null;
+  return best?.s ?? null;
+}
+
+/**
+ * Where two named streets meet near `at`: the crossing of their nearest
+ * segments, extended (tile lines are simplified and often stop short).
+ */
+export function meetPoint(lines: NamedLine[], a: string, b: string, at: Pt): Pt | null {
+  const s1 = nearestSeg(lines, a, at);
+  const s2 = nearestSeg(lines, b, at);
+  if (!s1 || !s2) return null;
+  const [[x1, y1], [x2, y2]] = s1;
+  const [[x3, y3], [x4, y4]] = s2;
+  const den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+  if (Math.abs(den) < 1e-14) return null;
+  const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / den;
+  const p: Pt = [x1 + t * (x2 - x1), y1 + t * (y2 - y1)];
+  return metres(p, at) <= 120 ? p : null;
 }
 
 /**

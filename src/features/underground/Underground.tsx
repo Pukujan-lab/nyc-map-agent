@@ -702,7 +702,7 @@ export default function Underground() {
   const pointer = arrowState({ cal, rawHeading: raw, interfered, exitBearing: exit ? bearing(pack.station.at, exit.at) : null, now });
   const canCalibrate = pack.trackBearing !== null && typeof window !== "undefined" && "DeviceOrientationEvent" in window;
   const cues = exit && target !== null ? pickLandmarks(exit.at, target, exit.landmarks) : [];
-  const cornerChoices = pack.exits.map((e, i) => ({ i, label: signText(e.streets, e.corner) })).filter((c): c is { i: number; label: string } => !!c.label);
+  const cornerChoices = pack.exits.map((e, i) => ({ i, label: signText(e.streets, e.corner) })).filter((c, k, all): c is { i: number; label: string } => !!c.label && all.findIndex((x) => x.label === c.label) === k);
   const outage = exit ? outageLabel(store?.status ?? null, exit.unit?.id ?? null, now) : null;
   const beginCalibration = () => {
     setWaitingCompass(true);
@@ -794,7 +794,7 @@ export default function Underground() {
                   {exit.unit && <p className="text-xs">MTA: {exit.unit.serving}</p>}
                   {outage && <p className="text-xs">{outage}</p>}
                   <p className="text-xs text-muted-foreground">
-                    {pack.tiles ? `Offline map of this station area saved (${pack.tiles.count} tiles, ${Math.round(pack.tiles.bytes / 1024)} kB).` : "No offline map saved for this station area; the platform sketch stands in."}
+                    {pack.tiles ? `Offline map of this station area saved (${pack.tiles.count} ${pack.tiles.count === 1 ? "tile" : "tiles"},${Math.round(pack.tiles.bytes / 1024)} kB).` : "No offline map saved for this station area; the platform sketch stands in."}
                   </p>
                   {cal && pointer.show && <p className="text-xs text-muted-foreground">Pointer: approximate, from the middle of the station.</p>}
                   <ol className="space-y-1" aria-label="Other exits">

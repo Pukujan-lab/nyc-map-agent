@@ -7,6 +7,7 @@ import type { ActiveTrip } from "@/lib/transit/activeTrip";
 import { matchUnit, parseCorner, type StreetUnit } from "@/lib/transit/equipment";
 import { alongLabel, alongPlatform, describePrompt, landmarkLine, pickLandmarks, signStreet, signText, trainCue, trainEndOf } from "./cues";
 import { ageLabel, bearing, cornerOf, exitKind, octant, rankExits, stationEntrances, turnHint, type Pt, type SubwayStatic } from "./exits";
+import { meetPoint } from "./offline";
 import { buildStore, clipSketch, loadStore, outageLabel, packFor, saveStore, tripStations, tripStops } from "./pack";
 import { accuracyWorsened, boardingStation, endedVisits, stationAtEntrance, stationToAsk } from "./prompt";
 import { backoffMs, enqueue, isConnected, markFailed, markSent, nextDue } from "./queue";
@@ -68,6 +69,18 @@ describe("exit ranking", () => {
   it("without a destination uses compass order and claims no closest", () => {
     const ranked = rankExits(station, stationEntrances(sys, station), null);
     expect(ranked.every((e) => e.toDestM === null)).toBe(true);
+  });
+
+  it("finds where two simplified street lines would cross, for the corner name", () => {
+    const lines = [
+      { name: "A St", coords: [[-73.98, 40.75], [-73.9705, 40.75]] as Pt[] },
+      { name: "B Av", coords: [[-73.97, 40.7503], [-73.97, 40.76]] as Pt[] }, // stops short of A St
+    ];
+    const p = meetPoint(lines, "A St", "B Av", [-73.9699, 40.7501])!;
+    expect(p[0]).toBeCloseTo(-73.97, 5);
+    expect(p[1]).toBeCloseTo(40.75, 5);
+    expect(cornerOf(p, [-73.9699, 40.7501])).toBe("NE");
+    expect(meetPoint(lines, "A St", "C St", [-73.97, 40.75])).toBeNull();
   });
 
   it("bearings, corners, turn hints and ages", () => {
