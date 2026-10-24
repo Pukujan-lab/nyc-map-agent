@@ -193,6 +193,13 @@ export function AgentHome(p: AgentHomeProps) {
       window.removeEventListener("resize", publish);
     };
   }, [hidden]);
+  // Also after every render: a ResizeObserver can lag (or not run in a background
+  // tab), and a stale, taller value lifted More layers over the menus while the
+  // idle cards were gone; a stale, shorter one let panels cover the bar.
+  useLayoutEffect(() => {
+    const el = stackRef.current;
+    if (!hidden && el) document.documentElement.style.setProperty("--chat-bar-h", `${Math.max(0, Math.ceil(window.innerHeight - el.getBoundingClientRect().top))}px`);
+  });
   useEffect(() => () => { document.documentElement.style.removeProperty("--chat-bar-h"); }, []);
 
   if (p.hidden) return null;

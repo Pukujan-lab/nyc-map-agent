@@ -1506,7 +1506,7 @@ export function MapView({
       const apply = () => {
         // Stand the camera `heightM` up, behind the current centre along the
         // bearing, looking at the centre on the ground, the same way the eye camera does.
-        const pitch = pitchForHeight(heightM);
+        const pitch = navCommand.pitch ?? pitchForHeight(heightM);
         const bearing = map.getBearing();
         const center = map.getCenter();
         const back = Math.max(heightM * Math.tan((pitch * Math.PI) / 180), heightM * 0.01);

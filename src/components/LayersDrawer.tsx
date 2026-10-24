@@ -387,6 +387,8 @@ export function LayersDrawer({
           // Leaves the top of the map free to tap; with Follow / Navigate on,
           // it stops further short so it never covers their HUD.
           hudActive ? "max-h-[50%]" : "max-h-[60%]",
+          // Home: never taller than the room between the menu row and the chat bar, so the bar always shows.
+          home && (hudActive ? "max-h-[min(50%,calc(100%_-_var(--chat-bar-h,0px)_-_76px))]" : "max-h-[min(60%,calc(100%_-_var(--chat-bar-h,0px)_-_76px))]"),
         )}
       >
         <div className="mx-auto mt-2 h-1.5 w-10 shrink-0 rounded-full bg-muted-foreground/30" />

@@ -7,7 +7,15 @@ import { useMapState } from "@/lib/store/MapStateContext";
 import { setOpenMenu, useOpenMenu } from "@/lib/store/openMenu";
 import { useFollowed } from "@/lib/transit/follow";
 import { useSelectedLine } from "@/lib/transit/selectedLine";
-import { MID_HEIGHT_M, UP_HEIGHT_M, levelOf, type ViewLevel } from "./ViewSwitcher";
+import { MID_HEIGHT_M, levelOf, type ViewLevel } from "./ViewSwitcher";
+
+/**
+ * Aerial on the home's Change view: clearly higher and wider than Closer.
+ * The classic Up level (300 m) comes out nearly straight down and only a
+ * little above Closer, so Aerial stands the camera ~1.1 km up at a 45° tilt.
+ */
+const AERIAL_HEIGHT_M = 1100;
+const AERIAL_PITCH = 45;
 
 /**
  * Agent-first map chrome (#370, #372): the round buttons at the top right
@@ -57,7 +65,7 @@ function ViewMenu({ pitch, onPick }: { pitch: number; onPick: () => void }) {
   const go = (l: ViewLevel) => {
     if (l === "street") { if (!walking) startWalk(); }
     else if (l === "mid") setCameraHeight(MID_HEIGHT_M);
-    else if (l === "up") setCameraHeight(UP_HEIGHT_M);
+    else if (l === "up") setCameraHeight(AERIAL_HEIGHT_M, AERIAL_PITCH);
     else if (walking) { stopWalk(); window.setTimeout(() => navigate("north"), 750); }
     else navigate("north");
     onPick();

@@ -941,6 +941,9 @@ export default function TransitLayer() {
   // The selected line's trains read larger than the dimmed rest.
   const bulletScale = (lineSel ? ["case", ["in", ["get", "route"], ["literal", isoRoutes]], 1.3, 1] : 1) as unknown;
   const onLine = (lineSel ? ["all", ["==", ["get", "system"], "subway"], ["in", ` ${lineSel} `, ["concat", " ", ["get", "routes"], " "]]] : ["==", 1, 0]) as never;
+  // An open notice names its skipped stations itself (transit-alert-skipped): the line's own label skips them, so each name shows once.
+  const namedByAlert = (alertGeo?.skipped ?? []).map((x) => String(x.id));
+  const lineStopName = (namedByAlert.length ? ["all", onLine, ["!", ["in", ["to-string", ["get", "id"]], ["literal", namedByAlert]]]] : onLine) as never;
   return (
     <>
       {followed ? <FollowCard vehicle={followed} /> : null}
@@ -1003,7 +1006,7 @@ export default function TransitLayer() {
         {/* Selected line (#370): its stations ringed and named at every zoom. */}
         <Layer id="transit-line-stop" type="circle" minzoom={9} filter={onLine} layout={{ visibility: lineSel ? "visible" : "none" }}
           paint={{ "circle-color": "#0e1726", "circle-stroke-color": "#ffffff", "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 10, 1.5, 15, 3], "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 3, 15, 7], "circle-pitch-alignment": "map" }} />
-        <Layer id="transit-line-stop-name" type="symbol" minzoom={10} filter={onLine} layout={{ visibility: lineSel ? "visible" : "none",
+        <Layer id="transit-line-stop-name" type="symbol" minzoom={10} filter={lineStopName} layout={{ visibility: lineSel ? "visible" : "none",
             "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": 12, "text-anchor": "right", "text-offset": [-1.1, 0], "text-optional": true, "text-max-width": 12, "text-pitch-alignment": "viewport" }}
           paint={{ "text-color": "#e2e8f0", "text-halo-color": "rgba(14,23,38,0.85)", "text-halo-width": 2.5 }} />
       </Source>
