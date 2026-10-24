@@ -35,6 +35,7 @@ import { busesToShow, capPerLine, holdShuttle, registerBusToggle, setShuttleBuse
 import { publishLiveDots } from "@/lib/transit/liveVehicles";
 import { setLinesControl } from "@/lib/transit/linesControl";
 import { lineOf, setSelectedLine, useSelectedLine } from "@/lib/transit/selectedLine";
+import { useActiveTrip } from "@/lib/transit/activeTrip";
 import { LinePanel } from "./LinePanel";
 import { XRAY_VEIL_M, setStreetXray, useStreetXray, xrayForFollow, xrayVeilDisc } from "@/lib/transit/streetXray";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
@@ -309,6 +310,9 @@ export default function TransitLayer() {
   const selected = useSelectedLine();
   const lineSel = home && selected ? lineOf(selected.route) : null;
   const isoRoutes = useMemo(() => (lineSel ? [lineSel, `${lineSel}X`] : opts.routes), [lineSel, opts.routes]);
+  // The lines of the trip on screen: their trains stay bright, the others fade.
+  const activeTrip = useActiveTrip();
+  const tripRoutes = useMemo(() => [...new Set((activeTrip?.legs ?? []).filter((l) => l.kind === "ride" && l.route).flatMap((l) => [l.route!, `${l.route!}X`]))], [activeTrip]);
   const lineAlpha = lineOpacity(isoRoutes, focus) as number;
   // `on` is a new Set every render: depending on it re-registered the chip on every render,
   // which re-rendered this layer through the panel context ("Maximum update depth exceeded").
@@ -472,7 +476,7 @@ export default function TransitLayer() {
     if (content?.id === want) shownAlert.current = want;
     else if (shownAlert.current === want) setAlertFocus(null);
   }, [content?.id, alertFocus]);
-  const openLines = useCallback(() => showPanel({ id: "transit:lines", title: "Lines", subtitle: "Tap lines to show only those", details: <LinesDrawer /> }), [showPanel]);
+  const openLines = useCallback(() => showPanel({ id: "transit:lines", title: "Lines", subtitle: "Tap a line for its trains and notices", details: <LinesDrawer /> }), [showPanel]);
   useEffect(() => {
     if (!enabled) return;
     setLinesControl(openLines);
@@ -968,7 +972,14 @@ export default function TransitLayer() {
 
   // Street level: a station name is useful only near the walker; far ones would stand on the horizon.
   const nearEye: unknown[] = walking && eyeAt ? [["<", ["distance", { type: "Point", coordinates: eyeAt }], STREET_LABEL_M]] : [];
-  const bulletAlpha = (alertFocus ? ["case", ["in", ["get", "route"], ["literal", alertFocus.routes]], 1, 0.15] : isoRoutes.length ? ["case", ["in", ["get", "route"], ["literal", [...isoRoutes]]], 1, 0.15] : 1) as number;
+  const brightRoutes = alertFocus ? alertFocus.routes : isoRoutes.length ? [...isoRoutes] : tripRoutes;
+  const bright: unknown = ["in", ["get", "route"], ["literal", brightRoutes]];
+  const trainAlpha: unknown = brightRoutes.length ? ["case", bright, 1, 0.15] : 1;
+  // Zoomed out, a bullet per train buried the city in circles: small dots until z12, then
+  // bullets. A picked line, an alert's lines or the trip's lines keep their bullets throughout.
+  const fadeIn = (alpha: unknown) => ["interpolate", ["linear"], ["zoom"], 11.5, brightRoutes.length ? ["case", bright, alpha, 0] : 0, 12.5, alpha] as unknown as number;
+  const bulletAlpha = fadeIn(trainAlpha);
+  const dotAlpha = ["interpolate", ["linear"], ["zoom"], 11.5, brightRoutes.length ? ["case", bright, 0, 0.15] : 1, 12.5, 0] as unknown as number;
   const dimLines = (alertFocus ? 0.12 : lineAlpha);
   // Isolated lines: their stations stay, the rest fade.
   const stationAlpha = (isoRoutes.length ? ["case", ["any", ...isoRoutes.map((r) => ["in", ` ${r} `, ["concat", " ", ["get", "routes"], " "]])], 1, 0.15] : 1) as number;
@@ -1119,6 +1130,10 @@ export default function TransitLayer() {
           filter={["in", ["get", "system"], ["literal", ["lirr", "mnr"]]]}
           layout={{ "icon-image": "transit-arrow", "icon-rotate": ["get", "bearing"], "icon-rotation-alignment": "map", "icon-allow-overlap": true, "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.45, 16, 0.9] }}
           paint={{ "icon-color": ["get", "color"], "icon-halo-color": "#111827", "icon-halo-width": 1, "icon-opacity": ["case", ["==", ["get", "grade"], "underground"], 0.55, 1] }} />
+        {/* Subway trains zoomed out: a small dot in the line's colour. */}
+        <Layer id="transit-train-dot" type="circle" maxzoom={12.5} filter={["==", ["get", "system"], "subway"]}
+          paint={{ "circle-radius": ["interpolate", ["linear"], ["zoom"], 9, 2, 12, 3.5], "circle-color": ["get", "color"], "circle-stroke-color": "#ffffff", "circle-stroke-width": 1,
+            "circle-opacity": dotAlpha, "circle-stroke-opacity": dotAlpha }} />
         {/* Subway trains: route bullets with a heading notch on the rim. */}
         <Layer id="transit-bullet-notch" type="symbol" filter={["==", ["get", "system"], "subway"]}
           layout={{ "icon-image": NOTCH_ICON, "icon-rotate": ["get", "bearing"], "icon-rotation-alignment": "map", "icon-allow-overlap": true, "icon-ignore-placement": true,
@@ -1129,7 +1144,7 @@ export default function TransitLayer() {
           layout={{ "icon-image": ["get", "bullet"], "icon-allow-overlap": true, "icon-ignore-placement": true,
             // Elevated trains float above the viaduct; in 3D the tag sits above the box. A train at a station lifts clear of the name.
             "icon-offset": (three ? tagOffset(0) : trainIconOffset(false, 0)) as [number, number], "icon-size": ["interpolate", ["linear"], ["zoom"], 10, ["*", bulletScale, 0.55], 14, ["*", bulletScale, 0.75], 17, ["*", bulletScale, 0.95]] as unknown as number }}
-          paint={{ "icon-opacity": ["*", bulletAlpha, ["case", ["==", ["get", "grade"], "underground"], xrayOn ? 1 : 0.7, 1]] as unknown as number }} />
+          paint={{ "icon-opacity": fadeIn(["*", trainAlpha, ["case", ["==", ["get", "grade"], "underground"], xrayOn ? 1 : 0.7, 1]]) }} />
         {/* Buses: SQUARE badges, so they never read as round subway bullets. Zoomed out
             only the borough prefix (all shown, so each heading notch has its badge); from z15 or for the
             selected route the badge widens to the full route. Every bus always draws: collision detection

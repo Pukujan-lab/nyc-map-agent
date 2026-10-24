@@ -86,7 +86,8 @@ export function RoutePanel({
   ]);
 
   if (!routeStart && !routeEnd && !routePicking) return null;
-  if (home && (walking || followingRoute) && route) return null;
+  // Home: Walk me there and the walk card own the route; the A/B card only covered the map (owner, 2026-10-24).
+  if (home) return null;
 
   const follow = () => {
     if (!route || !routeStart) return;
