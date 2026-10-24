@@ -59,6 +59,8 @@ export function ViewSwitcher() {
     return () => { map.off("pitch", sync); };
   }, [map]);
   const street = useFlag("streetLevel");
+  // Agent-first home (#370): the view levels moved to Change view and X-ray to More layers; only the follow row stays.
+  const home = useFlag("agentHome");
   const { walking, startWalk, stopWalk, navigate, setCameraHeight, cameraHeightM } = useMapState();
   const followed = useFollowed();
   const mode = useFollowMode();
@@ -98,6 +100,7 @@ export function ViewSwitcher() {
     ro.observe(outer);
     return () => ro.disconnect();
   }, [rowKey]);
+  if (home && !followed) return null;
   return (
     <div
       data-testid="view-switcher"
@@ -121,16 +124,16 @@ export function ViewSwitcher() {
               className={cn(seg, level === l.id ? "bg-foreground text-background" : "text-foreground hover:bg-muted")}>{l.label}</button>
           ))}
       </div>
-      <button type="button" aria-pressed={xray} data-testid="xray-toggle" onClick={() => setStreetXray(!xray)}
+      {home ? null : <button type="button" aria-pressed={xray} data-testid="xray-toggle" onClick={() => setStreetXray(!xray)}
         className={cn(seg, "pointer-events-auto flex items-center gap-1 border border-border shadow-md", xray ? "bg-foreground text-background" : "bg-card text-foreground hover:bg-muted")}>
         <ScanEye className="h-3.5 w-3.5" aria-hidden="true" /> X-ray
-      </button>
+      </button>}
       {followed ? (
         <button type="button" onClick={() => stopFollowing()} className={cn(seg, "pointer-events-auto border border-border bg-card text-foreground shadow-md hover:bg-muted")}>
           Stop following
         </button>
       ) : null}
-      {openLines ? (
+      {openLines && !home ? (
         <button type="button" onClick={openLines} data-testid="lines-button" className={cn(seg, "pointer-events-auto border border-border bg-card text-foreground shadow-md hover:bg-muted")}>
           Lines{isolated ? ` · ${isolated}` : ""}
         </button>

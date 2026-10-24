@@ -154,6 +154,7 @@ import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 import { WalkControls } from "./WalkControls";
 import { useQuickLayer } from "@/lib/quickLayers";
 import { QuickLayers } from "./QuickLayers";
+import { MapChrome } from "./MapChrome";
 import { StreetMiniMap } from "./StreetMiniMap";
 import { nearestCorner, type CornerSign } from "@/lib/map/corner";
 import { kioskSources, pickAt as pickFurniture } from "@/lib/map/streetPick";
@@ -267,6 +268,8 @@ export function MapView({
   const [schoolIcons, setSchoolIcons] = useState(false);
   const toggleSchools = useCallback(() => setSchoolIcons((on) => !on), []);
   const schoolsOn = useFlag("schools");
+  // Agent-first home (#370): round buttons at the top right replace the Layers menu and rotate buttons.
+  const agentHome = useFlag("agentHome");
   const analyticsFlags = useFlags();
   const analytics = analyticsFlags.noise || analyticsFlags.crashes || analyticsFlags.dataLayers;
   const businesses = useQuickLayer("businesses");
@@ -1612,12 +1615,12 @@ export function MapView({
         <Suspense fallback={null}>
           {FEATURES.map((f) => (f.MapLayer ? <f.MapLayer key={f.id} /> : null))}
         </Suspense>
-        {walking ? null : <MapCompass />}
+        {walking || agentHome ? null : <MapCompass />}
         <ViewSwitcher />
       </MapLibreMap>
 
 
-      <QuickLayers />
+      {agentHome ? <MapChrome /> : <QuickLayers />}
       {walking ? (
         <WalkControls
           place={walkPlace}
