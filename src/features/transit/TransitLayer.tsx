@@ -45,14 +45,23 @@ import { usePalette, type Palette } from "@/lib/theme";
 import { FOCUS_OPACITY, FOCUS_VEIL_ID, WORLD, focusVeil, useTransitFocus } from "@/lib/map/transitFocus";
 
 /** Layers a click on the map should hand to transit instead of the area pick. */
-/** CC BY 4.0 credits for the 3D vehicle models (public/models/LICENSE.md), shown while they can be on screen. */
-const VEHICLE_CREDITS = "3D vehicles: R142 by yarankepang, XD40 by kieranfarr, P32 by Sharky (Sketchfab, CC BY 4.0)";
+/** CC BY 4.0 credit for the 3D bus model (public/models/LICENSE.md), shown while it can be on screen. Trains are plain boxes (#366). */
+const VEHICLE_CREDITS = "3D buses: XD40 by kieranfarr (Sketchfab, CC BY 4.0)";
 const TRANSIT_CLICK_LAYERS = ["transit-bullet", "transit-bus-badge", "transit-bus-badge-full", "transit-bus-badge-selected", "transit-vehicle-2d", "transit-vehicle-hit", "transit-access", "transit-entrance", "transit-station-label", "transit-station-raised", "transit-station"];
 
 const MAX_VEHICLES = 400;
 /** In 3D, labels and bullets on raised track lift by about a viaduct's height on screen. */
 const RAISED_LIFT_PX = 26;
 const RAISED_LIFT_EM = 2.8;
+/** In 3D, a train's route bullet sits this far above its point so the box under it stays visible (#366). */
+const TAG_LIFT = 20;
+/** Tilted-view bullet offset: above the box, plus the viaduct lift when elevated; underground stays on the line. */
+function tagOffset(dy: number) {
+  return ["match", ["get", "grade"],
+    "elevated", ["literal", [0, dy - RAISED_LIFT_PX - TAG_LIFT]],
+    "underground", ["literal", [0, dy]],
+    ["literal", [0, dy - TAG_LIFT]]];
+}
 /** True when a point sits on (or right beside) raised subway track. */
 function onRaisedTrack(cells: Set<string>, p: GeoJSON.Position): boolean {
   for (const dx of [-1, 0, 1]) for (const dy of [-1, 0, 1]) if (cells.has(cellKey([p[0] + dx / 2400, p[1] + dy / 2400]))) return true;
@@ -923,12 +932,12 @@ export default function TransitLayer() {
         <Layer id="transit-bullet-notch" type="symbol" filter={["==", ["get", "system"], "subway"]}
           layout={{ "icon-image": NOTCH_ICON, "icon-rotate": ["get", "bearing"], "icon-rotation-alignment": "map", "icon-allow-overlap": true, "icon-ignore-placement": true,
             "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.5, 16, 0.8],
-            "icon-offset": (three ? ["case", ["==", ["get", "grade"], "elevated"], ["literal", [0, -26 - RAISED_LIFT_PX]], ["literal", [0, -26]]] : [0, -26]) as [number, number] }}
+            "icon-offset": (three ? tagOffset(-26) : [0, -26]) as [number, number] }}
           paint={{ "icon-opacity": bulletAlpha }} />
         <Layer id="transit-bullet" type="symbol" filter={["==", ["get", "system"], "subway"]}
           layout={{ "icon-image": ["get", "bullet"], "icon-allow-overlap": true, "icon-ignore-placement": true,
             // Elevated trains: the bullet floats above the viaduct deck, not on the street below.
-            "icon-offset": (three ? ["case", ["==", ["get", "grade"], "elevated"], ["literal", [0, -RAISED_LIFT_PX]], ["literal", [0, 0]]] : [0, 0]) as [number, number], "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.55, 14, 0.75, 17, 0.95] }}
+            "icon-offset": (three ? tagOffset(0) : [0, 0]) as [number, number], "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.55, 14, 0.75, 17, 0.95] }}
           paint={{ "icon-opacity": ["*", bulletAlpha, ["case", ["==", ["get", "grade"], "underground"], xrayOn ? 1 : 0.7, 1]] as unknown as number }} />
         {/* Buses: SQUARE badges, so they never read as round subway bullets. Zoomed out
             only the borough prefix (all shown, so each heading notch has its badge); from z15 or for the
