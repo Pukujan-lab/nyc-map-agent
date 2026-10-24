@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import maplibregl, { type GeoJSONSource, type Map as MapLibreMap } from "maplibre-gl";
 import { RestroomDetails } from "@/components/RestroomCard";
-import type { RestroomInfo } from "@/features/restrooms/layers";
+import type { RestroomInfo } from "@/lib/map/restrooms";
 import { applyInsetFilters, bearingTo, coneRotation, facingLabel, miniStyle, refreshInsetSource, whereLabel, type InsetFilters } from "@/lib/map/miniStyle";
 import { metresBetween } from "@/lib/map/walk";
 import { pushPanel } from "@/lib/store/PanelContext";
