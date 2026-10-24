@@ -13,6 +13,7 @@ import {
 } from "@/lib/memory/memory";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { setOpenMenu, useOpenMenu, type OpenMenu } from "@/lib/store/openMenu";
+import { startSharing, stopSharing, useSharedLocation } from "@/lib/geo/sharedLocation";
 import { usePanel } from "@/lib/store/PanelContext";
 import { CHOICES, THEMES, setTheme, useTheme } from "@/lib/theme";
 import { useFollowed } from "@/lib/transit/follow";
@@ -144,6 +145,15 @@ type DataSection = "kept" | "yours";
 
 function DataBody() {
   const prefs = useMemoryPrefs();
+  // Exact location is the app's one shared location (the locate button, "Use my
+  // location", the agent): the switch shows it live and turns sharing on or off.
+  const shared = useSharedLocation();
+  const sharing = shared.status === "on" || shared.status === "asking";
+  const setExact = (on: boolean) => {
+    setRemembering("exactLocation", on);
+    if (on) void startSharing().then((c) => { if (!c) setRemembering("exactLocation", false); });
+    else stopSharing();
+  };
   const [section, setSection] = useState<DataSection | null>("kept");
   const [seeAll, setSeeAll] = useState<StoredItem[] | null>(null);
   const [policy, setPolicy] = useState(false);
@@ -167,6 +177,7 @@ function DataBody() {
         <div className="pb-1">
           {MEMORY_KINDS.map((k) => {
             const Icon = KIND_ICON[k];
+            if (k === "exactLocation") return <SwitchRow key={k} testId={`memory-${k}`} icon={<Icon className={ICON} aria-hidden />} label={MEMORY_LABELS[k]} on={sharing} onChange={(v) => { setExact(v); refresh(); }} />;
             return <SwitchRow key={k} testId={`memory-${k}`} icon={<Icon className={ICON} aria-hidden />} label={MEMORY_LABELS[k]} on={prefs[k]} onChange={(v) => { setRemembering(k, v); refresh(); }} />;
           })}
         </div>
