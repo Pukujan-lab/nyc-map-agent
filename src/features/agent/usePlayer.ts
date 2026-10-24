@@ -2,7 +2,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { getMapInstance } from "@/lib/map/mapInstance";
 import { bindPreviewRelease } from "@/lib/transit/follow";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
-import { along, buildTimeline, calloutAt, poseAt, wallSeconds, type Segment } from "./flythrough";
+import { along, buildTimeline, calloutInfoAt, poseAt, wallSeconds, type Segment } from "./flythrough";
 import { initialPlayback, isActive, playback, type Playback } from "./playback";
 import type { PlaybackSpeed, Trip } from "./schema";
 import { setMarker, setPreviewDim, setXray } from "./tripLayer";
@@ -128,10 +128,10 @@ export function usePlayer(onCallout?: (text: string) => void) {
       }
       map.jumpTo({ center: pose.center, bearing: pose.bearing, pitch: pose.pitch, zoom: pose.zoom });
       setMarker(map, seg.kind === "ride" ? along(seg.coords, f) : pose.center, seg.route);
-      const text = calloutAt(seg, f);
+      const { text, quiet } = calloutInfoAt(seg, f);
       if (text !== lastCallout.current) {
         lastCallout.current = text;
-        say.current?.(text);
+        if (!quiet) say.current?.(text);
         setCallout(text);
       }
       if (elapsed.current >= total) {

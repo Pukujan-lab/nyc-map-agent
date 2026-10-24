@@ -15,7 +15,8 @@ export interface Segment {
   realS: number;
   underground: boolean;
   route?: string;
-  callouts: Array<{ f: number; text: string }>;
+  /** quiet: shown on screen but not spoken (the stops in the middle of a ride). */
+  callouts: Array<{ f: number; text: string; quiet?: boolean }>;
 }
 export interface Pose { center: LngLatTuple; bearing: number; pitch: number; zoom: number }
 
@@ -69,7 +70,7 @@ export function buildTimeline(trip: Trip): Segment[] {
       const s: LngLatTuple = [leg.station.lon, leg.station.lat];
       segs.push({ kind: "descend", label: leg.label, coords: [p, s], realS: 60, underground: true, callouts: [{ f: 0, text: leg.label }] });
     } else if (leg.kind === "ride") {
-      segs.push({ kind: "ride", label: leg.label, coords: leg.coords, realS: leg.durationS, underground: leg.underground, route: leg.route, callouts: [{ f: 0, text: leg.label }, ...leg.stops.map((s) => ({ f: fractionOf(leg.coords, s.at), text: s.text }))] });
+      segs.push({ kind: "ride", label: leg.label, coords: leg.coords, realS: leg.durationS, underground: leg.underground, route: leg.route, callouts: [{ f: 0, text: leg.label }, ...leg.stops.map((s, i) => ({ f: fractionOf(leg.coords, s.at), text: s.text, quiet: !speakStop(i, leg.stops.length) }))] });
     } else {
       const p: LngLatTuple = [leg.portal.lon, leg.portal.lat];
       const s: LngLatTuple = [leg.station.lon, leg.station.lat];
@@ -104,9 +105,23 @@ export function poseAt(seg: Segment, f: number): Pose {
   }
 }
 
+/**
+ * On a ride, only the last two stops are spoken (your stop is next, then your
+ * stop); the ones in between still show on screen. Narrating every stop was
+ * noise once you are on the train (owner, 2026-10-24).
+ */
+export function speakStop(i: number, count: number): boolean {
+  return i >= count - 2;
+}
+
 /** The latest callout reached at fraction f. */
 export function calloutAt(seg: Segment, f: number): string {
-  let text = seg.label;
-  for (const c of seg.callouts) if (c.f <= f + 1e-6) text = c.text;
-  return text;
+  return calloutInfoAt(seg, f).text;
+}
+
+/** The latest callout reached at fraction f, and whether it should be spoken. */
+export function calloutInfoAt(seg: Segment, f: number): { text: string; quiet: boolean } {
+  let out = { text: seg.label, quiet: false };
+  for (const c of seg.callouts) if (c.f <= f + 1e-6) out = { text: c.text, quiet: Boolean(c.quiet) };
+  return out;
 }
