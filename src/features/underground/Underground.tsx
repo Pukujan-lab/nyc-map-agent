@@ -657,6 +657,8 @@ export default function Underground() {
         </section>
       );
     }
+    // Agent-first home: Find exit and Exit help open the station view; no extra chips over the task panels.
+    if (home && !ask) return null;
     if (surface === "banner" && !ask) {
       return (
         <div className="pointer-events-auto absolute bottom-[8.5rem] left-3 z-40 flex items-center gap-1 rounded-full border bg-card/95 py-1 pl-3 pr-1 text-sm shadow-md" role="status">
