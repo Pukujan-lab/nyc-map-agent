@@ -37,7 +37,7 @@ export async function transcribe(form: FormData, headers: Headers, fetchImpl: ty
   const limit = limiter.take(clientIp(headers));
   if (!limit.ok) return json({ error: "rate_limited" }, 429);
   const out = new FormData();
-  out.set("file", audio, typeof (audio as File).name === "string" ? (audio as File).name : "speech.webm");
+  out.set("file", audio, typeof (audio).name === "string" ? (audio).name : "speech.webm");
   out.set("model", model);
   out.set("response_format", "json");
   const lang = whisperLang(typeof form.get("lang") === "string" ? (form.get("lang") as string) : null);
