@@ -11,3 +11,7 @@ playwright-report/
 test-results/
 .aba-results/
 .superpowers/
+
+# Claude Code subagent worktrees (ACS wants them under ~/.cache/acs/worktrees)
+.claude/worktrees/
+.claude/settings.local.json
