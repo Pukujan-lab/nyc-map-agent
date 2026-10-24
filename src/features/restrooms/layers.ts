@@ -1,4 +1,5 @@
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
+import { drawRestroomPictogram } from "@/lib/map/restroomPictogram";
 import { eyeOrCenter } from "@/lib/map/streetPick";
 
 /**
@@ -41,7 +42,7 @@ const RESTROOM_ATTRIBUTION = "NYC Open Data (Public Restrooms), © OpenStreetMap
 const INK = "#121212";
 const CHARTREUSE = "#c6f702";
 
-/** A chartreuse "WC" disc with an ink ring: readable on pale land and over bus badges. */
+/** A chartreuse disc with an ink ring and the restroom pictogram: readable on pale land and over bus badges. */
 function restroomIcon(): ImageData {
   const size = 64;
   const ctx = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
@@ -54,11 +55,7 @@ function restroomIcon(): ImageData {
   ctx.lineWidth = 5;
   ctx.strokeStyle = INK;
   ctx.stroke();
-  ctx.fillStyle = INK;
-  ctx.font = "bold 22px system-ui, sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("WC", size / 2, size / 2 + 1);
+  drawRestroomPictogram(ctx, size / 2, size / 2, 36, INK);
   return ctx.getImageData(0, 0, size, size);
 }
 
@@ -371,7 +368,7 @@ export function setRestroomsVisible(map: MapLibreMap, on: boolean): void {
   if (map.getLayer(RESTROOMS_LAYER)) map.setLayoutProperty(RESTROOMS_LAYER, "visibility", on ? "visible" : "none");
 }
 
-/** WC icons for the street-view inset. The caller fills the source. */
+/** Restroom icons for the street-view inset. The caller fills the source. */
 export function mountMiniRestrooms(map: MapLibreMap): void {
   if (!map.hasImage(ICON)) map.addImage(ICON, restroomIcon(), { pixelRatio: 2 });
   if (!map.getSource(MINI_SOURCE)) map.addSource(MINI_SOURCE, { type: "geojson", data: EMPTY, attribution: RESTROOM_ATTRIBUTION });

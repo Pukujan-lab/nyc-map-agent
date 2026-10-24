@@ -11,6 +11,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { cornerOffset, crossingsNear, dirOf, streetBearingAt, toLocal, type NamedStreet } from "./signPlacement";
 import { busStopsShown, eyeOrCenter, kioskSources, setPickTargets, subscribeBusStops, type PickTarget } from "./streetPick";
 import { LANDMARKS } from "./landmarks";
+import { drawRestroomPictogram } from "./restroomPictogram";
 import { atlasCell, facadeCategory } from "./storefrontCategory";
 import maplibregl, { type CustomLayerInterface, type CustomRenderMethodInput, type Map as MaplibreMap } from "maplibre-gl";
 // Default import: also loads under Node (CJS) for scripts/make-landmarks.ts.
@@ -1126,8 +1127,7 @@ function drawKioskPanels(g: CanvasRenderingContext2D) {
       g.fillRect(x + 10, 10, S - 20, 14);
       g.textAlign = "center";
       g.textBaseline = "middle";
-      g.font = '800 150px "Helvetica Neue", Arial, sans-serif';
-      g.fillText("WC", x + S / 2, 150);
+      drawRestroomPictogram(g, x + S / 2, 150, 170, "#16161a");
       g.font = '600 46px "Helvetica Neue", Arial, sans-serif';
       g.fillText("Restroom", x + S / 2, 262);
       const band = access === "anyone";
