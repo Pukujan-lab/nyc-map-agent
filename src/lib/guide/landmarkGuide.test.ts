@@ -1,6 +1,8 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   loadGuideLandmarks,
+  landmarksNear,
+  STREET_LEVEL_RANGE_M,
   TIER_MIN_ZOOM,
   bearingTo,
   compassDirection,
@@ -97,6 +99,20 @@ describe("pickGuideLandmarks", () => {
     const list = [mk({ id: "museum", category: "museum", tier: 3, lon: 0, lat: 0.009 }), mk({ id: "tower", tier: 2, lon: 0, lat: 0.02 })];
     expect(pickGuideLandmarks({ lon: 0, lat: 0 }, 0, { list }).map((p) => p.landmark.id)).toEqual(["tower"]);
     expect(pickGuideLandmarks({ lon: 0, lat: 0.1 }, 0, { list })).toEqual([]);
+  });
+
+  it("caps distance at street level, so a far tower drops out", () => {
+    // A tier-1 tower ~2.2 km north: inside its 4 km sight range, outside the street-level cap.
+    const list = [mk({ id: "far", lon: 0, lat: 0.02 }), mk({ id: "near", category: "museum", lon: 0.005, lat: 0 })];
+    expect(pickGuideLandmarks({ lon: 0, lat: 0 }, 0, { list }).map((p) => p.landmark.id)).toEqual(["far", "near"]);
+    expect(pickGuideLandmarks({ lon: 0, lat: 0 }, 0, { list, maxDistanceM: STREET_LEVEL_RANGE_M }).map((p) => p.landmark.id)).toEqual(["near"]);
+    expect(landmarksNear({ lon: 0, lat: 0 }, STREET_LEVEL_RANGE_M, list).map((l) => l.id)).toEqual(["near"]);
+  });
+
+  it("keeps JFK off the street-level map in Times Square", () => {
+    const near = landmarksNear({ lon: -73.9857, lat: 40.758 }, STREET_LEVEL_RANGE_M).map((l) => l.name);
+    expect(near).toContain("Times Square");
+    expect(near).not.toContain("John F. Kennedy International Airport");
   });
 
   it("says you are there when standing on it", () => {

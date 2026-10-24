@@ -15,8 +15,8 @@ import { busStopIconOpacity, busStopTextOpacity } from "@/lib/map/busStops";
 import { applyPlaces, placesStale, usePlaces, withQuickPlaces } from "@/lib/map/places";
 import { useMapOptions } from "@/lib/map/mapOptions";
 import { applyBuildings, cityDetail, mapLevel, wantsFlatBuildings } from "@/lib/map/buildings";
-import { installLandmarkLabels, isLandmarkLayer } from "@/lib/map/landmarkLabels";
-import { describeGuide, pickGuideLandmarks } from "@/lib/guide/landmarkGuide";
+import { focusLandmarks, installLandmarkLabels, isLandmarkLayer } from "@/lib/map/landmarkLabels";
+import { STREET_LEVEL_RANGE_M, describeGuide, pickGuideLandmarks } from "@/lib/guide/landmarkGuide";
 import { applyMapTheme, buildingEdge, setThemeCoords, usePalette } from "@/lib/theme";
 import { sharedCoords } from "@/lib/geo/sharedLocation";
 
@@ -1158,10 +1158,14 @@ export function MapView({
         lines = namedStreetLines(map);
         at = { lng: c.lng, lat: c.lat };
         placed = true;
+        // Only nearby landmarks on the street-level map, same cap as the header.
+        focusLandmarks(map, { lon: c.lng, lat: c.lat });
       }
       // Street, then the landmark you can see: "Grand St & Essex St · Empire State Building ahead".
       const street = streetLabel(streetPosition(lines, c.lng, c.lat));
-      const guide = describeGuide(pickGuideLandmarks({ lon: c.lng, lat: c.lat }, eye ? eye.bearing : map.getBearing(), { max: 1 }));
+      const guide = describeGuide(
+        pickGuideLandmarks({ lon: c.lng, lat: c.lat }, eye ? eye.bearing : map.getBearing(), { max: 1, maxDistanceM: STREET_LEVEL_RANGE_M }),
+      );
       const label = [street, guide].filter(Boolean).join(" · ") || null;
       setStreetHere((prev) => (prev === label ? prev : label));
     };
@@ -1177,6 +1181,8 @@ export function MapView({
     return () => {
       window.clearInterval(id);
       map.off("sourcedata", onData);
+      // Leaving street level: the whole list again, thinned by zoom.
+      focusLandmarks(map, null);
     };
   }, [ready, walking]);
 

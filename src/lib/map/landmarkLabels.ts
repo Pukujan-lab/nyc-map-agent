@@ -1,6 +1,6 @@
 import type { ExpressionSpecification, GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import type { FeatureCollection, Point } from "geojson";
-import { TIER_MIN_ZOOM, guideLandmarks, loadGuideLandmarks, type GuideCategory, type GuideLandmark } from "@/lib/guide/landmarkGuide";
+import { STREET_LEVEL_RANGE_M, TIER_MIN_ZOOM, guideLandmarks, landmarksNear, loadGuideLandmarks, type LonLat, type GuideCategory, type GuideLandmark } from "@/lib/guide/landmarkGuide";
 
 /**
  * Landmarks on the simple map (#361 goal 3, after #363's four names): a badge
@@ -106,6 +106,18 @@ export function byTierZoom<T extends string | number>(on: ExpressionSpecificatio
     z2, ["case", ["<=", ["get", "tier"], 2], on, off],
     z3, on,
   ] as ExpressionSpecification;
+}
+
+/**
+ * Street level: only landmarks within STREET_LEVEL_RANGE_M of `at`, so a far
+ * airport does not float on the horizon. null restores the whole list (Top
+ * and tilted views keep their zoom-based density).
+ */
+export function focusLandmarks(map: MapLibreMap, at: LonLat | null): void {
+  const src = map.getSource(LANDMARK_LABELS_SOURCE);
+  if (!src || !("setData" in src)) return;
+  const list = at ? landmarksNear(at, STREET_LEVEL_RANGE_M) : guideLandmarks();
+  (src as GeoJSONSource).setData(landmarkLabelsGeoJson(list));
 }
 
 /** Adds the source and layer once per style; safe to call again (it also re-raises the layer above later symbols). */

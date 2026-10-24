@@ -117,6 +117,16 @@ export interface PickOptions {
   /** At most this many (default 2). */
   max?: number;
   list?: readonly GuideLandmark[];
+  /** Ignore anything farther than this, whatever its sight range (street level: STREET_LEVEL_RANGE_M). */
+  maxDistanceM?: number;
+}
+
+/** At street level only landmarks this close are drawn or named; JFK is not on a Midtown horizon. */
+export const STREET_LEVEL_RANGE_M = 1500;
+
+/** Landmarks within `radiusM` of `at` (the street-level map shows only these). */
+export function landmarksNear(at: LonLat, radiusM: number, list: readonly GuideLandmark[] = guideLandmarks()): GuideLandmark[] {
+  return list.filter((l) => metresTo(at, l) <= radiusM);
 }
 
 /** What you face is easier to find than what is behind you. */
@@ -141,7 +151,7 @@ export function pickGuideLandmarks(at: LonLat, heading: number | null, opts: Pic
   for (const l of opts.list ?? guideLandmarks()) {
     const distanceM = metresTo(at, l);
     const range = sightRangeM(l);
-    if (distanceM > range) continue;
+    if (distanceM > range || distanceM > (opts.maxDistanceM ?? Infinity)) continue;
     const bearing = bearingTo(at, l);
     const turn = heading === null || !Number.isFinite(heading) ? null : turnFrom(heading, bearing);
     // Standing on it: still worth naming, so no zero-distance blow-up.
