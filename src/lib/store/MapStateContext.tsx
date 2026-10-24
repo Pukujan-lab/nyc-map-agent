@@ -33,6 +33,8 @@ export interface NavCommand {
   type: NavCommandType;
   /** For "height": the camera height above the street, in metres. */
   heightM?: number;
+  /** For "height": a tilt to use instead of the one the height implies (Aerial on the agent-first home). */
+  pitch?: number;
   nonce: number;
 }
 
@@ -107,7 +109,7 @@ interface MapStateActions {
   flyTo: (target: Omit<CameraTarget, "nonce">) => void;
   navigate: (type: NavCommandType) => void;
   /** Moves the camera to this height (metres), from eye level to overhead. */
-  setCameraHeight: (heightM: number) => void;
+  setCameraHeight: (heightM: number, pitch?: number) => void;
   /** The camera's current height above the street, reported by the map. */
   cameraHeightM: number;
   reportCameraHeight: (heightM: number) => void;
@@ -265,8 +267,8 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
     setNavCommand({ type, nonce: Date.now() });
   }, []);
 
-  const setCameraHeight = useCallback((heightM: number) => {
-    setNavCommand({ type: "height", heightM, nonce: Date.now() });
+  const setCameraHeight = useCallback((heightM: number, pitch?: number) => {
+    setNavCommand({ type: "height", heightM, ...(pitch === undefined ? {} : { pitch }), nonce: Date.now() });
   }, []);
 
   const reportCameraHeight = useCallback((heightM: number) => {

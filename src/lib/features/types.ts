@@ -44,6 +44,11 @@ export interface FeatureModule {
    * `replacesChat` hands the rail's Ask button (MapState.chatOpen) to it.
    */
   overlay?: { load: () => Promise<{ default: ComponentType }>; replacesChat?: boolean };
+  /**
+   * The "My day" dropdown's body on the agent-first home's menu row (#370), lazy
+   * (own chunk). `onClose` closes the dropdown, e.g. after a row opens the map.
+   */
+  myDay?: { load: () => Promise<{ default: ComponentType<{ onClose: () => void }> }> };
   /** Hono route paths in server/features/<name>/. */
   routes?: string[];
 }

@@ -1,5 +1,5 @@
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
-import type { LngLatTuple, Trip } from "./schema";
+import type { LngLatTuple, MapPoint, Trip } from "./schema";
 
 /** The planned trip as MapLibre line/circle layers on one GeoJSON source, plus a moving marker. */
 const SRC = "agent-trip";
@@ -37,9 +37,11 @@ export function tripToGeoJson(trip: Trip): GeoJSON.FeatureCollection {
   return { type: "FeatureCollection", features };
 }
 
-export function showTrip(map: MapLibreMap, trip: Trip): void {
+/** Draw the trip and fit the camera to it; `fit: false` only redraws (a preview owns the camera). */
+export function showTrip(map: MapLibreMap, trip: Trip, { fit = true }: { fit?: boolean } = {}): void {
   ensure(map);
   (map.getSource(SRC) as GeoJSONSource).setData(tripToGeoJson(trip));
+  if (!fit) return;
   const all = trip.legs.flatMap((l) => ("coords" in l ? l.coords : [[l.portal.lon, l.portal.lat] as LngLatTuple]));
   const lons = all.map((c) => c[0]);
   const lats = all.map((c) => c[1]);
@@ -52,6 +54,27 @@ export function setMarker(map: MapLibreMap, at: LngLatTuple | null, route?: stri
     type: "FeatureCollection",
     features: at ? [{ type: "Feature", properties: { color: route ? ROUTE_COLOR[route] ?? null : null }, geometry: { type: "Point", coordinates: at } }] : [],
   });
+}
+
+/** Route colour by line id; grey for an unknown line. */
+export const routeColor = (route: string): string => ROUTE_COLOR[route.replace(/X$/, "")] ?? "#808183";
+
+/** Named spots from an answer button (stops, skipped stations, crash hotspots): one source, replaced on each tap. */
+const POINTS = "agent-points";
+export function pointsToGeoJson(points: MapPoint[], color: string): GeoJSON.FeatureCollection {
+  return { type: "FeatureCollection", features: points.map((p) => ({ type: "Feature", properties: { name: p.name, color }, geometry: { type: "Point", coordinates: p.at } })) };
+}
+export function showPoints(map: MapLibreMap, points: MapPoint[], color: string): void {
+  if (!map.getSource(POINTS)) {
+    map.addSource(POINTS, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    map.addLayer({ id: `${POINTS}-dot`, type: "circle", source: POINTS, paint: { "circle-radius": 7, "circle-color": ["get", "color"], "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 } });
+    map.addLayer({ id: `${POINTS}-label`, type: "symbol", source: POINTS, layout: { "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-anchor": "left", "text-offset": [1, 0], "text-optional": true, "text-max-width": 14 }, paint: { "text-color": "#111827", "text-halo-color": "#ffffff", "text-halo-width": 1.5 } });
+  }
+  (map.getSource(POINTS) as GeoJSONSource).setData(pointsToGeoJson(points, color));
+  if (points.length === 1) { map.flyTo({ center: points[0].at, zoom: Math.max(map.getZoom(), 15), duration: 800 }); return; }
+  const lons = points.map((p) => p.at[0]);
+  const lats = points.map((p) => p.at[1]);
+  map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: 80, maxZoom: 16, duration: 800 });
 }
 
 const saved = new Map<string, unknown>();

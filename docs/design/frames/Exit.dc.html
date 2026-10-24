@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Find exit: underground</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#9ec5ff}a:hover{color:#cfe2ff}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #0b1220; font-family: Inter, system-ui, sans-serif; color: #f1f5f9">
+<svg width="390" height="844" viewBox="0 0 390 844" aria-hidden="true" style="position: absolute; inset: 0; opacity: 0.6">
+<rect x="150" y="80" width="90" height="560" rx="16" fill="#111c2f" stroke="#22314a" stroke-width="2"></rect>
+<path d="M195 70 L195 650" stroke="#2563eb" stroke-width="6" stroke-dasharray="12 10"></path>
+<rect x="120" y="150" width="30" height="24" rx="4" fill="#1e293b"></rect><rect x="240" y="470" width="30" height="24" rx="4" fill="#1e293b"></rect>
+</svg>
+<div style="position: absolute; top: 16px; left: 16px; right: 16px; display: flex; align-items: center; justify-content: space-between">
+<div style="display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 12px 0 6px; border-radius: 22px; background: rgba(15,23,42,0.55); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(148,163,184,0.18)">
+<span style="width: 32px; height: 32px; border-radius: 16px; background: #2563eb; color: #ffffff; display: flex; align-items: center; justify-content: center; font: 800 15px Inter, system-ui, sans-serif">A</span>
+<span style="font-size: 14px; font-weight: 600">42 St–Port Authority</span>
+</div>
+<span style="display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border-radius: 16px; background: rgba(15,23,42,0.55); border: 1px solid rgba(148,163,184,0.18); font-size: 12px; font-weight: 600; color: #cbd5e1"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M2 2l20 20M8.5 16.5a5 5 0 0 1 7 0M5 13a10 10 0 0 1 5.2-2.7M19 13a10 10 0 0 0-2.3-1.7M12 20h.01"></path></svg>Offline</span>
+</div>
+<div style="position: absolute; left: 12px; right: 12px; top: 84px; border-radius: 24px; background: rgba(11,18,32,0.5); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid rgba(148,163,184,0.16); padding: 18px 16px; display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center">
+<span style="font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #a5b4cb">Your exit</span>
+<span style="font-size: 24px; font-weight: 700; line-height: 1.25">W 42 St &amp; 8 Av<br>NE corner</span>
+<div style="position: relative; width: 168px; height: 168px; border-radius: 84px; border: 2px solid rgba(148,163,184,0.25); display: flex; align-items: center; justify-content: center">
+<span style="position: absolute; top: 8px; font-size: 11px; font-weight: 700; color: #a5b4cb">N</span>
+<svg width="96" height="96" viewBox="0 0 96 96" role="img" aria-label="Arrow pointing to your exit, slightly right" style="transform: rotate(28deg)"><path d="M48 6 L70 70 L48 58 L26 70 Z" fill="#60a5fa" stroke="#dbeafe" stroke-width="2" stroke-linejoin="round"></path></svg>
+</div>
+<span style="font-size: 18px; font-weight: 600">About 80 m · near the front</span>
+<span style="font-size: 13px; color: #fcd34d">Approximate · stay behind the yellow line</span>
+<div style="width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<a href="Calibrate.dc.html" style="display: flex; align-items: center; justify-content: center; text-decoration: none; box-sizing: border-box; cursor: pointer; height: 48px; border-radius: 24px; border: none; background: #2563eb; color: #ffffff; font: 600 14px Inter, system-ui, sans-serif">I'm out</a>
+<button type="button" style="height: 48px; border-radius: 24px; border: 1px solid rgba(148,163,184,0.3); background: transparent; color: #f1f5f9; font: 600 14px Inter, system-ui, sans-serif">Other exits</button>
+</div>
+</div>
+<div style="position: absolute; left: 0; right: 0; bottom: 0; padding: 0 16px 24px">
+<div style="display: flex; align-items: center; gap: 8px; padding: 6px; border-radius: 30px; background: #f8fafc; box-shadow: 0 8px 24px rgba(0,0,0,0.45)">
+<label for="ask7" style="position: absolute; left: -9999px">Ask the map</label>
+<input id="ask7" type="text" placeholder="Ask about this station…" style="flex: 1; min-width: 0; height: 44px; padding-left: 12px; border: none; background: transparent; font: 400 16px Inter, system-ui, sans-serif; color: #0f172a; outline: none">
+<button type="button" aria-label="Dictate" style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 22px; border: none; background: transparent; color: #475569; display: flex; align-items: center; justify-content: center; padding: 0"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg></button>
+<button type="button" aria-label="Hands-free conversation" style="width: 52px; height: 52px; flex-shrink: 0; border-radius: 26px; border: none; background: #2563eb; color: #ffffff; display: flex; align-items: center; justify-content: center; padding: 0"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"></path></svg></button>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

@@ -15,9 +15,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
+import { setAmbient } from "@/lib/ambient";
 import { useFlag } from "@/lib/flags";
 import { getMapInstance } from "@/lib/map/mapInstance";
+import { useDataView } from "@/lib/store/DataViewContext";
+import { followTripRoute } from "@/lib/transit/routeFollow";
+import { followUpQuestion } from "./followUpQuestion";
+import { setSelectedLine, useSelectedLine } from "@/lib/transit/selectedLine";
 import { useMapState } from "@/lib/store/MapStateContext";
+import { publishActiveTrip } from "@/lib/transit/activeTrip";
 import { revealTripBuses } from "@/lib/transit/busReveal";
 import { setFollowed } from "@/lib/transit/follow";
 import { usePanel } from "@/lib/store/PanelContext";
@@ -26,18 +32,45 @@ import { cn } from "@/lib/utils";
 import { useSpeech } from "@/lib/voice/useSpeech";
 import { spokenSummary } from "@/lib/voice/tts";
 import { executeCommand, type ExecutorContext } from "./executor";
-import type { Trip, TripMode } from "./schema";
+import { PLAYBACK_SPEEDS, langTag, type MapAction, type PlaybackSpeed, type Trip, type TripMode } from "./schema";
 import { askAgent } from "./stream";
+import { TripPreview } from "./TripPreview";
 import { TripSummary, selectAlternative } from "./TripSummary";
-import { showTrip } from "./tripLayer";
+import { routeColor, showPoints, showTrip } from "./tripLayer";
+import { runMapAction, TROUBLE_COLOR, type MapActionContext } from "./mapActions";
+import { AnswerActions, RestroomSpotDetails } from "./AnswerActions";
+import { AnswerSources, type AnswerSourcesLine } from "./AnswerSources";
+import { formatStreetText } from "@/lib/streetName";
 import { sharedCoords, startSharing, stopSharing, useSharedLocation } from "@/lib/geo/sharedLocation";
 import { usePlayer, type Speed } from "./usePlayer";
 import { useWakePhrase } from "./useWakePhrase";
 import { useHandsFree } from "./useHandsFree";
 import { closeAsk, useAskRequest } from "@/lib/agent/streetContext";
+import { AgentHome, AnswerCard, WorkingPanel } from "./AgentHome";
+import { DailyCard, TaskButtons } from "./HomeTasks";
+import { rememberCommute, useHomeWork } from "./commute";
+import { memorySummary } from "./memorySummary";
+import { rememberChat, rememberLookup } from "@/lib/memory/memory";
+import { useLangPref } from "@/lib/voice/langPref";
+import { useVoicePrefs } from "@/lib/voice/voicePrefs";
+import { useFollowed } from "@/lib/transit/follow";
+import { useLinesControl } from "@/lib/transit/linesControl";
+import { useStationHelp, useStationHelpVisible } from "@/lib/underground/stationHelp";
+import { applyStep, statusLine, type AgentStep } from "./agentSteps";
+import { speechTag, statusLang } from "./statusLines";
 import { needsSharedOrigin, ORIGIN_PROMPT, replyAsksForOrigin } from "./needsOrigin";
 
-interface Msg { id: string; role: "user" | "assistant"; content: string; offerLocation?: boolean }
+interface Msg { id: string; role: "user" | "assistant"; content: string; offerLocation?: boolean; actions?: MapAction[]; sources?: AnswerSourcesLine }
+
+/** A spoken status line covers a voice question that is still working after this long (#370). */
+const STATUS_AFTER_MS = 2500;
+const VOICE_UNSUPPORTED = "Voice input isn't available in this browser. Type your question instead.";
+
+/** The browser language, when it is a tag the server accepts. */
+function browserLang(): string | undefined {
+  const l = typeof navigator === "undefined" ? undefined : navigator.language;
+  return l && langTag.safeParse(l).success ? l : undefined;
+}
 
 const MODES: Array<{ id: TripMode; label: string; Icon: typeof Bus }> = [
   { id: "walk", label: "Walk", Icon: Footprints },
@@ -46,8 +79,22 @@ const MODES: Array<{ id: TripMode; label: string; Icon: typeof Bus }> = [
 ];
 
 export default function AgentOverlay() {
-  const { chatOpen, setChatOpen, flyTo, startWalk, stopWalk, chatSeed, clearSeed } = useMapState();
-  const { showPanel, closeAll } = usePanel();
+  const { setRoutePoint, setFollowingRoute, followingRoute } = useDataView();
+  const { chatOpen, setChatOpen, flyTo, startWalk, stopWalk, chatSeed, clearSeed, setRestrooms, walking, streetViewOpen } = useMapState();
+  const { showPanel, closeAll, content: panelContent, minimized: panelMinimized, drawerOpen } = usePanel();
+  // Agent-first home (#370): bottom chat bar, voice waveform, visible steps.
+  const home = useFlag("agentHome");
+  const undergroundOn = useFlag("underground");
+  const places = useHomeWork();
+  const followed = useFollowed();
+  const selectedLine = useSelectedLine();
+  const openLines = useLinesControl();
+  const stationHelp = useStationHelp();
+  const stationHelpVisible = useStationHelpVisible();
+  const homeInput = useRef<HTMLInputElement>(null);
+  // A stored language wins; otherwise the browser's, read when it changes.
+  const storedLang = useLangPref();
+  const lang = storedLang ?? browserLang();
   // One panel at a time (#225): opening Ask closes the drawer and any sheet.
   useEffect(() => {
     if (chatOpen) closeAll();
@@ -59,8 +106,16 @@ export default function AgentOverlay() {
   const [busy, setBusy] = useState(false);
   const [trip, setTrip] = useState<Trip | null>(null);
   const [mode, setMode] = useState<TripMode>("transit");
-  const [wake, setWake] = useState(false);
+  const [wakeClassic, setWake] = useState(false);
+  // Home: voice settings live in the Settings menu (#370).
+  const voicePrefs = useVoicePrefs();
+  const wake = home ? voicePrefs.wake : wakeClassic;
   const [mapTime, setMapTime] = useState<string | null>(null);
+  // Street weather forecasts the trip's departure hour instead of now.
+  useEffect(() => {
+    setAmbient({ tripDepart: trip?.departIso ?? null });
+    return () => setAmbient({ tripDepart: null });
+  }, [trip]);
   const shared = useSharedLocation();
   const abort = useRef<AbortController | null>(null);
   const messagesRef = useRef<Msg[]>([]);
@@ -71,15 +126,71 @@ export default function AgentOverlay() {
   const askReq = useAskRequest();
   const compact = askReq !== null;
 
-  const speech = useSpeech({ onFinalTranscript: (t) => void send(t) });
+  const [steps, setSteps] = useState<AgentStep[]>([]);
+  const stepsRef = useRef<AgentStep[]>([]);
+  stepsRef.current = steps;
+  const [notice, setNotice] = useState<string | null>(null);
+  /** The next send came from speech, so a long wait gets a spoken status line. */
+  const voiceTurn = useRef(false);
+  // The small mic dictates into the text box; the big button holds a hands-free conversation.
+  const [dictating, setDictating] = useState(false);
+  const dictatingRef = useRef(false);
+  const speech = useSpeech({
+    onFinalTranscript: (t) => {
+      if (dictatingRef.current) {
+        dictatingRef.current = false;
+        setDictating(false);
+        setInput((v) => (v.trim() ? `${v.trim()} ${t}` : t));
+        return;
+      }
+      voiceTurn.current = true;
+      void send(t);
+    },
+    lang: home ? lang : undefined,
+  });
+  // Dictation that ends without words (silence, an error) lets go of the mic button.
+  const wasListening = useRef(false);
+  useEffect(() => {
+    if (wasListening.current && !speech.listening && dictatingRef.current) {
+      dictatingRef.current = false;
+      setDictating(false);
+    }
+    wasListening.current = speech.listening;
+  }, [speech.listening]);
   const player = usePlayer((text) => speech.speak(text));
+  /** Speed the next Play uses: the agent's pick or the person's last tap. */
+  const [prefSpeed, setPrefSpeed] = useState<PlaybackSpeed>(10);
   // Ask, the route fit, and the preview all move the camera. Follow and street
-  // view let go first, without the Stop following glide back.
-  const handoffCamera = () => {
+  // view let go first, without the Stop following glide back. Starting the
+  // preview keeps the player (it is the new camera owner).
+  const handoffCamera = (keepPreview = false) => {
     setFollowed(null);
-    player.release();
+    if (!keepPreview) player.release();
     stopWalk();
     getMapInstance()?.stop();
+  };
+  /**
+   * Another option chosen (chat card or trip panel): redraw it and, if the
+   * preview is loaded, restart it on that route from its start. A playing
+   * preview keeps the camera, so the map does not fit to the new route then.
+   */
+  const chooseTrip = (next: Trip) => {
+    revealTripBuses(next);
+    setTrip(next);
+    const m = getMapInstance();
+    if (m) showTrip(m, next, { fit: !player.state.playing });
+    player.select(next);
+  };
+  const chooseRef = useRef(chooseTrip);
+  chooseRef.current = chooseTrip;
+  /** The Play button: the only thing that starts the preview. */
+  const startPreview = (t: Trip, speed: PlaybackSpeed) => {
+    handoffCamera(true);
+    revealTripBuses(t);
+    setTrip(t);
+    setPrefSpeed(speed);
+    setChatOpen(false);
+    player.start(t, speed);
   };
 
   const ctx: ExecutorContext = {
@@ -88,19 +199,59 @@ export default function AgentOverlay() {
     openTrip: (t) => {
       revealTripBuses(t);
       setTrip(t);
-      showPanel({ id: `agent:trip:${t.id}`, title: `To ${t.destination.label}`, subtitle: `${t.departIso.slice(11)} → ${t.arriveIso.slice(11)}`, summary: <TripSummary trip={t} compact onSelect={(alt) => ctxRef.current.openTrip(selectAlternative(t, alt))} />, details: <TripSummary trip={t} bodyOnly /> });
+      if (home) { setChatOpen(false); player.load(t, prefSpeed); return; }
+      showPanel({
+        id: `agent:trip:${t.id}`, title: `To ${t.destination.label}`, subtitle: `${t.departIso.slice(11)} → ${t.arriveIso.slice(11)}`,
+        summary: <TripSummary trip={t} compact onSelect={(alt) => { const next = selectAlternative(t, alt); chooseRef.current(next); ctxRef.current.openTrip(next); }} />,
+        details: <TripSummary trip={t} bodyOnly />,
+      });
     },
     enterStreetView: (lon, lat) => { handoffCamera(); startWalk({ lon, lat }); },
-    playFlythrough: (t, speed) => { handoffCamera(); revealTripBuses(t); setTrip(t); setChatOpen(false); player.start(t, speed); },
+    // The agent only loads the preview; it waits for Play (asking for a trip must not start it).
+    playFlythrough: (t, speed) => {
+      revealTripBuses(t);
+      setTrip(t);
+      setPrefSpeed(speed);
+      const m = getMapInstance();
+      if (m) showTrip(m, t);
+      player.load(t, speed);
+      if (home) setChatOpen(false);
+    },
     setTime: (iso) => setMapTime(iso),
   };
   const ctxRef = useRef(ctx);
   ctxRef.current = ctx;
 
+  // Answer buttons (#371): each draws what a tool returned, then gets out of the map's way on a phone.
+  const actionCtx: MapActionContext = {
+    flyTo: ctx.flyTo,
+    showTrip: ctx.showTrip,
+    showRestroom: (r) => {
+      handoffCamera();
+      setRestrooms(true);
+      const m = getMapInstance();
+      if (m) showPoints(m, [{ at: [r.lon, r.lat], name: formatStreetText(r.name) }], "#2563eb");
+      else flyTo({ lon: r.lon, lat: r.lat, zoom: 17 });
+      showPanel({ id: `restroom:${r.name}`, title: formatStreetText(r.name), subtitle: "Public restroom", details: <RestroomSpotDetails restroom={r} /> });
+    },
+    showPoints: (points, { color }) => {
+      handoffCamera();
+      const m = getMapInstance();
+      if (m) showPoints(m, points, color);
+    },
+  };
+  const runAction = (a: MapAction) => {
+    runMapAction(a, actionCtx, routeColor);
+    if (!isDesktop && !compact) setChatOpen(false);
+  };
+
   const send = useCallback(async (text: string) => {
     closeAll();
     const q = text.trim();
+    const byVoice = voiceTurn.current;
+    voiceTurn.current = false;
     if (!q || busy) return;
+    setNotice(null);
     setInput("");
     if (!askReq) setChatOpen(true);
     // A second tap of the same question, after Use my location, keeps the one user bubble.
@@ -118,19 +269,31 @@ export default function AgentOverlay() {
       return;
     }
     pendingQuestion.current = null;
+    // What we remember (#370): the question, on this device, for 30 days, while Chats is on.
+    if (home) rememberChat(q);
     const reply: Msg = { id: crypto.randomUUID(), role: "assistant", content: "" };
     setMessages([...history, reply]);
     setBusy(true);
+    setSteps([]);
     abort.current?.abort();
     abort.current = new AbortController();
     let spoken = "";
+    // A voice question still working after ~2.5 s gets one short spoken status line.
+    const sayIn = statusLang(q, lang);
+    const statusTimer = home && byVoice ? window.setTimeout(() => speech.speak(statusLine(stepsRef.current, sayIn), { lang: speechTag(sayIn, lang) }), STATUS_AFTER_MS) : undefined;
     try {
-      for await (const ev of askAgent({ messages: history.map(({ role, content }) => ({ role, content })), location, mode, now: new Date().toISOString(), ...(askReq ? { context: askReq.context } : {}) }, abort.current.signal)) {
+      const memory = home ? memorySummary() : null;
+      for await (const ev of askAgent({ messages: history.map(({ role, content }) => ({ role, content })), location, mode, now: new Date().toISOString(), ...(askReq ? { context: askReq.context } : {}), ...(home && lang ? { lang } : {}), ...(memory ? { memory } : {}) }, abort.current.signal)) {
+        setSteps((s) => applyStep(s, ev));
         if (ev.type === "text") {
           spoken += ev.text;
           setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, content: x.content + ev.text } : x)));
         } else if (ev.type === "command") {
           executeCommand(ev.command, ctxRef.current);
+        } else if (ev.type === "actions") {
+          setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, actions: ev.actions } : x)));
+        } else if (ev.type === "sources") {
+          setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, sources: ev } : x)));
         } else if (ev.type === "error") {
           setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, content: x.content || ev.message } : x)));
         }
@@ -138,6 +301,7 @@ export default function AgentOverlay() {
     } catch {
       setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, content: x.content || "The assistant is unavailable right now." } : x)));
     } finally {
+      window.clearTimeout(statusTimer);
       setBusy(false);
       // The model still asked for a start: put the same button on its reply.
       if (!askReq && spoken && !sharedCoords() && replyAsksForOrigin(spoken)) {
@@ -148,7 +312,7 @@ export default function AgentOverlay() {
       // person can talk over it to interrupt.
       if (spoken) speech.speak(spokenSummary(spoken), { bargeIn: handsFree });
     }
-  }, [busy, mode, setChatOpen, speech, askReq, handsFree, closeAll]);
+  }, [busy, mode, setChatOpen, speech, askReq, handsFree, closeAll, home, lang]);
 
   // The reply button and the footer chip both share location, then ask the waiting question.
   const enableLocation = useCallback(async () => {
@@ -177,31 +341,46 @@ export default function AgentOverlay() {
     setHandsFree(true);
   };
 
-  useWakePhrase(wake && speech.sttSupported, speech.listening || busy || speech.speaking, (t) => void send(t));
+  useWakePhrase(wake && speech.sttSupported, speech.listening || busy || speech.speaking, (t) => { voiceTurn.current = true; void send(t); });
   useEffect(() => () => abort.current?.abort(), []);
+  // Other features (underground help) prepare for the trip on screen through core.
+  useEffect(() => publishActiveTrip(trip), [trip]);
+  // A trip planned between saved Home and Work becomes the daily card's usual line (kept on this device).
+  useEffect(() => {
+    if (trip) rememberCommute(trip);
+  }, [trip]);
+  // Home: the trip joins "Looked up" in My day (this device only; exact points only with Exact location on).
+  useEffect(() => {
+    if (home && trip) rememberLookup({ from: { label: trip.origin.label, at: trip.origin.at }, to: { label: trip.destination.label, at: trip.destination.at }, routes: trip.routes, mode: trip.mode });
+  }, [home, trip]);
+  // Home: "Speak answers" in Settings.
+  const { setMuted } = speech;
+  useEffect(() => {
+    if (home) setMuted(!voicePrefs.speak);
+  }, [home, voicePrefs.speak, setMuted]);
 
   const ModeIcon = MODES.find((m) => m.id === mode)!.Icon;
   const modes = MODES.filter((m) => m.id !== "drive" || driveOn);
 
-  const body = (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2 border-b py-3 pl-4 pr-12">
-        <div className="flex-1 text-sm font-semibold">{compact ? "Ask about this spot" : "Ask the map"}</div>
+  // The home bar's sheet uses 44 px targets; the classic sheet keeps its compact chips.
+  const chip = home && !compact ? "h-11 gap-1 rounded-full px-3 text-xs" : "h-7 gap-1 rounded-full px-2.5 text-xs";
+  const controls = (
+    <>
         <Button
           type="button"
           variant={handsFree ? "default" : "secondary"}
           size="sm"
-          className="h-7 gap-1 rounded-full px-2.5 text-xs"
+          className={chip}
           aria-pressed={handsFree}
           disabled={!speech.sttSupported}
           title={speech.sttSupported ? undefined : "Voice input is not available in this browser"}
           onClick={toggleHandsFree}
         >
-          <Headphones className="h-3.5 w-3.5" /> Hands-free
+          <Headphones className="h-3.5 w-3.5" /> <span className={home && !compact ? "sr-only sm:not-sr-only" : undefined}>Hands-free</span>
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="secondary" size="sm" className="h-7 gap-1 rounded-full px-2.5 text-xs" aria-label={`Trip mode: ${mode}`}>
+            <Button variant="secondary" size="sm" className={chip} aria-label={`Trip mode: ${mode}`}>
               <ModeIcon className="h-3.5 w-3.5" /> {MODES.find((m) => m.id === mode)!.label}
             </Button>
           </DropdownMenuTrigger>
@@ -215,7 +394,7 @@ export default function AgentOverlay() {
         </DropdownMenu>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Assistant settings"><MoreVertical className="h-4 w-4" /></Button>
+            <Button variant="ghost" size="icon" className={home && !compact ? "h-11 w-11" : "h-8 w-8"} aria-label="Assistant settings"><MoreVertical className="h-4 w-4" /></Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-64">
             <DropdownMenuLabel>Voice</DropdownMenuLabel>
@@ -231,18 +410,11 @@ export default function AgentOverlay() {
             </p>
           </DropdownMenuContent>
         </DropdownMenu>
-      </div>
+    </>
+  );
 
-      {handsFree || speech.listening || (speech.speaking && handsFree) ? (
-        <div className="flex items-center gap-2 border-b bg-muted/50 px-4 py-1.5 text-xs" role="status" data-testid="voice-status">
-          <span className={cn("h-2 w-2 rounded-full", speech.listening ? "animate-pulse bg-destructive" : busy || speech.speaking ? "animate-pulse bg-primary" : "bg-muted-foreground")} />
-          <span>{speech.listening ? (speech.interim ? `Listening: “${speech.interim}”` : "Listening") : busy ? "Thinking…" : speech.speaking ? (handsFree ? "Speaking (talk to interrupt)" : "Speaking") : "Hands-free on"}</span>
-          <span className="ml-auto text-muted-foreground">Nothing is recorded or saved.</span>
-        </div>
-      ) : null}
-      {speech.error && handsFree ? <p className="border-b px-4 py-1.5 text-xs text-muted-foreground">{speech.error}</p> : null}
-
-      <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3" aria-live="polite">
+  const answers = (
+    <>
         {messages.length === 0 ? (
           <div className="space-y-2 text-sm text-muted-foreground">
             <p>Ask anything about getting around. For example:</p>
@@ -251,9 +423,13 @@ export default function AgentOverlay() {
             ))}
           </div>
         ) : (
-          messages.map((m) => (
+          messages.map((m) =>
+            // In the home sheet the working panel stands in for the empty reply bubble.
+            home && !compact && m.role === "assistant" && !m.content && !m.actions?.length && !m.offerLocation ? null : (
             <div key={m.id} className={cn("max-w-[90%] rounded-lg px-3 py-2 text-sm", m.role === "user" ? "ml-auto bg-primary text-primary-foreground" : "bg-muted")}>
               {m.content || (busy ? "…" : "")}
+              {m.actions?.length ? <AnswerActions actions={m.actions} onRun={runAction} /> : null}
+              {m.sources ? <AnswerSources line={m.sources} /> : null}
               {m.offerLocation && shared.status !== "on" ? (
                 <Button type="button" size="sm" className="mt-2 h-8 w-full gap-1.5" disabled={shared.status === "asking"} onClick={() => void enableLocation()}>
                   <LocateFixed className="h-4 w-4" aria-hidden="true" />
@@ -261,16 +437,26 @@ export default function AgentOverlay() {
                 </Button>
               ) : null}
             </div>
-          ))
+            ),
+          )
         )}
+        {home && !compact && busy ? <WorkingPanel steps={steps} /> : null}
         {trip ? (
           <div className="rounded-lg border p-3">
-            <TripSummary trip={trip} mapTime={mapTime} onSelect={(alt) => ctx.showTrip(selectAlternative(trip, alt))} />
-            <Button size="sm" className="mt-3 w-full gap-2" onClick={() => ctx.playFlythrough(trip, 10)}><Play className="h-4 w-4" /> Preview trip</Button>
+            <TripSummary trip={trip} mapTime={mapTime} onSelect={(alt) => chooseTrip(selectAlternative(trip, alt))} />
+            <div className="mt-3 flex items-center gap-1.5">
+              <Button size="sm" className="flex-1 gap-2" onClick={() => (player.state.playing && player.state.tripId === trip.id ? player.toggle() : startPreview(trip, prefSpeed))}>
+                {player.state.playing && player.state.tripId === trip.id ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                {player.state.tripId !== trip.id ? "Play trip preview" : player.state.playing ? "Pause preview" : player.state.status === "paused" ? "Resume preview" : "Play trip preview"}
+              </Button>
+              <SpeedPicker speed={prefSpeed} onSpeed={(s) => { setPrefSpeed(s); player.setSpeed(s); }} label="Preview speed" />
+            </div>
           </div>
         ) : null}
-      </div>
+    </>
+  );
 
+  const footer = (
       <div className="flex items-center justify-between gap-2 border-t px-3 pt-2 text-xs text-muted-foreground" role="status">
         {shared.status === "on" ? (
           <>
@@ -288,6 +474,29 @@ export default function AgentOverlay() {
           </>
         )}
       </div>
+  );
+
+  const body = (
+    <div className="flex h-full flex-col">
+      <div className="flex items-center gap-2 border-b py-3 pl-4 pr-12">
+        <div className="flex-1 text-sm font-semibold">{compact ? "Ask about this spot" : "Ask the map"}</div>
+        {controls}
+      </div>
+
+      {handsFree || speech.listening || (speech.speaking && handsFree) ? (
+        <div className="flex items-center gap-2 border-b bg-muted/50 px-4 py-1.5 text-xs" role="status" data-testid="voice-status">
+          <span className={cn("h-2 w-2 rounded-full", speech.listening ? "animate-pulse bg-destructive" : busy || speech.speaking ? "animate-pulse bg-primary" : "bg-muted-foreground")} />
+          <span>{speech.listening ? (speech.interim ? `Listening: “${speech.interim}”` : "Listening") : busy ? "Thinking…" : speech.speaking ? (handsFree ? "Speaking (talk to interrupt)" : "Speaking") : "Hands-free on"}</span>
+          <span className="ml-auto text-muted-foreground">Nothing is recorded or saved.</span>
+        </div>
+      ) : null}
+      {speech.error && handsFree ? <p className="border-b px-4 py-1.5 text-xs text-muted-foreground">{speech.error}</p> : null}
+
+      <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3" aria-live="polite">
+        {answers}
+      </div>
+
+      {footer}
       <form className="flex items-end gap-2 p-3" onSubmit={(e) => { e.preventDefault(); void send(input); }}>
         {speech.listening ? (
           <div className="flex h-9 flex-1 items-center gap-2 rounded-md border px-3 text-sm" role="status">
@@ -334,28 +543,196 @@ export default function AgentOverlay() {
     return slot ? createPortal(panel, slot) : <div className="fixed inset-x-0 bottom-0 z-[60] h-0">{panel}</div>;
   }
 
+  const playback = player.state.active ? (
+    <PlaybackBar
+      playing={player.state.playing}
+      speed={player.state.speed}
+      callout={player.state.callout}
+      step={`${player.state.seg + 1}/${player.state.segs.length}`}
+      onToggle={player.toggle}
+      onSpeed={(s) => { setPrefSpeed(s); player.setSpeed(s); }}
+      onSkip={player.skip}
+      onClose={player.stop}
+    />
+  ) : null;
+
+  if (home) {
+    const voiceOff = () => setNotice(VOICE_UNSUPPORTED);
+    const toggleDictation = () => {
+      if (!speech.sttSupported) return voiceOff();
+      if (dictating) { dictatingRef.current = false; setDictating(false); speech.stopListening(); return; }
+      if (handsFree) setHandsFree(false);
+      speech.stopListening();
+      setNotice(null);
+      speech.clearError();
+      dictatingRef.current = true;
+      setDictating(true);
+      speech.startListening();
+    };
+    const toggleVoice = () => {
+      if (!speech.sttSupported) return voiceOff();
+      if (dictating) { dictatingRef.current = false; setDictating(false); speech.stopListening(); }
+      setNotice(null);
+      toggleHandsFree();
+    };
+    const stopOrb = () => { setHandsFree(false); speech.stopListening(); };
+
+    // The last exchange is the answer card; earlier turns stay in the history sent to the agent.
+    const lastUser = [...messages].reverse().find((m) => m.role === "user") ?? null;
+    const reply = messages.at(-1)?.role === "assistant" ? messages.at(-1)! : null;
+    const actions = reply?.actions ?? [];
+    const first = actions[0];
+    const placeOf = (): { name: string; lon: number; lat: number } | null => {
+      if (first?.kind === "showRestroom") return { name: formatStreetText(first.restroom.name), lon: first.restroom.lon, lat: first.restroom.lat };
+      if (first?.kind === "flyTo") return { name: first.label.replace(/^Show /, ""), lon: first.lon, lat: first.lat };
+      if (trip) return { name: trip.destination.label, lon: trip.destination.at[0], lat: trip.destination.at[1] };
+      const c = getMapInstance()?.getCenter();
+      return c ? { name: "the map centre", lon: c.lng, lat: c.lat } : null;
+    };
+    const at = (pl: { lon: number; lat: number }) => `(${pl.lat.toFixed(4)}, ${pl.lon.toFixed(4)})`;
+    const primary = first
+      ? first.kind === "showRestroom"
+        ? { label: "Walk me there", run: () => { const r = first.restroom; void send(`Walk me from here to ${formatStreetText(r.name)} ${at(r)}`); } }
+        : { label: first.label, run: () => runAction(first) }
+      : null;
+    const onNearby = () => { void send(followUpQuestion("nearby", placeOf())); };
+    const onOther = () => { void send(followUpQuestion("other", placeOf())); };
+    const homeAnswer = (
+      <AnswerCard
+        question={lastUser?.content ?? null}
+        text={reply?.content ?? ""}
+        busy={busy}
+        working={<WorkingPanel steps={steps} />}
+        sources={reply?.sources && (reply.sources.sources.length || reply.sources.unverified.length) ? <AnswerSources line={reply.sources} /> : null}
+        primary={primary}
+        onNearby={onNearby}
+        onOther={onOther}
+        extra={
+          <>
+            {reply?.offerLocation && shared.status !== "on" ? (
+              <Button type="button" className="h-12 w-full gap-1.5 rounded-full" disabled={shared.status === "asking"} onClick={() => void enableLocation()}>
+                <LocateFixed className="h-4 w-4" aria-hidden="true" />
+                {shared.status === "asking" ? "Finding you…" : "Use my location"}
+              </Button>
+            ) : null}
+            {trip && !busy ? (
+              <div className="rounded-[18px] border border-[#22314a] bg-[#111c2f]/90 p-3 text-slate-100">
+                <TripSummary trip={trip} mapTime={mapTime} onSelect={(alt) => chooseTrip(selectAlternative(trip, alt))} />
+                <Button className="mt-3 h-11 w-full gap-2 rounded-full" onClick={() => (player.state.playing && player.state.tripId === trip.id ? player.toggle() : startPreview(trip, prefSpeed))}>
+                  {player.state.playing && player.state.tripId === trip.id ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                  Play trip preview
+                </Button>
+              </div>
+            ) : null}
+          </>
+        }
+      />
+    );
+
+    const trainRoute = trip?.legs.find((l) => l.kind === "ride")?.route;
+    const tasks = {
+      restroom: () => void send("Where's the nearest public restroom that's open now?"),
+      train: () => {
+        if (trainRoute) void send(`How is the ${trainRoute} train running right now?`);
+        else if (openLines) openLines();
+        else void send("How are the subway lines running right now?");
+      },
+      plan: () => {
+        setInput("Plan a trip to ");
+        window.requestAnimationFrame(() => {
+          const el = homeInput.current;
+          el?.focus();
+          el?.setSelectionRange(el.value.length, el.value.length);
+        });
+      },
+      exit: () => {
+        if (undergroundOn && stationHelp) stationHelp();
+        else void send("Which exit should I take at the nearest subway station?");
+      },
+    };
+    const panelUp = panelContent !== null && !panelMinimized;
+    const answerOpen = chatOpen && messages.length > 0;
+    const showIdle = !selectedLine && !stationHelpVisible && !followingRoute && !player.state.active && !walking && !streetViewOpen && !answerOpen && !busy && !handsFree && !drawerOpen && !panelUp && followed === null;
+    const idle = showIdle ? (
+      <>
+        <DailyCard places={places} onAsk={(q) => void send(q)} onFly={(sp) => flyTo({ lon: sp.lon, lat: sp.lat, zoom: 16 })} onShowStations={(points) => actionCtx.showPoints(points, { color: TROUBLE_COLOR.problem, title: "Delay" })} />
+        <TaskButtons on={tasks} />
+      </>
+    ) : null;
+
+    return (
+      <>
+        <AgentHome
+          inputRef={homeInput}
+          input={input}
+          setInput={setInput}
+          onSend={(t) => void send(t)}
+          busy={busy}
+          interim={speech.interim}
+          dictation={{ supported: speech.sttSupported, on: dictating && speech.listening, toggle: toggleDictation }}
+          handsFree={{ on: handsFree, toggle: toggleVoice }}
+          orb={{ show: handsFree && speech.listening && !dictating, transcript: speech.interim, stop: stopOrb }}
+          notice={notice ?? speech.error}
+          answerOpen={answerOpen}
+          onCloseAnswer={() => setChatOpen(false)}
+          answer={homeAnswer}
+          idle={idle}
+          // Task controls sit above the persistent chat bar.
+          hidden={false}
+          lift={!isDesktop && panelContent !== null && panelMinimized}
+        />
+        {trip && player.state.active && !answerOpen ? <TripPreview
+          trip={trip} state={player.state} speed={player.state.speed}
+          onToggle={player.toggle} onSpeed={(s) => { setPrefSpeed(s); player.setSpeed(s); }}
+          onClose={() => { player.stop(); setTrip(null); }}
+          onUse={() => {
+            player.release();
+            const ride = trip.legs.find((l) => l.kind === "ride");
+            if (ride && (ride.mode === "subway" || ride.mode === "bus")) {
+              if (followTripRoute({ system: ride.mode, route: ride.route, at: ride.coords[0] })) return;
+              if (ride.mode === "subway") { setSelectedLine(ride.route); return; }
+            }
+            if (trip.mode === "walk") {
+              setRoutePoint("start", { lon: trip.origin.at[0], lat: trip.origin.at[1] });
+              setRoutePoint("end", { lon: trip.destination.at[0], lat: trip.destination.at[1] });
+              setFollowingRoute(true);
+              flyTo({ lon: trip.origin.at[0], lat: trip.origin.at[1], zoom: 16 });
+              return;
+            }
+            void send(`Use this route to ${trip.destination.label}. Show me the ${trip.routes.join(" and ")} service for this trip.`);
+          }}
+          onOther={() => { player.release(); void send(`What are the other routes from ${trip.origin.label} to ${trip.destination.label}?`); }}
+        /> : null}
+      </>
+    );
+  }
+
   return (
     <>
-      <Sheet open={chatOpen} onOpenChange={setChatOpen}>
+      {/* Non-modal: the trip preview bar sits on the map and must stay reachable while Ask is open. */}
+      <Sheet open={chatOpen} onOpenChange={setChatOpen} modal={false}>
         <SheetContent side={isDesktop ? "left" : "bottom"} className={isDesktop ? "flex h-full w-full flex-col p-0 sm:max-w-[420px]" : "flex h-[85vh] flex-col p-0"}>
           <SheetTitle className="sr-only">Ask the map</SheetTitle>
           <SheetDescription className="sr-only">Voice and text trip assistant</SheetDescription>
           {body}
         </SheetContent>
       </Sheet>
-      {player.state.active ? (
-        <PlaybackBar
-          playing={player.state.playing}
-          speed={player.state.speed}
-          callout={player.state.callout}
-          step={`${player.state.seg + 1}/${player.state.segs.length}`}
-          onToggle={player.toggle}
-          onSpeed={player.setSpeed}
-          onSkip={player.skip}
-          onClose={player.stop}
-        />
-      ) : null}
+      {/* On a phone the Ask sheet covers the bottom; the trip card's Play button stands in until it closes. */}
+      {isDesktop || !chatOpen ? playback : null}
     </>
+  );
+}
+
+/** 2x / 5x / 10x / 30x. A change keeps the camera where it is and changes the rate. */
+function SpeedPicker({ speed, onSpeed, label }: { speed: Speed; onSpeed: (s: Speed) => void; label: string }) {
+  return (
+    <div className="flex items-center" role="group" aria-label={label}>
+      {PLAYBACK_SPEEDS.map((s) => (
+        <Button key={s} type="button" size="sm" variant={speed === s ? "default" : "ghost"} className="h-8 rounded-full px-2 text-xs tabular-nums" aria-pressed={speed === s} onClick={() => onSpeed(s)}>
+          {s}x
+        </Button>
+      ))}
+    </div>
   );
 }
 
@@ -366,13 +743,7 @@ function PlaybackBar(p: { playing: boolean; speed: Speed; callout: string; step:
       <Button size="icon" variant="ghost" className="h-8 w-8 rounded-full" aria-label={p.playing ? "Pause preview" : "Play preview"} onClick={p.onToggle}>
         {p.playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
       </Button>
-      <div className="flex items-center" role="group" aria-label="Playback speed">
-        {([2, 10, 30] as const).map((s) => (
-          <Button key={s} type="button" size="sm" variant={p.speed === s ? "default" : "ghost"} className="h-8 rounded-full px-2 text-xs tabular-nums" aria-pressed={p.speed === s} onClick={() => p.onSpeed(s)}>
-            {s}x
-          </Button>
-        ))}
-      </div>
+      <SpeedPicker speed={p.speed} onSpeed={p.onSpeed} label="Playback speed" />
       <Button size="icon" variant="ghost" className="h-8 w-8 rounded-full" aria-label="Skip to next leg" onClick={p.onSkip}><SkipForward className="h-4 w-4" /></Button>
       <div className="min-w-0 flex-1 truncate px-1 text-sm" aria-live="polite">{p.callout}</div>
       <Badge variant="secondary" className="tabular-nums">{p.step}</Badge>

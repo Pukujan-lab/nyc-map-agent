@@ -4,6 +4,7 @@ import type { FeatureModule } from "@/lib/features/types";
 const agent: FeatureModule = {
   id: "agent",
   overlay: { load: () => import("./AgentOverlay"), replacesChat: true },
+  myDay: { load: () => import("./MyDay") },
   flags: ["agent"],
   routes: ["/api/agent"],
 };

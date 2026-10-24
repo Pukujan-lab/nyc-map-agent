@@ -1,5 +1,9 @@
 # Agent Instructions
 
+Before changing anything people see in the app, read `docs/DESIGN_RULES.md` (the owner's design preferences: the map stays visible, buttons open dropdowns, no unasked suggestions, memory stays on the phone). The chat agent's runtime rules live in `server/features/agent/prompt.ts`.
+
+To continue the agent-first build, start from `docs/PDD.md`: what is built, what remains, how to check it, and how to ship it. Design frames are in `docs/design/frames/`.
+
 <!-- oio:issue-log-guidance:start -->
 Before filing an observational or operational issue log, read `.oio/ontology/ISSUE_LOG_ONTOLOGY.md`, `.oio/ontology/project.json`, and `.oio/ontology/AGENT_GUIDE.md`. Confirm the exact destination and filing action are authorized. On OIO, ACS, CGM, and PCM, do not submit an issue or write files without explicit human direction for that destination and action. A proposal can remain a local draft until directed. Never treat adoption as permission to write to an adopter or sibling repository.
 <!-- oio:issue-log-guidance:end -->

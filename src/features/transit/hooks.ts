@@ -1,14 +1,17 @@
 import type { ServiceChange } from "@/lib/transit/serviceChanges";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useSearchParams } from "react-router-dom";
-import { lookupFrom, type SegmentLookup, type SegmentRow } from "./history";
+import { useIdle } from "@/lib/idle";
+import { lookupFrom, nyHourOfWeek, type SegmentLookup, type SegmentRow } from "./history";
 import type { BusHistory } from "./busEstimate";
 import { parseBusCap, parseBusLines } from "@/lib/transit/busReveal";
 import { RAIL_SYSTEMS, type Bus, type LiveSystem, type StaticSystem, type SystemId , type XrayStation } from "./model";
 
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
 const REFRESH = 15_000;
+/** Batched rail + alerts poll; the endpoint is edge-cached for 30 s, so polling faster gains nothing. */
+const LIVE_REFRESH = 30_000;
 
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -88,6 +91,77 @@ export function useTransitMeta() {
   return useQuery({ queryKey: ["transit", "meta"], queryFn: () => getJson<{ bus: boolean }>(`${API_BASE}/api/transit`), staleTime: 5 * 60_000, retry: 1 });
 }
 
+/*
+ * Live rail and alerts come from one batched request (/api/transit-live) for
+ * the union of what every mounted component asks for, so the map, the status
+ * drawer and a card share one poll instead of one per system plus alerts.
+ */
+type Demand = { systems: SystemId[]; alerts: boolean };
+const demands = new Set<Demand>();
+const demandListeners = new Set<() => void>();
+let demandKey = "";
+function emitDemand() {
+  const sys = new Set<SystemId>();
+  let alerts = false;
+  for (const d of demands) { d.systems.forEach((s) => sys.add(s)); alerts ||= d.alerts; }
+  const key = sys.size || alerts ? `${RAIL_SYSTEMS.filter((s) => sys.has(s)).join(",")}|${alerts ? 1 : 0}` : "";
+  if (key === demandKey) return;
+  demandKey = key;
+  demandListeners.forEach((l) => l());
+}
+function subscribeDemand(fn: () => void) {
+  demandListeners.add(fn);
+  return () => { demandListeners.delete(fn); };
+}
+function useLiveDemand(systems: SystemId[], alerts: boolean) {
+  const sysKey = RAIL_SYSTEMS.filter((s) => systems.includes(s)).join(",");
+  useEffect(() => {
+    const d: Demand = { systems: sysKey ? (sysKey.split(",") as SystemId[]) : [], alerts };
+    demands.add(d);
+    emitDemand();
+    return () => { demands.delete(d); emitDemand(); };
+  }, [sysKey, alerts]);
+}
+
+type LiveBatch = { at: number; systems: Partial<Record<SystemId, LiveSystem>>; alerts?: AlertsBody; failed?: string[] };
+
+/** True while some mounted component wants live rail or alerts. */
+export function useLiveWanted(): boolean {
+  return useSyncExternalStore(subscribeDemand, () => demandKey !== "", () => false);
+}
+
+function useLiveBatch() {
+  const key = useSyncExternalStore(subscribeDemand, () => demandKey, () => "");
+  const { idle } = useIdle();
+  const client = useQueryClient();
+  // Waking from idle refreshes at once rather than on the next 30 s tick.
+  useEffect(() => {
+    if (!idle && key) void client.refetchQueries({ queryKey: ["transit", "live-batch", key], stale: true, type: "active" });
+  }, [idle]); // eslint-disable-line react-hooks/exhaustive-deps
+  return useQuery({
+    queryKey: ["transit", "live-batch", key],
+    queryFn: async () => {
+      const [systems, alerts] = key.split("|");
+      const body = await getJson<LiveBatch>(`${API_BASE}/api/transit-live?${new URLSearchParams({ systems, alerts })}`);
+      // A part that failed upstream keeps its last good value instead of blanking the map.
+      if (body.failed?.length) {
+        const prev = client.getQueryData<LiveBatch>(["transit", "live-batch", key]);
+        for (const f of body.failed) {
+          if (f === "alerts") body.alerts ??= prev?.alerts;
+          else body.systems[f as SystemId] ??= prev?.systems[f as SystemId];
+        }
+      }
+      return body;
+    },
+    enabled: key !== "",
+    staleTime: LIVE_REFRESH - 5_000,
+    // Idle tab (#369): stop polling until the next interaction.
+    refetchInterval: idle ? false : LIVE_REFRESH,
+    refetchOnWindowFocus: !idle,
+    placeholderData: keepPreviousData,
+  });
+}
+
 export function useTransitData(systems: SystemId[]) {
   const statics = useQueries({
     queries: RAIL_SYSTEMS.map((s) => ({
@@ -97,17 +171,11 @@ export function useTransitData(systems: SystemId[]) {
       enabled: systems.includes(s),
     })),
   });
-  const live = useQueries({
-    queries: RAIL_SYSTEMS.map((s) => ({
-      queryKey: ["transit", "live", s],
-      queryFn: () => getJson<LiveSystem>(`${API_BASE}/api/transit/${s}`),
-      refetchInterval: REFRESH,
-      enabled: systems.includes(s),
-    })),
-  });
+  useLiveDemand(systems, false);
+  const live = useLiveBatch().data;
   const out: Partial<Record<SystemId, { stat?: StaticSystem; live?: LiveSystem }>> = {};
   RAIL_SYSTEMS.forEach((s, i) => {
-    if (systems.includes(s)) out[s] = { stat: statics[i].data, live: live[i].data };
+    if (systems.includes(s)) out[s] = { stat: statics[i].data, live: live?.systems[s] };
   });
   return out;
 }
@@ -116,10 +184,12 @@ export function useTransitData(systems: SystemId[]) {
 export function useBuses(enabled: boolean, routes: string[]) {
   const list = [...new Set(routes.map((r) => r.toUpperCase()))].sort().slice(0, 20);
   const key = list.join(",");
+  const { idle } = useIdle();
   return useQuery({
     queryKey: ["transit", "bus", key],
     queryFn: () => getJson<{ at: number; buses: Bus[] }>(`${API_BASE}/api/transit/bus?${new URLSearchParams({ routes: key })}`),
-    refetchInterval: REFRESH,
+    refetchInterval: idle ? false : REFRESH,
+    refetchOnWindowFocus: !idle,
     enabled: enabled && list.length > 0,
     retry: false,
   });
@@ -151,11 +221,35 @@ export type BusTrip = { found: boolean; route?: string; destination?: string; di
 export type BusRoute = { route: string; lines: Array<Array<[number, number]>>; offsets?: number[][]; stops: Array<{ id: string; name: string; lon: number; lat: number }> };
 /** One bus's headsign and upcoming stops with ETAs (SIRI), while its sheet is open. */
 export function useBusTrip(vehicle: string | undefined) {
+  const { idle } = useIdle();
   return useQuery({
     queryKey: ["transit", "bus-trip", vehicle],
     queryFn: () => getJson<BusTrip>(`${API_BASE}/api/transit/bus-trip?${new URLSearchParams({ vehicle: vehicle ?? "" })}`),
-    refetchInterval: REFRESH,
+    refetchInterval: idle ? false : REFRESH,
+    refetchOnWindowFocus: !idle,
     enabled: Boolean(vehicle),
+    retry: false,
+  });
+}
+export type BusStopInfo = { id: string; name: string; lat: number; lon: number; dir: string; routes: string[] };
+export type BusArrival = { route: string; destination: string; eta: number | null; away: string };
+/** Stops around a tapped point with the routes serving each (grid-cached on the server). */
+export function useBusStopsNear(point: { lon: number; lat: number } | undefined) {
+  return useQuery({
+    queryKey: ["transit", "bus-stops", point && point.lat.toFixed(3), point && point.lon.toFixed(3)],
+    queryFn: () => getJson<{ stops: BusStopInfo[] }>(`${API_BASE}/api/transit/bus-stops?${new URLSearchParams({ lat: String(point!.lat), lon: String(point!.lon) })}`),
+    staleTime: 3600_000,
+    enabled: Boolean(point),
+    retry: false,
+  });
+}
+/** Next buses at one stop, refreshed while its sheet is open. */
+export function useBusArrivals(stop: string | undefined) {
+  return useQuery({
+    queryKey: ["transit", "bus-arrivals", stop],
+    queryFn: () => getJson<{ arrivals: BusArrival[] }>(`${API_BASE}/api/transit/bus-arrivals?${new URLSearchParams({ stop: stop ?? "" })}`),
+    refetchInterval: REFRESH,
+    enabled: Boolean(stop),
     retry: false,
   });
 }
@@ -196,13 +290,12 @@ export type TransitAlert = {
   replacement?: string[];
 };
 export type Outage = { id: string; station: string; routes: string[]; stops: string[]; equipment: "Elevator" | "Escalator"; serving: string; reason: string; since: string; back: string; ada: "yes" | "no" | "not-ada"; alternative: string };
-export function useAlerts(enabled: boolean) {
-  return useQuery({
-    queryKey: ["transit", "alerts"],
-    queryFn: () => getJson<{ at: number; alerts: TransitAlert[]; outages: Outage[] }>(`${API_BASE}/api/transit/alerts`),
-    refetchInterval: 60_000,
-    enabled,
-  });
+type AlertsBody = { at: number; alerts: TransitAlert[]; outages: Outage[] };
+/** Service alerts and outages, carried in the batched live request (same poll as live rail). */
+export function useAlerts(enabled: boolean): { data: AlertsBody | undefined } {
+  useLiveDemand([], enabled);
+  const data = useLiveBatch().data?.alerts;
+  return { data: enabled ? data : undefined };
 }
 
 /** Seconds clock that ticks every second, for countdowns between feed refreshes. */
@@ -247,20 +340,23 @@ export function useXrayData(enabled: boolean) {
   return useQuery({ queryKey: ["transit", "xray"], queryFn: () => getJson<Record<string, XrayStation>>("/transit/xray.json"), staleTime: Infinity, enabled });
 }
 
-/** Historical subway segment times for the routes on the map (refetched each 10 min). */
+/**
+ * Historical subway segment times for the routes on the map, every route in one
+ * request (/api/transit-segments/all). The URL pins the New York hour of the
+ * week, so the edge caches it for hours and it changes on the hour.
+ */
 export function useSegmentHistory(routes: string[]): SegmentLookup | undefined {
-  const qs = useQueries({
-    queries: routes.map((r) => ({
-      queryKey: ["transit", "segments", r],
-      queryFn: () => getJson<{ segments: SegmentRow[] }>(`${API_BASE}/api/transit-segments?${new URLSearchParams({ route: r })}`),
-      staleTime: 10 * 60_000,
-      refetchInterval: 10 * 60_000,
-      retry: 0,
-    })),
+  const list = [...new Set(routes)].sort().join(",");
+  const { dow, hour } = nyHourOfWeek(new Date());
+  const q = useQuery({
+    queryKey: ["transit", "segments-all", list, dow, hour],
+    queryFn: () => getJson<{ routes: Record<string, SegmentRow[]> }>(`${API_BASE}/api/transit-segments/all?${new URLSearchParams({ routes: list, dow: String(dow), hour: String(hour) })}`),
+    enabled: list !== "",
+    staleTime: Infinity,
+    placeholderData: keepPreviousData,
+    retry: 0,
   });
-  const key = qs.map((q) => q.dataUpdatedAt).join(",");
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  return useMemo(() => (qs.some((q) => q.data) ? lookupFrom(new Map(routes.map((r, i) => [r, qs[i].data?.segments ?? []]))) : undefined), [key]);
+  return useMemo(() => (q.data ? lookupFrom(new Map(Object.entries(q.data.routes))) : undefined), [q.data]);
 }
 
 type BusSegRow = { dir: number; from: string; to: string; kind: "travel" | "dwell"; n: number; median: number };

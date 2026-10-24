@@ -19,6 +19,8 @@ export interface FlagMeta {
 export const FLAGS = {
   agent: { tier: "basic", default: true, label: "Smart mode (voice + text assistant)" },
   agentDrive: { tier: "basic", default: true, label: "Smart mode: driving trips" },
+  // The main UI (#370): the owner approved the chat-first design, so it is on by default.
+  agentHome: { tier: "basic", default: true, label: "Smart mode: chat bar, task buttons, voice orb and answer card" },
   search: { tier: "basic", default: true, label: "Search" },
   directions: { tier: "basic", default: true, label: "Walking directions" },
   liveview: { tier: "basic", default: true, label: "Navigation arrows and Live View" },
@@ -31,10 +33,12 @@ export const FLAGS = {
   signs: { tier: "basic", default: true, label: "Street signs" },
   streetLevel: { tier: "basic", default: true, label: "Street level" },
   city3d: { tier: "basic", default: true, label: "Textured 3D city" },
+  detailedCity: { tier: "advanced", default: false, label: "Detailed 3D city above street level (textured buildings, skyline, landmark models)" },
   noise: { tier: "advanced", default: true, label: "Noise layer" },
   blockDensity: { tier: "basic", default: true, label: "Shade blocks per hectare" },
   daylight: { tier: "basic", default: true, label: "Time-of-day lighting" },
   weather: { tier: "basic", default: true, label: "Live weather" },
+  streetWeather: { tier: "basic", default: false, label: "Street weather: rain or snow in street view and a trip heads-up (in review)" },
   traffic: { tier: "basic", default: true, label: "Live traffic (DOT sensor corridors)" },
   parking: { tier: "basic", default: false, label: "Parking garages and street rules" },
   hazards: { tier: "advanced", default: true, label: "Weather alerts and street flooding" },
@@ -44,6 +48,8 @@ export const FLAGS = {
   feedHealth: { tier: "advanced", default: true, label: "Feed health" },
   ferry: { tier: "basic", default: true, label: "Ferries (NYC Ferry and Staten Island Ferry; layer off until chosen)" },
   events: { tier: "basic", default: true, label: "Events (street fairs, markets, pop-ups; layer off until chosen)" },
+  underground: { tier: "basic", default: false, label: "Underground help: station exits and the walk out, saved for when there is no signal" },
+  contextClean: { tier: "basic", default: false, label: "Clean map by context (show only your line, trip or street; landmarks always)" },
 } as const satisfies Record<string, FlagMeta>;
 
 export type FlagId = keyof typeof FLAGS;

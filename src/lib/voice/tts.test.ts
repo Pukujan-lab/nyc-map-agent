@@ -29,6 +29,12 @@ describe("pickVoice", () => {
     const v = [{ lang: "fr-FR", name: "Amelie" }, { lang: "en-US", name: "Fred" }, { lang: "en-US", name: "Google US English" }] as SpeechSynthesisVoice[];
     expect(pickVoice(v)?.name).toBe("Google US English");
   });
+  it("picks a voice in the browser's language, region first (#370)", () => {
+    const v = [{ lang: "en-US", name: "Fred" }, { lang: "es-ES", name: "Monica" }, { lang: "es-MX", name: "Paulina" }] as SpeechSynthesisVoice[];
+    expect(pickVoice(v, "es-MX")?.name).toBe("Paulina");
+    expect(pickVoice(v, "es-US")?.name).toBe("Monica");
+    expect(pickVoice(v, "zh-CN")).toBeUndefined();
+  });
 });
 
 describe("speakQueued", () => {

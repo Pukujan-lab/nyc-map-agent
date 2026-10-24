@@ -44,6 +44,13 @@ interface DataViewValue {
   /** True while the street camera follows the route. */
   followingRoute: boolean;
   setFollowingRoute: (following: boolean) => void;
+  /**
+   * Set by Simulate trip. The next settled walking route may start the
+   * existing walk-along when its on-foot time is under 20 minutes.
+   */
+  restroomWalkPending: boolean;
+  beginRestroomTrip: (start: LngLat, end: LngLat) => void;
+  clearRestroomWalk: () => void;
 }
 
 const DataViewContext = createContext<DataViewValue | null>(null);
@@ -162,12 +169,14 @@ export function DataViewProvider({ children }: { children: ReactNode }) {
   const [routeEnd, setRouteEnd] = useState<LngLat | null>(null);
   const [routePicking, setRoutePicking] = useState<RoutePickTarget | null>(null);
   const [followingRoute, setFollowingRoute] = useState(false);
+  const [restroomWalkPending, setRestroomWalkPending] = useState(false);
 
   const setRoutePoint = useCallback((target: RoutePickTarget, point: LngLat | null) => {
     if (target === "start") setRouteStart(point);
     else setRouteEnd(point);
     setRoutePicking(null);
     setFollowingRoute(false);
+    setRestroomWalkPending(false);
   }, []);
 
   const clearRoute = useCallback(() => {
@@ -175,7 +184,18 @@ export function DataViewProvider({ children }: { children: ReactNode }) {
     setRouteEnd(null);
     setRoutePicking(null);
     setFollowingRoute(false);
+    setRestroomWalkPending(false);
   }, []);
+
+  const beginRestroomTrip = useCallback((start: LngLat, end: LngLat) => {
+    setRouteStart(start);
+    setRouteEnd(end);
+    setRoutePicking(null);
+    setFollowingRoute(false);
+    setRestroomWalkPending(true);
+  }, []);
+
+  const clearRestroomWalk = useCallback(() => setRestroomWalkPending(false), []);
 
   const value = useMemo<DataViewValue>(
     () => ({
@@ -196,6 +216,9 @@ export function DataViewProvider({ children }: { children: ReactNode }) {
       clearRoute,
       followingRoute,
       setFollowingRoute,
+      restroomWalkPending,
+      beginRestroomTrip,
+      clearRestroomWalk,
     }),
     [
       enabledSources,
@@ -213,6 +236,9 @@ export function DataViewProvider({ children }: { children: ReactNode }) {
       setRoutePoint,
       clearRoute,
       followingRoute,
+      restroomWalkPending,
+      beginRestroomTrip,
+      clearRestroomWalk,
     ],
   );
 

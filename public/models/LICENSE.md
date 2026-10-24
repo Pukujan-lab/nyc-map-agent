@@ -8,6 +8,8 @@
 
 The 3D transit vehicles load from `/api/vehicle-models/<mode>`. Each one is a Sketchfab download (Download API), compressed with `gltf-transform optimize --compress meshopt --texture-compress webp --texture-size 512` and simplified to under 1 MB, then published through Octo files to R2 as `vehicle-<mode>.glb`. All three are licensed CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Changes: re-meshed, simplified, textures resized and re-encoded.
 
+Since #366 the app loads only the bus model; trains draw as route-coloured boxes, so the subway and rail rows below are kept for the published files' provenance.
+
 | Slot | Model | Author | Source |
 |---|---|---|---|
 | subway | "New York City Subway car Type-R142" | yarankepang | https://sketchfab.com/3d-models/new-york-city-subway-car-type-r142-564c1e5ef96f4fd2b94142313c2921ea |

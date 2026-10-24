@@ -4,18 +4,26 @@
  */
 import { formatStreetText } from "../../../src/lib/streetName";
 import { serviceChanges, type ServiceChange } from "../../../src/lib/transit/serviceChanges";
+import { coarsen } from "../../../src/lib/weather/street";
 import { z } from "zod";
-import type { LngLatTuple } from "../../../src/features/agent/schema";
+import GtfsRealtimeBindings from "gtfs-realtime-bindings";
+import type { FeedAlert, LiveVehicle, TroubleStation } from "../../../src/lib/transit/trouble";
+import type { LngLatTuple, RestroomSpot } from "../../../src/features/agent/schema";
 import { bestCandidate, matchLandmark, matchStation, type GeoCandidate } from "./places";
-import { openDataEntrances, type Station } from "./transit";
+import { distM, openDataEntrances, type Station } from "./transit";
+import { noteSource } from "./freshness";
 
 const UA = { "User-Agent": "nyc-map-agent (github.com/Pukujan/nyc-map-agent)" };
 export const OSRM_FOOT_URL = (process.env.VITE_OSRM_URL ?? "https://routing.openstreetmap.de/routed-foot").replace(/\/$/, "");
 
 async function getJson(url: string, timeoutMs = 10000): Promise<unknown> {
+  return (await getJsonDated(url, timeoutMs)).json;
+}
+/** JSON plus the response's last-modified time (Socrata sends the dataset's last update), when present. */
+async function getJsonDated(url: string, timeoutMs = 10000): Promise<{ json: unknown; modified: string | null }> {
   const res = await fetch(url, { headers: UA, signal: AbortSignal.timeout(timeoutMs) });
   if (!res.ok) throw new Error(`${new URL(url).host} returned ${res.status}`);
-  return res.json();
+  return { json: await res.json(), modified: res.headers.get("x-soda2-truth-last-modified") ?? res.headers.get("last-modified") };
 }
 
 /* ---------- geocode: NYC Planning GeoSearch (same service as src/lib/api/geosearch.ts) ---------- */
@@ -84,19 +92,30 @@ export async function routeWalk(a: LngLatTuple, b: LngLatTuple): Promise<WalkRes
 
 /* ---------- weather_forecast: Open-Meteo hourly (free, keyless) ---------- */
 const WMO: Record<number, string> = { 0: "Clear", 1: "Mostly clear", 2: "Partly cloudy", 3: "Overcast", 45: "Fog", 48: "Fog", 51: "Drizzle", 53: "Drizzle", 55: "Drizzle", 61: "Light rain", 63: "Rain", 65: "Heavy rain", 71: "Light snow", 73: "Snow", 75: "Heavy snow", 80: "Showers", 81: "Showers", 82: "Heavy showers", 95: "Thunderstorm", 96: "Thunderstorm", 99: "Thunderstorm" };
-const meteoSchema = z.object({ hourly: z.object({ time: z.array(z.string()), temperature_2m: z.array(z.number()), precipitation_probability: z.array(z.number().nullable()), weather_code: z.array(z.number()) }) });
-export async function weatherAt([lon, lat]: LngLatTuple, localIso: string) {
-  const q = new URLSearchParams({ latitude: String(lat), longitude: String(lon), hourly: "temperature_2m,precipitation_probability,weather_code", timezone: "America/New_York", forecast_days: "7" });
+const nullableSeries = z.array(z.number().nullable()).optional();
+const meteoSchema = z.object({ hourly: z.object({ time: z.array(z.string()), temperature_2m: z.array(z.number()), precipitation_probability: z.array(z.number().nullable()), weather_code: z.array(z.number()), apparent_temperature: nullableSeries, precipitation: nullableSeries, wind_speed_10m: nullableSeries, wind_gusts_10m: nullableSeries }) });
+export async function weatherAt(at: LngLatTuple, localIso: string) {
+  // About 1 km is enough for a forecast (docs/PRIVACY.md, "More precision than needed").
+  const { lat, lon } = coarsen(at[1], at[0]);
+  const q = new URLSearchParams({ latitude: String(lat), longitude: String(lon), hourly: "temperature_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,wind_speed_10m,wind_gusts_10m", timezone: "America/New_York", forecast_days: "7" });
   const h = meteoSchema.parse(await getJson(`https://api.open-meteo.com/v1/forecast?${q}`)).hourly;
   const hour = localIso.slice(0, 13);
-  const i = Math.max(0, h.time.findIndex((t) => t.startsWith(hour)));
-  return { time: h.time[i], tempC: h.temperature_2m[i], precipPct: h.precipitation_probability[i] ?? 0, summary: WMO[h.weather_code[i]] ?? "Mixed" };
+  const i = h.time.findIndex((t) => t.startsWith(hour));
+  // Past the 7-day forecast (or before it): say nothing rather than another hour's weather.
+  if (i < 0) throw new Error(`No forecast for ${hour}`);
+  noteSource("forecast");
+  return {
+    time: h.time[i], tempC: h.temperature_2m[i], precipPct: h.precipitation_probability[i] ?? 0, summary: WMO[h.weather_code[i]] ?? "Mixed",
+    code: h.weather_code[i], feelsLikeC: h.apparent_temperature?.[i] ?? null, precipMm: h.precipitation?.[i] ?? null, windKmh: h.wind_speed_10m?.[i] ?? null, gustKmh: h.wind_gusts_10m?.[i] ?? null,
+  };
 }
 
 /* ---------- hazards: NWS active alerts at a point ---------- */
-const nwsSchema = z.object({ features: z.array(z.object({ properties: z.object({ headline: z.string().nullable().optional(), event: z.string() }) })) });
-export async function hazardsAt([lon, lat]: LngLatTuple): Promise<string[]> {
-  const data = nwsSchema.parse(await getJson(`https://api.weather.gov/alerts/active?point=${lat.toFixed(4)},${lon.toFixed(4)}`));
+const nwsSchema = z.object({ updated: z.string().optional(), features: z.array(z.object({ properties: z.object({ headline: z.string().nullable().optional(), event: z.string() }) })) });
+export async function hazardsAt(at: LngLatTuple): Promise<string[]> {
+  const { lat, lon } = coarsen(at[1], at[0]);
+  const data = nwsSchema.parse(await getJson(`https://api.weather.gov/alerts/active?point=${lat},${lon}`));
+  noteSource("weather-alerts", data.updated ?? Date.now());
   return data.features.map((f) => f.properties.headline ?? f.properties.event);
 }
 
@@ -105,10 +124,12 @@ const eneSchema = z.array(z.object({ station: z.string(), trainno: z.string(), e
 export type Outage = z.infer<typeof eneSchema>[number];
 let eneCache: { at: number; rows: Outage[] } | null = null;
 export async function elevatorOutages(): Promise<Outage[]> {
-  if (eneCache && Date.now() - eneCache.at < 5 * 60_000) return eneCache.rows;
-  const rows = eneSchema.parse(await getJson("https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fnyct_ene.json"));
-  eneCache = { at: Date.now(), rows };
-  return rows;
+  if (!eneCache || Date.now() - eneCache.at >= 5 * 60_000) {
+    eneCache = { at: Date.now(), rows: eneSchema.parse(await getJson("https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fnyct_ene.json")) };
+  }
+  // The feed carries no timestamp of its own: its age is when we fetched it.
+  noteSource("mta-elevators", eneCache.at);
+  return eneCache.rows;
 }
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 export async function elevatorStatus(stationName: string): Promise<string[]> {
@@ -118,8 +139,66 @@ export async function elevatorStatus(stationName: string): Promise<string[]> {
     .map((o) => `${o.equipmenttype === "EL" ? "Elevator" : "Escalator"} out at ${o.station} (${o.serving}) — ${o.reason}, back ${o.estimatedreturntoservice}`);
 }
 
+/* ---------- nearest_restroom: NYC Open Data Public Restrooms (i7jb-7jku, keyless; the map's restroom layer reads the same rows via Octo) ---------- */
+const restroomRow = z.object({
+  facility_name: z.string(),
+  latitude: z.string(),
+  longitude: z.string(),
+  status: z.string().optional(),
+  hours_of_operation: z.string().optional(),
+  accessibility: z.string().optional(),
+  operator: z.string().optional(),
+});
+export type RestroomRow = z.infer<typeof restroomRow>;
+let restroomCache: { at: number; rows: RestroomRow[]; modified: string | null } | null = null;
+export async function publicRestrooms(): Promise<RestroomRow[]> {
+  if (!restroomCache || Date.now() - restroomCache.at >= 60 * 60_000) {
+    const q = new URLSearchParams({ $select: "facility_name,latitude,longitude,status,hours_of_operation,accessibility,operator", $where: "latitude IS NOT NULL", $limit: "5000" });
+    const { json, modified } = await getJsonDated(`https://data.cityofnewyork.us/resource/i7jb-7jku.json?${q}`);
+    const rows = z.array(z.unknown()).parse(json).flatMap((r) => {
+      const p = restroomRow.safeParse(r);
+      return p.success ? [p.data] : [];
+    });
+    restroomCache = { at: Date.now(), rows, modified };
+  }
+  // The dataset's own last update, not our fetch time: the city list changes rarely.
+  noteSource("restrooms", restroomCache.modified);
+  return restroomCache.rows;
+}
+/** The `n` closest restrooms to `at`, open ones first (a closed one is listed only when nothing open is nearer than 1.5 km). */
+export function nearestRestrooms(rows: RestroomRow[], at: LngLatTuple, n = 3): RestroomSpot[] {
+  const spots = rows
+    .map((r) => ({ r, lon: Number(r.longitude), lat: Number(r.latitude) }))
+    .filter((x) => Number.isFinite(x.lon) && Number.isFinite(x.lat))
+    .map(({ r, lon, lat }) => ({
+      name: r.facility_name,
+      lon,
+      lat,
+      distanceM: Math.round(distM(at, [lon, lat])),
+      status: r.status ?? null,
+      hours: r.hours_of_operation ?? null,
+      accessibility: r.accessibility ?? null,
+      operator: r.operator ?? null,
+    }))
+    .sort((a, b) => a.distanceM - b.distanceM);
+  const open = spots.filter((s) => !s.status || /^operational$/i.test(s.status));
+  return (open.length && open[0].distanceM <= 1500 ? open : spots).slice(0, n);
+}
+
 /* ---------- planned work / service alerts: MTA GTFS-rt alerts (JSON flavour) ---------- */
+/** GTFS-rt header: the feed's own "as of" time, seconds since the epoch. */
+const feedHeader = z.object({ timestamp: z.union([z.number(), z.string()]).optional() }).optional();
+const noteAlertsFeed = (header: z.infer<typeof feedHeader>) => noteSource("mta-alerts", header?.timestamp !== undefined ? Number(header.timestamp) * 1000 : Date.now());
+/**
+ * Is an alert in force at `atEpochS`? GTFS-rt active periods: no period means
+ * always; a missing start or end is open-ended. Planned work for a future trip
+ * counts only when one of its periods covers that trip's time.
+ */
+export function activeAt(periods: Array<{ start?: number; end?: number }>, atEpochS: number): boolean {
+  return periods.length === 0 || periods.some((p) => (p.start || 0) <= atEpochS && atEpochS <= (p.end || Infinity));
+}
 const alertSchema = z.object({
+  header: feedHeader,
   entity: z.array(z.object({ alert: z.object({
     active_period: z.array(z.object({ start: z.number().optional(), end: z.number().optional() })).default([]),
     informed_entity: z.array(z.object({ route_id: z.string().optional() })).default([]),
@@ -128,10 +207,11 @@ const alertSchema = z.object({
 });
 export async function serviceAlerts(routes: string[], atEpochS: number): Promise<string[]> {
   const data = alertSchema.parse(await getJson("https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys%2Fsubway-alerts.json"));
+  noteAlertsFeed(data.header);
   const out = new Set<string>();
   for (const { alert } of data.entity) {
     if (!alert.informed_entity.some((e) => e.route_id && routes.includes(e.route_id))) continue;
-    const active = alert.active_period.length === 0 || alert.active_period.some((p) => (p.start ?? 0) <= atEpochS && atEpochS <= (p.end ?? Infinity));
+    const active = activeAt(alert.active_period, atEpochS);
     const text = alert.header_text?.translation.find((t) => !t.language || t.language === "en")?.text;
     if (active && text) out.add(text.replace(/\s+/g, " ").slice(0, 220));
   }
@@ -140,6 +220,7 @@ export async function serviceAlerts(routes: string[], atEpochS: number): Promise
 
 /* ---------- station skips and platform changes (#253) ---------- */
 const changeSchema = z.object({
+  header: feedHeader,
   entity: z.array(z.object({ id: z.string().default(""), alert: z.object({
     active_period: z.array(z.object({ start: z.number().optional(), end: z.number().optional() })).default([]),
     informed_entity: z.array(z.object({ route_id: z.string().optional() })).default([]),
@@ -149,10 +230,77 @@ const changeSchema = z.object({
 /** Active direction-aware skips and platform changes at a time (subway alerts feed). */
 export async function stationServiceChanges(atEpochS: number): Promise<ServiceChange[]> {
   const data = changeSchema.parse(await getJson("https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys%2Fsubway-alerts.json"));
+  noteAlertsFeed(data.header);
   return data.entity.flatMap(({ id, alert }) => {
-    const active = alert.active_period.length === 0 || alert.active_period.some((p) => (p.start ?? 0) <= atEpochS && atEpochS <= (p.end ?? Infinity));
+    const active = activeAt(alert.active_period, atEpochS);
     const text = alert.header_text?.translation.find((t) => !t.language || t.language === "en")?.text;
     if (!active || !text) return [];
     return serviceChanges({ id, text, routes: [...new Set(alert.informed_entity.map((e) => e.route_id).filter((r): r is string => Boolean(r)))] });
   });
+}
+
+/* ---------- MTA trouble per line (#361): alerts, stations, live trains ---------- */
+const troubleFeedSchema = z.object({ header: feedHeader, entity: z.array(z.object({ id: z.string().default(""), alert: z.object({}).passthrough() })) });
+let troubleFeed: { at: number; alerts: FeedAlert[]; header: z.infer<typeof feedHeader> } | null = null;
+/** The camsys subway alerts as raw entities (Mercury extension kept), cached 30 s. */
+export async function subwayAlertEntities(): Promise<FeedAlert[]> {
+  if (!troubleFeed || Date.now() - troubleFeed.at >= 30_000) {
+    const data = troubleFeedSchema.parse(await getJson("https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys%2Fsubway-alerts.json"));
+    troubleFeed = { at: Date.now(), alerts: data.entity as FeedAlert[], header: data.header };
+  }
+  noteAlertsFeed(troubleFeed.header);
+  return troubleFeed.alerts;
+}
+
+/** Agent stations (39hk-dx4f) in the shape the trouble model reads; rows without a GTFS id are left out. */
+export const troubleStations = (stations: Station[]): TroubleStation[] =>
+  stations.flatMap((s) => (s.gtfsId ? [{ gtfsId: s.gtfsId, complexId: s.complexId, name: s.name, routes: s.routes, at: s.at, north: s.north, south: s.south }] : []));
+
+/** Which NYCT realtime feed carries a line. */
+export function feedForRoute(route: string): string | null {
+  const r = route.toUpperCase().replace(/X$/, "");
+  if (/^[1-7]$|^GS$/.test(r)) return "gtfs";
+  if (/^(A|C|E|H|FS)$/.test(r)) return "gtfs-ace";
+  if (/^(B|D|F|M)$/.test(r)) return "gtfs-bdfm";
+  if (r === "G") return "gtfs-g";
+  if (/^(J|Z)$/.test(r)) return "gtfs-jz";
+  if (/^(N|Q|R|W)$/.test(r)) return "gtfs-nqrw";
+  if (r === "L") return "gtfs-l";
+  if (r === "SI" || r === "SIR") return "gtfs-si";
+  return null;
+}
+
+const { FeedMessage, VehiclePosition } = GtfsRealtimeBindings.transit_realtime;
+/** Live vehicles on these lines (NYCT GTFS-rt), each joined with its trip update. */
+export async function subwayVehicles(routes: string[]): Promise<LiveVehicle[]> {
+  const feeds = [...new Set(routes.map(feedForRoute).filter((f): f is string => Boolean(f)))];
+  const want = new Set(routes.map((r) => r.toUpperCase()));
+  const out: LiveVehicle[] = [];
+  let oldest: number | null = null;
+  for (const f of feeds) {
+    const res = await fetch(`https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2F${f}`, { headers: UA, signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) throw new Error(`MTA ${f} returned ${res.status}`);
+    const msg = FeedMessage.decode(new Uint8Array(await res.arrayBuffer()));
+    const at = Number(msg.header.timestamp) * 1000;
+    if (at && (oldest === null || at < oldest)) oldest = at;
+    const updates = new Map(msg.entity.flatMap((e) => (e.tripUpdate?.trip?.tripId ? [[e.tripUpdate.trip.tripId, e.tripUpdate.stopTimeUpdate ?? []] as const] : [])));
+    for (const e of msg.entity) {
+      const v = e.vehicle;
+      const tripId = v?.trip?.tripId;
+      const route = v?.trip?.routeId ?? "";
+      if (!v || !tripId || !v.stopId || !want.has(route)) continue;
+      const u = updates.get(tripId) ?? [];
+      out.push({
+        tripId,
+        route,
+        stopId: v.stopId,
+        stopped: v.currentStatus === VehiclePosition.VehicleStopStatus.STOPPED_AT,
+        ts: Number(v.timestamp ?? 0),
+        remaining: u.length,
+        atOrigin: !!u[0] && !Number(u[0].arrival?.time ?? 0) && !!Number(u[0].departure?.time ?? 0),
+      });
+    }
+  }
+  noteSource("mta-trains", oldest ?? Date.now());
+  return out;
 }

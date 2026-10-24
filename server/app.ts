@@ -26,6 +26,7 @@ import * as parking from "./features/parking/routes";
 import * as agent from "./features/agent/routes";
 import * as transit from "./features/transit/routes";
 import * as transitSegments from "./features/transit/segments";
+import * as transitLive from "./features/transit/live";
 import * as transitBusSegments from "./features/transit/busSegments";
 import * as events from "./features/events/routes";
 import * as placeToilets from "./features/place-toilets/routes";
@@ -44,6 +45,7 @@ const routes: Array<[string, Handler]> = [
   ["/api/sources", sources],
   ["/api/street", street],
   ["/api/vehicle-models/:mode", vehicleModels],
+  ["/api/weather/hour", { GET: weather.GET_HOUR }],
   ["/api/weather", weather],
   ["/api/hazards", hazards],
   ["/api/ferry", ferry],
@@ -52,7 +54,9 @@ const routes: Array<[string, Handler]> = [
   ["/api/parking/near", { GET: parking.GET_NEAR }],
   ["/api/parking/rules", { GET: parking.GET_RULES }],
   ["/api/parking", parking],
+  ["/api/transit-segments/all", { GET: transitSegments.GET_ALL }],
   ["/api/transit-segments", transitSegments],
+  ["/api/transit-live", transitLive],
   ["/api/transit-bus-segments", transitBusSegments],
   ["/api/transit", transit],
   ["/api/transit/:system", transit],

@@ -12,7 +12,7 @@ test("map loads, search opens a panel, street level toggles, no console errors",
   page.on("pageerror", (e) => errors.push(e.message));
   await mockNetwork(page);
 
-  await page.goto("/");
+  await page.goto("/?flags=-agentHome");
 
   // Map loads: the MapLibre canvas is up and our neighbourhood data arrived.
   await expect(page.locator("canvas.maplibregl-canvas").first()).toBeVisible();

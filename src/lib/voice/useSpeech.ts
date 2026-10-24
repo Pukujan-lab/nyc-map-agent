@@ -56,6 +56,8 @@ function getRecognitionCtor(): SpeechRecognitionCtor | null {
 
 export interface UseSpeechOptions {
   onFinalTranscript: (text: string) => void;
+  /** Recognition and spoken-answer language (BCP 47); default "en-US". */
+  lang?: string;
 }
 
 export interface UseSpeechResult {
@@ -66,7 +68,7 @@ export interface UseSpeechResult {
   clearError: () => void;
   startListening: () => void;
   stopListening: () => void;
-  speak: (text: string, opts?: { bargeIn?: boolean }) => void;
+  speak: (text: string, opts?: { bargeIn?: boolean; lang?: string }) => void;
   stopSpeaking: () => void;
   speaking: boolean;
   muted: boolean;
@@ -75,6 +77,7 @@ export interface UseSpeechResult {
 
 export function useSpeech({
   onFinalTranscript,
+  lang = "en-US",
 }: UseSpeechOptions): UseSpeechResult {
   const [sttSupported] = useState(() => getRecognitionCtor() !== null);
   const [listening, setListening] = useState(false);
@@ -101,7 +104,7 @@ export function useSpeech({
     if (recognitionRef.current) return;
 
     const recognition = new Ctor();
-    recognition.lang = "en-US";
+    recognition.lang = lang;
     // Continuous + our own silence window: Chrome's non-continuous mode ends the
     // turn at the first short pause, which cut people off mid-sentence.
     recognition.continuous = true;
@@ -164,7 +167,7 @@ export function useSpeech({
     } catch {
       setError("Could not start the microphone.");
     }
-  }, []);
+  }, [lang]);
 
   const stopListening = useCallback(() => {
     recognitionRef.current?.stop();
@@ -180,7 +183,7 @@ export function useSpeech({
   }, []);
 
   const speak = useCallback(
-    (text: string, opts?: { bargeIn?: boolean }) => {
+    (text: string, opts?: { bargeIn?: boolean; lang?: string }) => {
       if (muted) return;
       if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
       stopSpeaking();
@@ -194,7 +197,7 @@ export function useSpeech({
         stopBargeRef.current?.();
         stopBargeRef.current = null;
         setSpeaking(false);
-      });
+      }, opts?.lang ?? lang);
       cancelSpeechRef.current = cancel;
       if (opts?.bargeIn) {
         // Only in hands-free (tap-started): an echo-cancelled detector so talking over the answer stops it.
@@ -204,7 +207,7 @@ export function useSpeech({
         });
       }
     },
-    [muted, stopSpeaking],
+    [muted, stopSpeaking, lang],
   );
 
   useEffect(() => {

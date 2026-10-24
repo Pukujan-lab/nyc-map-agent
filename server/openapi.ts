@@ -13,13 +13,15 @@ import { Query as HazardsQuery } from "./features/hazards/routes";
 import { NearQuery as ParkingNearQuery } from "./features/parking/routes";
 import { BrandsBox as StorefrontBrandsQuery, LogoQuery as StorefrontLogoQuery } from "./features/storefronts/routes";
 import { AlongQuery as TrafficAlongQuery } from "./features/traffic/routes";
-import { Query as WeatherQuery } from "./features/weather/routes";
-import { Query as SegmentsQuery, Response_ as SegmentsResponse } from "./features/transit/segments";
+import { HourQuery as WeatherHourQuery, Query as WeatherQuery } from "./features/weather/routes";
+import { AllQuery as AllSegmentsQuery, AllResponse as AllSegmentsResponse, Query as SegmentsQuery, Response_ as SegmentsResponse } from "./features/transit/segments";
+import { Query as LiveQuery } from "./features/transit/live";
 import { Query as BusSegmentsQuery, Response_ as BusSegmentsResponse } from "./features/transit/busSegments";
 import { EventsResponse, Query as EventsQuery } from "./features/events/schema";
 import { PlaceToiletsResponse } from "./features/place-toilets/schema";
+import { RestroomsResponse } from "./features/restrooms/schema";
 
-const Json = z.record(z.unknown()).openapi("Json");
+const Json = z.record(z.string(), z.unknown()).openapi("Json");
 const ApiError = z.object({ error: z.string(), issues: z.array(z.string()).optional() }).openapi("ApiError");
 
 const errors = {
@@ -27,7 +29,7 @@ const errors = {
   502: { description: "Upstream (Octo / R2) error", content: { "application/json": { schema: ApiError } } },
 };
 
-const jsonRoute = (path: string, summary: string, query?: z.AnyZodObject, params?: z.AnyZodObject) =>
+const jsonRoute = (path: string, summary: string, query?: z.ZodObject, params?: z.ZodObject) =>
   createRoute({
     method: "get",
     path,
@@ -75,6 +77,8 @@ export const AGENT_ROUTE = createRoute({
                   followedTrain: z.string().nullable().optional(),
                 })
                 .optional(),
+              lang: z.string().max(35).optional(),
+              memory: z.string().max(240).optional(),
             })
             .openapi("AgentRequest"),
         },
@@ -84,6 +88,17 @@ export const AGENT_ROUTE = createRoute({
   responses: {
     200: { description: "One JSON StreamEvent per line", content: { "application/x-ndjson": { schema: z.string() } } },
     400: { description: "Invalid body", content: { "application/json": { schema: ApiError } } },
+    429: {
+      description: "Fair-use limit for this client; Retry-After says when the next question frees up",
+      headers: { "Retry-After": { description: "Seconds until the next question is allowed", schema: { type: "integer" } } },
+      content: {
+        "application/json": {
+          schema: z
+            .object({ error: z.literal("rate_limited"), message: z.string(), retryAfterSeconds: z.number().int(), retryAt: z.string() })
+            .openapi("AgentRateLimited"),
+        },
+      },
+    },
   },
 });
 
@@ -101,9 +116,15 @@ export const ROUTES = {
   "/api/blocks": jsonRoute("/api/blocks", "One row per area for a source", BlocksQuery),
   "/api/city-tiles": binaryRoute("/api/city-tiles", "Citywide 3D-city PMTiles"),
   "/api/vehicle-models/:mode": binaryRoute("/api/vehicle-models/{mode}", "Live-vehicle glTF model (subway, bus, rail)"),
-  "/api/restrooms": jsonRoute("/api/restrooms", "Public restrooms GeoJSON"),
+  "/api/restrooms": createRoute({
+    method: "get",
+    path: "/api/restrooms",
+    summary: "Public restrooms GeoJSON: NYC Open Data merged with OpenStreetMap public toilets (ODbL); places within ~40 m are one record, each with its source and asOf",
+    responses: { 200: { description: "OK", content: { "application/json": { schema: RestroomsResponse } } }, ...errors },
+  }),
   "/api/sources": jsonRoute("/api/sources", "Source registry metadata and freshness"),
   "/api/street": jsonRoute("/api/street", "Street noise / crash stats", StreetQuery),
+  "/api/weather/hour": jsonRoute("/api/weather/hour", "One forecast hour (Open-Meteo) and active NWS alerts near a point, rounded to about 1 km", WeatherHourQuery),
   "/api/weather": jsonRoute("/api/weather", "Current weather near a point (Open-Meteo, NWS fallback)", WeatherQuery),
   "/api/hazards": jsonRoute("/api/hazards", "Active NWS alerts for NYC and flooded FloodNet sensors", HazardsQuery),
   "/api/ferry": jsonRoute("/api/ferry", "NYC Ferry and Staten Island Ferry routes, piers, and live or estimated vessels"),
@@ -114,6 +135,13 @@ export const ROUTES = {
   "/api/storefronts/brands": jsonRoute("/api/storefronts/brands", "OSM shops and amenities with brand:wikidata in a small bbox (ODbL)", StorefrontBrandsQuery),
   "/api/storefronts/logo": jsonRoute("/api/storefronts/logo", "A brand's freely licensed Wikidata P154 logo, re-hosted via Octo files (R2)", StorefrontLogoQuery),
   "/api/parking": jsonRoute("/api/parking", "Licensed garages and lots GeoJSON (DCWP + OSM)"),
+  "/api/transit-segments/all": createRoute({
+    method: "get",
+    path: "/api/transit-segments/all",
+    summary: "Historical subway segment travel and dwell times for many routes at once, keyed by route; cached for hours when dow and hour are given",
+    request: { query: AllSegmentsQuery },
+    responses: { 200: { description: "OK", content: { "application/json": { schema: AllSegmentsResponse } } }, ...errors },
+  }),
   "/api/transit-segments": createRoute({
     method: "get",
     path: "/api/transit-segments",
@@ -128,12 +156,23 @@ export const ROUTES = {
     request: { query: BusSegmentsQuery },
     responses: { 200: { description: "OK", content: { "application/json": { schema: BusSegmentsResponse } } }, ...errors },
   }),
+  "/api/transit-live": createRoute({
+    method: "get",
+    path: "/api/transit-live",
+    summary: "Live subway / LIRR / Metro-North trips and (alerts=1) service alerts in one response; ETag + If-None-Match (304), Cache-Control public, s-maxage=30, stale-while-revalidate=30",
+    request: { query: LiveQuery },
+    responses: {
+      200: { description: "OK ({ at, systems: { subway?, lirr?, mnr? }, alerts?, failed? })", content: { "application/json": { schema: Json } } },
+      304: { description: "Not modified (If-None-Match matched the ETag)" },
+      ...errors,
+    },
+  }),
   "/api/transit": jsonRoute("/api/transit", "Live transit capabilities ({ bus })"),
   "/api/transit/:system": jsonRoute(
     "/api/transit/{system}",
-    "Live MTA GTFS-rt (subway / lirr / mnr trips, bus positions, alerts + elevator outages), cached ~15 s; bus?routes=Q1,Q2 filters the cached fleet to at most 20 routes; bus-lines is the borough page catalog; bus-trip?vehicle= (one bus's headsign + upcoming stops), bus-route?route= (route shape + stops) and bus-stops?lat=&lon= (stops within ~300 m with the routes serving each)",
-    z.object({ vehicle: z.string().max(40).optional(), route: z.string().max(8).optional(), routes: z.string().max(240).optional(), lat: z.string().max(12).optional(), lon: z.string().max(12).optional() }),
-    z.object({ system: z.enum(["subway", "lirr", "mnr", "bus", "bus-lines", "alerts", "bus-trip", "bus-route", "bus-stops"]).openapi({ param: { name: "system", in: "path" }, example: "subway" }) }),
+    "Live MTA GTFS-rt (subway / lirr / mnr trips, bus positions, alerts + elevator outages), cached ~15 s; bus?routes=Q1,Q2 filters the cached fleet to at most 20 routes; bus-lines is the borough page catalog; bus-trip?vehicle= (one bus's headsign + upcoming stops), bus-route?route= (route shape + stops) and bus-stops?lat=&lon= (stops within ~300 m with the routes serving each) and bus-arrivals?stop= (next buses at one stop)",
+    z.object({ vehicle: z.string().max(40).optional(), route: z.string().max(8).optional(), routes: z.string().max(240).optional(), stop: z.string().max(20).optional(), lat: z.string().max(12).optional(), lon: z.string().max(12).optional() }),
+    z.object({ system: z.enum(["subway", "lirr", "mnr", "bus", "bus-lines", "alerts", "bus-trip", "bus-route", "bus-stops", "bus-arrivals"]).openapi({ param: { name: "system", in: "path" }, example: "subway" }) }),
   ),
   "/api/events": createRoute({
     method: "get",
