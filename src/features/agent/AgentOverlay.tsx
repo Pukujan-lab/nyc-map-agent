@@ -359,12 +359,16 @@ export default function AgentOverlay() {
 
   const turnOffHandsFree = useCallback(() => setHandsFree(false), []);
   useHandsFree({ on: handsFree, supported: speech.sttSupported, listening: speech.listening, busy, speaking: speech.speaking, error: speech.error, start: speech.startListening, stop: speech.stopListening, turnOff: turnOffHandsFree });
-  // A task screen (trip preview, walk, street view) takes over: hands-free ends instead of
-  // leaving the orb listening over it (owner report, 2026-10-24). The spoken answer still finishes.
-  const taskOn = player.state.active || followingRoute || walking || streetViewOpen;
+  // A trip preview or a followed route starting takes over the screen: hands-free ends instead of
+  // leaving the orb listening over it (owner report, 2026-10-24). Only the start counts, so you can
+  // still turn hands-free on during one, and street-level Ask keeps it. The spoken answer still finishes.
+  const taskOn = player.state.active || followingRoute;
+  const taskWas = useRef(taskOn);
   const stopMic = speech.stopListening;
   useEffect(() => {
-    if (!taskOn || !handsFree) return;
+    const started = taskOn && !taskWas.current;
+    taskWas.current = taskOn;
+    if (!started || !handsFree) return;
     setHandsFree(false);
     stopMic();
   }, [taskOn, handsFree, stopMic]);
