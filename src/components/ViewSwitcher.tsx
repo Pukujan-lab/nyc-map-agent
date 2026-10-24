@@ -62,7 +62,7 @@ export function ViewSwitcher() {
   const street = useFlag("streetLevel");
   // Agent-first home (#370): the view levels moved to Change view and X-ray to More layers; only the follow row stays.
   const home = useFlag("agentHome");
-  const { walking, startWalk, stopWalk, navigate, setCameraHeight, cameraHeightM } = useMapState();
+  const { walking, startWalk, navigate, setCameraHeight, cameraHeightM } = useMapState();
   const followed = useFollowed();
   const mode = useFollowMode();
   const xray = useStreetXray();
@@ -71,7 +71,7 @@ export function ViewSwitcher() {
     if (l === "street") { if (!walking) startWalk(); return; }
     if (l === "mid") { setCameraHeight(MID_HEIGHT_M); return; }
     if (l === "up") { setCameraHeight(UP_HEIGHT_M); return; }
-    if (walking) { stopWalk(); window.setTimeout(() => navigate("north"), 750); } else navigate("north");
+    navigate("north");
   };
   const train = followed !== null && !followed.startsWith("bus:");
   const openLines = useLinesControl();

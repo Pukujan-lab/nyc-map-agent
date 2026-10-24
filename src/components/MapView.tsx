@@ -65,6 +65,7 @@ import { BLOCK_FILL_LAYER, installBlockTiles, pushBlocks, setBlockFillVisible } 
 import { fetchNearestStreet, type WalkingRoute } from "@/lib/api/routing";
 import { useDataView } from "@/lib/store/DataViewContext";
 import type { CameraOptions, Map as MaplibreMapInstance } from "maplibre-gl";
+import { sendCamera } from "@/lib/map/cameraMode";
 import {
   approachBearing,
   clampLookPitch,
@@ -1506,6 +1507,8 @@ export function MapView({
         if (!walking) startWalk();
         return;
       }
+      // A view you picked: leaves the walk, and guidance stops re-tilting the camera.
+      sendCamera({ type: "view" });
       const apply = () => {
         // Stand the camera `heightM` up, behind the current centre along the
         // bearing, looking at the centre on the ground, the same way the eye camera does.
@@ -1523,11 +1526,9 @@ export function MapView({
         map.easeTo({ ...map.calculateCameraOptionsFromTo(eye, heightM, center, 0), duration: reducedMotion ? 0 : 900 });
         setTilted(pitch > 0);
       };
-      if (walking) {
-        // Leave the walk first; its exit animation would undo the jump.
-        stopWalk();
-        window.setTimeout(apply, reducedMotion ? 0 : 750);
-      } else apply();
+      // Leaving the walk animates out first; that exit would undo the jump.
+      if (walking) window.setTimeout(apply, reducedMotion ? 0 : 750);
+      else apply();
       return;
     }
     if (navCommand.type === "zoom-in") {
@@ -1539,8 +1540,13 @@ export function MapView({
       return;
     }
     if (navCommand.type === "north") {
-      map.easeTo({ bearing: 0, pitch: 0, duration });
-      setTilted(false);
+      sendCamera({ type: "view" });
+      const apply = () => {
+        map.easeTo({ bearing: 0, pitch: 0, duration });
+        setTilted(false);
+      };
+      if (walking) window.setTimeout(apply, reducedMotion ? 0 : 750);
+      else apply();
       return;
     }
     map.jumpTo({
@@ -1551,10 +1557,10 @@ export function MapView({
     });
     setTilted(false);
     // "Reset view" means the city, not the street you were standing on.
-    stopWalk();
+    sendCamera({ type: "reset" });
     // `walking` is read, not a trigger: only a new command moves the camera.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, navCommand, reducedMotion, setTilted, stopWalk, startWalk]);
+  }, [ready, navCommand, reducedMotion, setTilted, startWalk]);
 
   // The camera-height slider shows where the camera actually is.
   useEffect(() => {
