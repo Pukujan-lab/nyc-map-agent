@@ -162,6 +162,11 @@ export const MAX_ACTIONS = 6;
 export const streamEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("text"), text: z.string() }),
   z.object({ type: z.literal("tool"), name: z.string() }),
+  /**
+   * A tool the agent started or finished (#370), for the "Agents working" list.
+   * `id` pairs a start with its end. Older clients drop this line.
+   */
+  z.object({ type: z.literal("step"), id: z.string().max(100), name: z.string().max(100), status: z.enum(["start", "done", "error"]) }),
   z.object({ type: z.literal("command"), command }),
   z.object({ type: z.literal("actions"), actions: z.array(mapAction).max(MAX_ACTIONS) }),
   z.object({
@@ -197,5 +202,7 @@ export const requestBody = z.object({
   /** Client clock, so "tomorrow 9am" resolves in the user's zone. */
   now: z.string().optional(),
   context: askContext.optional(),
+  /** The browser's language (BCP 47, e.g. "es-US"); the reply follows the question's language, this is the tie-break. */
+  lang: z.string().regex(/^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8}){0,3}$/).max(35).optional(),
 });
 export type AgentRequest = z.infer<typeof requestBody>;

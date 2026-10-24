@@ -32,11 +32,17 @@ export function contextLine(c: AskContext | undefined): string | null {
   return `${parts.join("; ")}. Treat "here" as that spot unless they say otherwise.`;
 }
 
-export function systemPrompt(nowLocal: string, location: { lon: number; lat: number } | null, mode: "walk" | "transit" | "drive" = "transit", context?: AskContext): string {
+/** The reply follows the language the person wrote or spoke in (#370); the browser language only breaks ties. */
+export function languageLine(lang?: string): string {
+  return `Reply in the language of the user's latest message${lang ? `; if that is unclear, use the browser language ${lang}` : ""}. Keep station and line names exactly as written.`;
+}
+
+export function systemPrompt(nowLocal: string, location: { lon: number; lat: number } | null, mode: "walk" | "transit" | "drive" = "transit", context?: AskContext, lang?: string): string {
   const street = contextLine(context);
   return [
     ...(street ? [street] : []),
     "You are the NYC Map's trip assistant. Answers are spoken aloud: 2-4 short sentences, no markdown, no lists.",
+    languageLine(lang),
     `Now is ${nowLocal} in New York. Resolve relative times ("tomorrow at 9am") to local New York time YYYY-MM-DDTHH:MM.`,
     location
       ? `The user shared their exact location: longitude ${location.lon}, latitude ${location.lat}. Use "here" for it in tools; do not repeat the coordinates back.`
@@ -62,7 +68,7 @@ function defaultModel(): LanguageModel {
 export async function POST(request: Request, opts: { model?: LanguageModel; deps?: ToolContext["deps"] } = {}): Promise<Response> {
   const parsed = requestBody.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "bad_request" }, { status: 400 });
-  const { messages, now, mode, context } = parsed.data;
+  const { messages, now, mode, context, lang } = parsed.data;
   // Street view's spot counts as the shared location for "here".
   const location = parsed.data.location ?? (context ? { lon: context.lon, lat: context.lat } : null);
   const enc = new TextEncoder();
@@ -81,7 +87,7 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
         const model = opts.model ?? defaultModel();
         const result = streamText({
           model,
-          system: systemPrompt(toNyLocal(now ? new Date(now) : new Date()), location, mode, context),
+          system: systemPrompt(toNyLocal(now ? new Date(now) : new Date()), location, mode, context, lang),
           messages,
           tools: makeTools({ location, emit: (command) => send({ type: "command", command }), actions: (a) => actions.add(a), deps: opts.deps, drive: resolveFlags({ env: process.env.VITE_FLAGS, advancedMode: false }).agentDrive }),
           stopWhen: stepCountIs(8),
@@ -97,7 +103,12 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
         });
         for await (const part of result.fullStream) {
           if (part.type === "text-delta") send({ type: "text", text: part.text });
-          else if (part.type === "tool-call") send({ type: "tool", name: part.toolName });
+          else if (part.type === "tool-call") {
+            // "tool" stays for older clients; "step" pairs a start with its end (#370).
+            send({ type: "tool", name: part.toolName });
+            send({ type: "step", id: part.toolCallId.slice(0, 100), name: part.toolName, status: "start" });
+          } else if (part.type === "tool-result") send({ type: "step", id: part.toolCallId.slice(0, 100), name: part.toolName, status: "done" });
+          else if (part.type === "tool-error") send({ type: "step", id: part.toolCallId.slice(0, 100), name: part.toolName, status: "error" });
           else if (part.type === "error") send({ type: "error", message: "The model call failed." });
           else if (part.type === "finish") {
             flushActions();
