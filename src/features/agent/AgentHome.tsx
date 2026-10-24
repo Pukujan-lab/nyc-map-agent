@@ -9,7 +9,10 @@ import { stepLabel, type AgentStep } from "./agentSteps";
  * step lines, instead of a spinner. The first row is the agent reading the question.
  */
 export function WorkingPanel({ steps }: { steps: AgentStep[] }) {
-  const rows: AgentStep[] = [{ id: "planner", name: "", status: steps.length ? "done" : "start" }, ...steps];
+  // Something always spins while the agent works: once every step is done, the answer is being written.
+  const writing = steps.length > 0 && !steps.some((s) => s.status === "start");
+  const rows: AgentStep[] = [{ id: "planner", name: "", status: steps.length ? "done" : "start" }, ...steps, ...(writing ? [{ id: "writing", name: "", status: "start" as const }] : [])];
+  const slow = useSlow(SLOW_MS);
   return (
     <div className="rounded-xl border bg-background/60 p-3" role="status" aria-live="polite" aria-label="Agents working" data-testid="agents-working">
       <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Agents working</div>
@@ -23,13 +26,27 @@ export function WorkingPanel({ steps }: { steps: AgentStep[] }) {
             ) : (
               <AlertCircle className="h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
             )}
-            <span className={cn(s.status === "done" && "text-muted-foreground")}>{s.id === "planner" ? "Planner: reading your question" : stepLabel(s.name)}</span>
+            <span className={cn(s.status === "done" && "text-muted-foreground")}>{s.id === "planner" ? "Planner: reading your question" : s.id === "writing" ? "Writing the answer" : stepLabel(s.name)}</span>
             <span className="sr-only">{s.status === "start" ? "in progress" : s.status === "done" ? "done" : "failed"}</span>
           </li>
         ))}
       </ul>
+      {slow ? <p className="mt-2 text-xs text-muted-foreground">Still working. This one is taking longer than usual.</p> : null}
     </div>
   );
+}
+
+/** After this long, say the answer is slow so a quiet panel never looks frozen (owner report, 2026-10-24). */
+const SLOW_MS = 8000;
+
+/** True once `ms` have passed since the panel appeared. */
+function useSlow(ms: number): boolean {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const t = window.setTimeout(() => setSlow(true), ms);
+    return () => window.clearTimeout(t);
+  }, [ms]);
+  return slow;
 }
 
 const SECONDARY = "h-12 rounded-full border border-slate-700 bg-transparent text-sm font-semibold text-slate-100 hover:bg-slate-800 hover:text-white";

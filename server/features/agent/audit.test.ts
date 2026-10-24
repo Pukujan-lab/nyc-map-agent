@@ -24,7 +24,8 @@ function model(reply: string, call?: { toolName: string; input: unknown }) {
 }
 
 async function ask(m: MockLanguageModelV4, question: string, deps?: ToolContext["deps"]): Promise<StreamEvent[]> {
-  const body = { messages: [{ role: "user", content: question }], location: { lon: -73.984, lat: 40.754 } };
+  // A fixed asker's clock: the time is text a reply may repeat, so at 6:50 PM a real clock grounded "50" (flaky CI, 2026-10-24).
+  const body = { messages: [{ role: "user", content: question }], location: { lon: -73.984, lat: 40.754 }, now: "2026-03-04T13:07:00-05:00" };
   // A fresh, unlimited fair-use state per ask, so the shared per-address burst limit (#369) does not trip.
   const now = () => Date.now();
   const fairUse = { limiter: createLimiter({ windowMax: 0, windowMs: 0, burstMax: 0, burstMs: 0 }, now), budget: createDailyBudget({ softCap: 0, hardCap: 0, capModel: null }, now), now };

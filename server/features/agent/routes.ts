@@ -16,6 +16,7 @@ import { budgetConfigFromEnv, createDailyBudget, createLimiter, limitConfigFromE
 import { ActionCollector } from "./mapActions";
 import { contextLine, systemPrompt } from "./prompt";
 import { AnswerAudit } from "./audit";
+import { RunLog } from "./runLog";
 
 export const INFERHUB_BASE_URL = process.env.INFERHUB_BASE_URL ?? "https://api.inferhub.dev/v1";
 /** Cheap, fast, good at tool calls: ~$0.075 in / $0.30 out per M tokens (InferHub market max ask). */
@@ -24,12 +25,12 @@ export const DEFAULT_MODEL = "cb/deepseek-v4.1-flash";
 // The prompt lives in prompt.ts; re-exported for existing importers.
 export { contextLine, systemPrompt } from "./prompt";
 
-function defaultModel(only?: string): LanguageModel {
+function defaultModel(only?: string, run?: RunLog): LanguageModel {
   const key = process.env.INFERHUB_API_KEY;
   if (!key) throw new Error("INFERHUB_API_KEY is not set on the server.");
   // Over the daily cap only the configured cheap model is tried, with no fallbacks to pricier ones.
   const models = only ? [only] : modelChain(process.env.INFERHUB_MODEL ?? DEFAULT_MODEL, process.env.INFERHUB_MODEL_FALLBACKS);
-  return createOpenAICompatible({ name: "inferhub", baseURL: INFERHUB_BASE_URL, apiKey: key, fetch: fallbackFetch(models) })(models[0]);
+  return createOpenAICompatible({ name: "inferhub", baseURL: INFERHUB_BASE_URL, apiKey: key, fetch: fallbackFetch(models, fetch, (m) => { console.warn(m); run?.note(m); }, undefined, undefined, (m) => run?.usedModel(m)) })(models[0]);
 }
 
 export type FairUse = { limiter: ReturnType<typeof createLimiter>; budget: ReturnType<typeof createDailyBudget>; now: () => number };
@@ -66,6 +67,9 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
         controller.close();
         return;
       }
+      // Timings for this request: one log line and one core.agent_runs row (no question text).
+      const run = new RunLog(modelId);
+      let finished = false;
       // Buttons under the answer, from the tool results (#371); one "actions" line before "done".
       const actions = new ActionCollector();
       let answerText = "";
@@ -77,7 +81,7 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
       // Data sources and their age, plus the "no guessing" check (#375); one "sources" line before "done".
       const audit = new AnswerAudit([nowLocal, contextLine(context) ?? "", ...messages.filter((m) => m.role === "user").map((m) => m.content)]);
       try {
-        const model = opts.model ?? defaultModel(budget.tier === "cheap" ? budget.model : undefined);
+        const model = opts.model ?? defaultModel(budget.tier === "cheap" ? budget.model : undefined, run);
         const result = streamText({
           model,
           system: systemPrompt(nowLocal, location, mode, context, lang, memory),
@@ -95,28 +99,37 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
           },
         });
         for await (const part of result.fullStream) {
-          if (part.type === "text-delta") { audit.text(part.text); answerText += part.text; send({ type: "text", text: part.text }); }
+          if (part.type === "text-delta") { run.text(); audit.text(part.text); answerText += part.text; send({ type: "text", text: part.text }); }
           else if (part.type === "tool-call") {
             // "tool" stays for older clients; "step" pairs a start with its end (#370).
             send({ type: "tool", name: part.toolName });
             send({ type: "step", id: part.toolCallId.slice(0, 100), name: part.toolName, status: "start" });
+            run.stepStart(part.toolCallId, part.toolName);
           } else if (part.type === "tool-result") {
             audit.toolResult(part.toolName, part.output);
             send({ type: "step", id: part.toolCallId.slice(0, 100), name: part.toolName, status: "done" });
-          } else if (part.type === "tool-error") send({ type: "step", id: part.toolCallId.slice(0, 100), name: part.toolName, status: "error" });
-          else if (part.type === "error") send({ type: "error", message: "The model call failed." });
+            run.stepEnd(part.toolCallId, true);
+          } else if (part.type === "tool-error") { run.stepEnd(part.toolCallId, false); send({ type: "step", id: part.toolCallId.slice(0, 100), name: part.toolName, status: "error" }); }
+          else if (part.type === "error") { run.finish("error", null); finished = true; send({ type: "error", message: "The model call failed." }); }
           else if (part.type === "finish") {
             fair.budget.record((part.totalUsage.inputTokens ?? 0) + (part.totalUsage.outputTokens ?? 0));
             flushActions();
             const sources = audit.event();
             if (sources) send(sources);
-            send({ type: "done", model: modelId, usage: { inputTokens: part.totalUsage.inputTokens ?? 0, outputTokens: part.totalUsage.outputTokens ?? 0 } });
+            const usage = { inputTokens: part.totalUsage.inputTokens ?? 0, outputTokens: part.totalUsage.outputTokens ?? 0 };
+            run.finish("done", usage);
+            finished = true;
+            send({ type: "done", model: modelId, usage });
           }
         }
       } catch (err) {
+        run.finish("error", null);
+        finished = true;
         // Never echo provider errors verbatim: they can include request headers.
         send({ type: "error", message: err instanceof Error && /INFERHUB_API_KEY/.test(err.message) ? err.message : "The assistant is unavailable right now." });
       } finally {
+        // The stream ended with no finish part: the person left or the provider hung up.
+        if (!finished) run.finish("aborted", null);
         controller.close();
       }
     },
