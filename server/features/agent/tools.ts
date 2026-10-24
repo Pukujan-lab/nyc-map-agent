@@ -1,4 +1,5 @@
 import { tool } from "ai";
+import { readPage, webSearch } from "./webLookup";
 import { z } from "zod";
 import { command, playbackSpeed, type AgentCommand, type LngLatTuple, type MapAction, type Trip } from "../../../src/features/agent/schema";
 import { elevatorStatus, geocode, hazardsAt, nearestRestrooms, publicRestrooms, routeWalk, serviceAlerts, subwayAlertEntities, subwayVehicles, troubleStations, weatherAt, type Place, type RestroomRow } from "./services";
@@ -51,6 +52,8 @@ export const args = {
   }),
   weather_forecast: z.object({ place: z.string().default("here"), time: when }),
   hazards: z.object({ place: z.string().default("here") }),
+  find_event: z.object({ query: z.string().min(3).max(160).describe("The event's name and anything known: organiser, date, \"Luma\" or \"Eventbrite\" (e.g. \"3 Percent Club event New York October 24 2026\")") }),
+  read_page: z.object({ url: z.string().url().describe("An event page from find_event results") }),
   nearest_restroom: z.object({ place: z.string().default("here") }),
   elevator_status: z.object({ station: z.string().min(2) }),
   line_status: z.object({ lines: z.array(z.string().regex(/^[A-Za-z0-9]{1,3}$/)).min(1).max(6).describe("Subway lines as the MTA names them, e.g. [\"L\"] or [\"4\",\"5\",\"6\"]") }),
@@ -187,6 +190,8 @@ export function makeTools(ctx: ToolContext) {
     }),
     weather_forecast: tool({ description: "Hourly forecast (Open-Meteo) at a place and local time, up to 7 days ahead.", inputSchema: args.weather_forecast, execute: sourced(async ({ place, time }: z.infer<typeof args.weather_forecast>) => weatherAt(at(await resolve(place)), localTime(time))) }),
     hazards: tool({ description: "Active National Weather Service alerts at a place.", inputSchema: args.hazards, execute: sourced(async ({ place }: z.infer<typeof args.hazards>) => ({ alerts: await hazardsAt(at(await resolve(place))) })) }),
+    find_event: tool({ description: "Search the web for a named event in New York (Luma, Eventbrite, the organiser's site). Only when the user asks about a specific event.", inputSchema: args.find_event, execute: sourced(async ({ query }: z.infer<typeof args.find_event>) => webSearch(/new york|nyc|brooklyn|queens|manhattan|bronx|staten/i.test(query) ? query : `${query} New York`)) }),
+    read_page: tool({ description: "Read one event page from find_event to get its venue address, date and time.", inputSchema: args.read_page, execute: sourced(async ({ url }: z.infer<typeof args.read_page>) => readPage(url)) }),
     elevator_status: tool({ description: "Current MTA elevator/escalator outages at a station.", inputSchema: args.elevator_status, execute: sourced(async ({ station }: z.infer<typeof args.elevator_status>) => ({ outages: await elevatorStatus(station) })) }),
     flyTo: tool({ description: "Map: fly the camera to a place.", inputSchema: args.flyTo, execute: async ({ place, zoom }) => { const p = await resolve(place); offer(placeActions(p)); return emit({ type: "flyTo", lon: p.at[0], lat: p.at[1], zoom }); } }),
     showRoute: tool({ description: "Map: draw a planned trip.", inputSchema: args.tripRef, execute: ({ tripId }) => emit({ type: "showRoute", trip: tripOf(tripId) }) }),
