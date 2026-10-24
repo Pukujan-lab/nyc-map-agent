@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils";
 import { useSpeech } from "@/lib/voice/useSpeech";
 import { spokenSummary } from "@/lib/voice/tts";
 import { executeCommand, type ExecutorContext } from "./executor";
-import type { MapAction, Trip, TripMode } from "./schema";
+import { langTag, type MapAction, type Trip, type TripMode } from "./schema";
 import { askAgent } from "./stream";
 import { TripSummary, selectAlternative } from "./TripSummary";
 import { routeColor, showPoints, showTrip } from "./tripLayer";
@@ -38,9 +38,21 @@ import { usePlayer, type Speed } from "./usePlayer";
 import { useWakePhrase } from "./useWakePhrase";
 import { useHandsFree } from "./useHandsFree";
 import { closeAsk, useAskRequest } from "@/lib/agent/streetContext";
+import { AgentHome, WorkingPanel } from "./AgentHome";
+import { applyStep, statusLine, type AgentStep } from "./agentSteps";
 import { needsSharedOrigin, ORIGIN_PROMPT, replyAsksForOrigin } from "./needsOrigin";
 
 interface Msg { id: string; role: "user" | "assistant"; content: string; offerLocation?: boolean; actions?: MapAction[] }
+
+/** A spoken status line covers a voice question that is still working after this long (#370). */
+const STATUS_AFTER_MS = 2500;
+const VOICE_UNSUPPORTED = "Voice input isn't available in this browser. Type your question instead.";
+
+/** The browser language, when it is a tag the server accepts. */
+function browserLang(): string | undefined {
+  const l = typeof navigator === "undefined" ? undefined : navigator.language;
+  return l && langTag.safeParse(l).success ? l : undefined;
+}
 
 const MODES: Array<{ id: TripMode; label: string; Icon: typeof Bus }> = [
   { id: "walk", label: "Walk", Icon: Footprints },
@@ -49,8 +61,11 @@ const MODES: Array<{ id: TripMode; label: string; Icon: typeof Bus }> = [
 ];
 
 export default function AgentOverlay() {
-  const { chatOpen, setChatOpen, flyTo, startWalk, stopWalk, chatSeed, clearSeed, setRestrooms } = useMapState();
-  const { showPanel, closeAll } = usePanel();
+  const { chatOpen, setChatOpen, flyTo, startWalk, stopWalk, chatSeed, clearSeed, setRestrooms, walking, streetViewOpen } = useMapState();
+  const { showPanel, closeAll, content: panelContent, minimized: panelMinimized, drawerOpen } = usePanel();
+  // Agent-first home (#370): bottom chat bar, voice waveform, visible steps.
+  const home = useFlag("agentHome");
+  const [lang] = useState(browserLang);
   // One panel at a time (#225): opening Ask closes the drawer and any sheet.
   useEffect(() => {
     if (chatOpen) closeAll();
@@ -74,7 +89,13 @@ export default function AgentOverlay() {
   const askReq = useAskRequest();
   const compact = askReq !== null;
 
-  const speech = useSpeech({ onFinalTranscript: (t) => void send(t) });
+  const [steps, setSteps] = useState<AgentStep[]>([]);
+  const stepsRef = useRef<AgentStep[]>([]);
+  stepsRef.current = steps;
+  const [notice, setNotice] = useState<string | null>(null);
+  /** The next send came from speech, so a long wait gets a spoken status line. */
+  const voiceTurn = useRef(false);
+  const speech = useSpeech({ onFinalTranscript: (t) => { voiceTurn.current = true; void send(t); }, lang: home ? lang : undefined });
   const player = usePlayer((text) => speech.speak(text));
   // Ask, the route fit, and the preview all move the camera. Follow and street
   // view let go first, without the Stop following glide back.
@@ -126,7 +147,10 @@ export default function AgentOverlay() {
   const send = useCallback(async (text: string) => {
     closeAll();
     const q = text.trim();
+    const byVoice = voiceTurn.current;
+    voiceTurn.current = false;
     if (!q || busy) return;
+    setNotice(null);
     setInput("");
     if (!askReq) setChatOpen(true);
     // A second tap of the same question, after Use my location, keeps the one user bubble.
@@ -147,11 +171,15 @@ export default function AgentOverlay() {
     const reply: Msg = { id: crypto.randomUUID(), role: "assistant", content: "" };
     setMessages([...history, reply]);
     setBusy(true);
+    setSteps([]);
     abort.current?.abort();
     abort.current = new AbortController();
     let spoken = "";
+    // A voice question still working after ~2.5 s gets one short spoken status line.
+    const statusTimer = home && byVoice ? window.setTimeout(() => speech.speak(statusLine(stepsRef.current)), STATUS_AFTER_MS) : undefined;
     try {
-      for await (const ev of askAgent({ messages: history.map(({ role, content }) => ({ role, content })), location, mode, now: new Date().toISOString(), ...(askReq ? { context: askReq.context } : {}) }, abort.current.signal)) {
+      for await (const ev of askAgent({ messages: history.map(({ role, content }) => ({ role, content })), location, mode, now: new Date().toISOString(), ...(askReq ? { context: askReq.context } : {}), ...(home && lang ? { lang } : {}) }, abort.current.signal)) {
+        setSteps((s) => applyStep(s, ev));
         if (ev.type === "text") {
           spoken += ev.text;
           setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, content: x.content + ev.text } : x)));
@@ -166,6 +194,7 @@ export default function AgentOverlay() {
     } catch {
       setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, content: x.content || "The assistant is unavailable right now." } : x)));
     } finally {
+      window.clearTimeout(statusTimer);
       setBusy(false);
       // The model still asked for a start: put the same button on its reply.
       if (!askReq && spoken && !sharedCoords() && replyAsksForOrigin(spoken)) {
@@ -176,7 +205,7 @@ export default function AgentOverlay() {
       // person can talk over it to interrupt.
       if (spoken) speech.speak(spokenSummary(spoken), { bargeIn: handsFree });
     }
-  }, [busy, mode, setChatOpen, speech, askReq, handsFree, closeAll]);
+  }, [busy, mode, setChatOpen, speech, askReq, handsFree, closeAll, home, lang]);
 
   // The reply button and the footer chip both share location, then ask the waiting question.
   const enableLocation = useCallback(async () => {
@@ -205,31 +234,31 @@ export default function AgentOverlay() {
     setHandsFree(true);
   };
 
-  useWakePhrase(wake && speech.sttSupported, speech.listening || busy || speech.speaking, (t) => void send(t));
+  useWakePhrase(wake && speech.sttSupported, speech.listening || busy || speech.speaking, (t) => { voiceTurn.current = true; void send(t); });
   useEffect(() => () => abort.current?.abort(), []);
 
   const ModeIcon = MODES.find((m) => m.id === mode)!.Icon;
   const modes = MODES.filter((m) => m.id !== "drive" || driveOn);
 
-  const body = (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2 border-b py-3 pl-4 pr-12">
-        <div className="flex-1 text-sm font-semibold">{compact ? "Ask about this spot" : "Ask the map"}</div>
+  // The home bar's sheet uses 44 px targets; the classic sheet keeps its compact chips.
+  const chip = home && !compact ? "h-11 gap-1 rounded-full px-3 text-xs" : "h-7 gap-1 rounded-full px-2.5 text-xs";
+  const controls = (
+    <>
         <Button
           type="button"
           variant={handsFree ? "default" : "secondary"}
           size="sm"
-          className="h-7 gap-1 rounded-full px-2.5 text-xs"
+          className={chip}
           aria-pressed={handsFree}
           disabled={!speech.sttSupported}
           title={speech.sttSupported ? undefined : "Voice input is not available in this browser"}
           onClick={toggleHandsFree}
         >
-          <Headphones className="h-3.5 w-3.5" /> Hands-free
+          <Headphones className="h-3.5 w-3.5" /> <span className={home && !compact ? "sr-only sm:not-sr-only" : undefined}>Hands-free</span>
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="secondary" size="sm" className="h-7 gap-1 rounded-full px-2.5 text-xs" aria-label={`Trip mode: ${mode}`}>
+            <Button variant="secondary" size="sm" className={chip} aria-label={`Trip mode: ${mode}`}>
               <ModeIcon className="h-3.5 w-3.5" /> {MODES.find((m) => m.id === mode)!.label}
             </Button>
           </DropdownMenuTrigger>
@@ -243,7 +272,7 @@ export default function AgentOverlay() {
         </DropdownMenu>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Assistant settings"><MoreVertical className="h-4 w-4" /></Button>
+            <Button variant="ghost" size="icon" className={home && !compact ? "h-11 w-11" : "h-8 w-8"} aria-label="Assistant settings"><MoreVertical className="h-4 w-4" /></Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-64">
             <DropdownMenuLabel>Voice</DropdownMenuLabel>
@@ -259,18 +288,11 @@ export default function AgentOverlay() {
             </p>
           </DropdownMenuContent>
         </DropdownMenu>
-      </div>
+    </>
+  );
 
-      {handsFree || speech.listening || (speech.speaking && handsFree) ? (
-        <div className="flex items-center gap-2 border-b bg-muted/50 px-4 py-1.5 text-xs" role="status" data-testid="voice-status">
-          <span className={cn("h-2 w-2 rounded-full", speech.listening ? "animate-pulse bg-destructive" : busy || speech.speaking ? "animate-pulse bg-primary" : "bg-muted-foreground")} />
-          <span>{speech.listening ? (speech.interim ? `Listening: “${speech.interim}”` : "Listening") : busy ? "Thinking…" : speech.speaking ? (handsFree ? "Speaking (talk to interrupt)" : "Speaking") : "Hands-free on"}</span>
-          <span className="ml-auto text-muted-foreground">Nothing is recorded or saved.</span>
-        </div>
-      ) : null}
-      {speech.error && handsFree ? <p className="border-b px-4 py-1.5 text-xs text-muted-foreground">{speech.error}</p> : null}
-
-      <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3" aria-live="polite">
+  const answers = (
+    <>
         {messages.length === 0 ? (
           <div className="space-y-2 text-sm text-muted-foreground">
             <p>Ask anything about getting around. For example:</p>
@@ -279,7 +301,9 @@ export default function AgentOverlay() {
             ))}
           </div>
         ) : (
-          messages.map((m) => (
+          messages.map((m) =>
+            // In the home sheet the working panel stands in for the empty reply bubble.
+            home && !compact && m.role === "assistant" && !m.content && !m.actions?.length && !m.offerLocation ? null : (
             <div key={m.id} className={cn("max-w-[90%] rounded-lg px-3 py-2 text-sm", m.role === "user" ? "ml-auto bg-primary text-primary-foreground" : "bg-muted")}>
               {m.content || (busy ? "…" : "")}
               {m.actions?.length ? <AnswerActions actions={m.actions} onRun={runAction} /> : null}
@@ -290,16 +314,20 @@ export default function AgentOverlay() {
                 </Button>
               ) : null}
             </div>
-          ))
+            ),
+          )
         )}
+        {home && !compact && busy ? <WorkingPanel steps={steps} /> : null}
         {trip ? (
           <div className="rounded-lg border p-3">
             <TripSummary trip={trip} mapTime={mapTime} onSelect={(alt) => ctx.showTrip(selectAlternative(trip, alt))} />
             <Button size="sm" className="mt-3 w-full gap-2" onClick={() => ctx.playFlythrough(trip, 10)}><Play className="h-4 w-4" /> Preview trip</Button>
           </div>
         ) : null}
-      </div>
+    </>
+  );
 
+  const footer = (
       <div className="flex items-center justify-between gap-2 border-t px-3 pt-2 text-xs text-muted-foreground" role="status">
         {shared.status === "on" ? (
           <>
@@ -317,6 +345,29 @@ export default function AgentOverlay() {
           </>
         )}
       </div>
+  );
+
+  const body = (
+    <div className="flex h-full flex-col">
+      <div className="flex items-center gap-2 border-b py-3 pl-4 pr-12">
+        <div className="flex-1 text-sm font-semibold">{compact ? "Ask about this spot" : "Ask the map"}</div>
+        {controls}
+      </div>
+
+      {handsFree || speech.listening || (speech.speaking && handsFree) ? (
+        <div className="flex items-center gap-2 border-b bg-muted/50 px-4 py-1.5 text-xs" role="status" data-testid="voice-status">
+          <span className={cn("h-2 w-2 rounded-full", speech.listening ? "animate-pulse bg-destructive" : busy || speech.speaking ? "animate-pulse bg-primary" : "bg-muted-foreground")} />
+          <span>{speech.listening ? (speech.interim ? `Listening: “${speech.interim}”` : "Listening") : busy ? "Thinking…" : speech.speaking ? (handsFree ? "Speaking (talk to interrupt)" : "Speaking") : "Hands-free on"}</span>
+          <span className="ml-auto text-muted-foreground">Nothing is recorded or saved.</span>
+        </div>
+      ) : null}
+      {speech.error && handsFree ? <p className="border-b px-4 py-1.5 text-xs text-muted-foreground">{speech.error}</p> : null}
+
+      <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3" aria-live="polite">
+        {answers}
+      </div>
+
+      {footer}
       <form className="flex items-end gap-2 p-3" onSubmit={(e) => { e.preventDefault(); void send(input); }}>
         {speech.listening ? (
           <div className="flex h-9 flex-1 items-center gap-2 rounded-md border px-3 text-sm" role="status">
@@ -363,6 +414,52 @@ export default function AgentOverlay() {
     return slot ? createPortal(panel, slot) : <div className="fixed inset-x-0 bottom-0 z-[60] h-0">{panel}</div>;
   }
 
+  const playback = player.state.active ? (
+    <PlaybackBar
+      playing={player.state.playing}
+      speed={player.state.speed}
+      callout={player.state.callout}
+      step={`${player.state.seg + 1}/${player.state.segs.length}`}
+      onToggle={player.toggle}
+      onSpeed={player.setSpeed}
+      onSkip={player.skip}
+      onClose={player.stop}
+    />
+  ) : null;
+
+  if (home) {
+    const tapVoice = () => {
+      if (!speech.sttSupported) { setNotice(VOICE_UNSUPPORTED); return; }
+      if (busy) return;
+      if (speech.listening) { speech.stopListening(); return; }
+      setNotice(null);
+      speech.clearError();
+      speech.startListening();
+    };
+    return (
+      <>
+        <AgentHome
+          input={input}
+          setInput={setInput}
+          onSend={(t) => void send(t)}
+          busy={busy}
+          voice={{ supported: speech.sttSupported, listening: speech.listening, interim: speech.interim, error: speech.error, start: speech.startListening, stop: speech.stopListening }}
+          notice={notice ?? speech.error}
+          onVoiceTap={tapVoice}
+          sheetOpen={chatOpen}
+          onCloseSheet={() => setChatOpen(false)}
+          answers={answers}
+          controls={controls}
+          footer={<div className="pb-2">{footer}</div>}
+          // On a phone the place sheet and the layers drawer own the bottom; an open answer stays.
+          hidden={walking || streetViewOpen || player.state.active || (!isDesktop && !chatOpen && !busy && (drawerOpen || (panelContent !== null && !panelMinimized)))}
+          lift={!isDesktop && panelContent !== null && panelMinimized}
+        />
+        {playback}
+      </>
+    );
+  }
+
   return (
     <>
       <Sheet open={chatOpen} onOpenChange={setChatOpen}>
@@ -372,18 +469,7 @@ export default function AgentOverlay() {
           {body}
         </SheetContent>
       </Sheet>
-      {player.state.active ? (
-        <PlaybackBar
-          playing={player.state.playing}
-          speed={player.state.speed}
-          callout={player.state.callout}
-          step={`${player.state.seg + 1}/${player.state.segs.length}`}
-          onToggle={player.toggle}
-          onSpeed={player.setSpeed}
-          onSkip={player.skip}
-          onClose={player.stop}
-        />
-      ) : null}
+      {playback}
     </>
   );
 }

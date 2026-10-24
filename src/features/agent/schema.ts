@@ -190,6 +190,9 @@ export const askContext = z.object({
 });
 export type AskContext = z.infer<typeof askContext>;
 
+/** A BCP 47 language tag as browsers report it ("en-US", "zh-Hans-CN"). */
+export const langTag = z.string().max(35).regex(/^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8}){0,3}$/);
+
 export const requestBody = z.object({
   messages: z
     .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().max(4000) }))
@@ -203,6 +206,6 @@ export const requestBody = z.object({
   now: z.string().optional(),
   context: askContext.optional(),
   /** The browser's language (BCP 47, e.g. "es-US"); the reply follows the question's language, this is the tie-break. */
-  lang: z.string().regex(/^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8}){0,3}$/).max(35).optional(),
+  lang: langTag.optional(),
 });
 export type AgentRequest = z.infer<typeof requestBody>;
