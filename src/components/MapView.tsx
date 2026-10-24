@@ -17,7 +17,8 @@ import { applyPlaces, classesFor, placesStale, usePlaces, withQuickPlaces } from
 import { insetFilters } from "@/lib/map/miniStyle";
 import { useMapOptions } from "@/lib/map/mapOptions";
 import { applyBuildings, cityDetail, mapLevel, wantsFlatBuildings } from "@/lib/map/buildings";
-import { installLandmarkLabels } from "@/lib/map/landmarkLabels";
+import { focusLandmarks, installLandmarkLabels, isLandmarkLayer } from "@/lib/map/landmarkLabels";
+import { STREET_LEVEL_RANGE_M, describeGuide, pickGuideLandmarks } from "@/lib/guide/landmarkGuide";
 import { setWalkEye } from "@/lib/map/walkEye";
 import { applyMapTheme, buildingEdge, setThemeCoords, usePalette } from "@/lib/theme";
 import { sharedCoords } from "@/lib/geo/sharedLocation";
@@ -1133,12 +1134,13 @@ export function MapView({
       }).catch(() => {});
     }
     // At eye level basemap labels stand on the horizon and float in the sky,
-    // so they step aside while walking; our own route markers stay. Restroom
-    // icons keep the filter's own visibility — street view still needs them.
+    // so they step aside while walking; our own route markers and the
+    // landmarks (how you know where you are) stay. Restroom icons keep the
+    // filter's own visibility — street view still needs them.
     const own = new Set(Object.keys(SOURCE_IDS).map((k) => SOURCE_IDS[k as keyof typeof SOURCE_IDS] as string));
     for (const layer of map.getStyle().layers ?? []) {
       // Transit layers (station names + route bullets, #186) stand in the 3D scene and stay.
-      if (layer.type !== "symbol" || own.has((layer as { source?: string }).source ?? "") || layer.id.startsWith("transit-")) continue;
+      if (layer.type !== "symbol" || own.has((layer as { source?: string }).source ?? "") || layer.id.startsWith("transit-") || isLandmarkLayer(layer.id)) continue;
       if (layer.id === "restrooms") continue;
       map.setLayoutProperty(layer.id, "visibility", walking ? "none" : "visible");
     }
@@ -1206,8 +1208,15 @@ export function MapView({
         lines = namedStreetLines(map);
         at = { lng: c.lng, lat: c.lat };
         placed = true;
+        // Only nearby landmarks on the street-level map, same cap as the header.
+        focusLandmarks(map, { lon: c.lng, lat: c.lat });
       }
-      const label = streetLabel(streetPosition(lines, c.lng, c.lat));
+      // Street, then the landmark you can see: "Grand St & Essex St · Empire State Building ahead".
+      const street = streetLabel(streetPosition(lines, c.lng, c.lat));
+      const guide = describeGuide(
+        pickGuideLandmarks({ lon: c.lng, lat: c.lat }, eye ? eye.bearing : map.getBearing(), { max: 1, maxDistanceM: STREET_LEVEL_RANGE_M }),
+      );
+      const label = [street, guide].filter(Boolean).join(" · ") || null;
       setStreetHere((prev) => (prev === label ? prev : label));
     };
     update();
@@ -1222,6 +1231,8 @@ export function MapView({
     return () => {
       window.clearInterval(id);
       map.off("sourcedata", onData);
+      // Leaving street level: the whole list again, thinned by zoom.
+      focusLandmarks(map, null);
     };
   }, [ready, walking]);
 

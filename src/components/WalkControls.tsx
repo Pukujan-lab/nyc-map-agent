@@ -106,7 +106,7 @@ export function WalkControls({
                 <span
                   data-testid="walk-street"
                   aria-live="polite"
-                  className="max-w-[44vw] truncate text-[11px] font-semibold sm:max-w-none"
+                  className="line-clamp-2 max-w-[56vw] break-words text-[11px] font-semibold leading-tight sm:max-w-none"
                 >
                   {street}
                 </span>
