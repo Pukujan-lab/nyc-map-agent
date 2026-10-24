@@ -689,7 +689,8 @@ export default function AgentOverlay() {
 
   return (
     <>
-      <Sheet open={chatOpen} onOpenChange={setChatOpen}>
+      {/* Non-modal: the trip preview bar sits on the map and must stay reachable while Ask is open. */}
+      <Sheet open={chatOpen} onOpenChange={setChatOpen} modal={false}>
         <SheetContent side={isDesktop ? "left" : "bottom"} className={isDesktop ? "flex h-full w-full flex-col p-0 sm:max-w-[420px]" : "flex h-[85vh] flex-col p-0"}>
           <SheetTitle className="sr-only">Ask the map</SheetTitle>
           <SheetDescription className="sr-only">Voice and text trip assistant</SheetDescription>

@@ -34,7 +34,7 @@ async function open(page: Page, size = PHONE) {
     if (!path.endsWith("/bus")) { await r.fallback(); return; }
     await r.fulfill({ contentType: "application/json", body: JSON.stringify({ at: Math.floor(Date.now() / 1000), buses: [{ ...BUS, t: Math.floor(Date.now() / 1000) }] }) });
   });
-  await page.goto("/?transit=bus&busPage=brooklyn-1");
+  await page.goto("/?flags=-agentHome&transit=bus&busPage=brooklyn-1");
   await expect(page.locator("canvas.maplibregl-canvas").first()).toBeVisible();
   await page.waitForResponse((r) => r.url().includes("/api/aggregate"));
 }

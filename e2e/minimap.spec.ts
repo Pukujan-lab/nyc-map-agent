@@ -4,7 +4,7 @@ import { mockNetwork } from "./mocks";
 test("street level shows a mini map whose heading cone turns with the camera", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockNetwork(page);
-  await page.goto("/");
+  await page.goto("/?flags=-agentHome");
   await expect(page.locator("canvas.maplibregl-canvas").first()).toBeVisible();
   await page.waitForResponse((r) => r.url().includes("/api/aggregate"));
   await page.getByTestId("view-switcher").getByRole("button", { name: "Street", exact: true }).click();
@@ -36,7 +36,7 @@ test("street level mini map points to the nearest restroom and the card offers d
       }),
     }),
   );
-  await page.goto("/");
+  await page.goto("/?flags=-agentHome");
   await expect(page.locator("canvas.maplibregl-canvas").first()).toBeVisible();
   await page.waitForResponse((r) => r.url().includes("/api/aggregate"));
   await page.getByTestId("view-switcher").getByRole("button", { name: "Street", exact: true }).click();
