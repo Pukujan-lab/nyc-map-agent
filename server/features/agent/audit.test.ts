@@ -1,6 +1,7 @@
 import { MockLanguageModelV4, convertArrayToReadableStream } from "ai/test";
 import { describe, expect, it, vi } from "vitest";
 import { streamEvent, type StreamEvent } from "../../../src/features/agent/schema";
+import { createDailyBudget, createLimiter } from "./fair-use";
 import { noteSource } from "./freshness";
 import { POST } from "./routes";
 import type { RestroomRow } from "./services";
@@ -24,7 +25,10 @@ function model(reply: string, call?: { toolName: string; input: unknown }) {
 
 async function ask(m: MockLanguageModelV4, question: string, deps?: ToolContext["deps"]): Promise<StreamEvent[]> {
   const body = { messages: [{ role: "user", content: question }], location: { lon: -73.984, lat: 40.754 } };
-  const res = await POST(new Request("http://x/api/agent", { method: "POST", body: JSON.stringify(body) }), { model: m, deps });
+  // A fresh, unlimited fair-use state per ask, so the shared per-address burst limit (#369) does not trip.
+  const now = () => Date.now();
+  const fairUse = { limiter: createLimiter({ windowMax: 0, windowMs: 0, burstMax: 0, burstMs: 0 }, now), budget: createDailyBudget({ softCap: 0, hardCap: 0, capModel: null }, now), now };
+  const res = await POST(new Request("http://x/api/agent", { method: "POST", body: JSON.stringify(body) }), { model: m, deps, fairUse });
   return (await res.text()).trim().split("\n").map((l) => streamEvent.parse(JSON.parse(l)));
 }
 const sourcesOf = (events: StreamEvent[]) => events.find((e): e is Extract<StreamEvent, { type: "sources" }> => e.type === "sources");
