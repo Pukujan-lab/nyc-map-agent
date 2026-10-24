@@ -1,6 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { LANDMARK_LABELS_LAYER, LANDMARK_LABELS_SOURCE, LANDMARK_LAYER_PREFIX, byTierZoom, isLandmarkLayer, landmarkLabelsGeoJson } from "./landmarkLabels";
-import { GUIDE_LANDMARKS } from "@/lib/guide/landmarkGuide";
+import { loadGuideLandmarks, type GuideLandmark } from "@/lib/guide/landmarkGuide";
+
+let GUIDE_LANDMARKS: readonly GuideLandmark[] = [];
+beforeAll(async () => {
+  GUIDE_LANDMARKS = await loadGuideLandmarks();
+});
 
 describe("landmark layer", () => {
   it("uses the stable landmark- prefix that declutter rules skip", () => {
@@ -20,7 +25,7 @@ describe("landmark layer", () => {
   });
 
   it("places stronger landmarks first", () => {
-    const fc = landmarkLabelsGeoJson();
+    const fc = landmarkLabelsGeoJson(GUIDE_LANDMARKS);
     expect(fc.features).toHaveLength(GUIDE_LANDMARKS.length);
     const esb = fc.features.find((f) => f.properties.name === "Empire State Building")!;
     const tier3 = fc.features.find((f) => f.properties.tier === 3)!;

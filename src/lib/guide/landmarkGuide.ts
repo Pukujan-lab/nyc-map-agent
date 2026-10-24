@@ -1,4 +1,3 @@
-import data from "./landmarks.json";
 import type { GuideCategory, GuideLandmark, GuideLandmarkFile } from "./landmarkTypes";
 
 export type { GuideBorough, GuideCategory, GuideLandmark, GuidePicture } from "./landmarkTypes";
@@ -12,16 +11,40 @@ export type { GuideBorough, GuideCategory, GuideLandmark, GuidePicture } from ".
  * Shared by the map layer (src/lib/map/landmarkLabels.ts), the walking
  * header, and anything that needs "which landmark is where": the agent and the
  * underground surfacing check can call pickGuideLandmarks directly.
+ *
+ * The list is its own chunk, kept out of the app entry: the first call to
+ * loadGuideLandmarks (or to guideLandmarks / pickGuideLandmarks) fetches it
+ * once; until then those return [].
  */
-const FILE = data as GuideLandmarkFile;
-export const GUIDE_LANDMARKS: readonly GuideLandmark[] = FILE.landmarks;
-export const GUIDE_LANDMARKS_SOURCE = `${FILE.source}. ${FILE.license}. Pictures: ${FILE.pictures}.`;
+let loaded: readonly GuideLandmark[] | null = null;
+let loading: Promise<readonly GuideLandmark[]> | null = null;
+
+/** Fetches the list once; later calls share the same promise. */
+export function loadGuideLandmarks(): Promise<readonly GuideLandmark[]> {
+  loading ??= import("./landmarks.json")
+    .then((m) => {
+      loaded = (m.default as GuideLandmarkFile).landmarks;
+      return loaded;
+    })
+    .catch((err: unknown) => {
+      // A failed chunk load may succeed on the next call.
+      loading = null;
+      throw err;
+    });
+  return loading;
+}
+
+/** The list if it has arrived, else [] (and the load starts). */
+export function guideLandmarks(): readonly GuideLandmark[] {
+  if (!loaded) void loadGuideLandmarks().catch(() => {});
+  return loaded ?? [];
+}
 
 /** Zoom from which each tier is drawn: a few citywide, more as you zoom in. */
 export const TIER_MIN_ZOOM: Record<GuideLandmark["tier"], number> = { 1: 9, 2: 12, 3: 14 };
 
 /** The landmarks drawn at `zoom`, same rule as the map layer's per-feature filter. */
-export function landmarksAtZoom(zoom: number, list: readonly GuideLandmark[] = GUIDE_LANDMARKS): GuideLandmark[] {
+export function landmarksAtZoom(zoom: number, list: readonly GuideLandmark[] = guideLandmarks()): GuideLandmark[] {
   return list.filter((l) => zoom >= TIER_MIN_ZOOM[l.tier]);
 }
 
@@ -109,12 +132,13 @@ function facingWeight(turn: number | null): number {
  * range count. Score: how well known, how close relative to that range, and
  * how near your line of sight. The second pick must lie in a clearly
  * different direction, so two names triangulate instead of repeating.
- * Pure: no map, no DOM.
+ * No map, no DOM. Before the list has loaded this returns [] and starts the
+ * load; await loadGuideLandmarks() first when the answer must not be empty.
  */
 export function pickGuideLandmarks(at: LonLat, heading: number | null, opts: PickOptions = {}): GuidePick[] {
   const max = opts.max ?? 2;
   const scored: Array<{ pick: GuidePick; score: number }> = [];
-  for (const l of opts.list ?? GUIDE_LANDMARKS) {
+  for (const l of opts.list ?? guideLandmarks()) {
     const distanceM = metresTo(at, l);
     const range = sightRangeM(l);
     if (distanceM > range) continue;

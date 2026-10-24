@@ -51,6 +51,18 @@ const REJECT = /destroyed|demolished|proposed|former |planned|event|exhibit|artw
 const STATION_MIN_SITELINKS = 16;
 const TERMINAL = /ferry terminal|bus terminal|airport|aerodrome/;
 
+/**
+ * Kept whatever the sitelink floors say, with the borough set by hand: the
+ * Wikidata point decides where you see it from, not every borough the item
+ * touches. Both bridge points sit on the Astoria shore.
+ */
+export const INCLUDE: Record<string, { borough: GuideBorough; category: GuideCategory; tier: GuideLandmark["tier"]; name?: string }> = {
+  Q1035131: { borough: "Queens", category: "bridge", tier: 2 }, // Hell Gate Bridge
+  Q125450: { borough: "Queens", category: "bridge", tier: 2, name: "Robert F. Kennedy (Triborough) Bridge" },
+  // Wikidata's only item for the St. George ferry, rail and bus terminal.
+  Q5927015: { borough: "Staten Island", category: "station", tier: 2, name: "St. George Ferry Terminal" },
+};
+
 /** Fewer, bigger names in Manhattan; the other boroughs have fewer articles per place. */
 export const MIN_SITELINKS: Record<GuideBorough, number> = {
   Manhattan: 20,
@@ -170,6 +182,16 @@ export function normalize(rows: WdRow[], boroughs: Map<string, GuideBorough>): G
   const ids = new Set<string>();
   for (const r of sorted) {
     const id = qid(r.item);
+    const inc = INCLUDE[id];
+    const at = parsePoint(r.coord);
+    if (!inc || !at || ids.has(id)) continue;
+    const name = inc.name ?? r.label.trim();
+    names.add(name.toLowerCase());
+    ids.add(id);
+    out.push({ id, name, category: inc.category, borough: inc.borough, lon: at[0], lat: at[1], tier: inc.tier, sitelinks: r.sitelinks });
+  }
+  for (const r of sorted) {
+    const id = qid(r.item);
     if (ids.has(id)) continue;
     const borough = boroughs.get(id);
     if (!borough || r.sitelinks < MIN_SITELINKS[borough]) continue;
@@ -189,9 +211,10 @@ export function normalize(rows: WdRow[], boroughs: Map<string, GuideBorough>): G
     ids.add(id);
     out.push({ id, name, category, borough, lon: at[0], lat: at[1], tier: r.sitelinks >= TIER1 ? 1 : r.sitelinks >= TIER2 ? 2 : 3, sitelinks: r.sitelinks });
   }
+  out.sort((a, b) => b.sitelinks - a.sitelinks || a.name.localeCompare(b.name));
   // Promote each borough's strongest names so the citywide view covers all five.
   for (const b of Object.values(BOROUGH_QIDS)) {
-    out.filter((l) => l.borough === b).slice(0, TIER1_PER_BOROUGH).forEach((l) => (l.tier = 1));
+    out.filter((l) => l.borough === b && !INCLUDE[l.id]).slice(0, TIER1_PER_BOROUGH).forEach((l) => (l.tier = 1));
   }
   return out;
 }

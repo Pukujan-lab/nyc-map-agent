@@ -1,6 +1,6 @@
-import type { ExpressionSpecification, Map as MapLibreMap } from "maplibre-gl";
+import type { ExpressionSpecification, GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import type { FeatureCollection, Point } from "geojson";
-import { GUIDE_LANDMARKS, TIER_MIN_ZOOM, type GuideCategory, type GuideLandmark } from "@/lib/guide/landmarkGuide";
+import { TIER_MIN_ZOOM, guideLandmarks, loadGuideLandmarks, type GuideCategory, type GuideLandmark } from "@/lib/guide/landmarkGuide";
 
 /**
  * Landmarks on the simple map (#361 goal 3, after #363's four names): a badge
@@ -22,7 +22,7 @@ export function isLandmarkLayer(id: string): boolean {
 
 type Props = Pick<GuideLandmark, "id" | "name" | "category" | "tier"> & { sort: number };
 
-export function landmarkLabelsGeoJson(list: readonly GuideLandmark[] = GUIDE_LANDMARKS): FeatureCollection<Point, Props> {
+export function landmarkLabelsGeoJson(list: readonly GuideLandmark[]): FeatureCollection<Point, Props> {
   return {
     type: "FeatureCollection",
     features: list.map((l) => ({
@@ -111,7 +111,17 @@ export function byTierZoom<T extends string | number>(on: ExpressionSpecificatio
 /** Adds the source and layer once per style; safe to call again (it also re-raises the layer above later symbols). */
 export function installLandmarkLabels(map: MapLibreMap, color: string, halo: string): void {
   if (!map.getSource(LANDMARK_LABELS_SOURCE)) {
-    map.addSource(LANDMARK_LABELS_SOURCE, { type: "geojson", data: landmarkLabelsGeoJson(), attribution: "Landmarks: Wikidata (CC0)" });
+    const list = guideLandmarks();
+    map.addSource(LANDMARK_LABELS_SOURCE, { type: "geojson", data: landmarkLabelsGeoJson(list), attribution: "Landmarks: Wikidata (CC0)" });
+    // The list is a lazy chunk: fill the source when it arrives (if this style still has it).
+    if (!list.length) {
+      void loadGuideLandmarks()
+        .then((all) => {
+          const src = map.getSource(LANDMARK_LABELS_SOURCE);
+          if (src && "setData" in src) (src as GeoJSONSource).setData(landmarkLabelsGeoJson(all));
+        })
+        .catch(() => {});
+    }
   }
   addIcons(map);
   if (!map.getLayer(LANDMARK_LABELS_LAYER)) {

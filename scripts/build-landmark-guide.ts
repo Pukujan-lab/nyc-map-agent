@@ -10,7 +10,7 @@
  */
 import { writeFileSync } from "node:fs";
 import type { GuideLandmarkFile } from "../src/lib/guide/landmarkTypes";
-import { BOROUGH_QIDS, classify, commonsFile, normalize, pictureFromMeta, qid, resolveBoroughs, type PlaceHint, type WdRow } from "./landmark-guide-normalize";
+import { BOROUGH_QIDS, INCLUDE, classify, commonsFile, normalize, pictureFromMeta, qid, resolveBoroughs, type PlaceHint, type WdRow } from "./landmark-guide-normalize";
 
 const UA = "nyc-map-agent-landmarks/1.0 (https://github.com/Pukujan/nyc-map-agent)";
 const SPARQL = "https://query.wikidata.org/sparql";
@@ -46,6 +46,14 @@ const CANDIDATES = `SELECT ?item ?label ?coord ?sl (GROUP_CONCAT(DISTINCT ?clsLa
   ?item rdfs:label ?label . FILTER(LANG(?label) = "en")
   OPTIONAL { ?item wdt:P18 ?img }
   FILTER NOT EXISTS { ?item wdt:P576 ?gone }
+} GROUP BY ?item ?label ?coord ?sl`;
+
+/** The hand-picked INCLUDE items, fetched by ID whatever their sitelinks. */
+const INCLUDED = `SELECT ?item ?label ?coord ?sl (GROUP_CONCAT(DISTINCT ?clsLabel; separator="|") AS ?classes) (SAMPLE(?img) AS ?image) WHERE {
+  VALUES ?item { ${Object.keys(INCLUDE).map((i) => `wd:${i}`).join(" ")} }
+  ?item wdt:P625 ?coord ; wikibase:sitelinks ?sl ; rdfs:label ?label . FILTER(LANG(?label) = "en")
+  OPTIONAL { ?item wdt:P31 ?cls . ?cls rdfs:label ?clsLabel . FILTER(LANG(?clsLabel) = "en") }
+  OPTIONAL { ?item wdt:P18 ?img }
 } GROUP BY ?item ?label ?coord ?sl`;
 
 /** Boroughs and New York City (Q60) on each item's "located in" chain; ?direct marks a first-step match. */
@@ -91,7 +99,7 @@ async function commonsMeta(files: string[]): Promise<Map<string, Record<string, 
   return out;
 }
 
-const rows: WdRow[] = (await sparql(CANDIDATES)).map((b) => ({
+const rows: WdRow[] = [...(await sparql(CANDIDATES)), ...(await sparql(INCLUDED))].map((b) => ({
   item: b.item!.value,
   label: b.label!.value,
   coord: b.coord!.value,

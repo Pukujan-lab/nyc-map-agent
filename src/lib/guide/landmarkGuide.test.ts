@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  GUIDE_LANDMARKS,
+  loadGuideLandmarks,
   TIER_MIN_ZOOM,
   bearingTo,
   compassDirection,
@@ -23,6 +23,24 @@ const mk = (over: Partial<GuideLandmark> & Pick<GuideLandmark, "id" | "lon" | "l
 
 // Herald Square, a few blocks south-west of the Empire State Building.
 const HERALD = { lon: -73.98777, lat: 40.74967 };
+
+let GUIDE_LANDMARKS: readonly GuideLandmark[] = [];
+
+describe("lazy list", () => {
+  it("returns [] before the list has loaded, then answers once it has", async () => {
+    vi.resetModules();
+    const fresh = await import("./landmarkGuide");
+    expect(fresh.pickGuideLandmarks(HERALD, 120)).toEqual([]);
+    expect(fresh.guideLandmarks()).toEqual([]);
+    await fresh.loadGuideLandmarks();
+    expect(fresh.pickGuideLandmarks(HERALD, 120)[0]?.landmark.name).toBe("Empire State Building");
+  });
+});
+
+describe("with the list loaded", () => {
+  beforeAll(async () => {
+    GUIDE_LANDMARKS = await loadGuideLandmarks();
+  });
 
 describe("relative direction", () => {
   it("names the side and how far round", () => {
@@ -120,4 +138,15 @@ describe("generated data", () => {
       }
     }
   });
+
+  it("keeps the hand-picked bridges and ferry terminal, from mid zoom", () => {
+    const byId = new Map(GUIDE_LANDMARKS.map((l) => [l.id, l]));
+    expect(byId.get("Q1035131")).toMatchObject({ name: "Hell Gate Bridge", borough: "Queens", category: "bridge", tier: 2 });
+    expect(byId.get("Q125450")).toMatchObject({ name: "Robert F. Kennedy (Triborough) Bridge", borough: "Queens", tier: 2 });
+    expect(byId.get("Q5927015")).toMatchObject({ name: "St. George Ferry Terminal", borough: "Staten Island", category: "station", tier: 2 });
+    const at12 = new Set(landmarksAtZoom(12).map((l) => l.id));
+    expect(["Q1035131", "Q125450", "Q5927015"].every((id) => at12.has(id))).toBe(true);
+    expect(landmarksAtZoom(11.9).some((l) => l.id === "Q5927015")).toBe(false);
+  });
+});
 });

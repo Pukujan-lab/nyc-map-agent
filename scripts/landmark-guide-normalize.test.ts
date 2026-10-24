@@ -84,6 +84,14 @@ describe("normalize", () => {
     ["Q11", { borough: "Manhattan" as const, inNyc: true }],
   ]);
 
+  it("keeps an INCLUDE item below every floor, with its hand-set borough, name and tier", () => {
+    const hellGate = row("Q1035131", "Hell Gate Bridge", -73.92194, 40.7825, 3, ["arch bridge"]);
+    const terminal = row("Q5927015", "Saint George Terminal", -74.0742, 40.6433, 2, ["metro station"]);
+    const out = normalize([hellGate, terminal], new Map());
+    expect(out.find((l) => l.id === "Q1035131")).toMatchObject({ borough: "Queens", category: "bridge", tier: 2 });
+    expect(out.find((l) => l.id === "Q5927015")).toMatchObject({ name: "St. George Ferry Terminal", borough: "Staten Island", category: "station" });
+  });
+
   it("gives a city-only item the nearest borough and leaves New Jersey out", () => {
     const b = resolveBoroughs(rows, hints);
     expect(b.get("Q8")).toBe("Manhattan");
