@@ -1,3 +1,6 @@
+import "@/components/task-screens.css";
+import { useFlag } from "@/lib/flags";
+import { ExitTask } from "./ExitTask";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowUpFromLine, MessageSquare, TrainFront, X } from "lucide-react";
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
@@ -133,7 +136,7 @@ function exitName(e: PackExit, i: number, n: number): string {
   return signText(e.streets, e.corner) ?? `Exit ${i + 1} of ${n} (${exitKind(e.kind)}; street names were not saved)`;
 }
 
-const card = "pointer-events-auto absolute bottom-[8.5rem] left-3 z-40 w-[min(360px,calc(100vw-1.5rem))] rounded-xl border bg-card/95 p-3 text-sm shadow-xl backdrop-blur-md";
+const card = "task-panel task-bottom text-sm";
 
 /**
  * Underground help: station exits and the ride there, from data saved on the
@@ -141,6 +144,7 @@ const card = "pointer-events-auto absolute bottom-[8.5rem] left-3 z-40 w-[min(36
  * is the last confirmed station plus an honest, widening estimate.
  */
 export default function Underground() {
+  const home = useFlag("agentHome");
   const { online, navOnline, report } = useConnectivity();
   const trip = useActiveTrip();
   const followed = useFollowed();
@@ -836,6 +840,13 @@ export default function Underground() {
     setInterfered(false);
     setMode("station");
   };
+
+  if (home && mode === "station") return <ExitTask
+    key={pack.station.id} pack={pack} chosen={chosen} online={online}
+    rotation={pointer.show ? pointer.rotation : null} distanceM={distM}
+    onChoose={setChosen} onOut={surfaced} onClose={leave}
+    onCalibrate={canCalibrate ? beginCalibration : undefined}
+  />;
 
   return (
     <section className={`${card} max-h-[75vh] overflow-y-auto`} aria-label="Station exits">

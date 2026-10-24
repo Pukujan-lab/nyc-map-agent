@@ -1,3 +1,4 @@
+import { useFlag } from "@/lib/flags";
 import { useEffect } from "react";
 import { Footprints, MapPin, Navigation, X } from "lucide-react";
 import { AddressCombobox } from "@/components/AddressCombobox";
@@ -47,6 +48,7 @@ export function RoutePanel({
   isLoading: boolean;
   error: string | null;
 }) {
+  const home = useFlag("agentHome");
   const {
     routeStart,
     routeEnd,
@@ -84,6 +86,7 @@ export function RoutePanel({
   ]);
 
   if (!routeStart && !routeEnd && !routePicking) return null;
+  if (home && (walking || followingRoute) && route) return null;
 
   const follow = () => {
     if (!route || !routeStart) return;

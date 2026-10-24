@@ -18,6 +18,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { setAmbient } from "@/lib/ambient";
 import { useFlag } from "@/lib/flags";
 import { getMapInstance } from "@/lib/map/mapInstance";
+import { useDataView } from "@/lib/store/DataViewContext";
+import { setSelectedLine } from "@/lib/transit/selectedLine";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { publishActiveTrip } from "@/lib/transit/activeTrip";
 import { revealTripBuses } from "@/lib/transit/busReveal";
@@ -30,6 +32,7 @@ import { spokenSummary } from "@/lib/voice/tts";
 import { executeCommand, type ExecutorContext } from "./executor";
 import { PLAYBACK_SPEEDS, langTag, type MapAction, type PlaybackSpeed, type Trip, type TripMode } from "./schema";
 import { askAgent } from "./stream";
+import { TripPreview } from "./TripPreview";
 import { TripSummary, selectAlternative } from "./TripSummary";
 import { routeColor, showPoints, showTrip } from "./tripLayer";
 import { runMapAction, TROUBLE_COLOR, type MapActionContext } from "./mapActions";
@@ -72,6 +75,7 @@ const MODES: Array<{ id: TripMode; label: string; Icon: typeof Bus }> = [
 ];
 
 export default function AgentOverlay() {
+  const { setRoutePoint, setFollowingRoute, followingRoute } = useDataView();
   const { chatOpen, setChatOpen, flyTo, startWalk, stopWalk, chatSeed, clearSeed, setRestrooms, walking, streetViewOpen } = useMapState();
   const { showPanel, closeAll, content: panelContent, minimized: panelMinimized, drawerOpen } = usePanel();
   // Agent-first home (#370): bottom chat bar, voice waveform, visible steps.
@@ -189,6 +193,7 @@ export default function AgentOverlay() {
     openTrip: (t) => {
       revealTripBuses(t);
       setTrip(t);
+      if (home) { setChatOpen(false); player.load(t, prefSpeed); return; }
       showPanel({
         id: `agent:trip:${t.id}`, title: `To ${t.destination.label}`, subtitle: `${t.departIso.slice(11)} → ${t.arriveIso.slice(11)}`,
         summary: <TripSummary trip={t} compact onSelect={(alt) => { const next = selectAlternative(t, alt); chooseRef.current(next); ctxRef.current.openTrip(next); }} />,
@@ -204,6 +209,7 @@ export default function AgentOverlay() {
       const m = getMapInstance();
       if (m) showTrip(m, t);
       player.load(t, speed);
+      if (home) setChatOpen(false);
     },
     setTime: (iso) => setMapTime(iso),
   };
@@ -648,7 +654,7 @@ export default function AgentOverlay() {
     };
     const panelUp = panelContent !== null && !panelMinimized;
     const answerOpen = chatOpen && messages.length > 0;
-    const showIdle = !answerOpen && !busy && !handsFree && !drawerOpen && !panelUp && followed === null;
+    const showIdle = !followingRoute && !player.state.active && !walking && !streetViewOpen && !answerOpen && !busy && !handsFree && !drawerOpen && !panelUp && followed === null;
     const idle = showIdle ? (
       <>
         <DailyCard places={places} onAsk={(q) => void send(q)} onFly={(sp) => flyTo({ lon: sp.lon, lat: sp.lat, zoom: 16 })} onShowStations={(points) => actionCtx.showPoints(points, { color: TROUBLE_COLOR.problem, title: "Delay" })} />
@@ -674,10 +680,28 @@ export default function AgentOverlay() {
           answer={homeAnswer}
           idle={idle}
           // The bar stays on every screen; only street level and the trip preview take the bottom.
-          hidden={walking || streetViewOpen || player.state.active}
+          hidden={false}
           lift={!isDesktop && panelContent !== null && panelMinimized}
         />
-        {playback}
+        {trip && player.state.active && !answerOpen ? <TripPreview
+          trip={trip} state={player.state} speed={player.state.speed}
+          onToggle={player.toggle} onSpeed={(s) => { setPrefSpeed(s); player.setSpeed(s); }}
+          onClose={() => { player.stop(); setTrip(null); }}
+          onUse={() => {
+            player.release();
+            const ride = trip.legs.find((l) => l.kind === "ride");
+            if (ride?.mode === "subway") { setSelectedLine(ride.route); return; }
+            if (trip.mode === "walk") {
+              setRoutePoint("start", { lon: trip.origin.at[0], lat: trip.origin.at[1] });
+              setRoutePoint("end", { lon: trip.destination.at[0], lat: trip.destination.at[1] });
+              setFollowingRoute(true);
+              flyTo({ lon: trip.origin.at[0], lat: trip.origin.at[1], zoom: 16 });
+              return;
+            }
+            void send(`Use this route to ${trip.destination.label}. Show me the ${trip.routes.join(" and ")} service for this trip.`);
+          }}
+          onOther={() => { player.release(); void send(`What are the other routes from ${trip.origin.label} to ${trip.destination.label}?`); }}
+        /> : null}
       </>
     );
   }
