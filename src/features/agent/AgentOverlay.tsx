@@ -32,7 +32,7 @@ import { PLAYBACK_SPEEDS, langTag, type MapAction, type PlaybackSpeed, type Trip
 import { askAgent } from "./stream";
 import { TripSummary, selectAlternative } from "./TripSummary";
 import { routeColor, showPoints, showTrip } from "./tripLayer";
-import { runMapAction, type MapActionContext } from "./mapActions";
+import { runMapAction, TROUBLE_COLOR, type MapActionContext } from "./mapActions";
 import { AnswerActions, RestroomSpotDetails } from "./AnswerActions";
 import { AnswerSources, type AnswerSourcesLine } from "./AnswerSources";
 import { formatStreetText } from "@/lib/streetName";
@@ -635,7 +635,7 @@ export default function AgentOverlay() {
     const showIdle = !answerOpen && !busy && !handsFree && !drawerOpen && !panelUp && followed === null;
     const idle = showIdle ? (
       <>
-        <DailyCard places={places} onAsk={(q) => void send(q)} onFly={(sp) => flyTo({ lon: sp.lon, lat: sp.lat, zoom: 16 })} />
+        <DailyCard places={places} onAsk={(q) => void send(q)} onFly={(sp) => flyTo({ lon: sp.lon, lat: sp.lat, zoom: 16 })} onShowStations={(points) => actionCtx.showPoints(points, { color: TROUBLE_COLOR.problem, title: "Delay" })} />
         <TaskButtons on={tasks} />
       </>
     ) : null;
