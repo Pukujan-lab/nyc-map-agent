@@ -72,7 +72,8 @@ describe("freshness: data answers carry their source and age (#375)", () => {
   it("line_status reports live alerts with the MTA feed's age and offers the skipped stops", async () => {
     const m = model("The L is skipping Bedford Av.", { toolName: "line_status", input: { lines: ["l"] } });
     const alerts = () => { noteSource("mta-alerts", Date.now() - 30_000); return Promise.resolve(["L trains are running with delays"]); };
-    const events = await ask(m, "is the L ok?", { alerts, changes: [] });
+    // No trouble entities or live trains: the test stays off the network (#361 reads both).
+    const events = await ask(m, "is the L ok?", { alerts, changes: [], alertEntities: () => Promise.resolve([]), vehicles: () => Promise.resolve([]) });
     expect(sourcesOf(events)?.sources[0]).toMatchObject({ id: "mta-alerts", stale: false });
     expect(JSON.stringify(m.doStreamCalls[1]?.prompt)).toContain("L trains are running with delays");
   });

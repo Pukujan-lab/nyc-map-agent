@@ -78,7 +78,7 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
           model,
           system: systemPrompt(nowLocal, location, mode, context),
           messages,
-          tools: makeTools({ location, emit: (command) => send({ type: "command", command }), actions: (a) => actions.add(a), sources: audit.ledger, deps: opts.deps, drive: resolveFlags({ env: process.env.VITE_FLAGS, advancedMode: false }).agentDrive }),
+          tools: makeTools({ location, emit: (command) => send({ type: "command", command }), actions: (a) => actions.add(a), sources: audit.ledger, deps: opts.deps, followedTrain: context?.followedTrain ?? null, drive: resolveFlags({ env: process.env.VITE_FLAGS, advancedMode: false }).agentDrive }),
           stopWhen: stepCountIs(8),
           maxRetries: 1,
           // The default handler console.logs the raw provider error; keep logs to the request id only.

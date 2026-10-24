@@ -150,6 +150,12 @@ export const mapAction = z.discriminatedUnion("kind", [
   /** A line's stops, or (`skipped`) the stations it is skipping. */
   z.object({ ...actionBase, kind: z.literal("showStops"), route: z.string(), color: z.string().optional(), skipped: z.boolean().default(false), stops: z.array(mapPoint).min(1).max(200) }),
   z.object({ ...actionBase, kind: z.literal("showCrashes"), points: z.array(mapPoint).min(1).max(200) }),
+  /**
+   * MTA trouble on a line (#361): where the problem is, the shuttle bus segment
+   * and its boarding spots, stations where the MTA says to switch direction,
+   * or a train that has not moved.
+   */
+  z.object({ ...actionBase, kind: z.literal("showTrouble"), route: z.string(), style: z.enum(["problem", "shuttle", "switch", "stuck"]), points: z.array(mapPoint).min(1).max(200) }),
 ]);
 export type MapAction = z.infer<typeof mapAction>;
 /** Most buttons one answer carries. */

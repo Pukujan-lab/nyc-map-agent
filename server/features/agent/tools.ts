@@ -1,18 +1,30 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { command, type AgentCommand, type LngLatTuple, type MapAction, type Trip } from "../../../src/features/agent/schema";
-import { elevatorStatus, geocode, hazardsAt, nearestRestrooms, publicRestrooms, routeWalk, serviceAlerts, weatherAt, type Place, type RestroomRow } from "./services";
-import { placeActions, restroomActions, skipActions, tripActions } from "./mapActions";
+import { elevatorStatus, geocode, hazardsAt, nearestRestrooms, publicRestrooms, routeWalk, serviceAlerts, subwayAlertEntities, subwayVehicles, troubleStations, weatherAt, type Place, type RestroomRow } from "./services";
+import { placeActions, restroomActions, troubleActions, tripActions } from "./mapActions";
 import { buildDriveTrip } from "./drive/trip";
 import type { DriveRouter } from "./drive/router";
-import { toNyLocal, tripBrief, tripSkips } from "./trip";
+import { safe, toNyLocal, tripBrief } from "./trip";
+import { openDataEntrances, type Station } from "./transit";
+import { lineTroubles, otherLinesAt, stuckTrains, troubleSummary, type FeedAlert, type LiveVehicle } from "../../../src/lib/transit/trouble";
 import { planTrip, type PlanDeps } from "./plan";
 import { withSources, type SourceLedger } from "./freshness";
 
 export interface ToolContext {
   location: { lon: number; lat: number } | null;
   emit: (c: AgentCommand) => void;
-  deps?: PlanDeps & { driveRouter?: DriveRouter; restrooms?: () => Promise<RestroomRow[]>; alerts?: typeof serviceAlerts };
+  deps?: PlanDeps & {
+    driveRouter?: DriveRouter;
+    restrooms?: () => Promise<RestroomRow[]>;
+    alerts?: typeof serviceAlerts;
+    /** MTA trouble inputs (#361), injectable for tests. */
+    alertEntities?: () => Promise<FeedAlert[]>;
+    vehicles?: (routes: string[]) => Promise<LiveVehicle[]>;
+    now?: () => number;
+  };
+  /** The followed vehicle key from street view ("subway:<trip id>"), to say whether that train is the stuck one. */
+  followedTrain?: string | null;
   /** Driving sub-module flag (agentDrive). */
   drive?: boolean;
   /** Map action buttons built from tool results (#371). */
@@ -122,17 +134,37 @@ export function makeTools(ctx: ToolContext) {
       }),
     }),
     line_status: tool({
-      description: "Live MTA subway service alerts right now for the given lines (delays, suspensions, planned work) and the stations they skip. Subway only: no buses, LIRR or Metro-North.",
+      description: "Live MTA subway trouble right now for the given lines: what is wrong and at which station, skipped stations, shuttle buses (where they run, where to board, where to get the train back), stations where the MTA says to switch direction, other lines at skipped stations, and trains not moving on a delayed line. Subway only: no buses, LIRR or Metro-North.",
       inputSchema: args.line_status,
       execute: sourced(async ({ lines }: z.infer<typeof args.line_status>) => {
         const routes = [...new Set(lines.map((l) => l.toUpperCase()))];
-        const [alerts, skips] = await Promise.all([(ctx.deps?.alerts ?? serviceAlerts)(routes, Math.floor(Date.now() / 1000)), tripSkips(routes, toNyLocal(new Date()), ctx.deps)]);
-        offer(skipActions(skips));
+        const nowS = Math.floor((ctx.deps?.now?.() ?? Date.now()) / 1000);
+        const [alerts, feed] = await Promise.all([
+          (ctx.deps?.alerts ?? serviceAlerts)(routes, nowS),
+          safe((ctx.deps?.alertEntities ?? subwayAlertEntities)(), [] as FeedAlert[]),
+        ]);
+        // Stations only matter when an alert names one of these lines.
+        const touched = feed.some((a) => a.alert.informed_entity?.some((e) => e.route_id && routes.includes(e.route_id)));
+        const stations = touched ? troubleStations(await safe((ctx.deps?.entrances ?? openDataEntrances).stations(), [] as Station[])) : [];
+        const troubles = lineTroubles(feed, stations, routes, nowS);
+        const delayed = [...new Set(troubles.filter((t) => t.kind === "delay").map((t) => t.route))];
+        const vehicles = delayed.length ? await safe((ctx.deps?.vehicles ?? subwayVehicles)(delayed), [] as LiveVehicle[]) : [];
+        const stuck = stuckTrains(vehicles, troubles, stations, nowS);
+        offer(troubleActions(troubles, stuck));
+        const followed = ctx.followedTrain?.replace(/^subway:/, "") ?? null;
+        const followedSeen = followed ? vehicles.find((v) => v.tripId === followed) : undefined;
         return {
           lines: routes,
           alerts,
-          skippedStops: skips.map((s) => `${s.route}${s.toward ? ` (${s.toward}-bound)` : ""} skips ${s.name}`),
-          ...(alerts.length || skips.length ? {} : { note: "The MTA feed has no active alerts for these lines." }),
+          trouble: troubles.slice(0, 8).map((t) => ({
+            line: t.route,
+            kind: t.kind,
+            summary: troubleSummary(t),
+            ...(t.skipped.length ? { otherLinesAtSkippedStations: Object.fromEntries(t.skipped.slice(0, 4).map((s) => [s.name, otherLinesAt(s, troubles, stations).filter((r) => r !== t.route)])) } : {}),
+          })),
+          ...(stuck.length ? { trainsNotMoving: stuck.slice(0, 5).map((s) => ({ line: s.route, toward: s.toward, station: s.station.name, stoppedAtStation: s.stopped, minutesWithoutMoving: s.stoppedMin, ...(s.tripId === followed ? { isTheTrainTheUserFollows: true } : {}) })) } : {}),
+          ...(followedSeen && !stuck.some((s) => s.tripId === followed) ? { followedTrain: "moving normally per the live feed" } : {}),
+          ...(alerts.length || troubles.length ? {} : { note: "The MTA feed has no active alerts for these lines." }),
         };
       }),
     }),

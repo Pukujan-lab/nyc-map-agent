@@ -5,6 +5,7 @@
  */
 import { formatStreetText } from "../../../src/lib/streetName";
 import { mapAction, MAX_ACTIONS, type MapAction, type MapPoint, type RestroomSpot, type Trip } from "../../../src/features/agent/schema";
+import type { LineTrouble, StuckTrain } from "../../../src/lib/transit/trouble";
 
 const key = (at: readonly [number, number]) => `${at[0].toFixed(5)},${at[1].toFixed(5)}`;
 const clip = (s: string, n = 40) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
@@ -49,7 +50,49 @@ export function tripActions(trip: Trip): MapAction[] {
   return out;
 }
 
-const RANK: Record<MapAction["kind"], number> = { showRestroom: 0, showRoute: 1, showStops: 2, showCrashes: 2, flyTo: 3 };
+const dedupePoints = (ps: MapPoint[]) => [...new Map(ps.map((p) => [`${p.name}|${key(p.at)}`, p])).values()];
+
+/**
+ * Buttons for MTA trouble (#361), in the order a rider needs them: a stuck
+ * train, where the problem is, skipped stations, the shuttle buses (ends,
+ * boarding spots in the MTA's words, where the train picks up again), and
+ * where the MTA says to switch direction. Every point is a station the data
+ * placed; a shuttle stop is drawn at its station, labelled with the corner.
+ */
+export function troubleActions(troubles: LineTrouble[], stuck: StuckTrain[] = []): MapAction[] {
+  const out: MapAction[] = [];
+  for (const s of stuck.slice(0, 2)) {
+    out.push({ kind: "showTrouble", id: `trouble:stuck:${s.tripId}`, label: `Show the stuck ${s.route} train`, route: s.route, style: "stuck", points: [{ at: s.station.at, name: `${s.route} train${s.toward ? ` (${s.toward})` : ""} not moving for ${s.stoppedMin} min ${s.stopped ? "at" : "before"} ${s.station.name}` }] });
+  }
+  const byRoute = (pick: (t: LineTrouble) => MapPoint[]) => {
+    const m = new Map<string, MapPoint[]>();
+    for (const t of troubles) { const ps = pick(t); if (ps.length) m.set(t.route, [...(m.get(t.route) ?? []), ...ps]); }
+    return [...m].map(([route, ps]) => [route, dedupePoints(ps)] as const);
+  };
+  for (const [route, points] of byRoute((t) => t.problemAt.map((s) => ({ at: s.at, name: `Problem at ${s.name}` })))) {
+    out.push({ kind: "showTrouble", id: `trouble:problem:${route}`, label: `Show where the ${route} problem is`, route, style: "problem", points });
+  }
+  for (const [route, stops] of byRoute((t) => t.skipped.map((s) => ({ at: s.at, name: t.direction ? `${s.name} (${t.direction})` : s.name })))) {
+    out.push({ kind: "showStops", id: `skips:${route}`, label: `Show the stops the ${route} skips`, route, skipped: true, stops: stops.slice(0, 200) });
+  }
+  const shuttles = new Set<string>();
+  for (const t of troubles) {
+    if (!t.shuttle || shuttles.has(t.alertId)) continue;
+    shuttles.add(t.alertId);
+    const points = dedupePoints([
+      ...t.shuttle.between.map((s) => ({ at: s.at, name: `Shuttle buses end at ${s.name}` })),
+      ...t.shuttle.stops.map((s) => ({ at: s.station.at, name: `Shuttle bus: ${s.where}${s.toward ? ` (to ${s.toward})` : ""}` })),
+      ...t.rejoin.map((s) => ({ at: s.at, name: `Get the ${t.rejoinLine ?? t.route} train at ${s.name}` })),
+    ]);
+    if (points.length) out.push({ kind: "showTrouble", id: `trouble:shuttle:${t.alertId}`, label: `Show the ${t.route} shuttle buses`, route: t.route, style: "shuttle", points: points.slice(0, 200) });
+  }
+  for (const [route, points] of byRoute((t) => t.switchDirection.map((d) => ({ at: d.station.at, name: d.why === "crossover" ? `Switch direction at ${d.station.name}${d.leaveStation ? " (leave and re-enter)" : ""}` : `At ${d.station.name}, board ${d.board}` })))) {
+    out.push({ kind: "showTrouble", id: `trouble:switch:${route}`, label: `Where to switch direction on the ${route}`, route, style: "switch", points });
+  }
+  return out;
+}
+
+const RANK: Record<MapAction["kind"], number> = { showRestroom: 0, showRoute: 1, showTrouble: 2, showStops: 2, showCrashes: 2, flyTo: 3 };
 
 /** Collects actions across a request's tool calls: deduped by id, validated, ranked, capped. */
 export class ActionCollector {

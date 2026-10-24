@@ -13,6 +13,8 @@ export interface MapActionContext {
 /** Skipped stations and crash hotspots read as trouble; a plain stop list uses the line's colour. */
 export const SKIP_COLOR = "#dc2626";
 export const CRASH_COLOR = "#ea580c";
+/** MTA trouble (#361): the problem spot in red, shuttle buses in the MTA's shuttle blue, switch stations green, a stuck train amber. */
+export const TROUBLE_COLOR: Record<Extract<MapAction, { kind: "showTrouble" }>["style"], string> = { problem: SKIP_COLOR, shuttle: "#0039a6", switch: "#16a34a", stuck: "#d97706" };
 
 export type ActionResult = { ok: true; kind: MapAction["kind"] } | { ok: false; error: string };
 
@@ -28,6 +30,7 @@ export function runMapAction(raw: unknown, ctx: MapActionContext, routeColor: (r
       case "showRestroom": ctx.showRestroom(a.restroom); break;
       case "showStops": ctx.showPoints(a.stops, { color: a.skipped ? SKIP_COLOR : a.color ?? routeColor(a.route), title: a.label }); break;
       case "showCrashes": ctx.showPoints(a.points, { color: CRASH_COLOR, title: a.label }); break;
+      case "showTrouble": ctx.showPoints(a.points, { color: TROUBLE_COLOR[a.style], title: a.label }); break;
     }
     return { ok: true, kind: a.kind };
   } catch (e) {
