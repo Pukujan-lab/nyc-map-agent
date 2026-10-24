@@ -1,5 +1,6 @@
 import "@/components/task-screens.css";
-import { Clock, Pause, Play, X } from "lucide-react";
+import { Clock, Pause, Play, TriangleAlert, X } from "lucide-react";
+import { plainAlertText } from "@/lib/transit/trouble";
 import { PLAYBACK_SPEEDS, type PlaybackSpeed, type Trip } from "./schema";
 import type { PlayerState } from "./usePlayer";
 
@@ -8,23 +9,33 @@ export function TripPreview(p: {
   trip: Trip; state: PlayerState; speed: PlaybackSpeed;
   onToggle: () => void; onSpeed: (s: PlaybackSpeed) => void;
   onClose: () => void; onUse: () => void; onOther: () => void;
+  /** Open the line a notice is about, e.g. "N" for "[N][R] trains are delayed". */
+  onAlert?: (route: string) => void;
 }) {
   const { trip, state } = p;
   const minutes = Math.max(1, Math.round((Date.parse(trip.arriveIso) - Date.parse(trip.departIso)) / 60000));
+  const leave = new Date(trip.departIso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const alert = trip.alerts[0];
+  // The line the notice names; the one you ride when it names several.
+  const named = alert ? [...alert.matchAll(/\[([A-Z0-9]{1,3})\]/g)].map((m) => m[1]) : [];
+  const alertRoute = named.find((r) => trip.legs.some((l) => l.kind === "ride" && l.route === r)) ?? named[0];
+  const w = trip.weather;
   const progress = state.status === "ended" ? 100 : state.segs.length ? state.seg / state.segs.length * 100 : 0;
   return <>
     <div className="task-top flex flex-col gap-2" data-testid="trip-heading">
       <div className="flex items-center gap-2">
         <div className="task-panel flex min-w-0 flex-1 items-center gap-2.5 rounded-[18px] px-3.5 py-2">
           <Clock className="h-5 w-5 shrink-0" aria-hidden />
-          <div className="min-w-0"><h2 className="text-[15px] font-semibold">{trip.departIso.replace("T", " · ")}</h2>
+          <div className="min-w-0"><h2 className="text-[15px] font-semibold">{leave}</h2>
             <p className="text-[13px] text-slate-300">{trip.origin.label} → {trip.destination.label} · about {minutes} min</p></div>
         </div>
         <button type="button" className="task-action task-secondary h-11 w-11 shrink-0 p-0" aria-label="Close trip" onClick={p.onClose}><X size={18} /></button>
       </div>
       <div className="flex flex-wrap gap-2">
-        {trip.weather ? <span className="task-panel rounded-full px-3 py-2 text-[13px]">{trip.weather.summary} · {Math.round(trip.weather.tempC)}°C</span> : null}
-        {trip.alerts.length ? <span className="task-panel max-w-full truncate rounded-full border-amber-500/40 px-3 py-2 text-[13px] text-amber-200">{trip.alerts[0]}</span> : null}
+        {w ? <span className="task-panel rounded-full px-3 py-2 text-[13px]">{w.summary} · {Math.round(w.tempC)}°C / {Math.round(w.tempC * 9 / 5 + 32)}°F{w.precipPct >= 40 ? ` · ${w.precipPct}% rain` : ""}</span> : null}
+        {alert ? <button type="button" disabled={!alertRoute || !p.onAlert} onClick={() => alertRoute && p.onAlert?.(alertRoute)}
+          className="task-panel flex max-w-full items-center gap-1.5 rounded-full border-amber-500/40 px-3 py-2 text-left text-[13px] text-amber-200">
+          <TriangleAlert size={14} className="shrink-0" aria-hidden /><span className="truncate">{plainAlertText(alert)}</span></button> : null}
       </div>
     </div>
     <section className="task-panel task-bottom flex flex-col gap-2.5" aria-label="Trip preview">

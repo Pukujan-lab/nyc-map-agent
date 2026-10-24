@@ -204,7 +204,7 @@ export default function RouteGuide() {
     <section className="task-panel task-top flex items-center gap-3.5 px-4 py-3.5" aria-label="Walking guidance">
       <TurnIcon step={progress?.next ?? null} />
       <div className="min-w-0 flex-1"><h2 className="text-xl font-bold leading-tight">{checkpoint ? `Walk toward ${checkpoint.landmark.name}` : progress?.instruction ?? "Follow the walking route"}</h2>
-        <p className="mt-0.5 text-sm text-slate-300">{progress?.instruction ?? street} · {Math.max(1, Math.round(left / 80))} min left</p></div>
+        <p className="mt-0.5 text-sm text-slate-300">{[progress && !checkpoint ? `In ${formatMetres(progress.metresToNext)}` : progress?.instruction, street, `${Math.max(1, Math.round(left / 80))} min left`].filter(Boolean).join(" · ")}</p></div>
       <button type="button" className="task-action task-secondary h-11 w-11 shrink-0 p-0" aria-label="Stop walking guidance" onClick={() => { stopNav(); stopWalk(); clearRoute(); }}><Square size={18} /></button>
     </section>
     {checkpoint?.landmark.picture ? <section className="task-panel task-bottom flex flex-col gap-2.5 p-3.5" aria-label="Landmark checkpoint">

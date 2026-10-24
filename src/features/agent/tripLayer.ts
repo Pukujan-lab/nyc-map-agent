@@ -77,6 +77,12 @@ export function showPoints(map: MapLibreMap, points: MapPoint[], color: string):
   map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: 80, maxZoom: 16, duration: 800 });
 }
 
+/** Drop the marks of the previous answer, so a new question starts on a clean map. */
+export function clearPoints(map: MapLibreMap): void {
+  const source = map.getSource(POINTS);
+  if (source) (source as GeoJSONSource).setData({ type: "FeatureCollection", features: [] });
+}
+
 const saved = new Map<string, unknown>();
 /** Ghost / x-ray: fade every extruded-building layer while the preview is underground. */
 export function setXray(map: MapLibreMap, on: boolean): void {

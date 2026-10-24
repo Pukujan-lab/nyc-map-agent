@@ -37,7 +37,7 @@ import { PLAYBACK_SPEEDS, langTag, type Leg, type MapAction, type PlaybackSpeed,
 import { askAgent } from "./stream";
 import { TripPreview } from "./TripPreview";
 import { TripSummary, selectAlternative } from "./TripSummary";
-import { routeColor, showPoints, showTrip } from "./tripLayer";
+import { clearPoints, routeColor, showPoints, showTrip } from "./tripLayer";
 import { runMapAction, TROUBLE_COLOR, type MapActionContext } from "./mapActions";
 import { AnswerActions, RestroomSpotDetails } from "./AnswerActions";
 import { AnswerSources, type AnswerSourcesLine } from "./AnswerSources";
@@ -205,7 +205,12 @@ export default function AgentOverlay() {
     m.fitBounds(f.bounds, { padding: wide ? { top: 100, bottom: 120, left: 460, right: 100 } : { top: 110, bottom: Math.round(window.innerHeight * 0.55), left: 40, right: 40 }, maxZoom: 17, duration: 800 });
   };
   /** Close the line panel and stop following, so a new trip or answer starts on a clean map. */
-  const clearMapTask = () => { setSelectedLine(null); setFollowed(null); };
+  const clearMapTask = () => {
+    setSelectedLine(null);
+    setFollowed(null);
+    const m = getMapInstance();
+    if (m) clearPoints(m);
+  };
   const ctx: ExecutorContext = {
     flyTo: (lon, lat, zoom) => { handoffCamera(); flyTo({ lon, lat, zoom }); },
     // A new trip replaces whatever the map was showing: a picked line, a followed train.
@@ -374,9 +379,11 @@ export default function AgentOverlay() {
     const r = a.restroom;
     showPoints(m, [{ at: [r.lon, r.lat], name: formatStreetText(r.name) }], "#2563eb");
     const me = sharedCoords();
-    const bottom = Math.round(window.innerHeight * (window.innerWidth >= 640 ? 0.2 : 0.55));
-    if (me) m.fitBounds([[Math.min(me.lon, r.lon), Math.min(me.lat, r.lat)], [Math.max(me.lon, r.lon), Math.max(me.lat, r.lat)]], { padding: { top: 110, bottom, left: 48, right: 48 }, maxZoom: 17, duration: 900 });
-    else m.flyTo({ center: [r.lon, r.lat], zoom: 16, duration: 900 });
+    // On phones the answer sheet covers the lower ~60% and the quick bar the right edge.
+    const phone = window.innerWidth < 640;
+    const bottom = Math.round(window.innerHeight * (phone ? 0.62 : 0.2));
+    if (me) m.fitBounds([[Math.min(me.lon, r.lon), Math.min(me.lat, r.lat)], [Math.max(me.lon, r.lon), Math.max(me.lat, r.lat)]], { padding: { top: 110, bottom, left: 40, right: phone ? 84 : 48 }, maxZoom: 17, duration: 900 });
+    else m.flyTo({ center: [r.lon, r.lat], zoom: 16, duration: 900, offset: [0, -Math.round(bottom / 2)] });
   }, [lastActions, home]);
   // A trip planned between saved Home and Work becomes the daily card's usual line (kept on this device).
   useEffect(() => {
@@ -729,6 +736,7 @@ export default function AgentOverlay() {
         {trip && player.state.active && !answerOpen ? <TripPreview
           trip={trip} state={player.state} speed={player.state.speed}
           onToggle={player.toggle} onSpeed={(s) => { setPrefSpeed(s); player.setSpeed(s); }}
+          onAlert={(route) => setSelectedLine(route)}
           onClose={() => { player.stop(); setTrip(null); }}
           onUse={() => {
             player.release();
