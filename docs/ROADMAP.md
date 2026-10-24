@@ -10,6 +10,9 @@
 - **Secondary goal: know exactly which street a shop or restaurant is on** ("that's where McDonald's is"), fast and easy. Storefront layers and signs exist (`src/features/storefronts`); a fast find-it flow does not.
 - **Order of work:** keep the app fast and accessible and deliver the main goal first; optional modules come later.
 
+## Tracking
+The realigned direction is tracked in #361 with sub-issues #362 to #376.
+
 ## Main goal
 An accessible chat and voice agent that shows its answers on a clean map (`PROJECT.md`). Work so far leaned toward visual polish and technical issues; from now on, rank work by whether it moves this goal.
 
