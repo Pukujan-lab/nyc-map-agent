@@ -16,7 +16,7 @@ export interface MapOptions {
   /** Subway routes picked in Transit lines; empty = all lines, muted. */
   routes: string[];
   stationsOnly: boolean;
-  /** Basemap bus-stop icons and street-level poles; off by default. Live buses stay. */
+  /** Basemap bus-stop icons on the overview; off by default. Street view always shows the poles. */
   busStops: boolean;
 }
 export const OPTIONS_KEY = "nma.mapOptions";
@@ -41,11 +41,12 @@ export function readOptions(storage: Pick<Storage, "getItem"> | undefined = glob
 }
 
 let options = readOptions();
-setBusStopsShown(options.busStops);
+// Street view always draws bus-stop poles (they are how you find your stop there);
+// the Bus stops switch only covers the small icons on the overview map.
+setBusStopsShown(true);
 const listeners = new Set<() => void>();
 export function setOptions(patch: Partial<MapOptions>): void {
   options = { ...options, ...patch };
-  setBusStopsShown(options.busStops);
   try {
     localStorage.setItem(OPTIONS_KEY, JSON.stringify(options));
   } catch {
