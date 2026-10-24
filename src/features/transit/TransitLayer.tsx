@@ -36,23 +36,22 @@ import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 
 const stopFollow = () => setFollowed(null);
 import { SYSTEM_LABELS, cellKey } from "./model";
-import { FollowCard, StationDetails } from "./TransitCard";
+import { FollowCard, SkipDetails, StationDetails } from "./TransitCard";
 import { TransitStatusDetails } from "./TransitStatus";
 import { alertGeometry, setAlertFocus, stationChanges, useAlertFocus } from "./alertFocus";
 import { LinesDrawer } from "./LinesDrawer";
 import { lineOpacity, useMapOptions } from "@/lib/map/mapOptions";
 import { NOTCH_ICON, addBulletImage, lineColor as lineColorOf, stationRowId, bulletId, busBadgeId, busIconSize, busPrefix } from "@/lib/transit/bullets";
 import { usePalette } from "@/lib/theme";
+import { RAISED_LIFT_PX, STOP_LIFT_PX, alertCameraAction, paintAboveVehicles, trainIconOffset } from "./layerOrder";
 import { FOCUS_OPACITY, FOCUS_VEIL_ID, WORLD, focusVeil, useTransitFocus } from "@/lib/map/transitFocus";
 
 /** Layers a click on the map should hand to transit instead of the area pick. */
 /** CC BY 4.0 credits for the 3D vehicle models (public/models/LICENSE.md), shown while they can be on screen. */
 const VEHICLE_CREDITS = "3D vehicles: R142 by yarankepang, XD40 by kieranfarr, P32 by Sharky (Sketchfab, CC BY 4.0)";
-const TRANSIT_CLICK_LAYERS = ["transit-bullet", "transit-bus-badge", "transit-bus-badge-full", "transit-bus-badge-selected", "transit-vehicle-2d", "transit-vehicle-hit", "transit-access", "transit-entrance", "transit-station-label", "transit-station-raised", "transit-station"];
+const TRANSIT_CLICK_LAYERS = ["transit-skip", "transit-alert-skipped", "transit-bus-badge-follow", "transit-bullet", "transit-bus-badge", "transit-bus-badge-full", "transit-bus-badge-selected", "transit-vehicle-2d", "transit-vehicle-hit", "transit-vehicle-hit-stop", "transit-vehicle-hit-raised", "transit-access", "transit-entrance", "transit-station-label", "transit-station-raised", "transit-station"];
 
 const MAX_VEHICLES = 400;
-/** In 3D, labels and bullets on raised track lift by about a viaduct's height on screen. */
-const RAISED_LIFT_PX = 26;
 const RAISED_LIFT_EM = 2.8;
 /** True when a point sits on (or right beside) raised subway track. */
 function onRaisedTrack(cells: Set<string>, p: GeoJSON.Position): boolean {
@@ -143,7 +142,7 @@ export default function TransitLayer() {
     if (import.meta.env.DEV) (window as unknown as { __walk?: unknown }).__walk = startWalk;
   }, [startWalk]);
   const { on, set, panelOpen, setPanelOpen, busPage, busLines: pickedLines, busCap } = useTransitToggles();
-  const { content, showPanel, setDrawerOpen, drawerOpen } = usePanel();
+  const { content, showPanel, setDrawerOpen, setSnap, drawerOpen } = usePanel();
   const meta = useTransitMeta();
   const rail = (["subway", "lirr", "mnr"] as SystemId[]).filter((s) => on.has(s));
   const alertFocus = useAlertFocus();
@@ -300,7 +299,7 @@ export default function TransitLayer() {
         const st = stationPos.get(`subway:${id}`);
         if (!st || !c.skips.length) continue;
         const both = c.skips.some((k) => k.end === null);
-        skips.push({ type: "Feature", properties: { ...st.properties, icon: both ? "transit-skip-x" : "transit-skip-half", label: both ? "Skipped" : `Skipped ${c.skips[0].toward}-bound` }, geometry: st.geometry });
+        skips.push({ type: "Feature", properties: { ...st.properties, icon: both ? "transit-skip-x" : "transit-skip-half", label: both ? "Skipped" : `Skipped ${c.skips[0].toward}-bound`, alertId: c.skips[0].alertId }, geometry: st.geometry });
       }
     }
     const accessSeen = new Set<string>();
@@ -334,18 +333,23 @@ export default function TransitLayer() {
     return {
       affected: fc((alertGeo?.affected ?? []).map((x) => line(x.coords, x.route))),
       reroute: fc((alertGeo?.reroute ?? []).map((x) => line(x.coords, alertFocus?.routes[0] ?? x.route))),
-      skipped: fc((alertGeo?.skipped ?? []).map((x) => ({ type: "Feature", properties: { name: oneWay ? `${x.name} · ${oneWay}-bound skipped` : x.name, icon: oneWay ? "transit-skip-half" : "transit-skip-x" }, geometry: { type: "Point", coordinates: x.coord } }))),
+      skipped: fc((alertGeo?.skipped ?? []).map((x) => ({ type: "Feature", properties: { id: x.id, name: oneWay ? `${x.name} · ${oneWay}-bound skipped` : x.name, icon: oneWay ? "transit-skip-half" : "transit-skip-x" }, geometry: { type: "Point", coordinates: x.coord } }))),
     };
   }, [alertGeo, alertFocus]);  
+  const followedRef = useRef(followedKey);
+  followedRef.current = followedKey;
   const savedCam = useRef<{ center: [number, number]; zoom: number; bearing: number; pitch: number } | null>(null);
   useEffect(() => {
     if (!map) return;
-    if (alertGeo?.bounds) {
+    const act = alertCameraAction({ hasBounds: Boolean(alertGeo?.bounds), hasFocus: Boolean(alertFocus), hasSaved: Boolean(savedCam.current), following: Boolean(followedRef.current) });
+    if (act === "fit" && alertGeo?.bounds) {
       if (!savedCam.current) { const c = map.getCenter(); savedCam.current = { center: [c.lng, c.lat], zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() }; }
       const wide = window.innerWidth >= 768;
       map.fitBounds(alertGeo.bounds, { padding: wide ? { top: 90, bottom: 60, left: 440, right: 80 } : { top: 90, bottom: Math.round(window.innerHeight * 0.45), left: 30, right: 30 }, maxZoom: 15.5, duration: 900, bearing: 0, pitch: 0 });
-    } else if (!alertFocus && savedCam.current) {
+    } else if (act === "restore" && savedCam.current) {
       map.easeTo({ ...savedCam.current, duration: 700 });
+      savedCam.current = null;
+    } else if (act === "drop" && !alertFocus) {
       savedCam.current = null;
     }
   }, [map, alertGeo, alertFocus]);
@@ -469,7 +473,7 @@ export default function TransitLayer() {
   const [hitFc, setHitFc] = useState<GeoJSON.FeatureCollection>(EMPTY);
   useEffect(() => {
     if (!three) return;
-    const id = window.setInterval(() => setHitFc({ type: "FeatureCollection", features: [...display.current.values()].map((v) => ({ type: "Feature", properties: { key: v.key, label: v.label }, geometry: { type: "Point", coordinates: [v.lon, v.lat] } })) }), 1000);
+    const id = window.setInterval(() => setHitFc({ type: "FeatureCollection", features: [...display.current.values()].map((v) => ({ type: "Feature", properties: { key: v.key, label: v.label, grade: v.grade, atStop: v.stopped ? 1 : 0 }, geometry: { type: "Point", coordinates: [v.lon, v.lat] } })) }), 1000);
     return () => window.clearInterval(id);
   }, [three]);
   const theme = usePalette();
@@ -507,9 +511,13 @@ export default function TransitLayer() {
         badge = busBadgeId(p.text, c); // the tiny prefix badge stays plain; the "!" rides the full badge
         badgeFull = busBadgeId(v.route, c, alert);
       }
-      return { type: "Feature", properties: { key: v.key, color: v.color, bearing: v.bearing, grade: v.grade, label: v.label, system: v.system, route: v.route, bullet, badge, badgeFull, alpha: v.alpha ?? 1 }, geometry: { type: "Point", coordinates: [v.lon, v.lat] } };
+      return { type: "Feature", properties: { key: v.key, color: v.color, bearing: v.bearing, grade: v.grade, label: v.label, system: v.system, route: v.route, bullet, badge, badgeFull, alpha: v.alpha ?? 1, atStop: v.stopped ? 1 : 0, followed: v.key === followedKey ? 1 : 0 }, geometry: { type: "Point", coordinates: [v.lon, v.lat] } };
     }),
-  }), [visible, alerted, theme]);
+  }), [visible, alerted, theme, followedKey]);
+  const followBusFc = useMemo<GeoJSON.FeatureCollection>(() => ({
+    type: "FeatureCollection",
+    features: vehicleFc.features.filter((f) => f.properties?.followed === 1 && f.properties?.system === "bus"),
+  }), [vehicleFc]);
   const selBusRoute = (show.routes.length && selectedKey?.startsWith("bus:") ? visible.find((v) => v.key === selectedKey)?.route : undefined) ?? "";
   const busRoute = useBusRoute(selBusRoute || undefined);
   const busRouteFc = useMemo<GeoJSON.FeatureCollection>(() => {
@@ -635,8 +643,8 @@ export default function TransitLayer() {
       const v = v3d.current;
       if (!v) return;
       // Draw after the city layers, whose pavement and walls would otherwise paint over the glow.
-      const ids = map.getLayersOrder();
-      if (map.getLayer(v.layer.id) && ids[ids.length - 1] !== v.layer.id) map.moveLayer(v.layer.id);
+      // Station names and the followed bus badge stay above that vehicle layer.
+      paintAboveVehicles(map, v.layer.id);
       const e = streetEye(map);
       v.setGroundVeil([e.lon, e.lat], XRAY_VEIL_M);
     };
@@ -703,6 +711,18 @@ export default function TransitLayer() {
     return () => { map.off("dragstart", stop); };
   }, [map, following]);
   usePanelMode("follow", following ? stopFollow : null);
+  // Skip labels, station names, and the followed bus badge paint above the 3D vehicles.
+  useEffect(() => {
+    if (!map) return;
+    const lift = () => paintAboveVehicles(map, v3d.current?.layer.id);
+    // One check per frame, not one per move event.
+    let raf = 0;
+    const soon = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; lift(); }); };
+    lift();
+    map.on("move", soon);
+    map.on("styledata", lift);
+    return () => { if (raf) cancelAnimationFrame(raf); map.off("move", soon); map.off("styledata", lift); };
+  }, [map]);
 
   // A train or bus starts Follow. Any other map click, including empty map, drops it in place.
   useEffect(() => {
@@ -710,6 +730,13 @@ export default function TransitLayer() {
     const onClick = (e: MapLayerMouseEvent) => {
       const layers = TRANSIT_CLICK_LAYERS.filter((id) => map.getLayer(id));
       const f = layers.length ? map.queryRenderedFeatures(e.point, { layers })[0] : undefined;
+      if (f?.properties && (f.layer.id === "transit-skip" || f.layer.id === "transit-alert-skipped")) {
+        const id = String(f.properties.id ?? "");
+        if (!id) return;
+        showPanel({ id: `transit:skip:${id}`, title: "Skipped", subtitle: String(f.properties.name ?? "Station"), details: <SkipDetails stationId={id} /> });
+        setSnap("half");
+        return;
+      }
       const decision = followActionForMapClick(f?.properties ? { layerId: f.layer.id, key: f.properties.key } : null);
       if (decision.action === "start") {
         setDrawerOpen(false);
@@ -726,7 +753,7 @@ export default function TransitLayer() {
     };
     map.on("click", onClick);
     return () => { map.off("click", onClick); };
-  }, [map, openStation, setDrawerOpen]);
+  }, [map, openStation, setDrawerOpen, showPanel, setSnap]);
 
   // Notices for alerts touching starred lines or stations (in-app + optional browser).
   const notified = useRef(new Set<string>());
@@ -820,7 +847,8 @@ export default function TransitLayer() {
       </Source>
       <Source id="transit-skips" type="geojson" data={work.skips}>
         <Layer id="transit-skip" type="symbol" minzoom={11}
-          layout={{ "icon-image": ["get", "icon"], "icon-size": ["interpolate", ["linear"], ["zoom"], 11, 0.5, 16, 0.9], "icon-allow-overlap": true,
+          layout={{ "icon-image": ["get", "icon"], "icon-size": ["interpolate", ["linear"], ["zoom"], 11, 0.5, 16, 0.9], "icon-allow-overlap": true, "icon-ignore-placement": true,
+            "icon-offset": [18, -18],
             "text-field": ["step", ["zoom"], "", 13.5, ["get", "label"]], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-anchor": "left", "text-offset": [1.1, 0], "text-optional": true }}
           paint={{ "text-color": "#d4183d", "text-halo-color": theme.land, "text-halo-width": 1.6 }} />
       </Source>
@@ -839,7 +867,8 @@ export default function TransitLayer() {
           </Source>
           <Source id="transit-alert-skipped" type="geojson" data={alertFc.skipped}>
             <Layer id="transit-alert-skipped" type="symbol"
-              layout={{ "icon-image": ["get", "icon"], "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.6, 16, 1], "icon-allow-overlap": true,
+              layout={{ "icon-image": ["get", "icon"], "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.6, 16, 1], "icon-allow-overlap": true, "icon-ignore-placement": true,
+                "icon-offset": [18, -18],
                 "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-anchor": "left", "text-offset": [1.2, 0], "text-optional": true }}
               paint={{ "text-color": theme.dark ? "#f2f1ed" : "#111111", "text-halo-color": theme.land, "text-halo-width": 1.6 }} />
           </Source>
@@ -850,7 +879,16 @@ export default function TransitLayer() {
           layout={{ "icon-image": "transit-access", "icon-size": ["interpolate", ["linear"], ["zoom"], 11, 0.35, 16, 0.6], "icon-offset": [-18, -18], "icon-allow-overlap": true }} />
       </Source>
       <Source id="transit-vehicle-hits" type="geojson" data={three ? hitFc : EMPTY}>
-        <Layer id="transit-vehicle-hit" type="circle" paint={{ "circle-radius": 14, "circle-opacity": 0, "circle-pitch-alignment": "map" }} />
+        <Layer id="transit-vehicle-hit" type="circle" filter={["!=", ["get", "atStop"], 1]} paint={{ "circle-radius": 14, "circle-opacity": 0, "circle-pitch-alignment": "map" }} />
+        {/* A dwelling train's tap target lifts with its bullet so the station underneath stays clickable. */}
+        <Layer id="transit-vehicle-hit-stop" type="circle"
+          filter={three ? ["all", ["==", ["get", "atStop"], 1], ["!=", ["get", "grade"], "elevated"]] : ["==", ["get", "atStop"], 1]}
+          paint={{ "circle-radius": 14, "circle-opacity": 0, "circle-pitch-alignment": "viewport", "circle-translate-anchor": "viewport", "circle-translate": [0, -STOP_LIFT_PX] }} />
+        {three ? (
+          <Layer id="transit-vehicle-hit-raised" type="circle"
+            filter={["all", ["==", ["get", "atStop"], 1], ["==", ["get", "grade"], "elevated"]]}
+            paint={{ "circle-radius": 14, "circle-opacity": 0, "circle-pitch-alignment": "viewport", "circle-translate-anchor": "viewport", "circle-translate": [0, -(RAISED_LIFT_PX + STOP_LIFT_PX)] }} />
+        ) : null}
       </Source>
       <Source id="transit-bus-route" type="geojson" data={busRouteFc}>
         <Layer id="transit-bus-route-line" type="line" filter={["==", ["get", "kind"], "line"]} layout={{ "line-cap": "round", "line-join": "round" }}
@@ -871,29 +909,36 @@ export default function TransitLayer() {
         <Layer id="transit-bullet-notch" type="symbol" filter={["==", ["get", "system"], "subway"]}
           layout={{ "icon-image": NOTCH_ICON, "icon-rotate": ["get", "bearing"], "icon-rotation-alignment": "map", "icon-allow-overlap": true, "icon-ignore-placement": true,
             "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.5, 16, 0.8],
-            "icon-offset": (three ? ["case", ["==", ["get", "grade"], "elevated"], ["literal", [0, -26 - RAISED_LIFT_PX]], ["literal", [0, -26]]] : [0, -26]) as [number, number] }}
+            "icon-offset": trainIconOffset(three, 26) }}
           paint={{ "icon-opacity": bulletAlpha }} />
         <Layer id="transit-bullet" type="symbol" filter={["==", ["get", "system"], "subway"]}
           layout={{ "icon-image": ["get", "bullet"], "icon-allow-overlap": true, "icon-ignore-placement": true,
-            // Elevated trains: the bullet floats above the viaduct deck, not on the street below.
-            "icon-offset": (three ? ["case", ["==", ["get", "grade"], "elevated"], ["literal", [0, -RAISED_LIFT_PX]], ["literal", [0, 0]]] : [0, 0]) as [number, number], "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.55, 14, 0.75, 17, 0.95] }}
+            // Elevated trains float above the viaduct. A train at a station lifts clear of the name.
+            "icon-offset": trainIconOffset(three, 0), "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.55, 14, 0.75, 17, 0.95] }}
           paint={{ "icon-opacity": ["*", bulletAlpha, ["case", ["==", ["get", "grade"], "underground"], xrayOn ? 1 : 0.7, 1]] as unknown as number }} />
         {/* Buses: SQUARE badges, so they never read as round subway bullets. Zoomed out
             only the borough prefix (all shown, so each heading notch has its badge); from z15 or for the
             selected route the badge widens to the full route, with collision detection.
             A borough filter keeps the count down, so the badge matches a subway bullet. */}
-        <Layer id="transit-bus-notch" type="symbol" filter={["==", ["get", "system"], "bus"]}
+        <Layer id="transit-bus-notch" type="symbol" filter={["all", ["==", ["get", "system"], "bus"], ["!=", ["get", "followed"], 1]]}
           layout={{ "icon-image": NOTCH_ICON, "icon-rotate": ["get", "bearing"], "icon-rotation-alignment": "map", "icon-allow-overlap": true, "icon-ignore-placement": true,
             "icon-size": busIconSize("notch"), "icon-offset": [0, -17] }}
           paint={{ "icon-opacity": ["interpolate", ["linear"], ["zoom"], 12.5, 0, 13.5, ["*", 0.8, ["get", "alpha"]]] }} />
-        <Layer id="transit-bus-badge" type="symbol" maxzoom={15} filter={["all", ["==", ["get", "system"], "bus"], ["!=", ["get", "route"], selBusRoute]]}
+        <Layer id="transit-bus-badge" type="symbol" maxzoom={15} filter={["all", ["==", ["get", "system"], "bus"], ["!=", ["get", "route"], selBusRoute], ["!=", ["get", "followed"], 1]]}
           layout={{ "icon-image": ["get", "badge"], "icon-allow-overlap": true, "icon-ignore-placement": true, "icon-size": busIconSize("prefix") }}
           paint={{ "icon-opacity": ["*", selBusRoute ? 0.4 : 0.85, ["get", "alpha"]] }} />
-        <Layer id="transit-bus-badge-full" type="symbol" minzoom={15} filter={["all", ["==", ["get", "system"], "bus"], ["!=", ["get", "route"], selBusRoute]]}
+        <Layer id="transit-bus-badge-full" type="symbol" minzoom={15} filter={["all", ["==", ["get", "system"], "bus"], ["!=", ["get", "route"], selBusRoute], ["!=", ["get", "followed"], 1]]}
           layout={{ "icon-image": ["get", "badgeFull"], "icon-allow-overlap": false, "icon-ignore-placement": true, "icon-padding": 1, "icon-size": busIconSize("full") }}
           paint={{ "icon-opacity": ["*", selBusRoute ? 0.45 : 1, ["get", "alpha"]] }} />
-        <Layer id="transit-bus-badge-selected" type="symbol" filter={["all", ["==", ["get", "system"], "bus"], ["==", ["get", "route"], selBusRoute]]}
+        <Layer id="transit-bus-badge-selected" type="symbol" filter={["all", ["==", ["get", "system"], "bus"], ["==", ["get", "route"], selBusRoute], ["!=", ["get", "followed"], 1]]}
           layout={{ "icon-image": ["get", "badgeFull"], "icon-allow-overlap": true, "symbol-sort-key": 1, "icon-size": busIconSize("selected") }}
+          paint={{ "icon-opacity": ["get", "alpha"] }} />
+      </Source>
+      {/* Street level empties the vehicle source. This one stays, so the followed bus keeps its badge. */}
+      <Source id="transit-followed-bus" type="geojson" data={followBusFc}>
+        <Layer id="transit-bus-badge-follow" type="symbol" filter={["==", ["get", "followed"], 1]}
+          layout={{ "icon-image": ["get", "badgeFull"], "icon-allow-overlap": true, "icon-ignore-placement": true, "icon-offset": [0, -42],
+            "icon-size": busIconSize("selected") }}
           paint={{ "icon-opacity": ["get", "alpha"] }} />
       </Source>
     </>

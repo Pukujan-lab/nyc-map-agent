@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { ArrowLeft } from "lucide-react";
-import { usePanel, type PanelContent } from "@/lib/store/PanelContext";
+import { pushPanel, usePanel, type PanelContent } from "@/lib/store/PanelContext";
 import { alertGeometry, routeEnds, setAlertFocus } from "./alertFocus";
 import { setFollowed } from "./follow";
 import { otherDirection } from "@/lib/transit/serviceChanges";
@@ -23,9 +23,27 @@ const plain = (s: string): string => s.replace(/\[([A-Z0-9]+)\]/g, "$1");
 
 const when = (t?: number) => (t ? new Date(t * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "");
 
+function alertPanel(a: TransitAlert, onBack: () => void): PanelContent {
+  return {
+    id: `transit:alert:${a.id}`,
+    title: `${a.routes.slice(0, 3).join(" ")} ${alertLabel(a).toLowerCase()}`.trim(),
+    subtitle: a.period || "Service alert",
+    peek: `${a.routes[0] ?? "Alert"} · ${alertLabel(a)}`,
+    details: <AlertCard alert={a} onBack={onBack} />,
+    onBack,
+  };
+}
+
+/** Open an alert from outside the panel (the follow card). The map flies to it. */
+export function presentAlert(a: TransitAlert): void {
+  const onBack = () => setAlertFocus(null);
+  setAlertFocus(a);
+  pushPanel(alertPanel(a, onBack));
+}
+
 /** Open an alert: the map flies to it (TransitLayer) and the panel shows its card; Back returns to what was open before. */
 function useOpenAlert(): (a: TransitAlert) => void {
-  const { content, showPanel } = usePanel();
+  const { content, showPanel, setSnap } = usePanel();
   return useCallback(
     (a: TransitAlert) => {
       // In place, not Stop following: that ease would pull the camera off the alert.
@@ -36,16 +54,10 @@ function useOpenAlert(): (a: TransitAlert) => void {
         if (prev) window.setTimeout(() => showPanel(prev), 0);
       };
       setAlertFocus(a);
-      showPanel({
-        id: `transit:alert:${a.id}`,
-        title: `${a.routes.slice(0, 3).join(" ")} ${alertLabel(a).toLowerCase()}`.trim(),
-        subtitle: a.period || "Service alert",
-        peek: `${a.routes[0] ?? ""} · ${alertLabel(a)}`,
-        details: <AlertCard alert={a} onBack={back} />,
-        onBack: back,
-      });
+      showPanel(alertPanel(a, back));
+      setSnap("half");
     },
-    [content, showPanel],
+    [content, showPanel, setSnap],
   );
 }
 
