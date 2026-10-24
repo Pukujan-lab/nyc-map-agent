@@ -100,3 +100,28 @@ cached and health-checked (`pnpm feeds:health`, scheduled workflow `feed-health.
 - `pnpm lint:boundaries` (dependency-cruiser): no feature→feature imports; `three` only in the 3D layer.
 - `pnpm size` (size-limit): per-chunk budgets; fails on regression.
 - `pnpm feeds:health`: pings each upstream via our proxy.
+
+## Target: agent-first (2026-10-23, not built)
+
+The product is now an accessible chat and voice agent over the map (`PROJECT.md`). The module shape above stays; these are the changes the target asks for. Each line says whether it exists.
+
+| area | target | state |
+| --- | --- | --- |
+| Entry | Map with a chat prompt at the bottom and a Siri-style voice mode. Dashboards behind advanced mode (the basic/advanced tier split already exists). | not built; today a top search bar with an "Ask" button |
+| Answers | Every agent answer returns **map actions** the UI renders as buttons (show skipped stops, substitute route, nearest restroom, exits). | not built; the agent today moves or highlights the map |
+| Context | The agent or app sets a context (on a train, underground, walking, driving) and the map shows only what matters, landmarks always. | manual switches only (Transit Focus, Lines) |
+| Top view | Flat 2D only; no three.js layer, no 3D buildings. | Top still tries to render 3D |
+| Trains | A colored box with the route tag, plus a side panel (next stops, times, MTA notices). No 3D train model. | model in the three.js layer |
+| Live data | Server polls MTA feeds about every minute (it caches 15 s now). Clients read one batched endpoint every 30 to 60 s. | each browser polls every 15 s and calls one endpoint per subway line |
+| 3D performance | Keep MapLibre plus the one three.js layer. Draw 3D near the camera only, simple shapes far away, instancing, baked shadows. No game engine. | partly (PMTiles city tiles, size budgets) |
+| Trip simulator | Scheduled time, expected conditions, restart when the user picks an alternative route. | speeds exist; the rest does not |
+| Languages | Chat and voice in many languages. | not checked |
+
+### Agent reliability (target, partly built)
+
+| area | target | state |
+| --- | --- | --- |
+| Model availability | Primary `cb/deepseek-v4.1-flash` via InferHub, with a fallback chain so an LLM is always available when one or two are down. | chain via `INFERHUB_MODEL_FALLBACKS` and busy-retry (#343) exist in `server/features/agent/model-fallback.ts`; a provider-independent fallback is not confirmed |
+| Abuse protection | Per-client rate limits and caps on `/api/agent`. | not found on main |
+| Waiting | A clear loading animation, and a spoken status ("checking the trains") for slow model or voice replies. | text skeleton only |
+| Instructions | A system prompt that knows the available datasets and their limits, asks follow-up questions, and picks the right map action. | tool guidance in `context/CHAT_TOOLS.md` only |
