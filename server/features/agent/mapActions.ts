@@ -26,12 +26,17 @@ export function restroomActions(spots: RestroomSpot[]): MapAction[] {
   }));
 }
 
+/** One "Show the stops the L skips" button per line. */
+export function skipActions(skips: Trip["skips"]): MapAction[] {
+  const skipsByRoute = new Map<string, MapPoint[]>();
+  for (const s of skips) skipsByRoute.set(s.route, [...(skipsByRoute.get(s.route) ?? []), { at: s.at, name: s.toward ? `${s.name} (${s.toward}-bound)` : s.name }]);
+  return [...skipsByRoute].map(([route, stops]) => ({ kind: "showStops", id: `skips:${route}`, label: `Show the stops the ${route} skips`, route, skipped: true, stops }));
+}
+
 /** Route, skipped stations, crash hotspots, then each line's stops. */
 export function tripActions(trip: Trip): MapAction[] {
   const out: MapAction[] = [{ kind: "showRoute", id: `route:${trip.id}`, label: trip.mode === "drive" ? "Show the drive" : trip.mode === "walk" ? "Show the walk" : "Show the route", trip }];
-  const skipsByRoute = new Map<string, MapPoint[]>();
-  for (const s of trip.skips) skipsByRoute.set(s.route, [...(skipsByRoute.get(s.route) ?? []), { at: s.at, name: s.toward ? `${s.name} (${s.toward}-bound)` : s.name }]);
-  for (const [route, stops] of skipsByRoute) out.push({ kind: "showStops", id: `skips:${route}`, label: `Show the stops the ${route} skips`, route, skipped: true, stops });
+  out.push(...skipActions(trip.skips));
   const crashes = trip.context.filter((c) => c.kind === "crashes" && c.at).map((c) => ({ at: c.at!, name: c.text }));
   if (crashes.length) out.push({ kind: "showCrashes", id: `crashes:${trip.id}`, label: "Show crashes on this route", points: crashes });
   for (const l of trip.legs) {
