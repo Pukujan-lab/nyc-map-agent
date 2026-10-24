@@ -111,9 +111,9 @@ export function estimateTrain(sys: StaticSystem, trip: LiveTrip, now: number, tr
   const onward = pts[Math.min(mo.i + 1, pts.length - 1)];
   const forward = Math.sign(onward.m - pts[mo.i].m) || Math.sign(pts[mo.i].m - (pts[mo.i - 1]?.m ?? pts[mo.i].m)) || 1;
   if (tracker && mo.phase !== "terminal") {
-    // Never pass the first stop the feed still lists (departure unconfirmed).
+    // After the dwell, roll toward the next station. Do not pass that station early.
     const tripFwd = Math.sign(pts[pts.length - 1].m - pts[0].m) || forward;
-    m = tracker.update({ key: `${sys.system}:${trip.id}`, route: trip.route, forward: tripFwd, m, holdM: livePts[0].m, holdEta: livePts[0].arr }, now);
+    m = tracker.update({ key: `${sys.system}:${trip.id}`, route: trip.route, forward: tripFwd, m, holdM: next.m, holdEta: next.arr }, now);
   }
   const stopped: Vehicle["stopped"] =
     mo.phase === "origin" ? { kind: "departs", stop: pts[0].id, t: mo.departs }
