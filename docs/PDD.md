@@ -71,7 +71,7 @@ Do these in order, one commit each, with tests where logic is involved. After ea
 
 1. **Menu row: verify and finish** (`src/features/agent/AgentHome.tsx` and neighbours, commit `08ba438`).
    - Order: My day, Layers, Filters, Data, City data, Settings.
-   - The active item is always leftmost: a pill with icon and label, light when its dropdown is open, dark when closed. The rest follow as bare icons with no outline, sizes 44/40/34/28/24/20 px and opacity 1/0.8/0.5/0.28/0.14/0.06, wrapping round. The row fades out at its right edge.
+   - The active item is always leftmost: a pill with icon and label, light when its dropdown is open, dark when closed. The rest follow as icons on small dark discs with no outline, sizes 44/40/34/28/24/20 px and opacity 1/0.9/0.7/0.5/0.32/0.18, wrapping round. The row fades out at its right edge.
    - No dots or arrows on the pill.
    - Tapping an icon makes it active and opens its dropdown. Tapping the active pill toggles it. Only one dropdown is open at a time.
    - *Done when:* at 390×800 it matches `MyDay.dc.html` and `MyDayClosed.dc.html`, and a Playwright test taps each item and checks it becomes leftmost.

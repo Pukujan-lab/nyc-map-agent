@@ -43,7 +43,7 @@ const IDS = new Set<OpenMenu>(MENU_IDS);
  * the rest are bare icons, each smaller and fainter (docs/design/frames/MyDay.dc.html).
  */
 export const MENU_SIZE = [44, 40, 34, 28, 24, 20];
-export const MENU_ALPHA = [1, 0.8, 0.5, 0.28, 0.14, 0.06];
+export const MENU_ALPHA = [1, 0.9, 0.7, 0.5, 0.32, 0.18];
 
 /** Tap an icon: it becomes the active pill and its dropdown opens. Tap the pill again: it closes. */
 export function pressMenu(active: MenuId, open: MenuId | null, id: MenuId): { active: MenuId; open: MenuId | null } {
@@ -310,9 +310,10 @@ export function MenuRow({ onOpenDashboard, onOpenSources }: { onOpenDashboard: (
             const icon = Math.min(18, size - 4);
             return (
               <button key={it.id} type="button" aria-label={it.label} onClick={() => pick(it.id)} data-testid={`menu-${it.id}`} data-menu={it.id}
-                className={`flex shrink-0 snap-start items-center justify-center rounded-full border-0 bg-transparent p-0 text-[#f1f5f9] ${RING}`}
+                className={`flex shrink-0 snap-start items-center justify-center rounded-full border-0 bg-[rgba(15,23,42,0.78)] p-0 text-[#f1f5f9] backdrop-blur-[6px] ${RING}`}
                 style={{ width: size, height: size, opacity: MENU_ALPHA[i] }}>
-                <Icon aria-hidden style={{ width: icon, height: icon, filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.6))" }} />
+                {/* A small dark disc, no outline: white on its own vanished over the light map. */}
+                <Icon aria-hidden style={{ width: icon, height: icon }} />
               </button>
             );
           })}
