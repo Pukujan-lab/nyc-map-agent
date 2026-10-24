@@ -147,3 +147,17 @@ describe("POST /api/agent streams the actions line (mocked LLM)", () => {
     expect(events.some((e) => e.type === "actions")).toBe(false);
   });
 });
+
+describe("buttons only for places the answer stands behind", () => {
+  it("drops a geocoder leftover the answer calls unrelated, keeps named places", async () => {
+    const { answerNames, ActionCollector } = await import("./mapActions");
+    const answer = "I don't have an events listing, so I can't find the 3 Percent Club event — the only map match was an unrelated Staten Island address.";
+    expect(answerNames(answer, "Show 3 YACHT CLUB CV, Staten Island, NY")).toBe(false);
+    expect(answerNames("The Empire State Building is a 6-minute walk.", "Show Empire State Building, Manhattan")).toBe(true);
+    expect(answerNames("Bryant Park has the closest restroom.", "Show Bryant Park")).toBe(true);
+    const c = new ActionCollector();
+    c.add([{ kind: "flyTo", id: "fly:1", label: "Show 3 YACHT CLUB CV, Staten Island, NY", lon: -74.1, lat: 40.5, zoom: 16 }]);
+    expect(c.list(answer)).toEqual([]);
+    expect(c.list()).toHaveLength(1);
+  });
+});
