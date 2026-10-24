@@ -71,7 +71,7 @@ export function ViewSwitcher() {
     <div
       data-testid="view-switcher"
       style={{ display: "var(--controls-display, flex)" }}
-      className="pointer-events-none absolute bottom-[calc(var(--edge)+96px)] left-[max(var(--edge),var(--sheet-left,0px))] right-[var(--edge)] z-[35] flex flex-wrap items-center justify-center gap-[var(--sp-2)] lg:bottom-[calc(var(--edge)+36px)] lg:right-[calc(var(--edge)+340px)]"
+      className="pointer-events-none absolute bottom-[calc(var(--edge)+96px+var(--chat-bar-h,0px))] left-[max(var(--edge),var(--sheet-left,0px))] right-[var(--edge)] z-[35] flex flex-wrap items-center justify-center gap-[var(--sp-2)] lg:bottom-[calc(var(--edge)+36px+var(--chat-bar-h,0px))] lg:right-[calc(var(--edge)+340px)]"
     >
       <div role="group" aria-label={followed ? "Follow camera" : "View level"} className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-border bg-card p-0.5 shadow-md">
         {followed

@@ -1,5 +1,5 @@
 import { AlertCircle, Check, ChevronDown, Loader2, Mic, Send, Square } from "lucide-react";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { stepLabel, type AgentStep } from "./agentSteps";
@@ -93,6 +93,29 @@ export function AgentHome(p: AgentHomeProps) {
     if (p.notice && !p.voice.supported) inputRef.current?.focus();
   }, [p.notice, p.voice.supported]);
 
+  // Publish how much of the screen bottom the bar takes as --chat-bar-h, so the
+  // view switcher and rotate buttons sit above it. 0px while hidden; unset on unmount.
+  const barRef = useRef<HTMLDivElement>(null);
+  const { hidden } = p;
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    const el = barRef.current;
+    if (hidden || !el) {
+      root.style.setProperty("--chat-bar-h", "0px");
+      return;
+    }
+    const publish = () => root.style.setProperty("--chat-bar-h", `${Math.max(0, Math.ceil(window.innerHeight - el.getBoundingClientRect().top))}px`);
+    publish();
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(publish);
+    ro?.observe(el);
+    window.addEventListener("resize", publish);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", publish);
+    };
+  }, [hidden]);
+  useEffect(() => () => { document.documentElement.style.removeProperty("--chat-bar-h"); }, []);
+
   if (p.hidden) return null;
 
   return (
@@ -123,6 +146,7 @@ export function AgentHome(p: AgentHomeProps) {
         </section>
       ) : null}
 
+      <div ref={barRef} className="flex w-full flex-col items-center gap-2">
       {p.voice.listening ? (
         <section
           role="dialog"
@@ -181,6 +205,7 @@ export function AgentHome(p: AgentHomeProps) {
           {p.notice}
         </p>
       ) : null}
+      </div>
     </div>
   );
 }
