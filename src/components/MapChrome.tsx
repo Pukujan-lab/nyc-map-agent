@@ -1,20 +1,19 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import type { Map as MapLibreMap } from "maplibre-gl";
-import { Switch } from "@/components/ui/switch";
 import { useFlag } from "@/lib/flags";
 import { sharedCoords, startSharing } from "@/lib/geo/sharedLocation";
 import { onMapInstance } from "@/lib/map/mapInstance";
 import { useMapState } from "@/lib/store/MapStateContext";
-import { usePanel } from "@/lib/store/PanelContext";
+import { setOpenMenu, useOpenMenu } from "@/lib/store/openMenu";
 import { useFollowed } from "@/lib/transit/follow";
 import { useSelectedLine } from "@/lib/transit/selectedLine";
 import { MID_HEIGHT_M, UP_HEIGHT_M, levelOf, type ViewLevel } from "./ViewSwitcher";
 
 /**
  * Agent-first map chrome (#370, #372): the round buttons at the top right
- * (Layers, Change view, Center on my location), the small Layers panel and
- * view menu under them, and a compass that shows only while the map is
- * rotated or tilted. Everything else lives in More layers.
+ * (Change view, Center on my location), the view menu, and a compass that
+ * shows only while the map is rotated or tilted. Layers and every other menu
+ * live in the top-left menu row (MenuRow).
  */
 
 const ROUND = "flex h-11 w-11 shrink-0 items-center justify-center rounded-full p-0 shadow-[0_6px_18px_rgba(0,0,0,0.35)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]";
@@ -23,13 +22,8 @@ const LIGHT = "border border-transparent bg-[#f8fafc] text-[#0f172a]";
 const FLOAT = "rounded-[20px] border border-[#263449] bg-[rgba(11,18,32,0.82)] p-2 text-[#f1f5f9] shadow-[0_12px_32px_rgba(0,0,0,0.5)] backdrop-blur-[14px]";
 
 const svg = { width: 22, height: 22, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
-const LayersIcon = () => <svg {...svg} width={20} height={20}><path d="M12 3 2 8l10 5 10-5-10-5Z" /><path d="m2 13 10 5 10-5" /></svg>;
 const ViewIcon = () => <svg {...svg} width={20} height={20}><path d="M12 3 3 8v8l9 5 9-5V8l-9-5Z" /><path d="M3 8l9 5 9-5M12 13v8" /></svg>;
 const LocateIcon = () => <svg width={20} height={20} viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M21 3 3 10.5l7.5 2.9L13.4 21 21 3Z" /></svg>;
-const TrainIcon = () => <svg {...svg}><rect x="5" y="3" width="14" height="14" rx="3" /><path d="M5 11h14M8 21l2-4M16 21l-2-4" /></svg>;
-const BusIcon = () => <svg {...svg}><rect x="4" y="3" width="16" height="15" rx="3" /><path d="M4 10h16M8 21v-3M16 21v-3" /></svg>;
-const RestroomIcon = () => <svg width={22} height={22} viewBox="0 0 24 24" fill="currentColor" aria-hidden><circle cx="7" cy="4" r="2" /><path d="M5 7h4l1 7H8.5v7h-3v-7H4l1-7Z" /><circle cx="17" cy="4" r="2" /><path d="M15.2 7h3.6l2.2 8h-2.5v6h-3v-6H13l2.2-8Z" /></svg>;
-
 const VIEWS: Array<{ id: ViewLevel; label: string; note: string; icon: ReactNode }> = [
   { id: "top", label: "Top", note: "Flat map", icon: <svg {...svg}><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M4 12h16M12 4v16" /></svg> },
   { id: "up", label: "Aerial", note: "Tilted, from above", icon: <svg {...svg}><path d="M3 17l9-12 9 12H3Z" /></svg> },
@@ -51,36 +45,6 @@ function useCamera(): { map: MapLibreMap | null; bearing: number; pitch: number 
     return () => { map.off("rotate", sync); map.off("pitch", sync); };
   }, [map]);
   return { map, ...cam };
-}
-
-function LayerRow({ icon, label, on, onToggle }: { icon: ReactNode; label: string; on: boolean; onToggle: () => void }) {
-  return (
-    <label className="flex min-h-[52px] cursor-pointer items-center gap-3 px-2 text-[15px] font-medium">
-      {icon}
-      <span className="flex-1">{label}</span>
-      <Switch checked={on} onCheckedChange={onToggle} aria-label={label} className="data-[state=checked]:bg-[#2563eb] data-[state=unchecked]:bg-[#334155]" />
-    </label>
-  );
-}
-
-/** Live trains, Live buses and Restrooms; every other layer is in More layers. */
-function LayersPanel({ onMore }: { onMore: () => void }) {
-  const { chips } = usePanel();
-  const { restrooms, setRestrooms } = useMapState();
-  const restroomsOn = useFlag("restrooms");
-  const trains = chips.find((c) => c.id === "liveTrains");
-  const buses = chips.find((c) => c.id === "liveBuses");
-  return (
-    <div role="group" aria-label="Map layers" data-testid="layers-panel" className={`flex w-[232px] flex-col ${FLOAT}`}>
-      {trains ? <LayerRow icon={<TrainIcon />} label="Live trains" on={trains.active} onToggle={trains.onToggle} /> : null}
-      {buses ? <LayerRow icon={<BusIcon />} label="Live buses" on={buses.active} onToggle={buses.onToggle} /> : null}
-      {restroomsOn ? <LayerRow icon={<RestroomIcon />} label="Restrooms" on={restrooms} onToggle={() => setRestrooms(!restrooms)} /> : null}
-      <div className="mx-2 my-1 h-px bg-[#263449]" />
-      <button type="button" onClick={onMore} className="flex min-h-12 items-center justify-between rounded-[12px] px-2 text-[14px] font-medium text-[#cbd5e1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]">
-        <span>More layers</span><span aria-hidden>›</span>
-      </button>
-    </div>
-  );
 }
 
 /** Top / Aerial / Closer / Street: the app's camera levels, as a menu of radio items. */
@@ -158,21 +122,22 @@ export function MapChrome() {
   const { map, bearing, pitch } = useCamera();
   const line = useSelectedLine();
   const followed = useFollowed();
-  const { setDrawerOpen } = usePanel();
-  const [open, setOpen] = useState<"layers" | "view" | null>(null);
+  // One dropdown at a time across the menu row and this view menu.
+  const open = useOpenMenu() === "view" ? "view" : null;
+  const setOpen = (v: "view" | null) => setOpenMenu(v);
   const stack = useRef<HTMLDivElement>(null);
   const rotated = Math.abs(bearing) > 0.5 || pitch > 0.5;
 
   // A tap anywhere else, or Escape, closes the open panel or menu.
   useEffect(() => {
     if (!open) return;
-    const down = (e: PointerEvent) => { if (!stack.current?.contains(e.target as Node)) setOpen(null); };
-    const key = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(null); };
+    const down = (e: PointerEvent) => { if (!stack.current?.contains(e.target as Node)) setOpenMenu(null); };
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") setOpenMenu(null); };
     document.addEventListener("pointerdown", down);
     window.addEventListener("keydown", key);
     return () => { document.removeEventListener("pointerdown", down); window.removeEventListener("keydown", key); };
   }, [open]);
-  useEffect(() => { if (line || followed) setOpen(null); }, [line, followed]);
+  useEffect(() => { if ((line || followed) && open) setOpenMenu(null); }, [line, followed, open]);
 
   const top = "calc(env(safe-area-inset-top) + 16px)";
   // Following: the follow card owns the top; the locate button sits under it.
@@ -190,31 +155,19 @@ export function MapChrome() {
   }
   return (
     <div ref={stack} data-testid="map-chrome" className="pointer-events-none absolute right-4 z-40 flex flex-col items-end gap-2.5" style={{ top }}>
-      <button type="button" aria-label="Map layers" aria-expanded={open === "layers"} data-testid="layers-button"
-        onClick={() => setOpen(open === "layers" ? null : "layers")} className={`${ROUND} ${open === "layers" ? LIGHT : DARK} pointer-events-auto`}>
-        <LayersIcon />
-      </button>
-      {open === "layers" ? (
-        <div className="pointer-events-auto">
-          <LayersPanel onMore={() => { setOpen(null); setDrawerOpen(true); }} />
-        </div>
-      ) : (
-        <>
-          <div className="relative">
-            <button type="button" aria-label="Change view" aria-haspopup="menu" aria-expanded={open === "view"} data-testid="view-button"
-              onClick={() => setOpen(open === "view" ? null : "view")} className={`${ROUND} ${open === "view" ? LIGHT : DARK} pointer-events-auto`}>
-              <ViewIcon />
-            </button>
-            {open === "view" ? (
-              <div className="pointer-events-auto absolute right-[52px] top-0">
-                <ViewMenu pitch={pitch} onPick={() => setOpen(null)} />
-              </div>
-            ) : null}
+      <div className="relative">
+        <button type="button" aria-label="Change view" aria-haspopup="menu" aria-expanded={open === "view"} data-testid="view-button"
+          onClick={() => setOpen(open === "view" ? null : "view")} className={`${ROUND} ${open === "view" ? LIGHT : DARK} pointer-events-auto`}>
+          <ViewIcon />
+        </button>
+        {open === "view" ? (
+          <div className="pointer-events-auto absolute right-[52px] top-0">
+            <ViewMenu pitch={pitch} onPick={() => setOpen(null)} />
           </div>
-          <LocateButton map={map} />
-          {rotated && map ? <Compass map={map} bearing={bearing} /> : null}
-        </>
-      )}
+        ) : null}
+      </div>
+      <LocateButton map={map} />
+      {rotated && map ? <Compass map={map} bearing={bearing} /> : null}
     </div>
   );
 }

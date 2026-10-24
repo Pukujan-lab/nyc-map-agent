@@ -16,6 +16,7 @@ import { useAreas } from "@/lib/geo/useAreas";
 import { useFilters } from "@/lib/datasets/useFilters";
 import { PlaceDetails } from "@/components/PlaceDetails";
 import { MapPanel } from "@/components/MapPanel";
+import { MenuRow } from "@/components/MenuRow";
 import { usePanel } from "@/lib/store/PanelContext";
 import { MapStatusChip } from "@/components/MapStatusChip";
 import { MapView } from "@/components/MapView";
@@ -62,6 +63,8 @@ export default function Index() {
   const route = routeQuery.data ?? null;
 
   const blockDensity = useFlag("blockDensity");
+  // Agent-first home (#370): every menu opens from the top-left menu row.
+  const agentHome = useFlag("agentHome");
   const model = useMemo(() => {
     // Every view re-scores a combined model, so every populated block (noise
     // or crash) exists to carry its detail through.
@@ -225,6 +228,7 @@ export default function Index() {
       )}
       <FeatureOverlays />
       <ContextCleanChip />
+      {agentHome ? <MenuRow onOpenDashboard={() => setControlsOpen(true)} onOpenSources={() => setSourcesOpen(true)} /> : null}
 
       <MapPanel
         isDesktop={isDesktop}

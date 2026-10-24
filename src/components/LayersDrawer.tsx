@@ -334,6 +334,8 @@ export function LayersDrawer({
             <Pill on={opts.buildings === "3d"} onClick={() => setOptions({ buildings: "3d" })}>3D buildings</Pill>
           </div>
           {home ? null : <p className="text-[13px] text-muted-foreground">Rotate: right-drag or Ctrl+drag</p>}
+          {/* Home (#370): Theme lives in Settings on the menu row. */}
+          {home ? null : <>
           <div className="text-[13px] text-muted-foreground">Theme</div>
           <div className="flex flex-wrap gap-[var(--sp-2)]" role="radiogroup" aria-label="Theme">
             {CHOICES.map((id) => (
@@ -342,9 +344,11 @@ export function LayersDrawer({
               </Pill>
             ))}
           </div>
+          </>}
         </Section>
 
-        <Section title="Advanced" hidden={!advanced.some((a) => match(a.label)) && !match("advanced")}>
+        {/* Home (#370): these moved to Settings and City data on the menu row. */}
+        <Section title="Advanced" hidden={home || (!advanced.some((a) => match(a.label)) && !match("advanced"))}>
           <div className="flex flex-wrap gap-[var(--sp-2)]">
             {advanced.filter((a) => match(a.label) || match("advanced")).map((a) => <Pill key={a.label} on={a.on} onClick={a.onClick}>{a.label}</Pill>)}
           </div>

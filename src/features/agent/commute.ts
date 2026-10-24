@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { z } from "zod";
+import { COMMUTE_KEY, HOME_WORK_KEY, MEMORY_CHANGED, remembers } from "@/lib/memory/memory";
 import { sameStation } from "@/lib/transit/serviceChanges";
 import type { MapPoint, Trip, TripCore } from "./schema";
 
@@ -10,9 +11,9 @@ import type { MapPoint, Trip, TripCore } from "./schema";
  */
 
 /** Same storage key and shape as the Home and Work pills from #327, so a spot saved there shows here. */
-export const SAVED_PLACES_KEY = "nma.homeWork";
+export const SAVED_PLACES_KEY = HOME_WORK_KEY;
 /** The last trip planned between Home and Work, one per direction. */
-export const USUAL_KEY = "nma.commute";
+export const USUAL_KEY = COMMUTE_KEY;
 const CHANGED = "nma:homeWork";
 
 const spot = z.object({
@@ -46,6 +47,8 @@ function readJson(key: string, storage: Store | undefined): Record<string, unkno
 }
 
 export function readHomeWork(storage: Store | undefined = local()): HomeWork {
+  // Home & Work paused in What we remember: nothing is read (and it was cleared).
+  if (!remembers("homeWork")) return { home: null, work: null };
   const raw = readJson(SAVED_PLACES_KEY, storage);
   const home = spot.safeParse(raw.home);
   const work = spot.safeParse(raw.work);
@@ -59,9 +62,11 @@ export function useHomeWork(): HomeWork {
     const reread = () => setPlaces(readHomeWork());
     window.addEventListener("storage", reread);
     window.addEventListener(CHANGED, reread);
+    window.addEventListener(MEMORY_CHANGED, reread);
     return () => {
       window.removeEventListener("storage", reread);
       window.removeEventListener(CHANGED, reread);
+      window.removeEventListener(MEMORY_CHANGED, reread);
     };
   }, []);
   return places;
@@ -125,12 +130,14 @@ export function usualFromTrip(trip: Trip): UsualTrip | null {
 }
 
 export function readUsual(to: CommuteTo, storage: Store | undefined = local()): UsualTrip | null {
+  if (!remembers("rides")) return null;
   const parsed = usual.safeParse(readJson(USUAL_KEY, storage)[to]);
   return parsed.success ? parsed.data : null;
 }
 
 /** Remember a planned trip as the usual commute when it runs between Home and Work. */
 export function rememberCommute(trip: Trip, storage: Pick<Storage, "getItem" | "setItem"> | undefined = local()): CommuteTo | null {
+  if (!remembers("rides")) return null;
   const to = commuteOf(trip, readHomeWork(storage));
   const u = to ? usualFromTrip(trip) : null;
   if (!to || !u || !storage) return null;

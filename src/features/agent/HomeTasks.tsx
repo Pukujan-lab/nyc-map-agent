@@ -37,7 +37,7 @@ export function TaskButtons({ on }: { on: TaskHandlers }) {
 }
 
 /** A route bullet in the line's colour (MTA blue when the planner gave none). */
-function Bullet({ ride, size, lines }: { ride: Pick<UsualRide, "route" | "color">; size: "lg" | "sm"; lines?: SubwayStations["routes"] }) {
+export function Bullet({ ride, size, lines }: { ride: Pick<UsualRide, "route" | "color">; size: "lg" | "sm"; lines?: SubwayStations["routes"] }) {
   const line = lines?.[ride.route];
   return (
     <span
@@ -52,7 +52,7 @@ function Bullet({ ride, size, lines }: { ride: Pick<UsualRide, "route" | "color"
 
 const GLASS = "pointer-events-auto rounded-[20px] border bg-[#0b1220]/50 backdrop-blur-[14px]";
 
-async function fetchAlerts() {
+export async function fetchAlerts() {
   const res = await fetch("/api/transit/alerts");
   if (!res.ok) throw new Error(`alerts ${res.status}`);
   return alertsBody.parse(await res.json()).alerts;

@@ -44,6 +44,8 @@ import { closeAsk, useAskRequest } from "@/lib/agent/streetContext";
 import { AgentHome, AnswerCard, WorkingPanel } from "./AgentHome";
 import { DailyCard, TaskButtons } from "./HomeTasks";
 import { rememberCommute, useHomeWork } from "./commute";
+import { rememberChat, rememberLookup } from "@/lib/memory/memory";
+import { useVoicePrefs } from "@/lib/voice/voicePrefs";
 import { useFollowed } from "@/lib/transit/follow";
 import { useLinesControl } from "@/lib/transit/linesControl";
 import { useStationHelp } from "@/lib/underground/stationHelp";
@@ -92,7 +94,10 @@ export default function AgentOverlay() {
   const [busy, setBusy] = useState(false);
   const [trip, setTrip] = useState<Trip | null>(null);
   const [mode, setMode] = useState<TripMode>("transit");
-  const [wake, setWake] = useState(false);
+  const [wakeClassic, setWake] = useState(false);
+  // Home: voice settings live in the Settings menu (#370).
+  const voicePrefs = useVoicePrefs();
+  const wake = home ? voicePrefs.wake : wakeClassic;
   const [mapTime, setMapTime] = useState<string | null>(null);
   // Street weather forecasts the trip's departure hour instead of now.
   useEffect(() => {
@@ -252,6 +257,8 @@ export default function AgentOverlay() {
       return;
     }
     pendingQuestion.current = null;
+    // What we remember (#370): the question, on this device, for 30 days, while Chats is on.
+    if (home) rememberChat(q);
     const reply: Msg = { id: crypto.randomUUID(), role: "assistant", content: "" };
     setMessages([...history, reply]);
     setBusy(true);
@@ -329,6 +336,15 @@ export default function AgentOverlay() {
   useEffect(() => {
     if (trip) rememberCommute(trip);
   }, [trip]);
+  // Home: the trip joins "Looked up" in My day (this device only; exact points only with Exact location on).
+  useEffect(() => {
+    if (home && trip) rememberLookup({ from: { label: trip.origin.label, at: trip.origin.at }, to: { label: trip.destination.label, at: trip.destination.at }, routes: trip.routes, mode: trip.mode });
+  }, [home, trip]);
+  // Home: "Speak answers" in Settings.
+  const { setMuted } = speech;
+  useEffect(() => {
+    if (home) setMuted(!voicePrefs.speak);
+  }, [home, voicePrefs.speak, setMuted]);
 
   const ModeIcon = MODES.find((m) => m.id === mode)!.Icon;
   const modes = MODES.filter((m) => m.id !== "drive" || driveOn);
