@@ -89,7 +89,9 @@ export async function weatherAt([lon, lat]: LngLatTuple, localIso: string) {
   const q = new URLSearchParams({ latitude: String(lat), longitude: String(lon), hourly: "temperature_2m,precipitation_probability,weather_code", timezone: "America/New_York", forecast_days: "7" });
   const h = meteoSchema.parse(await getJson(`https://api.open-meteo.com/v1/forecast?${q}`)).hourly;
   const hour = localIso.slice(0, 13);
-  const i = Math.max(0, h.time.findIndex((t) => t.startsWith(hour)));
+  const i = h.time.findIndex((t) => t.startsWith(hour));
+  // Past the 7-day forecast (or before it): say nothing rather than another hour's weather.
+  if (i < 0) throw new Error(`No forecast for ${hour}`);
   return { time: h.time[i], tempC: h.temperature_2m[i], precipPct: h.precipitation_probability[i] ?? 0, summary: WMO[h.weather_code[i]] ?? "Mixed" };
 }
 
@@ -161,6 +163,14 @@ export function nearestRestrooms(rows: RestroomRow[], at: LngLatTuple, n = 3): R
 }
 
 /* ---------- planned work / service alerts: MTA GTFS-rt alerts (JSON flavour) ---------- */
+/**
+ * Is an alert in force at `atEpochS`? GTFS-rt active periods: no period means
+ * always; a missing start or end is open-ended. Planned work for a future trip
+ * counts only when one of its periods covers that trip's time.
+ */
+export function activeAt(periods: Array<{ start?: number; end?: number }>, atEpochS: number): boolean {
+  return periods.length === 0 || periods.some((p) => (p.start || 0) <= atEpochS && atEpochS <= (p.end || Infinity));
+}
 const alertSchema = z.object({
   entity: z.array(z.object({ alert: z.object({
     active_period: z.array(z.object({ start: z.number().optional(), end: z.number().optional() })).default([]),
@@ -173,7 +183,7 @@ export async function serviceAlerts(routes: string[], atEpochS: number): Promise
   const out = new Set<string>();
   for (const { alert } of data.entity) {
     if (!alert.informed_entity.some((e) => e.route_id && routes.includes(e.route_id))) continue;
-    const active = alert.active_period.length === 0 || alert.active_period.some((p) => (p.start ?? 0) <= atEpochS && atEpochS <= (p.end ?? Infinity));
+    const active = activeAt(alert.active_period, atEpochS);
     const text = alert.header_text?.translation.find((t) => !t.language || t.language === "en")?.text;
     if (active && text) out.add(text.replace(/\s+/g, " ").slice(0, 220));
   }
@@ -192,7 +202,7 @@ const changeSchema = z.object({
 export async function stationServiceChanges(atEpochS: number): Promise<ServiceChange[]> {
   const data = changeSchema.parse(await getJson("https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys%2Fsubway-alerts.json"));
   return data.entity.flatMap(({ id, alert }) => {
-    const active = alert.active_period.length === 0 || alert.active_period.some((p) => (p.start ?? 0) <= atEpochS && atEpochS <= (p.end ?? Infinity));
+    const active = activeAt(alert.active_period, atEpochS);
     const text = alert.header_text?.translation.find((t) => !t.language || t.language === "en")?.text;
     if (!active || !text) return [];
     return serviceChanges({ id, text, routes: [...new Set(alert.informed_entity.map((e) => e.route_id).filter((r): r is string => Boolean(r)))] });

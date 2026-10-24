@@ -176,6 +176,8 @@ export function tripBrief(t: Trip) {
     elevatorOutages: t.elevators,
     hazards: t.hazards,
     exitAdvice: t.exitAdvice,
+    /** Present for a trip planned ahead: say it, so nobody expects live delays for tomorrow. */
+    whenNote: t.scheduled?.note,
     roadNotes: t.context.map((c) => c.text),
     missingData: t.mode === "drive" ? t.stubbed : undefined,
   };

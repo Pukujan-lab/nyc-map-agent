@@ -6,7 +6,7 @@ import { mockNetwork } from "./mocks";
 const trip = JSON.parse(readFileSync(new URL("./fixtures/agent-trip.json", import.meta.url), "utf8")) as Record<string, unknown>;
 const nd = (evs: unknown[]) => evs.map((e) => JSON.stringify(e)).join("\n") + "\n";
 
-test("smart mode: trip question draws the route, opens the trip card and plays the preview", async ({ page, context }) => {
+test("smart mode: trip question draws the route, opens the trip card and waits for Play", async ({ page, context }) => {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 40.7359, longitude: -73.9903 });
   await mockNetwork(page);
@@ -43,10 +43,19 @@ test("smart mode: trip question draws the route, opens the trip card and plays t
   await expect(page.getByText("Take the 4 and use the NW exit on E 41 St.")).toBeVisible();
   await expect(page.getByText(/Use the NW exit on E 41 St at Grand Central-42 St/).first()).toBeVisible();
 
+  // Asking for the trip draws it and offers Play; nothing plays on its own.
+  await expect(page.getByRole("region", { name: "Trip preview" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Play trip preview" })).toBeVisible();
+
   await page.getByLabel("Ask the assistant").fill("preview it");
   await page.getByRole("button", { name: "Send" }).click();
   const bar = page.getByRole("region", { name: "Trip preview" });
   await expect(bar).toBeVisible();
+  // Loaded at the agent's speed, paused until the person presses Play.
+  await expect(bar.getByRole("button", { name: "30x", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await bar.getByRole("button", { name: "Play preview" }).click();
+  await bar.getByRole("button", { name: "5x", exact: true }).click();
+  await expect(bar.getByRole("button", { name: "5x", exact: true })).toHaveAttribute("aria-pressed", "true");
   await bar.getByRole("button", { name: "2x", exact: true }).click();
   await expect(bar.getByRole("button", { name: "2x", exact: true })).toHaveAttribute("aria-pressed", "true");
   await bar.getByRole("button", { name: "Pause preview" }).click();

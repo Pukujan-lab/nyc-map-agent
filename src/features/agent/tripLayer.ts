@@ -37,9 +37,11 @@ export function tripToGeoJson(trip: Trip): GeoJSON.FeatureCollection {
   return { type: "FeatureCollection", features };
 }
 
-export function showTrip(map: MapLibreMap, trip: Trip): void {
+/** Draw the trip and fit the camera to it; `fit: false` only redraws (a preview owns the camera). */
+export function showTrip(map: MapLibreMap, trip: Trip, { fit = true }: { fit?: boolean } = {}): void {
   ensure(map);
   (map.getSource(SRC) as GeoJSONSource).setData(tripToGeoJson(trip));
+  if (!fit) return;
   const all = trip.legs.flatMap((l) => ("coords" in l ? l.coords : [[l.portal.lon, l.portal.lat] as LngLatTuple]));
   const lons = all.map((c) => c[0]);
   const lats = all.map((c) => c[1]);

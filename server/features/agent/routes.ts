@@ -37,13 +37,15 @@ export function systemPrompt(nowLocal: string, location: { lon: number; lat: num
   return [
     ...(street ? [street] : []),
     "You are the NYC Map's trip assistant. Answers are spoken aloud: 2-4 short sentences, no markdown, no lists.",
-    `Now is ${nowLocal} in New York. Resolve relative times ("tomorrow at 9am") to local New York time YYYY-MM-DDTHH:MM.`,
+    `Now is ${nowLocal} in New York. Pass the user's time words as they said them ("tomorrow at 9am", "now") to the trip and weather tools; the server resolves them in New York time.`,
     location
       ? `The user shared their exact location: longitude ${location.lon}, latitude ${location.lat}. Use "here" for it in tools; do not repeat the coordinates back.`
       : 'The user\'s location is unknown. If they say "here" or need a start point, tell them to tap Use my location under your reply, or to type a starting address. That button is already on screen.',
     `The user's mode chip is ${mode}: use drive_plan for drive, route_walk for walk, transit_plan for transit, unless they ask otherwise.`,
-    "For a drive: call drive_plan, then showRoute, openPanel, playFlythrough; answer with ETA, slow segments, closures, tolls and only the parking hints the tool returned.",
-    "For a trip question: call transit_plan, then showRoute, openPanel and playFlythrough with its tripId (speed 10), then answer with: the recommended itinerary (the first one; it arrives earliest) and how it compares with the alternatives in plain words (e.g. \"The Q53 SBS is 20 minutes faster than the subway\"), lines, ETA, weather at that time, any planned work, the recommended exit said plainly (e.g. \"Use the NE exit near East 42nd Street & Lexington Avenue\"), and elevator outages.",
+    "For a drive: call drive_plan, then showRoute and openPanel; answer with ETA, slow segments, closures, tolls and only the parking hints the tool returned.",
+    "The trip preview never starts on its own: the user presses Play on the trip card. Call playFlythrough only when they ask to preview or play a trip, and say it is ready to play.",
+    "When a trip result has whenNote, it is planned ahead: say the conditions known for that time (planned work, skipped stops, the forecast) and say plainly that live delays are not known yet.",
+    "For a trip question: call transit_plan, then showRoute and openPanel with its tripId, then answer with: the recommended itinerary (the first one; it arrives earliest) and how it compares with the alternatives in plain words (e.g. \"The Q53 SBS is 20 minutes faster than the subway\"), lines, ETA, weather at that time, any planned work, the recommended exit said plainly (e.g. \"Use the NE exit near East 42nd Street & Lexington Avenue\"), and elevator outages.",
     'For "arrive by" questions set arriveBy true on transit_plan; otherwise the time is a departure time.',
     "For a restroom or toilet question: call nearest_restroom and answer with the closest one's name, distance and hours if known.",
     "Buttons that show your answer on the map (route, stops, skipped stops, crashes, restroom, places) appear under your reply on their own; do not list them.",
@@ -67,6 +69,9 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
   const location = parsed.data.location ?? (context ? { lon: context.lon, lat: context.lat } : null);
   const enc = new TextEncoder();
   const modelId = process.env.INFERHUB_MODEL ?? DEFAULT_MODEL;
+  // The asker's clock resolves "tomorrow"; a missing or broken one falls back to the server's.
+  const asked = now ? new Date(now) : null;
+  const clock = asked && Number.isFinite(asked.getTime()) ? asked : new Date();
 
   const body = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -81,9 +86,9 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
         const model = opts.model ?? defaultModel();
         const result = streamText({
           model,
-          system: systemPrompt(toNyLocal(now ? new Date(now) : new Date()), location, mode, context),
+          system: systemPrompt(toNyLocal(clock), location, mode, context),
           messages,
-          tools: makeTools({ location, emit: (command) => send({ type: "command", command }), actions: (a) => actions.add(a), deps: opts.deps, drive: resolveFlags({ env: process.env.VITE_FLAGS, advancedMode: false }).agentDrive }),
+          tools: makeTools({ location, now: clock, emit: (command) => send({ type: "command", command }), actions: (a) => actions.add(a), deps: opts.deps, drive: resolveFlags({ env: process.env.VITE_FLAGS, advancedMode: false }).agentDrive }),
           stopWhen: stepCountIs(8),
           maxRetries: 1,
           // The default handler console.logs the raw provider error; keep logs to the request id only.
