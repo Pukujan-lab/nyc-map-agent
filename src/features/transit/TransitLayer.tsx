@@ -26,6 +26,7 @@ import { useXray, xrayPrims } from "./xray";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { useFlag } from "@/lib/flags";
 import { usePanel, usePanelChip, usePanelMode, usePanelSearch, type SearchProvider } from "@/lib/store/PanelContext";
+import { pickRouteVehicle, registerRouteFollower } from "@/lib/transit/routeFollow";
 import { followRig, rememberFollowOrigin, setFollowMode, setFollowed, stableHeading, takeFollowRestore, useFollowMode, useFollowed } from "./follow";
 import { followActionForMapClick } from "./followClick";
 import { publishSubway } from "@/lib/agent/streetContext";
@@ -578,6 +579,10 @@ export default function TransitLayer() {
     } else {
       headingHold.current = stableHeading(headingHold.current.bearing, fv.bearing, headingHold.current.streak);
     }
+    if (homeRef.current) {
+      m.jumpTo({ center: [fv.lon, fv.lat], zoom: fv.system === "bus" ? 15.5 : 14.8, pitch: 0, bearing: 0 });
+      return;
+    }
     const { eye, look } = followRig(f.followMode, headingHold.current.bearing, fv.z ?? 0);
     const at = (dx: number, dy: number) => new LngLat(fv.lon + dx / (111_320 * Math.cos((fv.lat * Math.PI) / 180)), fv.lat + dy / 111_320);
     m.jumpTo(m.calculateCameraOptionsFromTo(at(eye[0], eye[1]), eye[2], at(look[0], look[1]), look[2]));
@@ -646,7 +651,8 @@ export default function TransitLayer() {
   }, [map]);
   const alerted = useMemo(() => alertedRoutes(alerts.data?.alerts), [alerts.data]);
   // The selected bus's route comes from the feed, not the animated positions, so it changes only with data.
-  const selBusId = show.routes.length && selectedKey?.startsWith("bus:") ? selectedKey.slice(4) : "";
+  const busKey = followedKey?.startsWith("bus:") ? followedKey : selectedKey;
+  const selBusId = show.routes.length && busKey?.startsWith("bus:") ? busKey.slice(4) : "";
   const selBusFeedRoute = selBusId ? buses.data?.buses.find((b) => b.id === selBusId)?.route : undefined;
   const selBusRoute = selBusFeedRoute && show.routes.some((r) => r.toUpperCase() === selBusFeedRoute.toUpperCase()) ? selBusFeedRoute : "";
   const busRoute = useBusRoute(selBusRoute || undefined);
@@ -787,7 +793,7 @@ export default function TransitLayer() {
   useEffect(() => {
     if (!following) return;
     if (walking) stopWalk();
-    setTilted(true);
+    setTilted(!home);
   }, [following]); // eslint-disable-line react-hooks/exhaustive-deps
   // Snapshot the view before the chase camera moves it. Stop following eases back here.
   useEffect(() => {
@@ -899,6 +905,19 @@ export default function TransitLayer() {
       if (stars.notify && "Notification" in window && Notification.permission === "granted") new Notification("NYC transit", { body: a.text });
     }
   }, [alerts.data, stars]);
+
+  useEffect(() => {
+    registerRouteFollower((request) => {
+      const pick = pickRouteVehicle([...display.current.values()], request);
+      if (!pick) return false;
+      setDrawerOpen(false);
+      setSelectedLine(request.system === "subway" ? lineOf(request.route) : null, pick.key);
+      setFollowMode("chase");
+      setFollowed(pick.key);
+      return true;
+    });
+    return () => registerRouteFollower(null);
+  }, [setDrawerOpen]);
 
   // "Follow a train" on the line panel: the tapped train, else the one nearest the map centre.
   const followLine = useCallback(() => {
@@ -1067,9 +1086,9 @@ export default function TransitLayer() {
       </Source>
       <Source id="transit-bus-route" type="geojson" data={busRouteFc}>
         <Layer id="transit-bus-route-line" type="line" filter={["==", ["get", "kind"], "line"]} layout={{ "line-cap": "round", "line-join": "round" }}
-          paint={{ "line-color": theme.bus, "line-width": ["interpolate", ["linear"], ["zoom"], 11, 2.5, 16, 5], "line-opacity": 0.85 }} />
+          paint={{ "line-color": home ? "#0ea5e9" : theme.bus, "line-width": home ? 8 : ["interpolate", ["linear"], ["zoom"], 11, 2.5, 16, 5], "line-opacity": 0.85 }} />
         <Layer id="transit-bus-route-stop" type="circle" filter={["==", ["get", "kind"], "stop"]}
-          paint={{ "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 2, 16, 4.5], "circle-color": "#ffffff", "circle-stroke-color": theme.bus, "circle-stroke-width": 1.5 }} />
+          paint={{ "circle-radius": home ? 7 : ["interpolate", ["linear"], ["zoom"], 11, 2, 16, 4.5], "circle-color": home ? "#0e1726" : "#ffffff", "circle-stroke-color": home ? "#ffffff" : theme.bus, "circle-stroke-width": home ? 3 : 1.5 }} />
         <Layer id="transit-bus-route-stop-name" type="symbol" minzoom={15} filter={["==", ["get", "kind"], "stop"]}
           layout={{ "text-field": ["get", "name"], "text-size": 10, "text-font": ["Noto Sans Regular"], "text-offset": [0, 1], "text-anchor": "top", "text-optional": true }}
           paint={{ "text-color": theme.label_, "text-halo-color": theme.land, "text-halo-width": 1.5 }} />

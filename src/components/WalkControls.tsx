@@ -1,3 +1,4 @@
+import { useFlag } from "@/lib/flags";
 import type { PointerEvent } from "react";
 import {
   ArrowLeft,
@@ -74,6 +75,7 @@ export function WalkControls({
   onInput,
   onAsk,
 }: WalkControlsProps) {
+  const home = useFlag("agentHome");
   const pad = (label: string, icon: typeof ChevronUp, input: WalkInput) => (
     <HoldButton
       label={label}
@@ -90,7 +92,7 @@ export function WalkControls({
         centre, and a window switch while walking must not put the two on top
         of each other.
       */}
-      <div className="pointer-events-none absolute left-3 top-3 z-30 flex max-w-[calc(100%-1.5rem)]">
+      <div className={`pointer-events-none absolute left-3 z-30 flex max-w-[calc(100%-1.5rem)] ${home ? "top-[230px]" : "top-3"}`}>
         <div className="pointer-events-auto max-w-full rounded-xl border border-border/70 bg-card/90 py-1.5 pl-3 pr-1 shadow-xl backdrop-blur-md">
           <div className="flex items-center gap-2">
             <Camera
@@ -167,7 +169,7 @@ export function WalkControls({
       <div
         role="group"
         aria-label="Street-level camera controls"
-        className="absolute bottom-32 left-3 z-30 grid sm:bottom-20 grid-cols-3 grid-rows-3 gap-1"
+        className={`absolute z-30 grid grid-cols-3 grid-rows-3 gap-1 ${home ? "bottom-[310px] right-3" : "bottom-32 left-3 sm:bottom-20"}`}
       >
         <span />
         {pad("Walk forward", ChevronUp, {

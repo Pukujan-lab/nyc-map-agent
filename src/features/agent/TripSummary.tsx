@@ -57,7 +57,7 @@ function LegRow({ l }: { l: Leg }) {
 }
 
 function OtherOptions({ trip, onSelect }: { trip: Trip; onSelect?: (t: TripCore) => void }) {
-  if (!trip.alternatives.length) return null;
+  if (!trip.alternatives.length || !onSelect) return null;
   return (
     <div>
       <div className="text-xs font-semibold uppercase text-muted-foreground">Other options</div>

@@ -59,7 +59,7 @@ export function ViewSwitcher() {
     return () => { map.off("pitch", sync); };
   }, [map]);
   const street = useFlag("streetLevel");
-  // Agent-first home (#370): the view levels moved to Change view and X-ray to More layers; only the follow row stays.
+  // Agent-first home (#370): the view levels moved to Change view and X-ray to More layers; task follow screens own their controls.
   const home = useFlag("agentHome");
   const { walking, startWalk, stopWalk, navigate, setCameraHeight, cameraHeightM } = useMapState();
   const followed = useFollowed();
@@ -100,7 +100,7 @@ export function ViewSwitcher() {
     ro.observe(outer);
     return () => ro.disconnect();
   }, [rowKey]);
-  if (home && !followed) return null;
+  if (home) return null;
   return (
     <div
       data-testid="view-switcher"

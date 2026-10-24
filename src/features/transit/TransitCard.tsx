@@ -1,3 +1,8 @@
+import "@/components/task-screens.css";
+import { useFlag } from "@/lib/flags";
+import { useMapState } from "@/lib/store/MapStateContext";
+import { useStationHelp } from "@/lib/underground/stationHelp";
+import { X } from "lucide-react";
 import { formatStreetText } from "@/lib/streetName";
 import { liveProgress } from "./monotonic";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -309,6 +314,9 @@ const FOLLOW_CARD_GAP = 8;
  * "Stop following" stay in the view switcher.
  */
 export function FollowCard({ vehicle }: { vehicle: Vehicle }) {
+  const home = useFlag("agentHome");
+  const { seedChat, setChatOpen, chatOpen } = useMapState();
+  const stationHelp = useStationHelp();
   const now = useNow();
   const sys = vehicle.system === "bus" ? [] : [vehicle.system];
   const data = useTransitData(sys);
@@ -337,6 +345,7 @@ export function FollowCard({ vehicle }: { vehicle: Vehicle }) {
       : undefined);
   const destLoading = vehicle.system === "bus" && busTrip.isLoading && !busTrip.data;
   const openAlert = (a: TransitAlert) => {
+    if (home) setFollowed(null);
     presentAlert(a);
     setSnap("half");
   };
@@ -379,6 +388,36 @@ export function FollowCard({ vehicle }: { vehicle: Vehicle }) {
       root.style.removeProperty("--follow-card-h");
     };
   }, []);
+  if (home) {
+    const ask = (text: string) => { setFollowed(null); seedChat(text); setChatOpen(true); };
+    return <>
+      <div className="task-top flex items-center gap-2" style={{ top: "calc(env(safe-area-inset-top) + 16px)" }} ref={ref} data-testid="follow-heading">
+        <div className="task-panel flex min-w-0 flex-1 items-center gap-2.5 rounded-full py-1.5 pl-1.5 pr-3">
+          <span className={`flex h-8 min-w-8 shrink-0 items-center justify-center px-2 text-[13px] font-extrabold ${vehicle.system === "bus" ? "rounded-[10px]" : "rounded-full"}`} style={{ background: vehicle.system === "bus" ? "#0ea5e9" : vehicle.color }}>{vehicle.route}</span>
+          <div className="min-w-0"><h2 className="text-sm font-bold">Following your {vehicle.route}</h2><p className="text-xs text-amber-200">{vehicle.system === "bus" ? "Bus" : vehicle.grade === "underground" ? "Underground" : "Train"} · {grouped.delays.length ? "Delays reported" : "No delay reported"}</p></div>
+        </div>
+        <button type="button" className="task-action task-secondary h-11 w-11 shrink-0 p-0" aria-label="Stop following" onClick={stopFollowing}><X size={18} /></button>
+      </div>
+      {!chatOpen ? <section className="task-panel task-bottom flex flex-col gap-2.5 p-2.5" data-testid="follow-card" aria-label={`Following ${vehicle.route}`}>
+        <div className="flex flex-col gap-1.5 px-1 py-1">
+          {headId ? <button type="button" onClick={() => openStop(headId, headName, headEta)} className="flex min-h-11 items-center justify-between gap-2 text-left text-[17px] font-bold"><span>Next: {headName}</span><span className="shrink-0 text-[15px] text-amber-200">{headEta ? `${minutesUntil(headEta, now)} min` : "—"}</span></button> : <p>No upcoming stop reported</p>}
+          {stops.filter((s) => s.id !== headId).slice(0, 2).map((s) => <button key={s.id} type="button" data-testid="follow-stop" onClick={() => openStop(s.id, s.name, s.eta)} className="flex min-h-8 items-center justify-between gap-2 text-left text-[13px] text-slate-300"><span>{s.name}</span><span>{s.eta ? `${minutesUntil(s.eta, now)} min` : "—"}</span></button>)}
+          {dest ? <p data-testid="follow-dest" className="text-[13px] text-slate-300">To {dest.name}</p> : destLoading ? <p>Loading destination…</p> : null}
+        </div>
+        <h3 className="task-caption px-1">Notices on the {vehicle.route}</h3>
+        <div className="flex max-h-[150px] flex-col gap-2 overflow-y-auto">
+          {[...grouped.delays, ...grouped.notices].map((a) => <button key={a.id} type="button" data-testid={grouped.delays.includes(a) ? "follow-delay" : "follow-notice"} onClick={() => openAlert(a)} className="rounded-[14px] border border-slate-400/15 bg-slate-900/35 px-3 py-2.5 text-left text-sm">
+            <span className="font-semibold">{plainAlert(a.text)}</span><span className="mt-1 block text-[13px] text-slate-300">{alertTimeLabel(a) ?? "No time given"} · Show on map</span>
+          </button>)}
+          {!grouped.delays.length && !grouped.notices.length ? <p className="px-1 text-[13px] text-slate-300">No notices reported</p> : null}
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {vehicle.system === "bus" ? <button type="button" className="task-action bg-sky-500" onClick={() => ask(`Where should I get off the ${vehicle.route} bus for my trip?`)}>Where to get off</button> : <button type="button" className="task-action" onClick={() => { if (stationHelp) { setFollowed(null); stationHelp(headId ? stationOf(vehicle.system === "bus" ? "subway" : vehicle.system, headId) : undefined); } else ask(`Which exit should I take at ${headName}?`); }}>Exit help</button>}
+          <button type="button" className="task-action task-secondary" onClick={() => ask(`What are the other ways to make my ${vehicle.route} trip?`)}>Other ways</button>
+        </div>
+      </section> : null}
+    </>;
+  }
   return (
     <div className="pointer-events-none absolute z-30 flex justify-center top-[calc(env(safe-area-inset-top)+var(--edge)+var(--topbar-h)+var(--sp-2))] left-[max(var(--edge),var(--sheet-left,0px))] right-[var(--edge)] lg:right-[calc(var(--edge)+13rem+var(--sp-3))]">
       <div ref={ref} data-testid="follow-card" className="pointer-events-auto max-h-[min(52vh,440px)] w-[min(92vw,420px)] max-w-full overflow-y-auto rounded-xl border border-border bg-card/95 px-[var(--sp-3)] py-1.5 text-[12px] shadow-lg backdrop-blur-md">
