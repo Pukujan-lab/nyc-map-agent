@@ -1,6 +1,6 @@
 import { formatStreetText } from "@/lib/streetName";
 import { liveProgress } from "./monotonic";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Accessibility, Crosshair, ScanEye, Star, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { arrivalsAt, directionLabel, estimateTrain, minutesUntil, stationOf, SYSTEM_LABELS, type LiveSystem, type StaticSystem, type SystemId, type Vehicle } from "./model";
@@ -297,10 +297,16 @@ export function OutageRow({ o }: { o: Outage }) {
   );
 }
 
+/** Gap under the card matching --sp-2, so the phone Layers control clears it. */
+const FOLLOW_CARD_GAP = 8;
+
 /**
- * Follow mode's card (top centre): where the trip is going, the upcoming stops,
- * and the delay and notices are buttons. The camera switcher and "Stop following"
- * stay in the view switcher.
+ * Follow mode's card: where the trip is going, the upcoming stops, and the
+ * delay and notices are buttons. It sits below the top bar. On a phone its
+ * height is published as --follow-card-h so the Layers button and its menu
+ * start underneath the card. On a wide screen the card stays in the band
+ * between the left sheet and the Layers menu. The camera switcher and
+ * "Stop following" stay in the view switcher.
  */
 export function FollowCard({ vehicle }: { vehicle: Vehicle }) {
   const now = useNow();
@@ -353,9 +359,29 @@ export function FollowCard({ vehicle }: { vehicle: Vehicle }) {
     }
     setSnap("half");
   };
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const root = document.documentElement;
+    if (!el) return;
+    const publish = () => {
+      const h = Math.ceil(el.getBoundingClientRect().height) + FOLLOW_CARD_GAP;
+      root.style.setProperty("--follow-card-h", `${h}px`);
+    };
+    publish();
+    if (typeof ResizeObserver === "undefined") {
+      return () => root.style.removeProperty("--follow-card-h");
+    }
+    const ro = new ResizeObserver(publish);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      root.style.removeProperty("--follow-card-h");
+    };
+  }, []);
   return (
-    <div data-testid="follow-card" className="pointer-events-none absolute left-1/2 top-28 z-30 w-[min(92vw,420px)] -translate-x-1/2 lg:top-16">
-      <div className="pointer-events-auto max-h-[min(52vh,440px)] overflow-y-auto rounded-xl border border-border bg-card/95 px-[var(--sp-3)] py-1.5 text-[12px] shadow-lg backdrop-blur-md">
+    <div className="pointer-events-none absolute z-30 flex justify-center top-[calc(env(safe-area-inset-top)+var(--edge)+var(--topbar-h)+var(--sp-2))] left-[max(var(--edge),var(--sheet-left,0px))] right-[var(--edge)] lg:right-[calc(var(--edge)+13rem+var(--sp-3))]">
+      <div ref={ref} data-testid="follow-card" className="pointer-events-auto max-h-[min(52vh,440px)] w-[min(92vw,420px)] max-w-full overflow-y-auto rounded-xl border border-border bg-card/95 px-[var(--sp-3)] py-1.5 text-[12px] shadow-lg backdrop-blur-md">
         <div className="flex items-center gap-[var(--sp-2)]">
           <RouteBullet system={vehicle.system} route={vehicle.route} data={data} />
           <button type="button" className="min-w-0 flex-1 truncate text-left font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
