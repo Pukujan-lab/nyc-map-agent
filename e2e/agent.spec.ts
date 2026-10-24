@@ -30,7 +30,8 @@ test("smart mode: trip question draws the route, opens the trip card and waits f
     });
   });
 
-  await page.goto("/");
+  // The classic Ask sheet (agentHome off) keeps its own coverage here.
+  await page.goto("/?flags=-agentHome");
   await expect(page.locator("canvas.maplibregl-canvas").first()).toBeVisible();
   // Location is shared only from a tap on My location; then the rail offers to stop.
   await page.getByRole("button", { name: "Layers & filters", exact: true }).click();
@@ -80,7 +81,8 @@ test("a question in the desktop search bar is asked inside Ask the map", async (
     });
   });
 
-  await page.goto("/");
+  // The classic Ask sheet (agentHome off) keeps its own coverage here.
+  await page.goto("/?flags=-agentHome");
   await expect(page.locator("canvas.maplibregl-canvas").first()).toBeVisible();
   const box = await page.getByTestId("topbar").boundingBox();
   expect(box?.width ?? 0).toBeGreaterThan(600);
@@ -112,7 +114,8 @@ test("a from-here question offers Use my location, then plans the trip", async (
     });
   });
 
-  await page.goto("/");
+  // The classic Ask sheet (agentHome off) keeps its own coverage here.
+  await page.goto("/?flags=-agentHome");
   await expect(page.locator("canvas.maplibregl-canvas").first()).toBeVisible();
   await page.getByRole("button", { name: "Ask", exact: true }).click();
   await page.getByLabel("Ask the assistant").fill("How will my trip be tomorrow from here to Grand Central at 9am?");
