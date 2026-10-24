@@ -1,5 +1,5 @@
+import { DirectionsFromHere } from "@/components/DirectionsFromHere";
 import { Button } from "@/components/ui/button";
-import { useDataView } from "@/lib/store/DataViewContext";
 import { ACCESS_LABEL, KIND_LABEL, type PlaceToiletProps } from "./data";
 
 /** Access badge: "Anyone" or "Customers only", plus a wheelchair mark where OSM tags it. */
@@ -24,9 +24,8 @@ function AccessBadge({ place }: { place: PlaceToiletProps }) {
   );
 }
 
-/** A tapped shop / café toilet: name (panel title), access, source link, Directions. */
+/** A tapped shop / café toilet: name (panel title), access, source link, directions from here. */
 export function PlaceToiletSheet({ place, lon, lat }: { place: PlaceToiletProps; lon: number; lat: number }) {
-  const { setRoutePoint, setRoutePicking } = useDataView();
   const extras = [
     place.changingTable ? "Changing table" : null,
     place.fee === true ? "Fee" : place.fee === false ? "Free" : null,
@@ -39,18 +38,8 @@ export function PlaceToiletSheet({ place, lon, lat }: { place: PlaceToiletProps;
         <AccessBadge place={place} />
       </div>
       {extras.length ? <div className="text-muted-foreground">{extras.join(" · ")}</div> : null}
+      <DirectionsFromHere lon={lon} lat={lat} />
       <div className="flex flex-wrap gap-2 pt-1">
-        <Button
-          type="button"
-          size="sm"
-          className="h-8 text-[11px]"
-          onClick={() => {
-            setRoutePoint("end", { lon, lat });
-            setRoutePicking("start");
-          }}
-        >
-          Directions
-        </Button>
         <Button asChild type="button" size="sm" variant="outline" className="h-8 text-[11px]">
           <a href={place.url} target="_blank" rel="noreferrer">
             Source: OpenStreetMap

@@ -2,6 +2,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { buildStreetContext, closeAsk, openAsk } from "@/lib/agent/streetContext";
 import { followedTrain } from "@/lib/transit/follow";
 import { setMapInstance } from "@/lib/map/mapInstance";
+import { DirectionsFromHere } from "@/components/DirectionsFromHere";
 import { RestroomDetails } from "@/components/RestroomCard";
 import { usePanel, usePanelChip } from "@/lib/store/PanelContext";
 import { setAmbient } from "@/lib/ambient";
@@ -12,10 +13,12 @@ import { MapCompass } from "./MapCompass";
 import { ViewSwitcher } from "./ViewSwitcher";
 import { applyReadable } from "@/lib/map/readable";
 import { busStopAt, busStopIconOpacity, busStopTextOpacity } from "@/lib/map/busStops";
-import { applyPlaces, placesStale, usePlaces, withQuickPlaces } from "@/lib/map/places";
+import { applyPlaces, classesFor, placesStale, usePlaces, withQuickPlaces } from "@/lib/map/places";
+import { insetFilters } from "@/lib/map/miniStyle";
 import { useMapOptions } from "@/lib/map/mapOptions";
 import { applyBuildings, cityDetail, mapLevel, wantsFlatBuildings } from "@/lib/map/buildings";
 import { installLandmarkLabels } from "@/lib/map/landmarkLabels";
+import { setWalkEye } from "@/lib/map/walkEye";
 import { applyMapTheme, buildingEdge, setThemeCoords, usePalette } from "@/lib/theme";
 import { sharedCoords } from "@/lib/geo/sharedLocation";
 
@@ -669,17 +672,17 @@ export function MapView({
         const str = (k: string) => (typeof p[k] === "string" && p[k] ? p[k] : null);
         const name = str("name") ?? "Public restroom";
         showPanel({
-          id: `restroom:${name}`,
+          id: `restroom:${kiosk.lng.toFixed(5)},${kiosk.lat.toFixed(5)}`,
           title: name,
           subtitle: "Public restroom",
-          details: <RestroomDetails restroom={{ name, status: str("status"), hours: str("hours"), accessibility: str("accessibility"), operator: str("operator") }} />,
+          details: <RestroomDetails restroom={{ name, status: str("status"), hours: str("hours"), accessibility: str("accessibility"), operator: str("operator"), lon: kiosk.lng, lat: kiosk.lat }} />,
         });
         return;
       }
       const hit = restroomsMod.current?.restroomAt(event.target, event.point.x, event.point.y);
       if (hit) {
         showPanel({
-          id: `restroom:${hit.name}`,
+          id: `restroom:${hit.lon.toFixed(5)},${hit.lat.toFixed(5)}`,
           title: formatStreetText(hit.name),
           subtitle: "Public restroom",
           details: <RestroomDetails restroom={hit} />,
@@ -694,9 +697,12 @@ export function MapView({
           title: dir.name,
           subtitle: `Directory · ${shops.length} shops · © OpenStreetMap contributors`,
           details: (
-            <ul className="space-y-1 text-sm">
-              {shops.map((name) => <li key={name}>{name}</li>)}
-            </ul>
+            <div className="space-y-2">
+              <ul className="space-y-1 text-sm">
+                {shops.map((name) => <li key={name}>{name}</li>)}
+              </ul>
+              <DirectionsFromHere lon={dir.lng} lat={dir.lat} />
+            </div>
           ),
         });
         return;
@@ -708,12 +714,22 @@ export function MapView({
       if (walking) {
         const hit = eyePick(event.target, event.point.x, event.point.y);
         if (hit?.kind === "landmark") {
-          showPanel({ id: `landmark:${hit.landmark.id}`, title: hit.landmark.name, subtitle: "Landmark" });
+          showPanel({
+            id: `landmark:${hit.landmark.id}`,
+            title: hit.landmark.name,
+            subtitle: "Landmark",
+            details: <DirectionsFromHere lon={hit.landmark.lon} lat={hit.landmark.lat} />,
+          });
           return;
         }
         if (hit?.kind === "building") {
           if (typeof hit.props.school === "string" && hit.props.school) {
-            showPanel({ id: `school:${hit.props.school}`, title: hit.props.school, subtitle: "School · NYC DOE (LCGMS)" });
+            showPanel({
+              id: `school:${hit.props.school}`,
+              title: hit.props.school,
+              subtitle: "School · NYC DOE (LCGMS)",
+              details: <DirectionsFromHere lon={hit.lng} lat={hit.lat} />,
+            });
             return;
           }
           const shop = hit.props.store === 1 && hit.z < 4.5 ? signsMod.current?.storefrontAt(event.target, hit.lng, hit.lat) : null;
@@ -723,7 +739,12 @@ export function MapView({
               id: `storefront:${shop.lng},${shop.lat}:${shop.name}`,
               title: shop.name,
               subtitle: `${shop.cat ? `${shop.cat} · ` : ""}© OpenStreetMap contributors`,
-              details: shops.length ? <ul className="space-y-1 text-sm">{shops.map((name) => <li key={name}>{name}</li>)}</ul> : undefined,
+              details: (
+                <div className="space-y-2">
+                  {shops.length ? <ul className="space-y-1 text-sm">{shops.map((name) => <li key={name}>{name}</li>)}</ul> : null}
+                  <DirectionsFromHere lon={shop.lng} lat={shop.lat} />
+                </div>
+              ),
             });
             return;
           }
@@ -736,7 +757,12 @@ export function MapView({
       }
       const school = city3dMod.current?.schoolAt(event.target, event.point.x, event.point.y);
       if (school) {
-        showPanel({ id: `school:${school}`, title: school, subtitle: "School · NYC DOE (LCGMS)" });
+        showPanel({
+          id: `school:${school}`,
+          title: school,
+          subtitle: "School · NYC DOE (LCGMS)",
+          details: <DirectionsFromHere lon={event.lngLat.lng} lat={event.lngLat.lat} />,
+        });
         return;
       }
       // Neighbourhood / block complaint picks are analytics: Advanced only.
@@ -921,6 +947,16 @@ export function MapView({
   // their flag is on, remounted after a style reload, cleaned up otherwise.
   const flags = useFlags();
   const [toggledOn] = useFeatureToggles();
+  const inset = useMemo(() => insetFilters({
+    placeClasses: classesFor(withQuickPlaces(places, { businesses, health, parksPlaces, citibike })),
+    busStops: opts.busStops,
+    restrooms,
+    shops: toggledOn.has("restroomShops"),
+    parking: toggledOn.has("parking"),
+    events: toggledOn.has("events"),
+    ferry: toggledOn.has("ferry"),
+    schools: schoolIcons,
+  }), [places, businesses, health, parksPlaces, citibike, opts.busStops, restrooms, toggledOn, schoolIcons]);
   const mountedKey = FEATURES.filter((f) => f.layers && flags[f.id] && (!f.chip || toggledOn.has(f.chip.id)))
     .map((f) => f.id)
     .join(",");
@@ -1084,19 +1120,29 @@ export function MapView({
     // it stays pinned to the ground as usual.
     map.setCenterClampedToGround(!walking);
     applyStreetPalette(map, walking);
+    // Flat footprints are already the map option. Re-apply here: this effect
+    // runs after the city load, and the street texture arrives a moment later.
+    applyBuildings(map, flatBuildings, t.building, buildingEdge(t));
     // After the street palette, so time-of-day lighting re-tints on top of it.
     setAmbient({ walking });
     // The sidewalk texture arrives a moment later; repaint once it has.
-    if (walking) void loadStreetTextures(map).then(() => applyStreetPalette(map, true)).catch(() => {});
+    if (walking) {
+      void loadStreetTextures(map).then(() => {
+        applyStreetPalette(map, true);
+        applyBuildings(map, flatBuildings, t.building, buildingEdge(t));
+      }).catch(() => {});
+    }
     // At eye level basemap labels stand on the horizon and float in the sky,
-    // so they step aside while walking; our own route markers stay.
+    // so they step aside while walking; our own route markers stay. Restroom
+    // icons keep the filter's own visibility — street view still needs them.
     const own = new Set(Object.keys(SOURCE_IDS).map((k) => SOURCE_IDS[k as keyof typeof SOURCE_IDS] as string));
     for (const layer of map.getStyle().layers ?? []) {
       // Transit layers (station names + route bullets, #186) stand in the 3D scene and stay.
       if (layer.type !== "symbol" || own.has((layer as { source?: string }).source ?? "") || layer.id.startsWith("transit-")) continue;
+      if (layer.id === "restrooms") continue;
       map.setLayoutProperty(layer.id, "visibility", walking ? "none" : "visible");
     }
-  }, [ready, walking, styleEpoch]);
+  }, [ready, walking, styleEpoch, flatBuildings, t]);
 
   // The location card names the nearest corner from the baked sign points.
   useEffect(() => {
@@ -1208,6 +1254,7 @@ export function MapView({
       ? { lon: snapped.lon, lat: snapped.lat, bearing: snapped.bearing, pitch: WALK_PITCH }
       : { lon: target[0], lat: target[1], bearing: map.getBearing(), pitch: WALK_PITCH };
     eyeRef.current = eye;
+    setWalkEye(eye);
     map.easeTo({ ...eyeCamera(map, eye), duration: reducedMotion ? 0 : 900 });
     if (!snapped) {
       // No road tiles in view yet (e.g. entering from the citywide map): ask OSRM.
@@ -1240,6 +1287,7 @@ export function MapView({
     wasWalking.current = false;
     setWalkPlace(null);
     setTilted(false);
+    setWalkEye(null);
     const map = mapRef.current?.getMap();
     if (!map || !ready) return;
     eyeRef.current = null;
@@ -1580,7 +1628,7 @@ export function MapView({
         />
       ) : null}
       {walking && ready && mapRef.current ? (
-        <StreetMiniMap main={mapRef.current.getMap()} getEye={getEye} onExit={stopWalk} />
+        <StreetMiniMap main={mapRef.current.getMap()} getEye={getEye} onExit={stopWalk} filters={inset} />
       ) : null}
 
       {hover && !walking && canHover && !sheetOpen && analytics ? (

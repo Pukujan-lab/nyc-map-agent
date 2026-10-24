@@ -1,6 +1,4 @@
-import { Navigation } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { useDataView } from "@/lib/store/DataViewContext";
+import { DirectionsFromHere } from "@/components/DirectionsFromHere";
 
 export interface GarageProps {
   name: string;
@@ -12,9 +10,8 @@ export interface GarageProps {
   lat: number;
 }
 
-/** A tapped garage / lot: address, capacity if known, Directions. No live occupancy. */
+/** A tapped garage / lot: address, capacity if known, directions from here. No live occupancy. */
 export function ParkingCard({ garage }: { garage: GarageProps }) {
-  const { setRoutePoint, setRoutePicking } = useDataView();
   return (
     <div className="space-y-2 text-xs">
       {garage.address ? <div className="text-foreground">{garage.address}</div> : null}
@@ -22,18 +19,7 @@ export function ParkingCard({ garage }: { garage: GarageProps }) {
         {garage.capacity ? `${garage.capacity} spaces · ` : ""}
         {garage.source === "dcwp" ? "Licensed by NYC DCWP" : "OpenStreetMap"}
       </div>
-      <Button
-        type="button"
-        size="sm"
-        className="h-8 text-[11px]"
-        onClick={() => {
-          setRoutePoint("end", { lon: garage.lon, lat: garage.lat });
-          setRoutePicking("start");
-        }}
-      >
-        <Navigation className="h-3.5 w-3.5" />
-        Directions
-      </Button>
+      <DirectionsFromHere lon={garage.lon} lat={garage.lat} />
     </div>
   );
 }

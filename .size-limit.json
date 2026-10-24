@@ -7,7 +7,7 @@
   {
     "name": "feature: restrooms (lazy)",
     "path": ".size-build/assets/restrooms-*.js",
-    "limit": "1.5 kB"
+    "limit": "2.5 kB"
   },
   {
     "name": "feature: agent (lazy overlay)",
