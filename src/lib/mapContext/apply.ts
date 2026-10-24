@@ -89,21 +89,53 @@ export function planOps(layers: { id: string; type: string }[], c: MapContext): 
   return ops;
 }
 
-interface Rec { layer: string; kind: Op["kind"]; prop: string; original: unknown; applied: unknown }
+/** `original` is the app's intended value: what it last set, restored on exit. */
+interface Rec { layer: string; kind: Op["kind"]; prop: string; original: unknown; applied: unknown; make: Op["make"] }
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 const keyOf = (o: { layer: string; kind: string; prop: string }) => `${o.layer}|${o.kind}|${o.prop}`;
 
+type Setter = MapLike["setLayoutProperty"];
+
 export class ContextOverrides {
   private recs = new Map<string, Rec>();
-  constructor(private map: MapLike) {}
+  private rawLayout: Setter;
+  private rawPaint: Setter;
+
+  /**
+   * Wraps the map's setLayoutProperty / setPaintProperty so an app write to a
+   * value we override (a toggle, a React prop change, readable.ts) is recorded
+   * as the app's intended value: the override stays on top while the context
+   * lasts, and exit restores the app's latest value, not the stale one.
+   */
+  constructor(private map: MapLike) {
+    this.rawLayout = map.setLayoutProperty.bind(map);
+    this.rawPaint = map.setPaintProperty.bind(map);
+    map.setLayoutProperty = (id, prop, v) => this.intercept("layout", id, prop, v);
+    map.setPaintProperty = (id, prop, v) => this.intercept("paint", id, prop, v);
+  }
+
+  private intercept(kind: Op["kind"], layer: string, prop: string, v: unknown): unknown {
+    const raw = kind === "layout" ? this.rawLayout : this.rawPaint;
+    const r = this.recs.get(keyOf({ layer, kind, prop }));
+    if (!r) return raw(layer, prop, v);
+    r.original = v;
+    r.applied = r.make(v);
+    return raw(layer, prop, r.applied);
+  }
+
+  /** Unwrap the map's setters. Call after restoreAll. */
+  dispose(): void {
+    this.map.setLayoutProperty = this.rawLayout;
+    this.map.setPaintProperty = this.rawPaint;
+  }
 
   private get(r: { layer: string; kind: Op["kind"]; prop: string }): unknown {
     return r.kind === "layout" ? this.map.getLayoutProperty(r.layer, r.prop) : this.map.getPaintProperty(r.layer, r.prop);
   }
   private set(r: { layer: string; kind: Op["kind"]; prop: string }, v: unknown): boolean {
     try {
-      if (r.kind === "layout") this.map.setLayoutProperty(r.layer, r.prop, v);
-      else this.map.setPaintProperty(r.layer, r.prop, v);
+      if (r.kind === "layout") this.rawLayout(r.layer, r.prop, v);
+      else this.rawPaint(r.layer, r.prop, v);
       return true;
     } catch {
       return false; // a layer mid style-swap; the next sync retries
@@ -127,7 +159,7 @@ export class ContextOverrides {
       const original = prev && same(cur, prev.applied) ? prev.original : cur;
       const applied = o.make(original);
       if (!same(cur, applied) && !this.set(o, applied)) continue;
-      this.recs.set(k, { layer: o.layer, kind: o.kind, prop: o.prop, original, applied });
+      this.recs.set(k, { layer: o.layer, kind: o.kind, prop: o.prop, original, applied, make: o.make });
     }
   }
 

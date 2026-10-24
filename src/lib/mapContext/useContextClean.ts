@@ -91,6 +91,7 @@ export function useContextClean(): void {
         if (raf) cancelAnimationFrame(raf);
         resync.current = () => {};
         if (map.style) overrides.restoreAll();
+        overrides.dispose();
       };
     });
     return () => { off(); cleanup(); };

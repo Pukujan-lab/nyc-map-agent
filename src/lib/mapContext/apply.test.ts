@@ -113,6 +113,36 @@ describe("ContextOverrides", () => {
     expect(m.layers.find((l) => l.id === "road_minor")!.paint["line-opacity"]).toBe(0.5);
   });
 
+  it("keeps a layer the app hides during the context hidden after exit", () => {
+    const m = scene();
+    const o = new ContextOverrides(m);
+    o.sync(planOps(layersOf(m), subwayF)); // poi_r20 hidden by the override (it was visible)
+    m.setLayoutProperty("poi_r20", "visibility", "none"); // the app turns it off meanwhile
+    o.restoreAll();
+    expect(m.layers.find((l) => l.id === "poi_r20")!.layout.visibility).toBe("none");
+  });
+
+  it("keeps the override on top of an app write, then restores the app's latest value", () => {
+    const m = scene();
+    const o = new ContextOverrides(m);
+    o.sync(planOps(layersOf(m), subwayF));
+    const poi = m.layers.find((l) => l.id === "poi_r20")!;
+    const road = m.layers.find((l) => l.id === "road_minor")!;
+    poi.layout.visibility = "none";
+    m.setLayoutProperty("poi_r20", "visibility", "visible"); // the app turns it on: the context still hides it
+    expect(poi.layout.visibility).toBe("none");
+    m.setPaintProperty("road_minor", "line-opacity", 0.5); // a React prop change: still dimmed, from the new value
+    expect(road.paint["line-opacity"]).toBe(0.15);
+    m.setPaintProperty("transit-entrance", "circle-radius", 9); // not overridden: passes straight through
+    expect(m.layers.find((l) => l.id === "transit-entrance")!.paint["circle-radius"]).toBe(9);
+    o.restoreAll();
+    expect(poi.layout.visibility).toBe("visible");
+    expect(road.paint["line-opacity"]).toBe(0.5);
+    o.dispose();
+    m.setPaintProperty("road_minor", "line-opacity", 0.7);
+    expect(road.paint["line-opacity"]).toBe(0.7);
+  });
+
   it("leaves a layer the user switched off still off after restore", () => {
     const m = scene();
     m.layers.find((l) => l.id === "poi_r20")!.layout.visibility = "none";
