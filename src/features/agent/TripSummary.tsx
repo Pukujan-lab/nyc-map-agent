@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
 import { Ship } from "lucide-react";
@@ -43,17 +44,37 @@ function RouteBullet({ route, mode, color }: { route: string; mode?: string; col
   );
 }
 
-function LegRow({ l }: { l: Leg }) {
+function LegRow({ l, onLeg }: { l: Leg; onLeg?: (l: Leg) => void }) {
   const dur = "durationS" in l ? ` · ${Math.max(1, Math.round(l.durationS / 60))} min` : "";
+  // A step is a place: tapping it shows that stretch and its stops on the map.
+  const Row = ({ children }: { children: React.ReactNode }) => onLeg
+    ? <li><button type="button" onClick={() => onLeg(l)} className="w-full rounded-lg px-1 py-0.5 text-left hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{children}</button></li>
+    : <li>{children}</li>;
   if (l.kind === "ride" && l.fromStop) {
     return (
-      <li>
-        <span className="inline-flex items-center gap-1"><RouteBullet route={l.route} mode={l.mode} color={l.color} /> {l.mode === "bus" ? "Bus" : l.mode === "subway" ? "Train" : l.mode === "ferry" ? "Ferry" : "Train"}{l.headsign ? ` toward ${l.headsign}` : ""}{dur}</span>
-        <div className="text-xs">Board at {l.fromStop} · get off at {l.toStop}{l.numStops ? ` · ${l.numStops} stop${l.numStops === 1 ? "" : "s"}` : ""}</div>
-      </li>
+      <Row>
+        <span className="inline-flex items-center gap-1"><RouteBullet route={l.route} mode={l.mode} color={l.color} /> {l.mode === "bus" ? "Bus" : l.mode === "subway" ? "Train" : l.mode === "ferry" ? "Ferry" : "Train"}{dur}</span>
+        <div className="truncate text-xs">Get off at {l.toStop}{l.numStops ? ` · ${l.numStops} stop${l.numStops === 1 ? "" : "s"}` : ""}</div>
+      </Row>
     );
   }
-  return <li>{l.label}{dur}</li>;
+  return <Row><span className="block truncate">{l.label}{dur}</span></Row>;
+}
+
+function Steps({ legs, onLeg }: { legs: Leg[]; onLeg?: (l: Leg) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground">
+        Steps ({legs.length}) {open ? "▴" : "▾"}
+      </button>
+      {open ? (
+        <ol className="mt-1 list-decimal space-y-0.5 pl-5 text-muted-foreground">
+          {legs.map((l, i) => <LegRow key={i} l={l} onLeg={onLeg} />)}
+        </ol>
+      ) : null}
+    </div>
+  );
 }
 
 function OtherOptions({ trip, onSelect }: { trip: Trip; onSelect?: (t: TripCore) => void }) {
@@ -85,7 +106,7 @@ export function selectAlternative(trip: Trip, alt: TripCore): Trip {
 }
 
 /** Weather chip, lines, ETA, exit, planned work, elevators, driving context. Text only, no tooltips. */
-export function TripSummary({ trip, compact, mapTime, bodyOnly, onSelect }: { trip: Trip; compact?: boolean; mapTime?: string | null; bodyOnly?: boolean; onSelect?: (t: TripCore) => void }) {
+export function TripSummary({ trip, compact, mapTime, bodyOnly, onSelect, onLeg }: { trip: Trip; compact?: boolean; mapTime?: string | null; bodyOnly?: boolean; onSelect?: (t: TripCore) => void; onLeg?: (l: Leg) => void }) {
   const w = trip.weather;
   const rides = trip.legs.filter((l): l is Extract<Leg, { kind: "ride" }> => l.kind === "ride");
   return (
@@ -93,7 +114,7 @@ export function TripSummary({ trip, compact, mapTime, bodyOnly, onSelect }: { tr
       {bodyOnly ? null : <div className="flex flex-wrap items-center gap-1.5">
         <Badge>{fmt(trip.departIso)} → {fmt(trip.arriveIso)}</Badge>
         {rides.length ? rides.map((r, i) => <RouteBullet key={`${r.route}${i}`} route={r.route} mode={r.mode} color={r.color} />) : trip.routes.map((r, i) => <Badge key={`${r}${i}`} variant="secondary">{r}</Badge>)}
-        {w ? <Badge variant="outline">{w.summary} · {Math.round(w.tempC)}°C · {w.precipPct}% rain</Badge> : null}
+        {w ? <Badge variant="outline">{w.summary} · {Math.round(w.tempC)}°C / {Math.round(w.tempC * 9 / 5 + 32)}°F · {w.precipPct}% rain</Badge> : null}
         {mapTime ? <Badge variant="outline">Map time {mapTime.replace("T", " ")}</Badge> : null}
       </div>}
       {bodyOnly ? null : <WeatherHeadsUp trip={trip} />}
@@ -101,9 +122,7 @@ export function TripSummary({ trip, compact, mapTime, bodyOnly, onSelect }: { tr
       {trip.scheduled && !bodyOnly ? <p className="text-xs text-muted-foreground" data-testid="trip-when">{trip.scheduled.note}</p> : null}
       {compact ? <OtherOptions trip={trip} onSelect={onSelect} /> : (
         <>
-          <ol className="list-decimal space-y-0.5 pl-5 text-muted-foreground">
-            {trip.legs.map((l, i) => <LegRow key={i} l={l} />)}
-          </ol>
+          <Steps legs={trip.legs} onLeg={onLeg} />
           <OtherOptions trip={trip} onSelect={onSelect} />
           {[["Planned work", trip.alerts], ["Elevators", trip.elevators], ["Weather alerts", trip.hazards], ["On the road", trip.context.map((c) => c.text)]].map(([title, items]) =>
             (items as string[]).length ? (

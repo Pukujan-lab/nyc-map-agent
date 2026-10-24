@@ -256,12 +256,14 @@ export function AgentHome(p: AgentHomeProps) {
   return (
     <div
       data-testid="agent-home"
-      className="dark pointer-events-none fixed inset-x-0 bottom-0 z-[45] flex justify-center"
+      className={cn("dark pointer-events-none fixed inset-x-0 bottom-0 z-[45] flex justify-center", sheet && "sm:justify-start sm:pl-3")}
     >
       <div
         ref={stackRef}
         className={cn(
           "pointer-events-none flex w-full flex-col sm:mb-4 sm:max-w-[480px]",
+          // An open answer docks to the left on wide screens, so the middle of the map stays clear.
+          sheet && "sm:max-w-[min(420px,44vw)]",
           sheet
             ? "pointer-events-auto max-h-[calc(100dvh-5rem)] gap-3.5 rounded-t-[24px] border-t border-[#263449] bg-[#0b1220]/80 px-4 pt-4 shadow-2xl backdrop-blur-xl sm:rounded-[24px] sm:border"
             : "gap-3 px-4",

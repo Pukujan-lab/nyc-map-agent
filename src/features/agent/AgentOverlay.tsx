@@ -1,4 +1,5 @@
 import { Bus, Car, Footprints, Headphones, LocateFixed, Mic, MicOff, MoreVertical, Pause, Play, Send, SkipForward, X } from "lucide-react";
+import { legFocus } from "./legFocus";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Badge } from "@/components/ui/badge";
@@ -32,7 +33,7 @@ import { cn } from "@/lib/utils";
 import { useSpeech } from "@/lib/voice/useSpeech";
 import { spokenSummary } from "@/lib/voice/tts";
 import { executeCommand, type ExecutorContext } from "./executor";
-import { PLAYBACK_SPEEDS, langTag, type MapAction, type PlaybackSpeed, type Trip, type TripMode } from "./schema";
+import { PLAYBACK_SPEEDS, langTag, type Leg, type MapAction, type PlaybackSpeed, type Trip, type TripMode } from "./schema";
 import { askAgent } from "./stream";
 import { TripPreview } from "./TripPreview";
 import { TripSummary, selectAlternative } from "./TripSummary";
@@ -193,6 +194,16 @@ export default function AgentOverlay() {
     player.start(t, speed);
   };
 
+  /** A tapped trip step: frame that stretch and mark where to board and get off. */
+  const showLeg = (l: Leg) => {
+    const f = legFocus(l);
+    const m = getMapInstance();
+    if (!f || !m) return;
+    handoffCamera();
+    showPoints(m, f.marks.map((x) => ({ at: x.at, name: x.name })), "#2563eb");
+    const wide = window.innerWidth >= 640;
+    m.fitBounds(f.bounds, { padding: wide ? { top: 100, bottom: 120, left: 460, right: 100 } : { top: 110, bottom: Math.round(window.innerHeight * 0.55), left: 40, right: 40 }, maxZoom: 17, duration: 800 });
+  };
   /** Close the line panel and stop following, so a new trip or answer starts on a clean map. */
   const clearMapTask = () => { setSelectedLine(null); setFollowed(null); };
   const ctx: ExecutorContext = {
@@ -249,6 +260,7 @@ export default function AgentOverlay() {
     if (!isDesktop && !compact) setChatOpen(false);
   };
 
+  const stopPlayer = player.stop;
   const send = useCallback(async (text: string) => {
     closeAll();
     const q = text.trim();
@@ -257,6 +269,8 @@ export default function AgentOverlay() {
     if (!q || busy) return;
     setNotice(null);
     setInput("");
+    // A new question replaces the last answer: its trip card, the line it opened, a follow.
+    if (home) { stopPlayer(); setTrip(null); clearMapTask(); }
     if (!askReq) setChatOpen(true);
     // A second tap of the same question, after Use my location, keeps the one user bubble.
     const continuing = messagesRef.current.some((m) => m.offerLocation);
@@ -316,7 +330,7 @@ export default function AgentOverlay() {
       // person can talk over it to interrupt.
       if (spoken) speech.speak(spokenSummary(spoken), { bargeIn: handsFree });
     }
-  }, [busy, mode, setChatOpen, speech, askReq, handsFree, closeAll, home, lang]);
+  }, [busy, mode, setChatOpen, speech, askReq, handsFree, closeAll, home, lang, stopPlayer]);
 
   // The reply button and the footer chip both share location, then ask the waiting question.
   const enableLocation = useCallback(async () => {
@@ -462,7 +476,7 @@ export default function AgentOverlay() {
         {home && !compact && busy ? <WorkingPanel steps={steps} /> : null}
         {trip ? (
           <div className="rounded-lg border p-3">
-            <TripSummary trip={trip} mapTime={mapTime} onSelect={(alt) => chooseTrip(selectAlternative(trip, alt))} />
+            <TripSummary trip={trip} mapTime={mapTime} onSelect={(alt) => chooseTrip(selectAlternative(trip, alt))} onLeg={showLeg} />
             <div className="mt-3 flex items-center gap-1.5">
               <Button size="sm" className="flex-1 gap-2" onClick={() => (player.state.playing && player.state.tripId === trip.id ? player.toggle() : startPreview(trip, prefSpeed))}>
                 {player.state.playing && player.state.tripId === trip.id ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
@@ -648,7 +662,7 @@ export default function AgentOverlay() {
             ) : null}
             {trip && !busy ? (
               <div className="rounded-[18px] border border-[#22314a] bg-[#111c2f]/90 p-3 text-slate-100">
-                <TripSummary trip={trip} mapTime={mapTime} onSelect={(alt) => chooseTrip(selectAlternative(trip, alt))} />
+                <TripSummary trip={trip} mapTime={mapTime} onSelect={(alt) => chooseTrip(selectAlternative(trip, alt))} onLeg={showLeg} />
                 <Button className="mt-3 h-11 w-full gap-2 rounded-full" onClick={() => (player.state.playing && player.state.tripId === trip.id ? player.toggle() : startPreview(trip, prefSpeed))}>
                   {player.state.playing && player.state.tripId === trip.id ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                   Play trip preview
