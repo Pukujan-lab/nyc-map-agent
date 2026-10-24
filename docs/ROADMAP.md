@@ -46,6 +46,9 @@ Storefront layers exist; a find-by-question flow does not.
 - **Better loading animation, and a voice that talks through the wait** for slow model or voice responses ("one moment, checking the trains"). Today: a text skeleton in the chat panel only. Not built.
 - **Smarter instructions for the agent** so it asks good follow-up questions and uses the data it has (what datasets exist, their limits, which map action fits which question). Today: tool guidance in `context/CHAT_TOOLS.md`; a richer system prompt tied to the dataset registry is not built.
 
+## Speed and abuse
+See `docs/PERFORMANCE.md` for the fastest wins, the first-load plan, network calls, idle tabs, rate limits and LLM fair use.
+
 ## Known problems to fix (owner's list)
 - **Top view renders 3D** instead of flat and fast.
 - **Train 3D model** causes problems. Decision: draw a colored box with the train tag on top, and show next stops, timings and MTA notices in a side panel.

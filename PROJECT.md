@@ -37,5 +37,6 @@ Virtual travel through NYC to find businesses and food and where they are.
 
 ## Where to read next
 - `docs/ROADMAP.md`: priorities, known problems, and what exists versus what is missing.
+- `docs/PERFORMANCE.md`: speed, first load, network calls, and abuse and LLM fair-use limits.
 - `docs/ARCHITECTURE.md`: how the code is organised, plus the agent-first target.
 - `context/CHAT_TOOLS.md`, `context/AI_VOICE.md`: how the agent calls tools and listens today.
