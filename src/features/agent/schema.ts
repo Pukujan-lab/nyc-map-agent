@@ -99,6 +99,8 @@ export const tripBase = z.object({
   weather: weatherChip.nullable().default(null),
   exitAdvice: z.string().nullable().default(null),
   context: z.array(contextNote).default([]),
+  /** Stations the trip's subway lines skip right now (service alerts, #253), with where they are. */
+  skips: z.array(z.object({ route: z.string(), name: z.string(), at: lngLat, toward: z.string().nullable().default(null) })).default([]),
   stubbed: z.array(z.string()).default([]),
   /** "otp" when OpenTripPlanner planned it, "fallback" for the built-in subway router. */
   planner: z.enum(["otp", "fallback"]).optional(),
@@ -119,11 +121,49 @@ export const command = z.discriminatedUnion("type", [
 ]);
 export type AgentCommand = z.infer<typeof command>;
 
-/** One NDJSON line streamed by POST /api/agent. */
+/** A named spot an action draws: a stop, a skipped station, a crash hotspot. */
+export const mapPoint = z.object({ at: lngLat, name: z.string() });
+export type MapPoint = z.infer<typeof mapPoint>;
+
+export const restroomSpot = z.object({
+  name: z.string(),
+  lon: z.number().min(-180).max(180),
+  lat: z.number().min(-90).max(90),
+  distanceM: z.number().nonnegative(),
+  status: z.string().nullable().default(null),
+  hours: z.string().nullable().default(null),
+  accessibility: z.string().nullable().default(null),
+  operator: z.string().nullable().default(null),
+});
+export type RestroomSpot = z.infer<typeof restroomSpot>;
+
+/**
+ * A button under an answer that shows it on the map (#371). The server builds
+ * these from the tool results it already has, never from the model's words,
+ * so a button only ever draws data a tool returned. `id` dedupes repeats.
+ */
+const actionBase = { id: z.string().max(200), label: z.string().max(80) };
+export const mapAction = z.discriminatedUnion("kind", [
+  z.object({ ...actionBase, kind: z.literal("flyTo"), lon: z.number().min(-180).max(180), lat: z.number().min(-90).max(90), zoom: z.number().min(9).max(20).optional() }),
+  z.object({ ...actionBase, kind: z.literal("showRestroom"), restroom: restroomSpot }),
+  z.object({ ...actionBase, kind: z.literal("showRoute"), trip }),
+  /** A line's stops, or (`skipped`) the stations it is skipping. */
+  z.object({ ...actionBase, kind: z.literal("showStops"), route: z.string(), color: z.string().optional(), skipped: z.boolean().default(false), stops: z.array(mapPoint).min(1).max(200) }),
+  z.object({ ...actionBase, kind: z.literal("showCrashes"), points: z.array(mapPoint).min(1).max(200) }),
+]);
+export type MapAction = z.infer<typeof mapAction>;
+/** Most buttons one answer carries. */
+export const MAX_ACTIONS = 6;
+
+/**
+ * One NDJSON line streamed by POST /api/agent. Clients drop lines they cannot
+ * parse, so an older client simply ignores the newer "actions" line.
+ */
 export const streamEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("text"), text: z.string() }),
   z.object({ type: z.literal("tool"), name: z.string() }),
   z.object({ type: z.literal("command"), command }),
+  z.object({ type: z.literal("actions"), actions: z.array(mapAction).max(MAX_ACTIONS) }),
   z.object({
     type: z.literal("done"),
     model: z.string(),

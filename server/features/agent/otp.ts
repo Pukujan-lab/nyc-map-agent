@@ -176,6 +176,6 @@ export async function itineraryToTrip(
   return {
     id: crypto.randomUUID(), mode: routes.length ? "transit" : "walk", origin, destination,
     departIso: local(it.start), arriveIso: local(it.end), legs, routes, alerts, elevators: [...new Set(elevators)], hazards: [], weather: null, exitAdvice,
-    context: [], stubbed: rt ? [] : ["Scheduled times (no live predictions for these trips yet)."], planner: "otp",
+    context: [], skips: [], stubbed: rt ? [] : ["Scheduled times (no live predictions for these trips yet)."], planner: "otp",
   };
 }

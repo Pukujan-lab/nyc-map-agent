@@ -11,6 +11,7 @@ import { resolveFlags } from "../../../src/lib/flags/registry";
 import { makeTools, type ToolContext } from "./tools";
 import { toNyLocal } from "./trip";
 import { fallbackFetch, modelChain } from "./model-fallback";
+import { ActionCollector } from "./mapActions";
 
 export const INFERHUB_BASE_URL = process.env.INFERHUB_BASE_URL ?? "https://api.inferhub.dev/v1";
 /** Cheap, fast, good at tool calls: ~$0.075 in / $0.30 out per M tokens (InferHub market max ask). */
@@ -44,6 +45,8 @@ export function systemPrompt(nowLocal: string, location: { lon: number; lat: num
     "For a drive: call drive_plan, then showRoute, openPanel, playFlythrough; answer with ETA, slow segments, closures, tolls and only the parking hints the tool returned.",
     "For a trip question: call transit_plan, then showRoute, openPanel and playFlythrough with its tripId (speed 10), then answer with: the recommended itinerary (the first one; it arrives earliest) and how it compares with the alternatives in plain words (e.g. \"The Q53 SBS is 20 minutes faster than the subway\"), lines, ETA, weather at that time, any planned work, the recommended exit said plainly (e.g. \"Use the NE exit near East 42nd Street & Lexington Avenue\"), and elevator outages.",
     'For "arrive by" questions set arriveBy true on transit_plan; otherwise the time is a departure time.',
+    "For a restroom or toilet question: call nearest_restroom and answer with the closest one's name, distance and hours if known.",
+    "Buttons that show your answer on the map (route, stops, skipped stops, crashes, restroom, places) appear under your reply on their own; do not list them.",
     "Spell street names out in full: Street, Avenue, Boulevard, Place, East/West (\"West 44th Street\", \"St. Marks Place\"), never St/Av abbreviations. Keep station names exactly as the MTA writes them (\"Times Sq-42 St\").",
     "Never advise which train car to board; that data is not available. Do not invent service information that tools did not return.",
   ].join("\n");
@@ -68,13 +71,19 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
   const body = new ReadableStream<Uint8Array>({
     async start(controller) {
       const send = (e: StreamEvent) => controller.enqueue(enc.encode(`${JSON.stringify(e)}\n`));
+      // Buttons under the answer, from the tool results (#371); one "actions" line before "done".
+      const actions = new ActionCollector();
+      const flushActions = () => {
+        const list = actions.list();
+        if (list.length) send({ type: "actions", actions: list });
+      };
       try {
         const model = opts.model ?? defaultModel();
         const result = streamText({
           model,
           system: systemPrompt(toNyLocal(now ? new Date(now) : new Date()), location, mode, context),
           messages,
-          tools: makeTools({ location, emit: (command) => send({ type: "command", command }), deps: opts.deps, drive: resolveFlags({ env: process.env.VITE_FLAGS, advancedMode: false }).agentDrive }),
+          tools: makeTools({ location, emit: (command) => send({ type: "command", command }), actions: (a) => actions.add(a), deps: opts.deps, drive: resolveFlags({ env: process.env.VITE_FLAGS, advancedMode: false }).agentDrive }),
           stopWhen: stepCountIs(8),
           maxRetries: 1,
           // The default handler console.logs the raw provider error; keep logs to the request id only.
@@ -91,6 +100,7 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
           else if (part.type === "tool-call") send({ type: "tool", name: part.toolName });
           else if (part.type === "error") send({ type: "error", message: "The model call failed." });
           else if (part.type === "finish") {
+            flushActions();
             send({ type: "done", model: modelId, usage: { inputTokens: part.totalUsage.inputTokens ?? 0, outputTokens: part.totalUsage.outputTokens ?? 0 } });
           }
         }

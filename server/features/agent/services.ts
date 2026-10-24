@@ -5,9 +5,9 @@
 import { formatStreetText } from "../../../src/lib/streetName";
 import { serviceChanges, type ServiceChange } from "../../../src/lib/transit/serviceChanges";
 import { z } from "zod";
-import type { LngLatTuple } from "../../../src/features/agent/schema";
+import type { LngLatTuple, RestroomSpot } from "../../../src/features/agent/schema";
 import { bestCandidate, matchLandmark, matchStation, type GeoCandidate } from "./places";
-import { openDataEntrances, type Station } from "./transit";
+import { distM, openDataEntrances, type Station } from "./transit";
 
 const UA = { "User-Agent": "nyc-map-agent (github.com/Pukujan/nyc-map-agent)" };
 export const OSRM_FOOT_URL = (process.env.VITE_OSRM_URL ?? "https://routing.openstreetmap.de/routed-foot").replace(/\/$/, "");
@@ -116,6 +116,48 @@ export async function elevatorStatus(stationName: string): Promise<string[]> {
   return (await elevatorOutages())
     .filter((o) => o.isupcomingoutage !== "Y" && norm(o.station).startsWith(key))
     .map((o) => `${o.equipmenttype === "EL" ? "Elevator" : "Escalator"} out at ${o.station} (${o.serving}) — ${o.reason}, back ${o.estimatedreturntoservice}`);
+}
+
+/* ---------- nearest_restroom: NYC Open Data Public Restrooms (i7jb-7jku, keyless; the map's restroom layer reads the same rows via Octo) ---------- */
+const restroomRow = z.object({
+  facility_name: z.string(),
+  latitude: z.string(),
+  longitude: z.string(),
+  status: z.string().optional(),
+  hours_of_operation: z.string().optional(),
+  accessibility: z.string().optional(),
+  operator: z.string().optional(),
+});
+export type RestroomRow = z.infer<typeof restroomRow>;
+let restroomCache: { at: number; rows: RestroomRow[] } | null = null;
+export async function publicRestrooms(): Promise<RestroomRow[]> {
+  if (restroomCache && Date.now() - restroomCache.at < 60 * 60_000) return restroomCache.rows;
+  const q = new URLSearchParams({ $select: "facility_name,latitude,longitude,status,hours_of_operation,accessibility,operator", $where: "latitude IS NOT NULL", $limit: "5000" });
+  const rows = z.array(z.unknown()).parse(await getJson(`https://data.cityofnewyork.us/resource/i7jb-7jku.json?${q}`)).flatMap((r) => {
+    const p = restroomRow.safeParse(r);
+    return p.success ? [p.data] : [];
+  });
+  restroomCache = { at: Date.now(), rows };
+  return rows;
+}
+/** The `n` closest restrooms to `at`, open ones first (a closed one is listed only when nothing open is nearer than 1.5 km). */
+export function nearestRestrooms(rows: RestroomRow[], at: LngLatTuple, n = 3): RestroomSpot[] {
+  const spots = rows
+    .map((r) => ({ r, lon: Number(r.longitude), lat: Number(r.latitude) }))
+    .filter((x) => Number.isFinite(x.lon) && Number.isFinite(x.lat))
+    .map(({ r, lon, lat }) => ({
+      name: r.facility_name,
+      lon,
+      lat,
+      distanceM: Math.round(distM(at, [lon, lat])),
+      status: r.status ?? null,
+      hours: r.hours_of_operation ?? null,
+      accessibility: r.accessibility ?? null,
+      operator: r.operator ?? null,
+    }))
+    .sort((a, b) => a.distanceM - b.distanceM);
+  const open = spots.filter((s) => !s.status || /^operational$/i.test(s.status));
+  return (open.length && open[0].distanceM <= 1500 ? open : spots).slice(0, n);
 }
 
 /* ---------- planned work / service alerts: MTA GTFS-rt alerts (JSON flavour) ---------- */

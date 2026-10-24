@@ -43,6 +43,7 @@ export async function buildDriveTrip(
     weather,
     exitAdvice: null,
     context: [...slow, ...close, ...events, ...n511.notes, ...tolls(r.coords), ...crashes],
+    skips: [],
     stubbed,
     alternatives: [],
   };

@@ -26,10 +26,13 @@ import { cn } from "@/lib/utils";
 import { useSpeech } from "@/lib/voice/useSpeech";
 import { spokenSummary } from "@/lib/voice/tts";
 import { executeCommand, type ExecutorContext } from "./executor";
-import type { Trip, TripMode } from "./schema";
+import type { MapAction, Trip, TripMode } from "./schema";
 import { askAgent } from "./stream";
 import { TripSummary, selectAlternative } from "./TripSummary";
-import { showTrip } from "./tripLayer";
+import { routeColor, showPoints, showTrip } from "./tripLayer";
+import { runMapAction, type MapActionContext } from "./mapActions";
+import { AnswerActions, RestroomSpotDetails } from "./AnswerActions";
+import { formatStreetText } from "@/lib/streetName";
 import { sharedCoords, startSharing, stopSharing, useSharedLocation } from "@/lib/geo/sharedLocation";
 import { usePlayer, type Speed } from "./usePlayer";
 import { useWakePhrase } from "./useWakePhrase";
@@ -37,7 +40,7 @@ import { useHandsFree } from "./useHandsFree";
 import { closeAsk, useAskRequest } from "@/lib/agent/streetContext";
 import { needsSharedOrigin, ORIGIN_PROMPT, replyAsksForOrigin } from "./needsOrigin";
 
-interface Msg { id: string; role: "user" | "assistant"; content: string; offerLocation?: boolean }
+interface Msg { id: string; role: "user" | "assistant"; content: string; offerLocation?: boolean; actions?: MapAction[] }
 
 const MODES: Array<{ id: TripMode; label: string; Icon: typeof Bus }> = [
   { id: "walk", label: "Walk", Icon: Footprints },
@@ -46,7 +49,7 @@ const MODES: Array<{ id: TripMode; label: string; Icon: typeof Bus }> = [
 ];
 
 export default function AgentOverlay() {
-  const { chatOpen, setChatOpen, flyTo, startWalk, stopWalk, chatSeed, clearSeed } = useMapState();
+  const { chatOpen, setChatOpen, flyTo, startWalk, stopWalk, chatSeed, clearSeed, setRestrooms } = useMapState();
   const { showPanel, closeAll } = usePanel();
   // One panel at a time (#225): opening Ask closes the drawer and any sheet.
   useEffect(() => {
@@ -97,6 +100,29 @@ export default function AgentOverlay() {
   const ctxRef = useRef(ctx);
   ctxRef.current = ctx;
 
+  // Answer buttons (#371): each draws what a tool returned, then gets out of the map's way on a phone.
+  const actionCtx: MapActionContext = {
+    flyTo: ctx.flyTo,
+    showTrip: ctx.showTrip,
+    showRestroom: (r) => {
+      handoffCamera();
+      setRestrooms(true);
+      const m = getMapInstance();
+      if (m) showPoints(m, [{ at: [r.lon, r.lat], name: formatStreetText(r.name) }], "#2563eb");
+      else flyTo({ lon: r.lon, lat: r.lat, zoom: 17 });
+      showPanel({ id: `restroom:${r.name}`, title: formatStreetText(r.name), subtitle: "Public restroom", details: <RestroomSpotDetails restroom={r} /> });
+    },
+    showPoints: (points, { color }) => {
+      handoffCamera();
+      const m = getMapInstance();
+      if (m) showPoints(m, points, color);
+    },
+  };
+  const runAction = (a: MapAction) => {
+    runMapAction(a, actionCtx, routeColor);
+    if (!isDesktop && !compact) setChatOpen(false);
+  };
+
   const send = useCallback(async (text: string) => {
     closeAll();
     const q = text.trim();
@@ -131,6 +157,8 @@ export default function AgentOverlay() {
           setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, content: x.content + ev.text } : x)));
         } else if (ev.type === "command") {
           executeCommand(ev.command, ctxRef.current);
+        } else if (ev.type === "actions") {
+          setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, actions: ev.actions } : x)));
         } else if (ev.type === "error") {
           setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, content: x.content || ev.message } : x)));
         }
@@ -254,6 +282,7 @@ export default function AgentOverlay() {
           messages.map((m) => (
             <div key={m.id} className={cn("max-w-[90%] rounded-lg px-3 py-2 text-sm", m.role === "user" ? "ml-auto bg-primary text-primary-foreground" : "bg-muted")}>
               {m.content || (busy ? "…" : "")}
+              {m.actions?.length ? <AnswerActions actions={m.actions} onRun={runAction} /> : null}
               {m.offerLocation && shared.status !== "on" ? (
                 <Button type="button" size="sm" className="mt-2 h-8 w-full gap-1.5" disabled={shared.status === "asking"} onClick={() => void enableLocation()}>
                   <LocateFixed className="h-4 w-4" aria-hidden="true" />
