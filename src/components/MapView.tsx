@@ -272,11 +272,12 @@ export function MapView({
   const agentHome = useFlag("agentHome");
   const analyticsFlags = useFlags();
   const analytics = analyticsFlags.noise || analyticsFlags.crashes || analyticsFlags.dataLayers;
-  const businesses = useQuickLayer("businesses");
+  // Businesses are off on the overview but on at street level, where shops are the landmarks.
+  const businessesPicked = useQuickLayer("businesses");
   const health = useQuickLayer("health");
   const parksPlaces = useQuickLayer("parksPlaces");
   const citibike = useQuickLayer("citibike");
-  const storefrontsOn = useFlag("storefronts") && businesses;
+  const storefrontsFlag = useFlag("storefronts");
   usePanelChip(schoolsOn ? { id: "schools", label: "Schools", active: schoolIcons, onToggle: toggleSchools } : null);
   const restroomsMod = useRef<typeof import("@/lib/map/restrooms") | null>(null);
   /** So leaving walk mode can restore the overhead camera exactly once. */
@@ -307,6 +308,8 @@ export function MapView({
     selectNta,
     selectBlock,
   } = useMapState();
+  const businesses = businessesPicked || walking;
+  const storefrontsOn = storefrontsFlag && businesses;
   const reducedMotion = usePrefersReducedMotion();
   /** Held d-pad buttons. A ref, because it changes without needing a render. */
   const walkPad = useRef<WalkInput>(WALK_IDLE);
