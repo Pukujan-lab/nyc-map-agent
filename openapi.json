@@ -318,6 +318,32 @@
           "features"
         ]
       },
+      "AgentRateLimited": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "enum": [
+              "rate_limited"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "retryAfterSeconds": {
+            "type": "integer"
+          },
+          "retryAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "message",
+          "retryAfterSeconds",
+          "retryAt"
+        ]
+      },
       "AgentRequest": {
         "type": "object",
         "properties": {
@@ -3798,6 +3824,24 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "Fair-use limit for this client; Retry-After says when the next question frees up",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next question is allowed",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRateLimited"
+                }
+              }
+            }
           }
         }
       }
@@ -3833,6 +3877,24 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Fair-use limit for this client; Retry-After says when the next question frees up",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next question is allowed",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRateLimited"
                 }
               }
             }

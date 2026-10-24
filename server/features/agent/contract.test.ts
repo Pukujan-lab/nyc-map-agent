@@ -43,6 +43,14 @@ describe("agent client/server contract", () => {
   it("failed requests show plain words, not a status code", () => {
     for (const s of [400, 429, 500, 502]) expect(friendlyError(s)).not.toMatch(/\d{3}/);
   });
+
+  it("a fair-use 429 shows the server's own message", async () => {
+    const message = "Your next question frees up in about 5 minutes.";
+    vi.stubGlobal("fetch", () => Promise.resolve(Response.json({ error: "rate_limited", message, retryAfterSeconds: 300 }, { status: 429, headers: { "retry-after": "300" } })));
+    const events: StreamEvent[] = [];
+    for await (const ev of askAgent({ messages: [{ role: "user", content: "hi" }], location: null, mode: "transit" })) events.push(ev);
+    expect(events).toEqual([{ type: "error", message }]);
+  });
 });
 
 describe("street-view context", () => {

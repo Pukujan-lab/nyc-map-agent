@@ -34,7 +34,13 @@ export async function* askAgent(req: AgentRequest, signal?: AbortSignal): AsyncG
   const base = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
   const res = await fetch(`${base}/api/agent`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(req), signal });
   if (!res.ok || !res.body) {
-    yield { type: "error", message: friendlyError(res.status) };
+    // A fair-use 429 carries its own wording (when the next question frees up); show that when present.
+    let message = friendlyError(res.status);
+    if (res.status === 429) {
+      const j = (await res.json().catch(() => null)) as { message?: unknown } | null;
+      if (typeof j?.message === "string" && j.message) message = j.message;
+    }
+    yield { type: "error", message };
     return;
   }
   yield* readEvents(res.body);

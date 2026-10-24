@@ -11,6 +11,8 @@ import { resolveFlags } from "../../../src/lib/flags/registry";
 import { makeTools, type ToolContext } from "./tools";
 import { toNyLocal } from "./trip";
 import { fallbackFetch, modelChain } from "./model-fallback";
+import { clientIp } from "../../lib/clientIp";
+import { budgetConfigFromEnv, createDailyBudget, createLimiter, limitConfigFromEnv, limitedResponse, noModelMessage } from "./fair-use";
 
 export const INFERHUB_BASE_URL = process.env.INFERHUB_BASE_URL ?? "https://api.inferhub.dev/v1";
 /** Cheap, fast, good at tool calls: ~$0.075 in / $0.30 out per M tokens (InferHub market max ask). */
@@ -49,27 +51,47 @@ export function systemPrompt(nowLocal: string, location: { lon: number; lat: num
   ].join("\n");
 }
 
-function defaultModel(): LanguageModel {
+function defaultModel(only?: string): LanguageModel {
   const key = process.env.INFERHUB_API_KEY;
   if (!key) throw new Error("INFERHUB_API_KEY is not set on the server.");
-  const models = modelChain(process.env.INFERHUB_MODEL ?? DEFAULT_MODEL, process.env.INFERHUB_MODEL_FALLBACKS);
+  // Over the daily cap only the configured cheap model is tried, with no fallbacks to pricier ones.
+  const models = only ? [only] : modelChain(process.env.INFERHUB_MODEL ?? DEFAULT_MODEL, process.env.INFERHUB_MODEL_FALLBACKS);
   return createOpenAICompatible({ name: "inferhub", baseURL: INFERHUB_BASE_URL, apiKey: key, fetch: fallbackFetch(models) })(models[0]);
 }
 
-export async function POST(request: Request, opts: { model?: LanguageModel; deps?: ToolContext["deps"] } = {}): Promise<Response> {
+export type FairUse = { limiter: ReturnType<typeof createLimiter>; budget: ReturnType<typeof createDailyBudget>; now: () => number };
+
+/** In-memory, per process (see fair-use.ts): one Node process serves the deployment. Created on first use so env is read at runtime. */
+let shared: FairUse | undefined;
+const sharedFairUse = (): FairUse =>
+  (shared ??= { limiter: createLimiter(limitConfigFromEnv()), budget: createDailyBudget(budgetConfigFromEnv()), now: Date.now });
+
+export async function POST(request: Request, opts: { model?: LanguageModel; deps?: ToolContext["deps"]; fairUse?: FairUse } = {}): Promise<Response> {
   const parsed = requestBody.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "bad_request" }, { status: 400 });
+  // Only well-formed questions count. The client sends no device id, so the key is the address alone.
+  const fair = opts.fairUse ?? sharedFairUse();
+  const limit = fair.limiter.take(`ip:${clientIp(request.headers)}`);
+  if (!limit.ok) return limitedResponse(limit.retryAt, limit.reason, fair.now());
+  const budget = fair.budget.tier();
   const { messages, now, mode, context } = parsed.data;
   // Street view's spot counts as the shared location for "here".
   const location = parsed.data.location ?? (context ? { lon: context.lon, lat: context.lat } : null);
   const enc = new TextEncoder();
-  const modelId = process.env.INFERHUB_MODEL ?? DEFAULT_MODEL;
+  const modelId = budget.tier === "cheap" ? budget.model : budget.tier === "none" ? "none" : (process.env.INFERHUB_MODEL ?? DEFAULT_MODEL);
 
   const body = new ReadableStream<Uint8Array>({
     async start(controller) {
       const send = (e: StreamEvent) => controller.enqueue(enc.encode(`${JSON.stringify(e)}\n`));
+      if (budget.tier === "none") {
+        // Daily budget spent: answer without a model call so the chat still says something useful.
+        send({ type: "text", text: noModelMessage(budget.resetAt) });
+        send({ type: "done", model: modelId, usage: { inputTokens: 0, outputTokens: 0 } });
+        controller.close();
+        return;
+      }
       try {
-        const model = opts.model ?? defaultModel();
+        const model = opts.model ?? defaultModel(budget.tier === "cheap" ? budget.model : undefined);
         const result = streamText({
           model,
           system: systemPrompt(toNyLocal(now ? new Date(now) : new Date()), location, mode, context),
@@ -91,6 +113,7 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
           else if (part.type === "tool-call") send({ type: "tool", name: part.toolName });
           else if (part.type === "error") send({ type: "error", message: "The model call failed." });
           else if (part.type === "finish") {
+            fair.budget.record((part.totalUsage.inputTokens ?? 0) + (part.totalUsage.outputTokens ?? 0));
             send({ type: "done", model: modelId, usage: { inputTokens: part.totalUsage.inputTokens ?? 0, outputTokens: part.totalUsage.outputTokens ?? 0 } });
           }
         }
