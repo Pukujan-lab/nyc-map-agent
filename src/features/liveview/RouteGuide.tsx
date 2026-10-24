@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { onMapInstance } from "@/lib/map/mapInstance";
 import { LOOK_CENTER_DISTANCE_M, poseAlongRoute } from "@/lib/map/walk";
 import { useDataView } from "@/lib/store/DataViewContext";
+import { appGeo } from "@/lib/geo/devGeo";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { installNavLayers, readNavColors, removeNavLayers, roadNameAt, updateNavLayers } from "./layers";
 import { distanceAlong, fetchGuidedRoute, formatMetres, metresLeft, progressAt, type RouteStep } from "./steps";
@@ -112,20 +113,21 @@ export default function RouteGuide() {
 
   // 2D navigation: geolocation only after the tap, cleared on stop and unmount.
   const stopNav = () => {
-    if (watchRef.current !== null) navigator.geolocation.clearWatch(watchRef.current);
+    if (watchRef.current !== null) appGeo()?.clearWatch(watchRef.current);
     watchRef.current = null;
     setNavigating(false);
     setFix(null);
   };
   const startNav = () => {
-    if (!("geolocation" in navigator)) {
+    const g = appGeo();
+    if (!g) {
       setGeoError("This browser has no location access.");
       return;
     }
     setGeoError(null);
     setNavigating(true);
     setCentered(true);
-    watchRef.current = navigator.geolocation.watchPosition(
+    watchRef.current = g.watchPosition(
       (p) =>
         setFix({
           lon: p.coords.longitude,
@@ -138,7 +140,7 @@ export default function RouteGuide() {
     );
   };
   useEffect(() => () => {
-    if (watchRef.current !== null) navigator.geolocation.clearWatch(watchRef.current);
+    if (watchRef.current !== null) appGeo()?.clearWatch(watchRef.current);
   }, []);
   useEffect(() => {
     if (!routeStart || !routeEnd) stopNav();

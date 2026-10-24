@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { appGeo } from "./devGeo";
 
 /**
  * "My location": the person's exact position, shared only after they tap the
@@ -26,7 +27,7 @@ const set = (next: SharedLocation) => {
 };
 
 function geo(): Geo | null {
-  return typeof navigator !== "undefined" && "geolocation" in navigator ? navigator.geolocation : null;
+  return appGeo();
 }
 
 /** Start sharing. Call only from a tap: this is what shows the browser's permission prompt. */
