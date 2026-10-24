@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { errorMessage, errorType, fallbackFetch, isBusy, modelChain, shouldFallBack } from "./model-fallback";
+import { errorMessage, errorType, fallbackFetch, isBusy, streamError, modelChain, shouldFallBack } from "./model-fallback";
 import { DEFAULT_MODEL } from "./routes";
 
 const err = (status: number, code: string) => new Response(JSON.stringify({ error: { message: "x", type: "invalid_request_error", code } }), { status });
@@ -86,5 +86,41 @@ describe("model fallback", () => {
     const base = vi.fn().mockResolvedValue(err(401, "invalid_api_key"));
     expect((await fallbackFetch(["cb/a"], base as unknown as typeof fetch, vi.fn(), instant)("u", req())).status).toBe(401);
     expect(base).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("a busy error inside a 200 stream", () => {
+  const sse = (text: string) => new Response(text, { status: 200, headers: { "content-type": "text/event-stream" } });
+  const busyStream = () => sse('data: {"error":{"message":"every provider within your price limit is busy or rate-limited right now","type":"x"}}\n\n');
+  const goodStream = () => sse('data: {"choices":[{"delta":{"content":"hi"}}]}\n\ndata: [DONE]\n\n');
+  const instant = () => Promise.resolve();
+
+  it("reads the error from the first chunk and leaves a normal stream alone", async () => {
+    expect(await streamError(busyStream())).toContain("busy or rate-limited");
+    const ok = goodStream();
+    expect(await streamError(ok)).toBe("");
+    expect(await ok.text()).toContain("[DONE]");
+  });
+
+  it("keeps the caller's body whole after peeking at it", async () => {
+    const res = busyStream();
+    await streamError(res);
+    expect(await res.text()).toContain("busy or rate-limited");
+  });
+
+  it("retries a 200 whose stream is a busy error, then returns the good stream", async () => {
+    const base = vi.fn().mockResolvedValueOnce(busyStream()).mockResolvedValueOnce(goodStream());
+    const log = vi.fn();
+    const res = await fallbackFetch(["cb/a"], base as unknown as typeof fetch, log, instant)("u", req());
+    expect(await res.text()).toContain("[DONE]");
+    expect(modelsSent(base)).toEqual(["cb/a", "cb/a"]);
+    expect(log.mock.calls[0][0]).toContain("busy");
+  });
+
+  it("falls to the next model when the stream stays busy", async () => {
+    const base = vi.fn().mockImplementation((_u: unknown, init: RequestInit) => Promise.resolve((JSON.parse(init.body as string) as { model: string }).model === "cb/a" ? busyStream() : goodStream()));
+    const res = await fallbackFetch(["cb/a", "cb/b"], base as unknown as typeof fetch, vi.fn(), instant)("u", req());
+    expect(await res.text()).toContain("[DONE]");
+    expect(modelsSent(base)).toEqual(["cb/a", "cb/a", "cb/a", "cb/b"]);
   });
 });
