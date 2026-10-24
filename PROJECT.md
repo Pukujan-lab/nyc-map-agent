@@ -8,7 +8,13 @@ An **accessible AI agent that takes care of a regular person getting around New 
 The goal is *not* a dashboard. The technical dashboards and in-depth controls stay, but for technical users, tucked away behind advanced mode.
 
 ## Who it is for
-A regular New Yorker or visitor on a phone. (Open question: is the main user a local or a visitor? See `docs/ROADMAP.md`.)
+Three kinds of people, in this order of priority:
+
+1. **The newcomer.** Someone visiting New York, or opening the app for the first time. They must get started immediately: no setup, no learning the map. The home screen shows the chat and four task buttons (Restroom, My train, Plan trip, Find exit), and one tap or one spoken question gets a useful answer.
+2. **The daily explorer.** A New Yorker who uses the app every day to get around and get things done: their train, their usual trips, a restroom on the way, what's nearby. They want speed and habit: saved places, hands-free voice while walking, answers that remember their routes, and no clutter.
+3. **The technical user.** People looking for data about the city: noise, crashes, 311, neighbourhood comparisons. They get the dashboards, data layers and detailed controls, but behind "More layers" and advanced mode, so the first two groups never trip over them.
+
+Design rule that follows: the first screen serves the newcomer, repeated use serves the daily explorer, and depth is opt-in for the technical user.
 
 ## The feel
 Being looked after. The app notices what you are doing (on a train, underground, walking, driving), shows only what matters for that, and warns you before you ask.

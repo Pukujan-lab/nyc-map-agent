@@ -71,7 +71,7 @@ See `docs/PERFORMANCE.md` for the fastest wins, the first-load plan, network cal
 Several open PRs fail CI (module-boundary rule on #350 and #352, lint on #355, size on #360, audit on #351, unconfirmed on #347 and #358). Merge order for the follow-card PRs: #329 and #336, then #337, then #330, then #340. #320 conflicts with #340 on the phone Layers button; decision made: keep Layers on phones. #357 contains a database migration that has never been run.
 
 ## Open questions
-- Is the main user a local or a visitor?
+- ~~Is the main user a local or a visitor?~~ Answered: three audiences (newcomer, daily explorer, technical user); see `PROJECT.md`.
 - Where do the technical dashboards live: behind advanced mode, a separate page, or removed?
 - Is voice the main way in, or equal to typing?
 - Does Live View (#192) move up in priority because of the underground problem?
