@@ -68,7 +68,7 @@ export interface UseSpeechResult {
   clearError: () => void;
   startListening: () => void;
   stopListening: () => void;
-  speak: (text: string, opts?: { bargeIn?: boolean }) => void;
+  speak: (text: string, opts?: { bargeIn?: boolean; lang?: string }) => void;
   stopSpeaking: () => void;
   speaking: boolean;
   muted: boolean;
@@ -183,7 +183,7 @@ export function useSpeech({
   }, []);
 
   const speak = useCallback(
-    (text: string, opts?: { bargeIn?: boolean }) => {
+    (text: string, opts?: { bargeIn?: boolean; lang?: string }) => {
       if (muted) return;
       if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
       stopSpeaking();
@@ -197,7 +197,7 @@ export function useSpeech({
         stopBargeRef.current?.();
         stopBargeRef.current = null;
         setSpeaking(false);
-      }, lang);
+      }, opts?.lang ?? lang);
       cancelSpeechRef.current = cancel;
       if (opts?.bargeIn) {
         // Only in hands-free (tap-started): an echo-cancelled detector so talking over the answer stops it.

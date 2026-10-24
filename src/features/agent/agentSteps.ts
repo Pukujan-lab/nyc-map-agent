@@ -1,4 +1,5 @@
 import type { StreamEvent } from "./schema";
+import { localStatus, statusKind } from "./statusLines";
 
 /** One row of the "Agents working" list (#370). */
 export interface AgentStep {
@@ -7,22 +8,22 @@ export interface AgentStep {
   status: "start" | "done" | "error";
 }
 
-/** Plain words for each tool: the row label and the line said aloud on a long wait. */
-const WORDS: Record<string, { label: string; spoken: string }> = {
-  transit_plan: { label: "Planning the transit trip", spoken: "Checking the trains" },
-  route_walk: { label: "Planning the walk", spoken: "Working out the walk" },
-  drive_plan: { label: "Planning the drive", spoken: "Checking the roads" },
-  geocode: { label: "Finding the place", spoken: "Finding the place" },
-  nearest_restroom: { label: "Finding restrooms nearby", spoken: "Looking for restrooms nearby" },
-  weather_forecast: { label: "Checking the weather", spoken: "Checking the weather" },
-  hazards: { label: "Checking weather alerts", spoken: "Checking weather alerts" },
-  elevator_status: { label: "Checking elevators", spoken: "Checking the elevators" },
-  flyTo: { label: "Moving the map", spoken: "Moving the map" },
-  showRoute: { label: "Drawing the route", spoken: "Drawing the route" },
-  openPanel: { label: "Opening the trip card", spoken: "Opening the trip card" },
-  enterStreetView: { label: "Going to street level", spoken: "Going to street level" },
-  playFlythrough: { label: "Preparing the preview", spoken: "Preparing the preview" },
-  setTime: { label: "Setting the map time", spoken: "Setting the map time" },
+/** Plain words for each tool's row in the list. */
+const WORDS: Record<string, string> = {
+  transit_plan: "Planning the transit trip",
+  route_walk: "Planning the walk",
+  drive_plan: "Planning the drive",
+  geocode: "Finding the place",
+  nearest_restroom: "Finding restrooms nearby",
+  weather_forecast: "Checking the weather",
+  hazards: "Checking weather alerts",
+  elevator_status: "Checking elevators",
+  flyTo: "Moving the map",
+  showRoute: "Drawing the route",
+  openPanel: "Opening the trip card",
+  enterStreetView: "Going to street level",
+  playFlythrough: "Preparing the preview",
+  setTime: "Setting the map time",
 };
 
 /** A tool we have no words for still gets a readable label ("data_query" → "Data query"). */
@@ -31,13 +32,12 @@ function fallback(name: string): string {
   return s ? s[0].toUpperCase() + s.slice(1) : "Working";
 }
 
-export const stepLabel = (name: string): string => WORDS[name]?.label ?? fallback(name);
+export const stepLabel = (name: string): string => WORDS[name] ?? fallback(name);
 
-/** The short line spoken when a voice question takes a while, from the step still running. */
-export function statusLine(steps: AgentStep[]): string {
+/** The short line spoken when a voice question takes a while, from the step still running, in `lang`. */
+export function statusLine(steps: AgentStep[], lang = "en"): string {
   const running = [...steps].reverse().find((s) => s.status === "start");
-  const words = running ? WORDS[running.name]?.spoken : undefined;
-  return `${words ?? "One moment, I'm working on it"}…`;
+  return localStatus(statusKind(running?.name), lang);
 }
 
 /**

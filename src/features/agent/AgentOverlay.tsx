@@ -40,6 +40,7 @@ import { useHandsFree } from "./useHandsFree";
 import { closeAsk, useAskRequest } from "@/lib/agent/streetContext";
 import { AgentHome, WorkingPanel } from "./AgentHome";
 import { applyStep, statusLine, type AgentStep } from "./agentSteps";
+import { speechTag, statusLang } from "./statusLines";
 import { needsSharedOrigin, ORIGIN_PROMPT, replyAsksForOrigin } from "./needsOrigin";
 
 interface Msg { id: string; role: "user" | "assistant"; content: string; offerLocation?: boolean; actions?: MapAction[] }
@@ -176,7 +177,8 @@ export default function AgentOverlay() {
     abort.current = new AbortController();
     let spoken = "";
     // A voice question still working after ~2.5 s gets one short spoken status line.
-    const statusTimer = home && byVoice ? window.setTimeout(() => speech.speak(statusLine(stepsRef.current)), STATUS_AFTER_MS) : undefined;
+    const sayIn = statusLang(q, lang);
+    const statusTimer = home && byVoice ? window.setTimeout(() => speech.speak(statusLine(stepsRef.current, sayIn), { lang: speechTag(sayIn, lang) }), STATUS_AFTER_MS) : undefined;
     try {
       for await (const ev of askAgent({ messages: history.map(({ role, content }) => ({ role, content })), location, mode, now: new Date().toISOString(), ...(askReq ? { context: askReq.context } : {}), ...(home && lang ? { lang } : {}) }, abort.current.signal)) {
         setSteps((s) => applyStep(s, ev));
