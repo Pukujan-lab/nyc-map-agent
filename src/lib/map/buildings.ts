@@ -56,8 +56,10 @@ export function cityDetail(o: { level: MapLevel; flat: boolean; eco: boolean; ci
     const detailed = o.detailed && !o.eco;
     return { extrude: true, skyline: detailed, textured: detailed };
   }
-  const extrude = !o.flat;
-  return { extrude, skyline: extrude && !o.eco, textured: extrude && o.city3d };
+  // Street level is always the 3D city (buildings, storefronts, signs) unless Eco is on:
+  // the Flat choice is for the overview, and a flat street read as an empty plane (owner, 2026-10-24).
+  const extrude = !o.eco;
+  return { extrude, skyline: extrude, textured: extrude && o.city3d };
 }
 
 const saved = new WeakMap<MapLibreMap, Map<string, { vis: unknown; min?: number; max?: number; color: unknown; outline: unknown }>>();

@@ -21,7 +21,8 @@ import {
   type SystemId,
   type Vehicle,
 } from "./model";
-import { alertedRoutes, routesForPage, useAlerts, useBusLines, useBusRoute, useBusSegmentHistory, useBusShapes, useBuses, useStarred, useTransitData, useTransitMeta, useTransitToggles, useXrayData, useSegmentHistory } from "./hooks";
+import { alertedRoutes, fetchBusRoutesNear, routesForPage, useAlerts, useBusLines, useBusRoute, useBusSegmentHistory, useBusShapes, useBuses, useStarred, useTransitData, useTransitMeta, useTransitToggles, useXrayData, useSegmentHistory } from "./hooks";
+import { sharedCoords } from "@/lib/geo/sharedLocation";
 import { useXray, xrayPrims } from "./xray";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { useFlag } from "@/lib/flags";
@@ -224,7 +225,7 @@ export default function TransitLayer() {
   useEffect(() => {
     if (import.meta.env.DEV) (window as unknown as { __walk?: unknown }).__walk = startWalk;
   }, [startWalk]);
-  const { on, set, panelOpen, setPanelOpen, busPage, busLines: pickedLines, busCap } = useTransitToggles();
+  const { on, set, panelOpen, setPanelOpen, busPage, busLines: pickedLines, busCap, setBusLines } = useTransitToggles();
   const { content, showPanel, setDrawerOpen, setSnap, drawerOpen } = usePanel();
   const meta = useTransitMeta();
   const rail = (["subway", "lirr", "mnr"] as SystemId[]).filter((s) => on.has(s));
@@ -312,8 +313,16 @@ export default function TransitLayer() {
   const toggleTrains = useCallback(() => set("subway", !trainsOn), [trainsOn, set]);
   const toggleBuses = useCallback(() => {
     if (show.routes.length > 0) { holdShuttle(alertFocus?.id ?? null); set("bus", false); return; }
+    // Agent-first home: switch on the buses around you (or the map centre) instead of
+    // opening the full line picker; the picker stays in More layers.
+    const c = map?.getCenter();
+    const point = sharedCoords() ?? (c ? { lon: c.lng, lat: c.lat } : null);
+    if (home && point) {
+      void fetchBusRoutesNear(point).then((routes) => { if (routes.length) setBusLines(routes); }).catch(() => {});
+      return;
+    }
     setDrawerOpen(true);
-  }, [show.routes.length, alertFocus, set, setDrawerOpen]);
+  }, [show.routes.length, alertFocus, set, setDrawerOpen, home, map, setBusLines]);
   usePanelChip({ id: "liveTrains", label: "Live trains", active: trainsOn, onToggle: toggleTrains });
   usePanelChip(meta.data?.bus === true ? { id: "liveBuses", label: "Live buses", active: show.routes.length > 0, onToggle: toggleBuses } : null);
   usePanelChip({ id: "transitFocus", label: "Transit Focus", active: focus && anyOn, onToggle: toggleFocus });

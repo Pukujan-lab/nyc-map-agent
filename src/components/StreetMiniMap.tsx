@@ -177,12 +177,13 @@ export function StreetMiniMap({ main, getEye, onExit, filters }: {
   const onMiniClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     const mini = miniRef.current;
     const el = box.current;
-    if (!mini || !el || !mini.getLayer("mini-restrooms")) return;
+    if (!mini || !el) return;
     const rect = el.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
-    const f = mini.queryRenderedFeatures([[x - 24, y - 24], [x + 24, y + 24]], { layers: ["mini-restrooms"] })[0];
-    if (!f) return;
+    const f = mini.getLayer("mini-restrooms") ? mini.queryRenderedFeatures([[x - 24, y - 24], [x + 24, y + 24]], { layers: ["mini-restrooms"] })[0] : undefined;
+    // A tap on the map itself (not a restroom) leaves street view for the overview.
+    if (!f) { onExit(); return; }
     void import("@/lib/map/restrooms").then((mod) => {
       const info = mod.restroomInfo(f);
       if (!info) return;

@@ -53,8 +53,10 @@ describe("simple block map by default, detailed city optional (#363)", () => {
     expect(cityDetail({ ...base, detailed: true, level: "tilted" })).toEqual({ extrude: true, skyline: true, textured: true });
     expect(cityDetail({ ...base, detailed: true, eco: true, level: "tilted" })).toEqual({ extrude: true, skyline: false, textured: false });
   });
-  it("street level keeps its current detail, flag or not", () => {
-    expect(cityDetail({ ...base, level: "street" })).toEqual({ extrude: false, skyline: false, textured: false });
+  it("street level is the 3D city even under the Flat default, except in eco", () => {
+    expect(cityDetail({ ...base, level: "street" })).toEqual({ extrude: true, skyline: true, textured: false });
+    expect(cityDetail({ ...base, city3d: true, level: "street" })).toEqual({ extrude: true, skyline: true, textured: true });
+    expect(cityDetail({ ...base, eco: true, city3d: true, level: "street" })).toEqual({ extrude: false, skyline: false, textured: false });
     expect(cityDetail({ ...base, flat: false, city3d: true, level: "street" })).toEqual({ extrude: true, skyline: true, textured: true });
   });
 });

@@ -16,11 +16,11 @@ export interface MapOptions {
   /** Subway routes picked in Transit lines; empty = all lines, muted. */
   routes: string[];
   stationsOnly: boolean;
-  /** False hides basemap bus-stop icons and the street-level poles. Live buses stay. */
+  /** Basemap bus-stop icons on the overview; off by default. Street view always shows the poles. */
   busStops: boolean;
 }
 export const OPTIONS_KEY = "nma.mapOptions";
-export const DEFAULT_OPTIONS: MapOptions = { streets: "simple", roads: true, streetNames: true, buildings: "flat", routes: [], stationsOnly: false, busStops: true };
+export const DEFAULT_OPTIONS: MapOptions = { streets: "simple", roads: true, streetNames: true, buildings: "flat", routes: [], stationsOnly: false, busStops: false };
 
 export function readOptions(storage: Pick<Storage, "getItem"> | undefined = globalThis.localStorage): MapOptions {
   try {
@@ -32,7 +32,8 @@ export function readOptions(storage: Pick<Storage, "getItem"> | undefined = glob
       buildings: raw.buildings === "3d" ? "3d" : "flat",
       routes: Array.isArray(raw.routes) ? raw.routes.filter((r): r is string => typeof r === "string") : [],
       stationsOnly: raw.stationsOnly === true,
-      busStops: raw.busStops !== false,
+      // Off unless switched on: bus-stop icons crowded the transit lines (owner, 2026-10-24).
+      busStops: raw.busStops === true,
     };
   } catch {
     return DEFAULT_OPTIONS;
@@ -40,11 +41,12 @@ export function readOptions(storage: Pick<Storage, "getItem"> | undefined = glob
 }
 
 let options = readOptions();
-setBusStopsShown(options.busStops);
+// Street view always draws bus-stop poles (they are how you find your stop there);
+// the Bus stops switch only covers the small icons on the overview map.
+setBusStopsShown(true);
 const listeners = new Set<() => void>();
 export function setOptions(patch: Partial<MapOptions>): void {
   options = { ...options, ...patch };
-  setBusStopsShown(options.busStops);
   try {
     localStorage.setItem(OPTIONS_KEY, JSON.stringify(options));
   } catch {
