@@ -95,6 +95,21 @@ export function troubleActions(troubles: LineTrouble[], stuck: StuckTrain[] = []
 const RANK: Record<MapAction["kind"], number> = { showRestroom: 0, showRoute: 1, showTrouble: 2, showStops: 2, showCrashes: 2, flyTo: 3 };
 
 /** Collects actions across a request's tool calls: deduped by id, validated, ranked, capped. */
+const GENERIC = new Set(["show", "street", "avenue", "road", "place", "boulevard", "new", "york", "nyc", "the", "and", "east", "west", "north", "south"]);
+const words = (t: string) => t.toLowerCase().normalize("NFKD").replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w.length >= 3 && !GENERIC.has(w));
+/**
+ * Does the answer stand behind this place? Its name (before the first comma)
+ * must mostly appear in the answer. A geocoder leftover the answer calls
+ * unrelated ("3 YACHT CLUB CV, Staten Island" for "the 3 Percent Club") fails.
+ */
+export function answerNames(answer: string, label: string): boolean {
+  const name = label.replace(/^Show\s+/i, "").split(",")[0];
+  const need = words(name);
+  if (!need.length) return true;
+  const have = new Set(words(answer));
+  return need.filter((w) => have.has(w)).length / need.length >= 0.6;
+}
+
 export class ActionCollector {
   private byId = new Map<string, MapAction>();
   add(actions: MapAction[]): void {
@@ -103,9 +118,10 @@ export class ActionCollector {
       if (ok.success) this.byId.set(a.id, ok.data);
     }
   }
-  list(): MapAction[] {
+  /** The buttons to show; with the answer's text, a "Show <place>" button stays only if the answer names that place. */
+  list(answer?: string): MapAction[] {
     // Skipped stops before a plain stop list: the trouble first.
     const rank = (a: MapAction) => RANK[a.kind] + (a.kind === "showStops" && !a.skipped ? 0.5 : 0);
-    return [...this.byId.values()].map((a, i) => ({ a, i })).sort((x, y) => rank(x.a) - rank(y.a) || x.i - y.i).slice(0, MAX_ACTIONS).map((x) => x.a);
+    return [...this.byId.values()].filter((a) => answer === undefined || a.kind !== "flyTo" || answerNames(answer, a.label)).map((a, i) => ({ a, i })).sort((x, y) => rank(x.a) - rank(y.a) || x.i - y.i).slice(0, MAX_ACTIONS).map((x) => x.a);
   }
 }

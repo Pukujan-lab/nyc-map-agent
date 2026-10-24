@@ -68,8 +68,9 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
       }
       // Buttons under the answer, from the tool results (#371); one "actions" line before "done".
       const actions = new ActionCollector();
+      let answerText = "";
       const flushActions = () => {
-        const list = actions.list();
+        const list = actions.list(answerText);
         if (list.length) send({ type: "actions", actions: list });
       };
       const nowLocal = toNyLocal(clock);
@@ -94,7 +95,7 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
           },
         });
         for await (const part of result.fullStream) {
-          if (part.type === "text-delta") { audit.text(part.text); send({ type: "text", text: part.text }); }
+          if (part.type === "text-delta") { audit.text(part.text); answerText += part.text; send({ type: "text", text: part.text }); }
           else if (part.type === "tool-call") {
             // "tool" stays for older clients; "step" pairs a start with its end (#370).
             send({ type: "tool", name: part.toolName });

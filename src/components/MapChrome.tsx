@@ -5,7 +5,7 @@ import { sharedCoords, startSharing } from "@/lib/geo/sharedLocation";
 import { onMapInstance } from "@/lib/map/mapInstance";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { setOpenMenu, useOpenMenu } from "@/lib/store/openMenu";
-import { useFollowed } from "@/lib/transit/follow";
+import { setFollowMode, stopFollowing, useFollowMode, useFollowed, type FollowMode } from "@/lib/transit/follow";
 import { useSelectedLine } from "@/lib/transit/selectedLine";
 import { MID_HEIGHT_M, levelOf, type ViewLevel } from "./ViewSwitcher";
 
@@ -94,6 +94,62 @@ function ViewMenu({ pitch, onPick }: { pitch: number; onPick: () => void }) {
   );
 }
 
+/** While following, Change view picks the follow camera; Street rides along at street level (trains and buses). */
+const FOLLOW_VIEWS: Array<{ id: FollowMode; label: string; note: string }> = [
+  { id: "map", label: "Map", note: "Flat, from above" },
+  { id: "chase", label: "Chase", note: "Just behind it" },
+  { id: "side", label: "Side", note: "Alongside" },
+  { id: "overhead", label: "Overhead", note: "High above" },
+  { id: "cab", label: "Street", note: "Ride along at street level" },
+];
+
+function FollowViewMenu({ onPick }: { onPick: () => void }) {
+  const mode = useFollowMode();
+  return (
+    <div role="menu" aria-label="Change view" data-testid="follow-view-menu" className={`flex w-[220px] flex-col gap-0.5 ${FLOAT}`}>
+      {FOLLOW_VIEWS.map((v) => {
+        const on = mode === v.id;
+        return (
+          <button key={v.id} type="button" role="menuitemradio" aria-checked={on} onClick={() => { setFollowMode(v.id); onPick(); }}
+            className="flex min-h-[48px] items-center rounded-[14px] border px-2.5 text-left text-[15px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]"
+            style={{ background: on ? "rgba(37,99,235,0.22)" : "transparent", borderColor: on ? "rgba(96,165,250,0.55)" : "transparent" }}>
+            <span className="flex flex-1 flex-col"><span className="font-semibold">{v.label}</span><span className="text-[12px] text-[#a5b4cb]">{v.note}</span></span>
+          </button>
+        );
+      })}
+      <div className="mx-2 my-1 h-px bg-[#263449]" />
+      <button type="button" onClick={() => { stopFollowing(); onPick(); }} className="flex min-h-[44px] items-center rounded-[14px] px-2.5 text-left text-[14px] font-semibold text-[#fca5a5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]">Stop following</button>
+    </div>
+  );
+}
+
+/**
+ * Zoom, always in the same place: +, a vertical slider, −. It works while
+ * following or previewing too: the camera keeps your zoom (ZoomKeeper).
+ */
+export const ZOOM_MIN = 9;
+export const ZOOM_MAX = 20;
+function ZoomControl({ map }: { map: MapLibreMap | null }) {
+  const [z, setZ] = useState(() => map?.getZoom() ?? 12);
+  useEffect(() => {
+    if (!map) return;
+    const sync = () => setZ(map.getZoom());
+    sync();
+    map.on("zoom", sync);
+    return () => { map.off("zoom", sync); };
+  }, [map]);
+  const set = (next: number) => map?.setZoom(Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, next)));
+  const step = "flex h-9 w-11 items-center justify-center text-[20px] font-semibold leading-none text-[#f1f5f9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]";
+  return (
+    <div data-testid="zoom-control" className="pointer-events-auto flex w-11 flex-col items-center rounded-full border border-[#263449] bg-[rgba(15,23,42,0.92)] py-1 shadow-[0_6px_18px_rgba(0,0,0,0.35)]">
+      <button type="button" aria-label="Zoom in" className={step} onClick={() => set(z + 1)}>+</button>
+      <input type="range" aria-label="Zoom" min={ZOOM_MIN} max={ZOOM_MAX} step={0.1} value={z} onChange={(e) => set(Number(e.target.value))}
+        className="h-24 w-6 cursor-pointer accent-[#60a5fa]" style={{ writingMode: "vertical-lr", direction: "rtl" }} />
+      <button type="button" aria-label="Zoom out" className={step} onClick={() => set(z - 1)}>−</button>
+    </div>
+  );
+}
+
 function LocateButton({ map, className, style }: { map: MapLibreMap | null; className?: string; style?: React.CSSProperties }) {
   const { flyTo } = useMapState();
   const [asking, setAsking] = useState(false);
@@ -145,12 +201,24 @@ export function MapChrome() {
     window.addEventListener("keydown", key);
     return () => { document.removeEventListener("pointerdown", down); window.removeEventListener("keydown", key); };
   }, [open]);
-  useEffect(() => { if ((line || followed) && open) setOpenMenu(null); }, [line, followed, open]);
+  useEffect(() => { if (line && open) setOpenMenu(null); }, [line, open]);
 
   const top = "calc(env(safe-area-inset-top) + 16px)";
-  // Following: the follow card owns the top; the locate button sits under it.
+  // Following: the same quick bar, with the follow cameras under Change view.
   if (followed) {
-    return <LocateButton map={map} className="absolute right-4 z-40" style={{ top: "calc(env(safe-area-inset-top) + max(72px, var(--follow-card-h, 0px) + 28px))" }} />;
+    return (
+      <div ref={stack} data-testid="map-chrome" className="pointer-events-none absolute right-4 z-40 flex flex-col items-end gap-2.5" style={{ top }}>
+        <div className="relative">
+          <button type="button" aria-label="Change view" aria-haspopup="menu" aria-expanded={open === "view"} data-testid="view-button"
+            onClick={() => setOpen(open === "view" ? null : "view")} className={`${ROUND} ${open === "view" ? LIGHT : DARK} pointer-events-auto`}>
+            <ViewIcon />
+          </button>
+          {open === "view" ? <div className="pointer-events-auto absolute right-[52px] top-0"><FollowViewMenu onPick={() => setOpen(null)} /></div> : null}
+        </div>
+        <ZoomControl map={map} />
+        <LocateButton map={map} />
+      </div>
+    );
   }
   // A line is selected: its close button takes the top right; locate drops above the chat bar.
   if (line) {
@@ -174,7 +242,8 @@ export function MapChrome() {
           </div>
         ) : null}
       </div>
-      {/* Quick bar, top to bottom: Change view, the compass (only while rotated or tilted), Center on my location. */}
+      {/* Quick bar, top to bottom: Change view, zoom, the compass (only while rotated or tilted), Center on my location. */}
+      <ZoomControl map={map} />
       {rotated && map ? <Compass map={map} bearing={bearing} /> : null}
       <LocateButton map={map} />
     </div>
