@@ -92,7 +92,7 @@ async function main() {
   try {
     rows = await fetchBorough(code);
   } catch (err) {
-    throw new Error(`Could not fetch footprints (${err instanceof Error ? err.message : err}).\n${prereqText()}`);
+    throw new Error(`Could not fetch footprints (${err instanceof Error ? err.message : String(err)}).\n${prereqText()}`);
   }
   const lonlat = rows.flatMap((r) => outerRings(r.the_geom).map((ring) => ({ ring, h: heightMeters(r.height_roof) })));
   const first = lonlat.find((b) => b.ring[0])?.ring[0];

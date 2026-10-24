@@ -50,8 +50,8 @@ export function toLocalMeters(p: LonLat, origin: Origin): XY {
 export function signedArea(ring: XY[]): number {
   let a = 0;
   for (let i = 0; i < ring.length; i++) {
-    const [x1, y1] = ring[i]!;
-    const [x2, y2] = ring[(i + 1) % ring.length]!;
+    const [x1, y1] = ring[i];
+    const [x2, y2] = ring[(i + 1) % ring.length];
     a += x1 * y2 - x2 * y1;
   }
   return a / 2;
@@ -89,14 +89,14 @@ export function triangulate(ring: XY[]): number[] {
   while (idx.length > 3 && guard-- > 0) {
     let clipped = false;
     for (let i = 0; i < idx.length; i++) {
-      const ia = idx[(i + idx.length - 1) % idx.length]!;
-      const ib = idx[i]!;
-      const ic = idx[(i + 1) % idx.length]!;
-      const a = ring[ia]!;
-      const b = ring[ib]!;
-      const c = ring[ic]!;
+      const ia = idx[(i + idx.length - 1) % idx.length];
+      const ib = idx[i];
+      const ic = idx[(i + 1) % idx.length];
+      const a = ring[ia];
+      const b = ring[ib];
+      const c = ring[ic];
       if (cross(a, b, c) <= 0) continue; // reflex or collinear
-      if (idx.some((j) => j !== ia && j !== ib && j !== ic && inTriangle(ring[j]!, a, b, c))) continue;
+      if (idx.some((j) => j !== ia && j !== ib && j !== ic && inTriangle(ring[j], a, b, c))) continue;
       tris.push(ia, ib, ic);
       idx.splice(i, 1);
       clipped = true;
@@ -104,12 +104,12 @@ export function triangulate(ring: XY[]): number[] {
     }
     if (!clipped) {
       // Self-touching or degenerate input: drop one vertex so the loop always ends.
-      const [ia, ib, ic] = [idx[idx.length - 1]!, idx[0]!, idx[1]!];
-      if (cross(ring[ia]!, ring[ib]!, ring[ic]!) > 0) tris.push(ia, ib, ic);
+      const [ia, ib, ic] = [idx[idx.length - 1], idx[0], idx[1]];
+      if (cross(ring[ia], ring[ib], ring[ic]) > 0) tris.push(ia, ib, ic);
       idx.shift();
     }
   }
-  if (idx.length === 3 && cross(ring[idx[0]!]!, ring[idx[1]!]!, ring[idx[2]!]!) > 0) tris.push(idx[0]!, idx[1]!, idx[2]!);
+  if (idx.length === 3 && cross(ring[idx[0]], ring[idx[1]], ring[idx[2]]) > 0) tris.push(idx[0], idx[1], idx[2]);
   return tris;
 }
 
@@ -135,8 +135,8 @@ export function extrudeRing(mesh: Mesh, ring: XY[], heightM: number): void {
   for (const [x, y] of ring) push(x, y, heightM, 0, 0, 1);
   for (const t of triangulate(ring)) mesh.indices.push(base + t);
   for (let i = 0; i < ring.length; i++) {
-    const [x1, y1] = ring[i]!;
-    const [x2, y2] = ring[(i + 1) % ring.length]!;
+    const [x1, y1] = ring[i];
+    const [x2, y2] = ring[(i + 1) % ring.length];
     const len = Math.hypot(x2 - x1, y2 - y1);
     if (len === 0) continue;
     const nx = (y2 - y1) / len;
@@ -157,13 +157,13 @@ export function meshToGlb(mesh: Mesh): Buffer {
   const min = [Infinity, Infinity, Infinity];
   const max = [-Infinity, -Infinity, -Infinity];
   for (let i = 0; i < vertexCount; i++) {
-    const p = [mesh.positions[i * 3]!, mesh.positions[i * 3 + 2]!, -mesh.positions[i * 3 + 1]!];
-    const n = [mesh.normals[i * 3]!, mesh.normals[i * 3 + 2]!, -mesh.normals[i * 3 + 1]!];
+    const p = [mesh.positions[i * 3], mesh.positions[i * 3 + 2], -mesh.positions[i * 3 + 1]];
+    const n = [mesh.normals[i * 3], mesh.normals[i * 3 + 2], -mesh.normals[i * 3 + 1]];
     for (let k = 0; k < 3; k++) {
       pos[i * 3 + k] = p[k]!;
       nor[i * 3 + k] = n[k]!;
-      min[k] = Math.min(min[k]!, p[k]!);
-      max[k] = Math.max(max[k]!, p[k]!);
+      min[k] = Math.min(min[k], p[k]);
+      max[k] = Math.max(max[k], p[k]);
     }
   }
   const idx = new Uint32Array(mesh.indices);
@@ -267,15 +267,15 @@ export function unionBox(boxes: number[][]): number[] {
   const lo = [Infinity, Infinity, Infinity];
   const hi = [-Infinity, -Infinity, -Infinity];
   for (const b of boxes) {
-    const half = [b[3]!, b[7]!, b[11]!];
+    const half = [b[3], b[7], b[11]];
     for (let k = 0; k < 3; k++) {
-      lo[k] = Math.min(lo[k]!, b[k]! - half[k]!);
-      hi[k] = Math.max(hi[k]!, b[k]! + half[k]!);
+      lo[k] = Math.min(lo[k], b[k] - half[k]);
+      hi[k] = Math.max(hi[k], b[k] + half[k]);
     }
   }
   return [
-    (lo[0]! + hi[0]!) / 2, (lo[1]! + hi[1]!) / 2, (lo[2]! + hi[2]!) / 2,
-    (hi[0]! - lo[0]!) / 2, 0, 0, 0, (hi[1]! - lo[1]!) / 2, 0, 0, 0, (hi[2]! - lo[2]!) / 2,
+    (lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2,
+    (hi[0] - lo[0]) / 2, 0, 0, 0, (hi[1] - lo[1]) / 2, 0, 0, 0, (hi[2] - lo[2]) / 2,
   ];
 }
 

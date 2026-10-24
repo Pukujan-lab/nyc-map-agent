@@ -9,7 +9,7 @@ const square: XY[] = [[0, 0], [10, 0], [10, 10], [0, 10]];
 const lShape: XY[] = [[0, 0], [10, 0], [10, 4], [4, 4], [4, 10], [0, 10]];
 const triArea = (ring: XY[], t: number[]) => {
   let a = 0;
-  for (let i = 0; i < t.length; i += 3) a += signedArea([ring[t[i]!]!, ring[t[i + 1]!]!, ring[t[i + 2]!]!]);
+  for (let i = 0; i < t.length; i += 3) a += signedArea([ring[t[i]], ring[t[i + 1]], ring[t[i + 2]]]);
   return a;
 };
 
@@ -60,21 +60,21 @@ describe("3D tiles geometry", () => {
     expect(glb.readUInt32LE(8)).toBe(glb.length);
     expect(glb.length % 4).toBe(0);
     const jsonLen = glb.readUInt32LE(12);
-    const json = JSON.parse(glb.toString("utf8", 20, 20 + jsonLen));
+    const json = JSON.parse(glb.toString("utf8", 20, 20 + jsonLen)) as { accessors: Array<{ count: number; max: number[] }> };
     expect(json.accessors[0].count).toBe(m.positions.length / 3);
     expect(json.accessors[0].max[1]).toBe(20); // height stored on glTF Y
   });
   it("builds an ENU->ECEF transform, grid cells, and a tileset", () => {
     const t = enuToEcefTransform(-74, 40.7);
     expect(t).toHaveLength(16);
-    expect(Math.hypot(t[12]!, t[13]!, t[14]!)).toBeGreaterThan(6.3e6);
+    expect(Math.hypot(t[12], t[13], t[14])).toBeGreaterThan(6.3e6);
     const cells = gridCells([{ ring: square, heightM: 5 }, { ring: square.map(([x, y]) => [x + 5000, y] as XY), heightM: 9 }], 1000);
     expect(cells).toHaveLength(2);
-    const box = boundingBox(cells[0]!.buildings);
+    const box = boundingBox(cells[0].buildings);
     expect(box.slice(0, 3)).toEqual([5, 5, 2.5]);
     const ts = buildTileset({ lon: -74, lat: 40.7 }, [{ uri: "a.glb", box }]);
     expect(ts.asset.version).toBe("1.1");
-    expect(ts.root.children[0]!.content.uri).toBe("a.glb");
+    expect(ts.root.children[0].content.uri).toBe("a.glb");
   });
   it("reads outer rings from Polygon and MultiPolygon", () => {
     const p = { type: "Polygon", coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]], [[0.1, 0.1], [0.2, 0.1], [0.2, 0.2], [0.1, 0.1]]] };
