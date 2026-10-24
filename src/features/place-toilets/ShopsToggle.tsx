@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { useFeatureToggles } from "@/lib/featureToggles";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { usePanelChip } from "@/lib/store/PanelContext";
@@ -15,6 +15,9 @@ export default function ShopsToggle() {
   const active = on.has(SHOPS_CHIP);
   useEffect(() => setShopsEnabled(restrooms && active), [restrooms, active]);
   useEffect(() => () => setShopsEnabled(false), []);
-  usePanelChip(restrooms ? { id: SHOPS_CHIP, label: "Include shops & cafés", active, onToggle: () => toggle(SHOPS_CHIP) } : null);
+  // A stable handler: a fresh arrow re-registered the chip on every render, and the
+  // registration re-rendered this component through the panel context (an endless loop).
+  const onToggle = useCallback(() => toggle(SHOPS_CHIP), [toggle]);
+  usePanelChip(restrooms ? { id: SHOPS_CHIP, label: "Include shops & cafés", active, onToggle } : null);
   return null;
 }
