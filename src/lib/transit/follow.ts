@@ -16,7 +16,8 @@ export function bindPreviewRelease(fn: (() => void) | null) {
 }
 
 export function setFollowed(key: string | null) {
-  // Drag and Esc release the camera where it is. The Stop button sets the flag first.
+  // Drag, Esc, Show on map, Show map, and a non-vehicle map click release the camera where it is.
+  // The Stop button sets the flag first.
   if (key === null && !restoreOnStop) snap = null;
   // A new vehicle owns the camera, so a playing trip preview lets go without gliding home.
   if (key !== null && key !== followed) onLeavePreview?.();
