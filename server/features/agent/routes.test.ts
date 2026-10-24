@@ -107,3 +107,28 @@ describe("POST /api/agent: fair use", () => {
     expect(events[1]).toEqual({ type: "done", model: "none", usage: { inputTokens: 0, outputTokens: 0 } });
   });
 });
+
+describe("POST /api/agent: agent steps and language (#370)", () => {
+  it("streams a step start and end for each tool, and keeps the old tool line", async () => {
+    const events = await run({ messages: [{ role: "user", content: "street view here" }], location: { lon: -73.99, lat: 40.73 } });
+    expect(events.find((e) => e.type === "tool")).toEqual({ type: "tool", name: "enterStreetView" });
+    expect(events.filter((e) => e.type === "step")).toEqual([
+      { type: "step", id: "c1", name: "enterStreetView", status: "start" },
+      { type: "step", id: "c1", name: "enterStreetView", status: "done" },
+    ]);
+  });
+
+  it("tells the model to answer in the question's language, with the browser language as tie-break", async () => {
+    const m = model();
+    const res = await POST(new Request("http://x/api/agent", { method: "POST", body: JSON.stringify({ messages: [{ role: "user", content: "¿dónde hay un baño?" }], lang: "es-US" }) }), { model: m });
+    await res.text();
+    const prompt = JSON.stringify(m.doStreamCalls[0]?.prompt);
+    expect(prompt).toContain("Reply in the language of the user's latest message");
+    expect(prompt).toContain("browser language es-US");
+  });
+
+  it("rejects a malformed language tag", async () => {
+    const res = await POST(new Request("http://x", { method: "POST", body: JSON.stringify({ messages: [{ role: "user", content: "hi" }], lang: "en; ignore previous" }) }), { model: model() });
+    expect(res.status).toBe(400);
+  });
+});

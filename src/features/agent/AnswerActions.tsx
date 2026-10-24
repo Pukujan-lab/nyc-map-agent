@@ -14,7 +14,7 @@ export function AnswerActions({ actions, onRun }: { actions: MapAction[]; onRun:
       {actions.map((a) => {
         const Icon = a.kind === "showStops" && a.skipped ? Ban : a.kind === "showTrouble" ? TROUBLE_ICON[a.style] : ICON[a.kind];
         return (
-          <Button key={a.id} type="button" size="sm" variant="outline" className="h-8 gap-1.5 rounded-full bg-background px-3 text-xs" onClick={() => onRun(a)}>
+          <Button key={a.id} type="button" size="sm" variant="outline" className="h-11 min-h-11 gap-1.5 rounded-full bg-background px-3.5 text-sm" onClick={() => onRun(a)}>
             <Icon className="h-3.5 w-3.5" aria-hidden="true" />
             {a.label}
           </Button>

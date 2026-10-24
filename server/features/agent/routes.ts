@@ -47,7 +47,7 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
   const limit = fair.limiter.take(`ip:${clientIp(request.headers)}`);
   if (!limit.ok) return limitedResponse(limit.retryAt, limit.reason, fair.now());
   const budget = fair.budget.tier();
-  const { messages, now, mode, context } = parsed.data;
+  const { messages, now, mode, context, lang } = parsed.data;
   // Street view's spot counts as the shared location for "here".
   const location = parsed.data.location ?? (context ? { lon: context.lon, lat: context.lat } : null);
   const enc = new TextEncoder();
@@ -76,7 +76,7 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
         const model = opts.model ?? defaultModel(budget.tier === "cheap" ? budget.model : undefined);
         const result = streamText({
           model,
-          system: systemPrompt(nowLocal, location, mode, context),
+          system: systemPrompt(nowLocal, location, mode, context, lang),
           messages,
           tools: makeTools({ location, emit: (command) => send({ type: "command", command }), actions: (a) => actions.add(a), sources: audit.ledger, deps: opts.deps, followedTrain: context?.followedTrain ?? null, drive: resolveFlags({ env: process.env.VITE_FLAGS, advancedMode: false }).agentDrive }),
           stopWhen: stepCountIs(8),
@@ -92,8 +92,14 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
         });
         for await (const part of result.fullStream) {
           if (part.type === "text-delta") { audit.text(part.text); send({ type: "text", text: part.text }); }
-          else if (part.type === "tool-call") send({ type: "tool", name: part.toolName });
-          else if (part.type === "tool-result") audit.toolResult(part.toolName, part.output);
+          else if (part.type === "tool-call") {
+            // "tool" stays for older clients; "step" pairs a start with its end (#370).
+            send({ type: "tool", name: part.toolName });
+            send({ type: "step", id: part.toolCallId.slice(0, 100), name: part.toolName, status: "start" });
+          } else if (part.type === "tool-result") {
+            audit.toolResult(part.toolName, part.output);
+            send({ type: "step", id: part.toolCallId.slice(0, 100), name: part.toolName, status: "done" });
+          } else if (part.type === "tool-error") send({ type: "step", id: part.toolCallId.slice(0, 100), name: part.toolName, status: "error" });
           else if (part.type === "error") send({ type: "error", message: "The model call failed." });
           else if (part.type === "finish") {
             fair.budget.record((part.totalUsage.inputTokens ?? 0) + (part.totalUsage.outputTokens ?? 0));

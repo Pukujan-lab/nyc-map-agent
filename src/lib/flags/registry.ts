@@ -19,6 +19,8 @@ export interface FlagMeta {
 export const FLAGS = {
   agent: { tier: "basic", default: true, label: "Smart mode (voice + text assistant)" },
   agentDrive: { tier: "basic", default: true, label: "Smart mode: driving trips" },
+  // Off while it is reviewed (#370); the goal is on by default.
+  agentHome: { tier: "basic", default: false, label: "Smart mode: chat bar at the bottom, voice waveform, agent steps" },
   search: { tier: "basic", default: true, label: "Search" },
   directions: { tier: "basic", default: true, label: "Walking directions" },
   liveview: { tier: "basic", default: true, label: "Navigation arrows and Live View" },

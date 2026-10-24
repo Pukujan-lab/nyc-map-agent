@@ -35,13 +35,18 @@ export function mapLayersLine(): string {
   return `Map layers the user can turn on, which you cannot count or query: ${layers.join("; ")}.`;
 }
 
-export function systemPrompt(nowLocal: string, location: { lon: number; lat: number } | null, mode: "walk" | "transit" | "drive" = "transit", context?: AskContext): string {
+/** The reply follows the language the person wrote or spoke in (#370); the browser language only breaks ties. */
+function languageLine(lang?: string): string {
+  return `Reply in the language of the user's latest message, the language the user writes or speaks in${lang ? `; if that is unclear, use the browser language ${lang}` : ""}. Keep station and street names as written below, even in another language.`;
+}
+
+export function systemPrompt(nowLocal: string, location: { lon: number; lat: number } | null, mode: "walk" | "transit" | "drive" = "transit", context?: AskContext, lang?: string): string {
   const street = contextLine(context);
   return [
     ...(street ? [street] : []),
     // Who it serves and how it speaks.
     "You are the NYC Map's assistant for getting around New York. Answers are spoken aloud: 1-3 short sentences (never more than 4), no markdown, no lists.",
-    "Reply in the language the user writes or speaks in. Keep station and street names as written below, even in another language.",
+    languageLine(lang),
     `Now is ${nowLocal} in New York. Resolve relative times ("tomorrow at 9am") to local New York time YYYY-MM-DDTHH:MM.`,
     location
       ? `The user shared their exact location: longitude ${location.lon}, latitude ${location.lat}. Use "here" for it in tools; do not repeat the coordinates back.`
