@@ -16,6 +16,7 @@ import { appGeo } from "@/lib/geo/devGeo";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { installNavLayers, readNavColors, removeNavLayers, roadNameAt, updateNavLayers } from "./layers";
 import { distanceAlong, fetchGuidedRoute, formatMetres, metresLeft, progressAt, type RouteStep } from "./steps";
+import { sendCamera, useCameraMode } from "@/lib/map/cameraMode";
 
 const MILE = 1609.344;
 
@@ -56,9 +57,12 @@ export default function RouteGuide() {
   const shared = useSharedLocation();
   const [map, setMap] = useState<MapLibreMap | null>(null);
   const [pos, setPos] = useState<{ lon: number; lat: number; bearing: number } | null>(null);
-  const [navigating, setNavigating] = useState(false);
+  // Guidance is a camera mode: it can't overlap a street walk, and a view you pick keeps it from re-tilting.
+  const camera = useCameraMode();
+  const navigating = camera.kind === "guide" || (camera.kind === "street" && camera.back === "guide");
+  const centered = camera.kind === "guide" && camera.centred;
+  const tilt = camera.kind === "guide" && camera.tilt;
   const [fix, setFix] = useState<Fix | null>(null);
-  const [centered, setCentered] = useState(true);
   const [geoError, setGeoError] = useState<string | null>(null);
   const watchRef = useRef<number | null>(null);
 
@@ -127,7 +131,7 @@ export default function RouteGuide() {
   const stopNav = () => {
     if (watchRef.current !== null) appGeo()?.clearWatch(watchRef.current);
     watchRef.current = null;
-    setNavigating(false);
+    sendCamera({ type: "stop-guide" });
     setFix(null);
   };
   const startNav = () => {
@@ -137,8 +141,7 @@ export default function RouteGuide() {
       return;
     }
     setGeoError(null);
-    setNavigating(true);
-    setCentered(true);
+    sendCamera({ type: "guide" });
     watchRef.current = g.watchPosition(
       (p) =>
         setFix({
@@ -153,6 +156,7 @@ export default function RouteGuide() {
   };
   useEffect(() => () => {
     if (watchRef.current !== null) appGeo()?.clearWatch(watchRef.current);
+    sendCamera({ type: "stop-guide" });
   }, []);
   useEffect(() => {
     if (!routeStart || !routeEnd) stopNav();
@@ -184,24 +188,18 @@ export default function RouteGuide() {
   // Heading-up, tilted camera that follows the fix until you pan away.
   useEffect(() => {
     if (!map || !navigating || walking) return;
-    const off = () => setCentered(false);
+    const off = () => sendCamera({ type: "pan" });
     map.on("dragstart", off);
     return () => {
       map.off("dragstart", off);
     };
   }, [map, navigating, walking]);
-  // Tilt heading-up once when guidance starts; after that only keep you centred, so a
-  // view picked from Change view (Top, Aerial) is not undone by the next location fix.
-  const framed = useRef(false);
-  useEffect(() => { if (!navigating) framed.current = false; }, [navigating]);
+  // Heading-up and tilted until you pick a view (Top, Aerial); after that only keep you centred.
   useEffect(() => {
-    // Street walk frames itself; leaving it for Top or Aerial is a view choice to keep.
-    if (walking) framed.current = true;
-    if (!map || !navigating || walking || !fix || !centered) return;
-    if (framed.current) { map.easeTo({ center: [fix.lon, fix.lat], duration: 600 }); return; }
-    framed.current = true;
+    if (!map || camera.kind !== "guide" || !fix || !centered) return;
+    if (!tilt) { map.easeTo({ center: [fix.lon, fix.lat], duration: 600 }); return; }
     map.easeTo({ center: [fix.lon, fix.lat], bearing: heading, pitch: 55, zoom: Math.max(map.getZoom(), 17), duration: 600 });
-  }, [map, navigating, walking, fix, centered, heading]);
+  }, [map, camera.kind, fix, centered, tilt, heading]);
 
   if (!route) return null;
 
@@ -257,7 +255,7 @@ export default function RouteGuide() {
       {!walking ? (
         <div className="pointer-events-none absolute inset-x-0 bottom-8 z-30 flex flex-col items-center gap-2 [&>*]:pointer-events-auto">
           {navigating && !centered ? (
-            <Button type="button" size="sm" variant="secondary" onClick={() => setCentered(true)}>
+            <Button type="button" size="sm" variant="secondary" onClick={() => sendCamera({ type: "recenter" })}>
               <LocateFixed className="h-4 w-4" /> Recenter
             </Button>
           ) : null}

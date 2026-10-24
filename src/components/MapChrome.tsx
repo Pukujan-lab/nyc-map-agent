@@ -58,7 +58,7 @@ function useCamera(): { map: MapLibreMap | null; bearing: number; pitch: number 
 /** Top / Aerial / Closer / Street: the app's camera levels, as a menu of radio items. */
 function ViewMenu({ pitch, onPick }: { pitch: number; onPick: () => void }) {
   const street = useFlag("streetLevel");
-  const { walking, startWalk, stopWalk, navigate, setCameraHeight, cameraHeightM } = useMapState();
+  const { walking, startWalk, navigate, setCameraHeight, cameraHeightM } = useMapState();
   const level = levelOf(walking, cameraHeightM, pitch);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => { ref.current?.querySelector<HTMLButtonElement>('[aria-checked="true"], [role="menuitemradio"]')?.focus(); }, []);
@@ -66,7 +66,6 @@ function ViewMenu({ pitch, onPick }: { pitch: number; onPick: () => void }) {
     if (l === "street") { if (!walking) startWalk(); }
     else if (l === "mid") setCameraHeight(MID_HEIGHT_M);
     else if (l === "up") setCameraHeight(AERIAL_HEIGHT_M, AERIAL_PITCH);
-    else if (walking) { stopWalk(); window.setTimeout(() => navigate("north"), 750); }
     else navigate("north");
     onPick();
   };
