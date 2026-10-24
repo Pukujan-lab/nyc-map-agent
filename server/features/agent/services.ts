@@ -12,6 +12,7 @@ import type { LngLatTuple, RestroomSpot } from "../../../src/features/agent/sche
 import { bestCandidate, matchLandmark, matchStation, type GeoCandidate } from "./places";
 import { distM, openDataEntrances, type Station } from "./transit";
 import { noteSource } from "./freshness";
+import { cached } from "../../lib/ttlCache";
 
 const UA = { "User-Agent": "nyc-map-agent (github.com/Pukujan/nyc-map-agent)" };
 export const OSRM_FOOT_URL = (process.env.VITE_OSRM_URL ?? "https://routing.openstreetmap.de/routed-foot").replace(/\/$/, "");
@@ -31,7 +32,37 @@ const geoSchema = z.object({
   features: z.array(z.object({ geometry: z.object({ coordinates: z.tuple([z.number(), z.number()]) }), properties: z.object({ label: z.string(), confidence: z.number().optional() }) })),
 });
 export interface Place { label: string; at: LngLatTuple }
-interface GeocodeDeps { stations?: () => Promise<Station[]>; geosearch?: (text: string) => Promise<GeoCandidate[]> }
+interface GeocodeDeps { stations?: () => Promise<Station[]>; geosearch?: (text: string) => Promise<GeoCandidate[]>; shops?: (text: string) => Promise<Place | null> }
+
+/**
+ * A shop, restaurant or other named business by name ("Aldi at Rego Park"). NYC
+ * GeoSearch only knows addresses and picked "ICCD Rego Park" for that (owner report,
+ * 2026-10-24); OpenStreetMap's Nominatim knows the store. Bounded to the five boroughs;
+ * only business-like results count, so streets and neighbourhoods still go to GeoSearch.
+ * Cached a day per text, which also keeps us far under Nominatim's 1 request a second.
+ */
+const POI = new Set(["shop", "amenity", "tourism", "leisure", "office", "craft", "healthcare"]);
+const nominatimSchema = z.array(z.object({ category: z.string(), name: z.string().optional(), display_name: z.string(), lon: z.coerce.number(), lat: z.coerce.number() }));
+export function businessQuery(text: string): string | null {
+  const t = text.trim();
+  // A house number means an address: GeoSearch is better at those.
+  if (/^\d/.test(t)) return null;
+  return t.replace(/\s+(?:at|in|on|near|by)\s+/i, ", ");
+}
+async function nominatimBusiness(text: string): Promise<Place | null> {
+  const q = businessQuery(text);
+  if (!q) return null;
+  return cached(`shop:${q.toLowerCase()}`, 86_400_000, async () => {
+    const url = `https://nominatim.openstreetmap.org/search?${new URLSearchParams({ q, format: "jsonv2", limit: "3", bounded: "1", viewbox: "-74.26,40.92,-73.69,40.49" })}`;
+    const hit = nominatimSchema.parse(await getJson(url, 5000)).find((r) => POI.has(r.category) && r.name);
+    if (!hit) return null;
+    // "Aldi, 61-11, Junction Boulevard, Rego Park, …" → "Aldi, 61-11 Junction Boulevard, Rego Park"
+    const parts = hit.display_name.split(", ");
+    const street = /^\d[\d-]*$/.test(parts[1] ?? "") ? `${parts[1]} ${parts[2] ?? ""}`.trim() : parts[1];
+    const area = /^\d[\d-]*$/.test(parts[1] ?? "") ? parts[3] : parts[2];
+    return { label: [hit.name, street, area].filter(Boolean).join(", "), at: [hit.lon, hit.lat] };
+  });
+}
 
 async function geosearchCandidates(text: string): Promise<GeoCandidate[]> {
   const data = geoSchema.parse(await getJson(`https://geosearch.planninglabs.nyc/v2/search?${new URLSearchParams({ text, size: "5" })}`));
@@ -47,6 +78,12 @@ export async function geocode(text: string, deps: GeocodeDeps = {}): Promise<Pla
     if (st) return { label: `${st.name} station`, at: st.at };
   } catch {
     // Station list unavailable: fall through to GeoSearch.
+  }
+  try {
+    const shop = await (deps.shops ?? nominatimBusiness)(text);
+    if (shop) return shop;
+  } catch {
+    // Nominatim down or slow: fall through to GeoSearch.
   }
   const best = bestCandidate(await (deps.geosearch ?? geosearchCandidates)(text));
   return best ? { label: best.label, at: best.at } : null;

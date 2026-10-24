@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { errorMessage, errorType, fallbackFetch, isBusy, streamError, modelChain, shouldFallBack } from "./model-fallback";
+import { errorMessage, errorType, fallbackFetch, isBusy, peekStream, streamError, modelChain, shouldFallBack, withoutThinking } from "./model-fallback";
 import { DEFAULT_MODEL } from "./routes";
 
 const err = (status: number, code: string) => new Response(JSON.stringify({ error: { message: "x", type: "invalid_request_error", code } }), { status });
@@ -122,5 +122,41 @@ describe("a busy error inside a 200 stream", () => {
     const res = await fallbackFetch(["cb/a", "cb/b"], base as unknown as typeof fetch, vi.fn(), instant)("u", req());
     expect(await res.text()).toContain("[DONE]");
     expect(modelsSent(base)).toEqual(["cb/a", "cb/a", "cb/a", "cb/b"]);
+  });
+});
+
+describe("speed", () => {
+  const sse = (text: string) => new Response(text, { status: 200, headers: { "content-type": "text/event-stream" } });
+  const goodStream = () => sse('data: {"choices":[{"delta":{"content":"hi"}}]}\n\ndata: [DONE]\n\n');
+  /** A stream whose first chunk never comes until aborted. */
+  const stalled = (signal?: AbortSignal | null) => new Response(new ReadableStream({ start(c) { signal?.addEventListener("abort", () => c.error(new Error("aborted"))); } }), { status: 200 });
+  const req2 = () => ({ method: "POST", body: JSON.stringify({ model: "x", messages: [] }) });
+  const sent = (base: ReturnType<typeof vi.fn>) => base.mock.calls.map((c) => JSON.parse((c[1] as RequestInit).body as string) as Record<string, unknown>);
+
+  it("turns thinking off for DeepSeek and Qwen unless INFERHUB_THINKING=on", () => {
+    expect(withoutThinking("cb/deepseek-v4.1-flash", {})).toEqual({ thinking: { type: "disabled" } });
+    expect(withoutThinking("ali/qwen3.8-flash", {})).toEqual({ enable_thinking: false });
+    expect(withoutThinking("other/model", { a: 1 })).toEqual({ a: 1 });
+    expect(withoutThinking("cb/deepseek-v4.1-flash", {}, "on")).toEqual({});
+  });
+
+  it("moves to the next model when the first is slow to start", async () => {
+    const base = vi.fn().mockImplementation((_u: unknown, init: RequestInit) => Promise.resolve((JSON.parse(init.body as string) as { model: string }).model === "cb/a" ? stalled(init.signal) : goodStream()));
+    const log = vi.fn();
+    const res = await fallbackFetch(["cb/a", "cb/b"], base as unknown as typeof fetch, log, () => Promise.resolve(), 30)("u", req2());
+    expect(await res.text()).toContain("[DONE]");
+    expect(sent(base).map((b) => b.model)).toEqual(["cb/a", "cb/b"]);
+    expect(log.mock.calls[0][0]).toContain("slow to start");
+  });
+
+  it("waits for the last model however slow, and does not cut a good stream later", async () => {
+    const base = vi.fn().mockResolvedValue(goodStream());
+    const res = await fallbackFetch(["cb/a"], base as unknown as typeof fetch, vi.fn(), () => Promise.resolve(), 1)("u", req2());
+    await new Promise((r) => setTimeout(r, 20));
+    expect(await res.text()).toContain("[DONE]");
+  });
+
+  it("reports a stream with no first chunk in time as slow", async () => {
+    expect(await peekStream(stalled(), 10)).toEqual({ message: "", slow: true });
   });
 });
