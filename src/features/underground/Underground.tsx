@@ -9,7 +9,11 @@ import { useMapState } from "@/lib/store/MapStateContext";
 import { useActiveTrip } from "@/lib/transit/activeTrip";
 import type { StreetUnit } from "@/lib/transit/equipment";
 import { useFollowed } from "@/lib/transit/follow";
-import { arrowState, calibrate, describePrompt, facingTracksHeading, headingJumped, landmarkLine, pickLandmarks, signText, trainCue, type Calibration } from "./cues";
+import { LANDMARKS } from "@/lib/map/landmarks";
+import { SurfaceCalibration } from "./SurfaceCalibration";
+import { SURFACE_CAL_MS, disagreementTrigger, lateOpenTrigger, movementCorrection, openedAfterTrip } from "./surface";
+import { angleDiff } from "./exits";
+import { arrowState, calibrate, correctedHeading, describePrompt, facingTracksHeading, headingJumped, landmarkLine, pickLandmarks, signText, trainCue, type Calibration } from "./cues";
 import { ageLabel, bearing, compassAgrees, exitKind, headingFromMovement, metres, nearestStation, turnHint, type Pt, type Station, type SubwayStatic } from "./exits";
 import { initialDetector, stepDetector } from "./motion";
 import { canUndo, riding, stepGetOff, type GetOff, type GetOffEvent } from "./getoff";
@@ -182,6 +186,15 @@ export default function Underground() {
 
   // "Describe what you see", queued while offline.
   const [describe, setDescribe] = useState<string | null>(null);
+
+  // Above-ground calibration: offered by a banner, sensors only from a tap.
+  const [surface, setSurface] = useState<"off" | "banner" | "open">("off");
+  const [surfaceCal, setSurfaceCal] = useState<Calibration | null>(null);
+  const surfaceDismissed = useRef(false);
+  const gps = useRef<{ lastAt: number | null; gapMs: number | null; recoveredAt: number | null }>({ lastAt: null, gapMs: null, recoveredAt: null });
+  const surfaceFixes = useRef<Array<{ t: number; at: Pt; accuracy: number | null }>>([]);
+  const disagreeSamples = useRef<Array<{ t: number; compass: number; movement: number }>>([]);
+  const [openedStore] = useState(() => loadStore());
   const [queue, setQueue] = useState<Queued[]>(() => read<Queued[]>(QUEUE_KEY, []));
 
   useEffect(() => registerOfflineWorker(), []);
@@ -381,6 +394,70 @@ export default function Underground() {
     setCal(null);
   };
 
+  // ---------- above-ground calibration (late open, or no platform calibration) ----------
+  const aboveGround = mode === "idle" || mode === "walk";
+  const fix: Pt | null = shared.status === "on" && shared.coords ? [shared.coords.lon, shared.coords.lat] : null;
+  useEffect(() => {
+    if (!aboveGround || !fix) return;
+    const t = Date.now();
+    const g = gps.current;
+    const good = accuracy === null || accuracy <= 50;
+    if (good) {
+      if (g.lastAt !== null && t - g.lastAt >= 60_000) {
+        g.gapMs = t - g.lastAt;
+        g.recoveredAt = t;
+      }
+      g.lastAt = t;
+    }
+    // Heading from the last ~20 s of good walking fixes; trusted over the compass when they disagree.
+    surfaceFixes.current = [...surfaceFixes.current.filter((f) => t - f.t < 20_000), { t, at: fix, accuracy }];
+    const move = headingFromMovement(surfaceFixes.current, 12, 20);
+    if (move !== null && raw !== null) {
+      const corrected = surfaceCal ? correctedHeading(surfaceCal, raw, t, SURFACE_CAL_MS) : null;
+      const c = corrected ?? raw;
+      disagreeSamples.current = [...disagreeSamples.current.filter((s) => t - s.t < 15_000), { t, compass: c, movement: move }];
+      if (movementCorrection(c, move).disagree) setSurfaceCal(calibrate(move, raw, t));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shared, aboveGround]);
+  useEffect(() => {
+    if (!aboveGround || surface !== "off" || ask) return;
+    const g = gps.current;
+    const t = Date.now();
+    const offeredKey = "nyc-map:underground:surface-offered";
+    const firstOpen = openedAfterTrip(openedStore?.savedAt ?? null, !!openedStore?.destination && !!openedStore.packs.length, read<number | null>(offeredKey, null) === openedStore?.savedAt, t);
+    const reason = lateOpenTrigger({
+      gpsGapMs: g.gapMs,
+      recoveredAgoMs: g.recoveredAt === null ? null : t - g.recoveredAt,
+      entranceM: fix && sys ? (stationAtEntrance(sys, fix, 150) ? 0 : null) : null,
+      compassDisagrees: disagreementTrigger(disagreeSamples.current, t),
+      firstOpenAfterTrip: mode === "idle" && firstOpen,
+      dismissed: surfaceDismissed.current,
+    });
+    if (!reason) return;
+    if (reason === "after-subway-trip") write(offeredKey, openedStore?.savedAt ?? null);
+    setSurface("banner");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shared, now, aboveGround, surface, ask, sys]);
+  // While the above-ground correction is fresh, the map turns with the corrected compass.
+  useEffect(() => {
+    if (!aboveGround || raw === null || !surfaceCal) return;
+    const h = correctedHeading(surfaceCal, raw, Date.now(), SURFACE_CAL_MS);
+    const m = getMapInstance();
+    if (h === null || !m || Math.abs(angleDiff(m.getBearing(), h)) < 4) return;
+    m.jumpTo({ bearing: h });
+  }, [raw, surfaceCal, aboveGround]);
+  const closeSurface = () => {
+    surfaceDismissed.current = true;
+    setSurface("off");
+    if (!surfaceCal && mode === "idle") {
+      stopCompass.current?.();
+      stopCompass.current = null;
+      setRaw(null);
+    }
+  };
+  const surfaceLines = useMemo(() => (surface === "open" ? [...readMap(getMapInstance()).lines, ...(store?.packs.flatMap((p) => p.sketch) ?? [])] : []), [surface, store]);
+
   const showStation = (id: string) => {
     setStationId(id);
     setChosen(0);
@@ -514,6 +591,39 @@ export default function Underground() {
 
   // ---------- idle ----------
   if (mode === "idle") {
+    if (surface === "open") {
+      return (
+        <section className={card} aria-label="Fix my direction">
+          <SurfaceCalibration
+            at={fix}
+            lines={surfaceLines}
+            landmarks={LANDMARKS.map((l) => ({ name: l.name, at: [l.lon, l.lat] }))}
+            raw={raw}
+            startCompass={startCompass}
+            onCalibrated={(expected, mean) => setSurfaceCal(calibrate(expected, mean, Date.now()))}
+            onFacing={(h) => {
+              if (raw !== null) setSurfaceCal(calibrate(h, raw, Date.now()));
+              getMapInstance()?.easeTo({ bearing: h, duration: 500 });
+            }}
+            onShareLocation={() => void startSharing()}
+            onClose={closeSurface}
+          />
+        </section>
+      );
+    }
+    if (surface === "banner" && !ask) {
+      return (
+        <div className="pointer-events-auto absolute bottom-[8.5rem] left-3 z-40 flex items-center gap-1 rounded-full border bg-card/95 py-1 pl-3 pr-1 text-sm shadow-md" role="status">
+          Map facing the wrong way?
+          <Button type="button" size="sm" variant="secondary" className="h-7 rounded-full px-3" onClick={() => setSurface("open")}>
+            Fix direction
+          </Button>
+          <Button type="button" size="icon" variant="ghost" className="h-7 w-7" aria-label="Dismiss" onClick={closeSurface}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      );
+    }
     if (ask) {
       return (
         <section className={card} aria-label="Are you in the station?">
