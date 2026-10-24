@@ -37,6 +37,9 @@ export const SOURCE_INFO = {
   "street-closures": { label: "DOT street closures", url: "https://data.cityofnewyork.us/d/i6b5-j7bu", staleAfterMs: 3 * DAY },
   "event-closures": { label: "Permitted events", url: "https://data.cityofnewyork.us/d/tvpp-9vvx", staleAfterMs: 3 * DAY },
   "ny511": { label: "511NY events", url: "https://511ny.org", staleAfterMs: 15 * MIN },
+  // Event lookups on request: a search and the event's own page, read live.
+  "web-search": { label: "Web search (TinyFish)", url: "https://tinyfish.ai", staleAfterMs: 60 * MIN },
+  "web-page": { label: "Event page", url: "https://tinyfish.ai", staleAfterMs: 60 * MIN, note: "Read from the organiser's page; check it before you go." },
   crashes: { label: "Police-reported crashes, last 12 months", url: "https://data.cityofnewyork.us/d/h9gi-nx95", staleAfterMs: 3 * DAY, note: "Crash data runs weeks to months behind." },
 } satisfies Record<string, SourceInfo>;
 export type SourceId = keyof typeof SOURCE_INFO;
