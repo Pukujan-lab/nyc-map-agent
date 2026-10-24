@@ -11,6 +11,7 @@ import { useDataView } from "@/lib/store/DataViewContext";
 import { ChatPanel } from "@/components/ChatPanel";
 import { FeatureOverlays, useChatReplaced } from "@/components/FeatureOverlays";
 import { ControlDrawer } from "@/components/ControlDrawer";
+import { ContextCleanChip } from "@/components/ContextCleanChip";
 import { useAreas } from "@/lib/geo/useAreas";
 import { useFilters } from "@/lib/datasets/useFilters";
 import { PlaceDetails } from "@/components/PlaceDetails";
@@ -223,6 +224,7 @@ export default function Index() {
         />
       )}
       <FeatureOverlays />
+      <ContextCleanChip />
 
       <MapPanel
         isDesktop={isDesktop}
