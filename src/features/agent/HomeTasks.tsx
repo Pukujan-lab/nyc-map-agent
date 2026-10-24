@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { Briefcase, ChevronDown, House, Route, TrainFront } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { alertsBody, commuteFor, commutePrompt, delayDetails, delayOn, readUsual, stationPoints, subwayStations, type HomeWork, type SavedSpot, type SubwayStations, type UsualRide } from "./commute";
+import { useCommuteFocus } from "./commuteFocus";
 import type { MapPoint } from "./schema";
 import { ExitStairsIcon, RestroomIcon } from "./homeIcons";
 
@@ -37,11 +38,13 @@ export function TaskButtons({ on }: { on: TaskHandlers }) {
 }
 
 /** A route bullet in the line's colour (MTA blue when the planner gave none). */
-export function Bullet({ ride, size, lines }: { ride: Pick<UsualRide, "route" | "color">; size: "lg" | "sm"; lines?: SubwayStations["routes"] }) {
+export function Bullet({ ride, size, lines }: { ride: Pick<UsualRide, "route" | "color">; size: "lg" | "sm" | "xs"; lines?: SubwayStations["routes"] }) {
   const line = lines?.[ride.route];
+  const wide = size === "xs" && ride.route.length > 2;
+  const box = size === "lg" ? "h-9 w-9 rounded-full text-[15px]" : size === "sm" ? "h-[30px] w-[30px] rounded-full text-[13px]" : wide ? "h-6 min-w-6 rounded-md px-1 text-[11px]" : "h-6 w-6 rounded-full text-[11px]";
   return (
     <span
-      className={size === "lg" ? "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[15px] font-extrabold text-white" : "flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full text-[13px] font-extrabold text-white"}
+      className={`flex shrink-0 items-center justify-center font-extrabold text-white ${box}`}
       style={{ background: line?.color ?? ride.color ?? "#2563eb", ...(line?.text ? { color: line.text } : {}) }}
       aria-hidden="true"
     >
@@ -91,6 +94,16 @@ export function DailyCard({ places, onAsk, onFly, onShowStations }: { places: Ho
   const { data: stations } = useQuery({ queryKey: ["agent", "subway-stations"], queryFn: fetchStations, enabled: !!delay, staleTime: Infinity });
   const alt = usual && alerts ? usual.alternatives.find((a) => !delayOn(alerts, a.route)) : undefined;
   const [open, setOpen] = useState<"notice" | "alt" | null>(null);
+  const focus = useCommuteFocus();
+  const opened = useRef(0);
+  // My day’s delay row opens this notice and puts the problem on the map.
+  useEffect(() => {
+    if (!focus || focus.n === opened.current || !usual || focus.route !== usual.route || !delay || !details || !stations) return;
+    opened.current = focus.n;
+    setOpen("notice");
+    const points = stationPoints(stations, details);
+    if (points.length) onShowStations(points);
+  }, [focus, usual, delay, details, stations, onShowStations]);
   const ask = (opts?: Parameters<typeof commutePrompt>[2]) => {
     const q = commutePrompt(to, places, opts);
     if (q) onAsk(q);
