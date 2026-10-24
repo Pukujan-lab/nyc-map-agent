@@ -186,6 +186,43 @@ function boundFor(text: string, route: string): string | null {
 const article = (s: string) => (/^[aeiou]/i.test(s) ? `an ${s}` : `a ${s}`);
 
 /**
+ * Stations the text says trains still serve: "[G] runs between X and Y",
+ * "Trains run every 20 minutes between X and Y", "1. Between X and Y", and
+ * transfer points. Lines about shuttle buses are not train service.
+ */
+export function servedNames(text: string): string[] {
+  const out: string[] = [];
+  for (const line of text.split("\n")) {
+    if (/shuttle bus/i.test(line) || /^\s*No \[/i.test(line)) continue;
+    const r = /(?:\b(?:runs?|operates?)(?: every \d+ minutes)?(?: only)?|^\s*\d+\.)\s+between\s+(.+?)\s+and\s+([^.,\n(]+)/i.exec(line);
+    if (r) out.push(cleanName(r[1]), cleanName(r[2]));
+    const t = /Transfer (?:between [^\n]*? )?at ([^.\n|]+?)(?:\s*\[[^\]]*\])*(?: to continue your trip)?\.?\s*$/i.exec(line);
+    if (t) out.push(cleanName(t[1]));
+  }
+  return [...new Set(out.filter(Boolean))];
+}
+
+/**
+ * Stations without this line's trains during a suspension. The entities list
+ * every station the change touches, in line order, including a section where
+ * trains still run less often; so take the headline's "No [G] between A and
+ * B" stretch of that list (a missing end runs to the list's far end) and drop
+ * the stations the text says are still served.
+ */
+export function suspendedStops(listed: TroubleStation[], header: string, served: Set<string>, route: string, stations: TroubleStation[]): TroubleStation[] {
+  let part = listed;
+  const r = /No \[[A-Z0-9]+\][^\n]*? between\s+(.+?)\s+and\s+([^.,\n]+)/i.exec(header);
+  if (r) {
+    const ids = listed.map((s) => s.gtfsId);
+    const [ia, ib] = [r[1], r[2]].map((n) => ids.indexOf(findStation(n, stations, route)?.gtfsId ?? ""));
+    const last = listed.length - 1;
+    const ends = ia >= 0 && ib >= 0 ? [ia, ib] : ia >= 0 || ib >= 0 ? [Math.max(ia, ib), Math.max(ia, ib) === 0 ? last : 0] : [0, last];
+    part = listed.slice(Math.min(...ends), Math.max(...ends) + 1);
+  }
+  return part.filter((s) => !served.has(s.gtfsId));
+}
+
+/**
  * The MTA's own direction-switch advice. Kept only when the train to board is
  * one of the lines just ridden, or "a … train": switching to another line is
  * a transfer, not a direction change.
@@ -233,6 +270,7 @@ export function troubleFromAlert(a: FeedAlert, stations: TroubleStation[], nowS:
   const skipNames = [...new Set(skipChanges.flatMap((c) => c.names))];
   const sh = shuttleOf(all);
   const rejoinAt = rejoinNames(all);
+  const servedAt = servedNames(all);
   const switches = directionSwitches(all, stations);
   const notes = (merc?.station_alternative ?? []).flatMap((s) => {
     const st = s.affected_entity?.stop_id ? byId.get(s.affected_entity.stop_id) : undefined;
@@ -245,8 +283,9 @@ export function troubleFromAlert(a: FeedAlert, stations: TroubleStation[], nowS:
     const rejoinLine = rejoinAt.find((r) => r.lines.length)?.lines[0] ?? (rejoin.length ? route : null);
     let skipped: TroubleStation[] = [];
     if (kind === "suspended") {
-      // The entities are the stations without this line's trains; a rejoin station still has them.
-      skipped = mine.flatMap((e) => (e.stop_id && byId.get(e.stop_id)) || []).filter((s) => !rejoin.some((r) => r.gtfsId === s.gtfsId));
+      const listed = mine.flatMap((e) => (e.stop_id && byId.get(e.stop_id)) || []);
+      const served = new Set([...rejoin.map((s) => s.gtfsId), ...servedAt.flatMap((n) => findStation(n, stations, route)?.gtfsId ?? [])]);
+      skipped = suspendedStops(listed, header, served, route, stations);
     } else if (skipNames.length) {
       skipped = skipNames.map((n) => findStation(n, stations, route)).filter((s): s is TroubleStation => Boolean(s));
     }
@@ -260,7 +299,7 @@ export function troubleFromAlert(a: FeedAlert, stations: TroubleStation[], nowS:
       alertId: a.id,
       route,
       kind,
-      headline: plainAlertText(header),
+      headline: plainAlertText(header.replace(/\s*\n+\s*/g, ". ")),
       direction: direction ? direction[0].toUpperCase() + direction.slice(1) : null,
       partial: /\bsome\b[^.\n]*\btrains?\b/i.test(header),
       problemAt: kind === "delay" ? stationsNamedIn(header, stations, [route]).map(ref) : [],
