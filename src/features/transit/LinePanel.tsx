@@ -7,6 +7,7 @@ import { useMapState } from "@/lib/store/MapStateContext";
 import { setAlertFocus } from "./alertFocus";
 import { useAlerts, useTransitData } from "./hooks";
 import { TONE, lineNotices, type LineNotice } from "./lineNotices";
+import { NoticeIcon, noticeKind } from "./noticeKind";
 
 const GLASS = "border border-[rgba(148,163,184,0.18)] bg-[rgba(15,23,42,0.6)] backdrop-blur-[10px]";
 
@@ -107,10 +108,11 @@ export function LinePanel({ map, route, onFollow }: { map: MaplibreMap | undefin
                   <button type="button" aria-expanded={open} data-notice={n.id} onClick={() => setPicked(open ? null : n.id)}
                     className="flex w-full items-start gap-2.5 rounded-[14px] border px-3 py-2.5 text-left text-[14px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]"
                     style={{ borderColor: open ? "rgba(96,165,250,0.6)" : "rgba(148,163,184,0.16)", background: open ? "rgba(37,99,235,0.22)" : "rgba(15,23,42,0.35)" }}>
-                    <span className="mt-[5px] h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: tone.dot }} aria-hidden />
+                    <NoticeIcon kind={noticeKind(`${n.title} ${n.body}`, { kind: n.alert?.kind, reroute: n.alert?.reroute })} color={tone.dot} className="mt-[2px] h-4 w-4 shrink-0" />
                     <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
-                      <span className={`font-semibold ${open ? "" : "line-clamp-2"}`}>{n.title}</span>
-                      {n.meta ? <span className="text-[13px] text-[#cbd5e1]">{n.meta}</span> : null}
+                      {/* Closed: one line each; the full text opens on tap. */}
+                      <span className={`font-semibold ${open ? "" : "truncate"}`}>{n.title}</span>
+                      {n.meta ? <span className={`text-[13px] text-[#cbd5e1] ${open ? "" : "truncate"}`}>{n.meta}</span> : null}
                       {open && n.body !== n.title ? <span className="mt-1 whitespace-pre-line text-[13px] leading-[1.45] text-[#e2e8f0]">{n.body}</span> : null}
                     </span>
                     <span aria-hidden className="mt-0.5 text-[#a5b4cb] transition-transform" style={{ transform: `rotate(${open ? 180 : 0}deg)` }}>⌄</span>

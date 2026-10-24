@@ -1,4 +1,5 @@
 import "@/components/task-screens.css";
+import { NoticeIcon, noticeKind } from "./noticeKind";
 import { useFlag } from "@/lib/flags";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { useStationHelp } from "@/lib/underground/stationHelp";
@@ -406,8 +407,10 @@ export function FollowCard({ vehicle }: { vehicle: Vehicle }) {
         </div>
         <h3 className="task-caption px-1">Notices on the {vehicle.route}</h3>
         <div className="flex max-h-[150px] flex-col gap-2 overflow-y-auto">
-          {[...grouped.delays, ...grouped.notices].map((a) => <button key={a.id} type="button" data-testid={grouped.delays.includes(a) ? "follow-delay" : "follow-notice"} onClick={() => openAlert(a)} className="rounded-[14px] border border-slate-400/15 bg-slate-900/35 px-3 py-2.5 text-left text-sm">
-            <span className="font-semibold">{plainAlert(a.text)}</span><span className="mt-1 block text-[13px] text-slate-300">{alertTimeLabel(a) ?? "No time given"} · Show on map</span>
+          {[...grouped.delays, ...grouped.notices].map((a) => <button key={a.id} type="button" data-testid={grouped.delays.includes(a) ? "follow-delay" : "follow-notice"} onClick={() => openAlert(a)} className="flex items-center gap-2.5 rounded-[14px] border border-slate-400/15 bg-slate-900/35 px-3 py-2 text-left text-sm">
+            <NoticeIcon kind={noticeKind(a.text, { kind: a.kind, reroute: a.reroute })} color="#fcd34d" />
+            {/* One line each; tapping opens the full notice and frames it on the map. */}
+            <span className="flex min-w-0 flex-1 flex-col"><span className="truncate font-semibold">{plainAlert(a.text)}</span><span className="truncate text-[12px] text-slate-300">{alertTimeLabel(a) ?? "No time given"}</span></span>
           </button>)}
           {!grouped.delays.length && !grouped.notices.length ? <p className="px-1 text-[13px] text-slate-300">No notices reported</p> : null}
         </div>

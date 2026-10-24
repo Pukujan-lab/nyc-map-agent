@@ -59,7 +59,7 @@ export function ViewSwitcher() {
     return () => { map.off("pitch", sync); };
   }, [map]);
   const street = useFlag("streetLevel");
-  // Agent-first home (#370): the view levels moved to Change view and X-ray to More layers; task follow screens own their controls.
+  // Agent-first home (#370): the view levels moved to Change view and X-ray to More layers; only the follow row stays.
   const home = useFlag("agentHome");
   const { walking, startWalk, stopWalk, navigate, setCameraHeight, cameraHeightM } = useMapState();
   const followed = useFollowed();
@@ -100,12 +100,13 @@ export function ViewSwitcher() {
     ro.observe(outer);
     return () => ro.disconnect();
   }, [rowKey]);
-  if (home) return null;
+  // While following a train or bus the Street / Top switch stays: it is how you ride along or step back.
+  if (home && !followed) return null;
   return (
     <div
       data-testid="view-switcher"
       style={{ display: "var(--controls-display, flex)" }}
-      className="pointer-events-none absolute bottom-[calc(var(--edge)+96px+var(--chat-bar-h,0px))] left-[max(var(--edge),var(--sheet-left,0px))] right-[var(--edge)] z-[35] lg:bottom-[calc(var(--edge)+36px+var(--chat-bar-h,0px))] lg:right-[calc(var(--edge)+340px)]"
+      className={`pointer-events-none absolute bottom-[calc(var(--edge)+96px+var(--chat-bar-h,0px))] left-[max(var(--edge),var(--sheet-left,0px))] right-[var(--edge)] z-[35] lg:bottom-[calc(var(--edge)+36px+var(--chat-bar-h,0px))] lg:right-[calc(var(--edge)+340px)] ${home ? "sm:left-[calc(min(380px,42vw)+24px)]" : ""}`}
     >
       <div ref={outerRef} className="flex w-full min-w-0 justify-center">
         <div
