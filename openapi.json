@@ -667,6 +667,17 @@
         "required": [
           "messages"
         ]
+      },
+      "SttResult": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ]
       }
     },
     "parameters": {}
@@ -4667,6 +4678,141 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AgentRateLimited"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/stt": {
+      "post": {
+        "summary": "Transcribe one short voice turn (Whisper); the audio is not stored",
+        "responses": {
+          "200": {
+            "description": "The words heard",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SttResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No recording",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Recording too long",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Transcription failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Speech-to-text is not set up on this server",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stt": {
+      "post": {
+        "summary": "Transcribe one short voice turn (Whisper); the audio is not stored (alias of /api/v1/stt)",
+        "deprecated": true,
+        "responses": {
+          "200": {
+            "description": "The words heard",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SttResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No recording",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Recording too long",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Transcription failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Speech-to-text is not set up on this server",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }
