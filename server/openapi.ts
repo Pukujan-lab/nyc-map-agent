@@ -20,7 +20,7 @@ import { Query as BusSegmentsQuery, Response_ as BusSegmentsResponse } from "./f
 import { EventsResponse, Query as EventsQuery } from "./features/events/schema";
 import { PlaceToiletsResponse } from "./features/place-toilets/schema";
 
-const Json = z.record(z.unknown()).openapi("Json");
+const Json = z.record(z.string(), z.unknown()).openapi("Json");
 const ApiError = z.object({ error: z.string(), issues: z.array(z.string()).optional() }).openapi("ApiError");
 
 const errors = {
@@ -28,7 +28,7 @@ const errors = {
   502: { description: "Upstream (Octo / R2) error", content: { "application/json": { schema: ApiError } } },
 };
 
-const jsonRoute = (path: string, summary: string, query?: z.AnyZodObject, params?: z.AnyZodObject) =>
+const jsonRoute = (path: string, summary: string, query?: z.ZodObject, params?: z.ZodObject) =>
   createRoute({
     method: "get",
     path,

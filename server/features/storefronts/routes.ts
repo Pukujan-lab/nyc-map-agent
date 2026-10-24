@@ -42,7 +42,7 @@ const Osm = z.object({
   elements: z.array(z.object({
     lat: z.number().optional(), lon: z.number().optional(),
     center: z.object({ lat: z.number(), lon: z.number() }).optional(),
-    tags: z.record(z.string()).optional(),
+    tags: z.record(z.string(), z.string()).optional(),
   })),
 });
 
@@ -78,10 +78,10 @@ export async function GET(request: Request): Promise<Response> {
 
 const Info = z.object({
   query: z.object({
-    pages: z.record(z.object({
+    pages: z.record(z.string(), z.object({
       imageinfo: z.array(z.object({
         thumburl: z.string().optional(),
-        extmetadata: z.record(z.object({ value: z.unknown() })).optional(),
+        extmetadata: z.record(z.string(), z.object({ value: z.unknown() })).optional(),
       })).optional(),
     })),
   }),

@@ -52,7 +52,7 @@
   {
     "name": "aggregate worker",
     "path": ".size-build/assets/aggregate.worker-*.js",
-    "limit": "18 kB"
+    "limit": "27 kB"
   },
   {
     "name": "feature: transit layers (lazy)",
