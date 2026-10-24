@@ -35,10 +35,26 @@ describe("Top view is flat 2D (#364)", () => {
     expect(mapLevel(true, true)).toBe("street");
   });
   it("draws no extrusion, skyline or textured city from straight above, even with 3D buildings", () => {
-    expect(cityDetail({ level: "top", flat: false, eco: false, city3d: true })).toEqual({ extrude: false, skyline: false, textured: false });
+    expect(cityDetail({ level: "top", flat: false, eco: false, city3d: true, detailed: true })).toEqual({ extrude: false, skyline: false, textured: false });
   });
   it("brings 3D back when tilted or walking", () => {
-    expect(cityDetail({ level: "tilted", flat: false, eco: false, city3d: false })).toEqual({ extrude: true, skyline: true, textured: false });
-    expect(cityDetail({ level: "street", flat: false, eco: false, city3d: true })).toEqual({ extrude: true, skyline: true, textured: true });
+    expect(cityDetail({ level: "tilted", flat: false, eco: false, city3d: false, detailed: false }).extrude).toBe(true);
+    expect(cityDetail({ level: "street", flat: false, eco: false, city3d: true, detailed: false })).toEqual({ extrude: true, skyline: true, textured: true });
+  });
+});
+
+describe("simple block map by default, detailed city optional (#363)", () => {
+  const base = { flat: true, eco: false, city3d: false, detailed: false };
+  it("tilted views draw plain extruded blocks, even under the Flat default, and nothing heavier", () => {
+    expect(cityDetail({ ...base, level: "tilted" })).toEqual({ extrude: true, skyline: false, textured: false });
+    expect(cityDetail({ ...base, flat: false, city3d: true, level: "tilted" })).toEqual({ extrude: true, skyline: false, textured: false });
+  });
+  it("the detailedCity flag brings the skyline and textured city back above street level, except in eco", () => {
+    expect(cityDetail({ ...base, detailed: true, level: "tilted" })).toEqual({ extrude: true, skyline: true, textured: true });
+    expect(cityDetail({ ...base, detailed: true, eco: true, level: "tilted" })).toEqual({ extrude: true, skyline: false, textured: false });
+  });
+  it("street level keeps its current detail, flag or not", () => {
+    expect(cityDetail({ ...base, level: "street" })).toEqual({ extrude: false, skyline: false, textured: false });
+    expect(cityDetail({ ...base, flat: false, city3d: true, level: "street" })).toEqual({ extrude: true, skyline: true, textured: true });
   });
 });

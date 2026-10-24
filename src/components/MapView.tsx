@@ -15,6 +15,7 @@ import { busStopIconOpacity, busStopTextOpacity } from "@/lib/map/busStops";
 import { applyPlaces, placesStale, usePlaces, withQuickPlaces } from "@/lib/map/places";
 import { useMapOptions } from "@/lib/map/mapOptions";
 import { applyBuildings, cityDetail, mapLevel, wantsFlatBuildings } from "@/lib/map/buildings";
+import { installLandmarkLabels } from "@/lib/map/landmarkLabels";
 import { applyMapTheme, buildingEdge, setThemeCoords, usePalette } from "@/lib/theme";
 import { sharedCoords } from "@/lib/geo/sharedLocation";
 
@@ -469,13 +470,15 @@ export function MapView({
   const places = usePlaces();
   const opts = useMapOptions();
   const t = usePalette();
-  // Flat footprints at every level, including street view. 3D buildings is what
-  // extrudes the basemap and turns on the textured city. Ignoring Flat during a
-  // walk loaded that city under Simple streets too.
+  // At street level Flat keeps footprints flat; 3D buildings extrudes the
+  // basemap and turns on the textured city. Ignoring Flat during a walk loaded
+  // that city under Simple streets too.
   const flatBuildings = wantsFlatBuildings(opts.buildings);
-  // Top view is a flat 2D overview whatever the choice (#364); tilting brings 3D back.
+  // Top view is a flat 2D overview (#364). Tilted views are a simple block map;
+  // the detailed city above street level is an advanced, off-by-default flag (#363).
+  const detailedCity = useFlag("detailedCity");
   const level = mapLevel(walking, tilted);
-  const { extrude, skyline: skylineOn, textured: texturedOn } = cityDetail({ level, flat: flatBuildings, eco, city3d });
+  const { extrude, skyline: skylineOn, textured: texturedOn } = cityDetail({ level, flat: flatBuildings, eco, city3d, detailed: detailedCity });
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!map || !ready) return;
@@ -502,6 +505,8 @@ export function MapView({
     };
     map.on("styledata", keep);
     applyBuildings(map, !extrude, t.building, buildingEdge(t), flatBuildings);
+    // A few named landmarks so the light map still says where you are (#363).
+    installLandmarkLabels(map, t.dark ? "#f1f5f9" : "#1f2937", t.land);
     return () => {
       map.off("styledata", keep);
     };

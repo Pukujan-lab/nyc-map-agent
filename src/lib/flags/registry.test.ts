@@ -33,3 +33,15 @@ describe("transit-first first open", () => {
     expect(resolveFlags({ advancedMode: true }).hazards).toBe(true);
   });
 });
+
+describe("detailed 3D city is optional (#363)", () => {
+  it("is off by default, in simple and in advanced mode", () => {
+    expect(resolveFlags({ advancedMode: false }).detailedCity).toBe(false);
+    expect(resolveFlags({ advancedMode: true }).detailedCity).toBe(false);
+  });
+  it("turns on only in advanced mode, from the URL or the build env", () => {
+    expect(resolveFlags({ advancedMode: true, url: "+detailedCity" }).detailedCity).toBe(true);
+    expect(resolveFlags({ advancedMode: true, env: "+detailedCity" }).detailedCity).toBe(true);
+    expect(resolveFlags({ advancedMode: false, url: "+detailedCity" }).detailedCity).toBe(false);
+  });
+});

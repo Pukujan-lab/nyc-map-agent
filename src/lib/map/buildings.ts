@@ -39,12 +39,24 @@ export interface CityDetail {
 }
 
 /**
- * What 3D the map draws at a level. Top view is a flat 2D overview (#364): no
- * extrusions, no skyline and no textured city, so no three.js layer either.
- * Tilting brings the chosen detail back. Pure, for tests.
+ * What 3D the map draws at a level. Pure, for tests.
+ *
+ * - Top: a flat 2D overview (#364). No extrusions, skyline or textured city,
+ *   so no three.js layer either.
+ * - Tilted (Mid / Up): a simple block map (#363). The basemap's own buildings
+ *   as plain theme-coloured extrusions, whatever the Flat / 3D choice. The
+ *   skyline and textured city (facades, props, hero landmark models,
+ *   storefront signs) are the optional detailed city: the `detailedCity`
+ *   flag, advanced tier, off by default.
+ * - Street: unchanged. The Flat / 3D choice and the textured-city toggle decide.
  */
-export function cityDetail(o: { level: MapLevel; flat: boolean; eco: boolean; city3d: boolean }): CityDetail {
-  const extrude = o.level !== "top" && !o.flat;
+export function cityDetail(o: { level: MapLevel; flat: boolean; eco: boolean; city3d: boolean; detailed: boolean }): CityDetail {
+  if (o.level === "top") return { extrude: false, skyline: false, textured: false };
+  if (o.level === "tilted") {
+    const detailed = o.detailed && !o.eco;
+    return { extrude: true, skyline: detailed, textured: detailed };
+  }
+  const extrude = !o.flat;
   return { extrude, skyline: extrude && !o.eco, textured: extrude && o.city3d };
 }
 

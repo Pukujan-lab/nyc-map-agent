@@ -31,6 +31,7 @@ export const FLAGS = {
   signs: { tier: "basic", default: true, label: "Street signs" },
   streetLevel: { tier: "basic", default: true, label: "Street level" },
   city3d: { tier: "basic", default: true, label: "Textured 3D city" },
+  detailedCity: { tier: "advanced", default: false, label: "Detailed 3D city above street level (textured buildings, skyline, landmark models)" },
   noise: { tier: "advanced", default: true, label: "Noise layer" },
   blockDensity: { tier: "basic", default: true, label: "Shade blocks per hectare" },
   daylight: { tier: "basic", default: true, label: "Time-of-day lighting" },
