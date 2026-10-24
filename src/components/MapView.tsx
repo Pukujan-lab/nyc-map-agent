@@ -11,7 +11,7 @@ import { useMediaQuery } from "@/lib/useMediaQuery";
 import { MapCompass } from "./MapCompass";
 import { ViewSwitcher } from "./ViewSwitcher";
 import { applyReadable } from "@/lib/map/readable";
-import { busStopIconOpacity, busStopTextOpacity } from "@/lib/map/busStops";
+import { busStopAt, busStopIconOpacity, busStopTextOpacity } from "@/lib/map/busStops";
 import { applyPlaces, placesStale, usePlaces, withQuickPlaces } from "@/lib/map/places";
 import { useMapOptions } from "@/lib/map/mapOptions";
 import { applyBuildings, cityDetail, mapLevel, wantsFlatBuildings } from "@/lib/map/buildings";
@@ -657,6 +657,9 @@ export function MapView({
       };
       const transitIds = FEATURES.filter((f) => f.id === "transit").flatMap((f) => f.clickLayers ?? []);
       if (hitsAny(transitIds)) return;
+      // A bus-stop icon (basemap poi_transit, class "bus"): the transit feature
+      // opens its routes and next buses, so skip the area pick.
+      if (opts.busStops && analyticsFlags.transit && clicked && busStopAt(clicked, event.point)) return;
       // 3D restroom kiosks at street level: public ones open here, shop/café
       // ones are opened by the place-toilets feature's own click handler.
       const kiosk = walking ? pickFurniture(event.target, event.point.x, event.point.y) : null;
@@ -749,7 +752,7 @@ export function MapView({
         selectNta(picked.datum.ntaCode);
       }
     },
-    [pickAt, selectBlock, selectNta, routePicking, setRoutePoint, showPanel, emptyMapTap, city3d, walking, analytics],
+    [opts.busStops, analyticsFlags.transit, pickAt, selectBlock, selectNta, routePicking, setRoutePoint, showPanel, emptyMapTap, city3d, walking, analytics],
   );
 
   const handleMoveEnd = useCallback(() => {

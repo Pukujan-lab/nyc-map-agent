@@ -11,6 +11,7 @@
  *   /api/transit/bus-trip?vehicle=&route= → one bus: headsign + upcoming stops with ETAs (SIRI)
  *   /api/transit/bus-route?route=        → one route's shape + stops, on demand (Bus Time OBA)
  *   /api/transit/bus-stops?lat=&lon=     → stops within ~300 m and the routes serving each (Bus Time OBA)
+ *   /api/transit/bus-arrivals?stop=MTA_308209 → next buses at one stop with ETAs (SIRI stop-monitoring)
  *
  * /api/transit-live (live.ts) batches the rail systems and alerts into one edge-cached response.
  */
@@ -243,6 +244,26 @@ export async function loadBusStops(key: string, lat: number, lon: number) {
   return { stops };
 }
 
+const STOP_RE = /^(MTA|MTABC)_\d{1,8}$/;
+type SiriVisit = { MonitoredVehicleJourney?: Record<string, unknown> & { MonitoredCall?: SiriCall } };
+/** Next buses at one stop (SIRI stop-monitoring), soonest first. */
+export async function loadBusArrivals(key: string, stop: string) {
+  const qs = new URLSearchParams({ key, MonitoringRef: stop, MaximumStopVisits: "12", StopMonitoringDetailLevel: "normal" });
+  const r = await fetch(`${BUSTIME}siri/stop-monitoring.json?${qs}`, { signal: AbortSignal.timeout(10_000) });
+  if (!r.ok) throw new Error(`bus-arrivals upstream ${r.status}`);
+  const d = (await r.json()) as { Siri?: { ServiceDelivery?: { StopMonitoringDelivery?: Array<{ MonitoredStopVisit?: SiriVisit[] }> } } };
+  const visits = d.Siri?.ServiceDelivery?.StopMonitoringDelivery?.[0]?.MonitoredStopVisit ?? [];
+  const arrivals = visits.flatMap((v) => {
+    const j = v.MonitoredVehicleJourney;
+    if (!j) return [];
+    const c = j.MonitoredCall;
+    const t = Date.parse(c?.ExpectedArrivalTime ?? c?.AimedArrivalTime ?? "");
+    return [{ route: first(j.PublishedLineName), destination: first(j.DestinationName), eta: Number.isFinite(t) ? Math.round(t / 1000) : null, away: c?.Extensions?.Distances?.PresentableDistance ?? "" }];
+  });
+  arrivals.sort((a, b) => (a.eta ?? Infinity) - (b.eta ?? Infinity));
+  return { arrivals };
+}
+
 export async function GET(request: Request): Promise<Response> {
   const system = new URL(request.url).pathname.replace(/^\/api(?:\/v1)?\/transit\/?/, "");
   const busKey = process.env.MTA_BUSTIME_KEY;
@@ -266,6 +287,12 @@ export async function GET(request: Request): Promise<Response> {
       const glat = Math.round(lat * 1000) / 1000;
       const glon = Math.round(lon * 1000) / 1000;
       return json(await cached(`bus-stops:${glat},${glon}`, () => loadBusStops(busKey, glat, glon), 24 * 3600_000), { maxAge: 3600, browserMaxAge: 3600 });
+    }
+    if (system === "bus-arrivals") {
+      if (!busKey) return json({ error: "bus_unavailable" }, { status: 404 });
+      const stop = new URL(request.url).searchParams.get("stop") ?? "";
+      if (!STOP_RE.test(stop)) return json({ error: "bad_stop" }, { status: 400 });
+      return json(await cached(`bus-arrivals:${stop}`, () => loadBusArrivals(busKey, stop)), { maxAge: 15, browserMaxAge: 10 });
     }
     if (system === "bus-trip" || system === "bus-route") {
       if (!busKey) return json({ error: "bus_unavailable" }, { status: 404 });
