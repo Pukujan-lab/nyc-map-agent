@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { alertGeometry, isSkipped, lineStatus, skippedStations, stationChanges } from "./alertFocus";
+import { alertGeometry, isSkipped, lineStatus, namedStations, skippedStations, stationChanges } from "./alertFocus";
 import type { TransitAlert } from "./hooks";
 import type { StaticSystem } from "./model";
 
@@ -26,6 +26,15 @@ describe("alert focus geometry", () => {
     const g = alertGeometry({ ...base, stops: ["F23N", "F25"], routes: ["F"] }, sub);
     expect(g.skipped.map((s) => s.id).sort()).toEqual(["F23", "F25"]);
     expect(g.affected[0].coords.length).toBeLessThan(sub.shapes.F.c.length / 2);
+  });
+  it("frames the stations an alert names instead of the whole line", () => {
+    const name = (id: string) => sub.stations.features.find((f) => f.properties.id === id)?.properties.name;
+    const one = { ...base, kind: "planned" as const, reroute: true, routes: ["7"], text: "In Queens, no [7] at Flushing-Main St" };
+    expect(namedStations(one.text, sub, "7").map(name)).toEqual(["Flushing-Main St"]);
+    const g = alertGeometry(one, sub);
+    expect(g.affected[0].coords.length).toBeLessThan(sub.shapes["7"].c.length / 2);
+    const many = "In Queens, Flushing-bound [7] skips 52 St and 69 St. All trains at Woodside-61 St board from the Manhattan-bound platform";
+    expect(namedStations(many, sub, "7").map(name).sort()).toEqual(["52 St", "61 St-Woodside", "69 St"]);
   });
   it("highlights the whole line for a line-wide delay", () => {
     const g = alertGeometry({ ...base, kind: "delay", reroute: false, routes: ["Q"] }, sub);

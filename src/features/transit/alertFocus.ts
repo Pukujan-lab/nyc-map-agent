@@ -129,6 +129,24 @@ export function reroutePath(sys: StaticSystem, via: string[], from: Pos, to: Pos
   return out;
 }
 
+/** Words of a station name worth matching ("61 St-Woodside" -> "61 st", "woodside"). */
+const nameParts = (name: string): string[] => name.toLowerCase().split(/[-/]/).map((x) => x.trim()).filter((x) => x.length >= 3 || /\d/.test(x));
+const hasPhrase = (text: string, part: string) => new RegExp(`(^|[^a-z0-9])${part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9]|$)`).test(text);
+
+/**
+ * Stations on `route` that the alert text names: every part of the station's
+ * name appears in the text, in any order ("Woodside-61 St" finds 61 St-Woodside).
+ */
+export function namedStations(text: string, sys: StaticSystem, route: string): string[] {
+  const sm = sys.stopM[route];
+  if (!sm || !text) return [];
+  const t = text.toLowerCase().replace(/\[([a-z0-9]+)\]/g, "$1");
+  return sys.stations.features
+    .filter((f) => f.properties.id in sm)
+    .filter((f) => { const parts = nameParts(f.properties.name); return parts.length > 0 && parts.every((p) => hasPhrase(t, p)); })
+    .map((f) => f.properties.id);
+}
+
 export function alertGeometry(a: TransitAlert, sys: StaticSystem): AlertGeometry {
   const g: AlertGeometry = { affected: [], skipped: [], reroute: [], bounds: null };
   const byId = new Map(sys.stations.features.map((f) => [f.properties.id, f]));
@@ -142,7 +160,10 @@ export function alertGeometry(a: TransitAlert, sys: StaticSystem): AlertGeometry
       const f = byId.get(id);
       if (f && !seen.has(id)) { seen.add(id); g.skipped.push({ id, name: f.properties.name, coord: f.geometry.coordinates as Pos }); }
     }
-    const ms = ids.map((id) => sm[id]).filter((m): m is number => m !== undefined);
+    // No skipped stops: the stations the alert names on this line ("no 7 at
+    // Flushing-Main St") frame it, so the map zooms in instead of showing the whole line.
+    const named = ids.length ? [] : namedStations(a.text, sys, route);
+    const ms = [...ids, ...named].map((id) => sm[id]).filter((m): m is number => m !== undefined);
     if (!ms.length) { g.affected.push({ route, coords: c }); continue; } // whole-line alert
     // Stretch from the stop before the first affected one to the stop after the last.
     const all = Object.values(sm).sort((x, y) => x - y);

@@ -11,7 +11,7 @@ describe("menu row order", () => {
 
   it("shrinks and fades each place after the pill", () => {
     expect(MENU_SIZE).toEqual([44, 40, 34, 28, 24, 20]);
-    expect(MENU_ALPHA).toEqual([1, 0.8, 0.5, 0.28, 0.14, 0.06]);
+    expect(MENU_ALPHA).toEqual([1, 0.9, 0.7, 0.5, 0.32, 0.18]);
     expect(MENU_SIZE).toHaveLength(MENU_IDS.length);
   });
 
