@@ -52,6 +52,9 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
   const location = parsed.data.location ?? (context ? { lon: context.lon, lat: context.lat } : null);
   const enc = new TextEncoder();
   const modelId = budget.tier === "cheap" ? budget.model : budget.tier === "none" ? "none" : (process.env.INFERHUB_MODEL ?? DEFAULT_MODEL);
+  // The asker's clock resolves "tomorrow"; a missing or broken one falls back to the server's.
+  const asked = now ? new Date(now) : null;
+  const clock = asked && Number.isFinite(asked.getTime()) ? asked : new Date();
 
   const body = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -69,7 +72,7 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
         const list = actions.list();
         if (list.length) send({ type: "actions", actions: list });
       };
-      const nowLocal = toNyLocal(now ? new Date(now) : new Date());
+      const nowLocal = toNyLocal(clock);
       // Data sources and their age, plus the "no guessing" check (#375); one "sources" line before "done".
       const audit = new AnswerAudit([nowLocal, contextLine(context) ?? "", ...messages.filter((m) => m.role === "user").map((m) => m.content)]);
       try {
@@ -78,7 +81,7 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
           model,
           system: systemPrompt(nowLocal, location, mode, context, lang),
           messages,
-          tools: makeTools({ location, emit: (command) => send({ type: "command", command }), actions: (a) => actions.add(a), sources: audit.ledger, deps: opts.deps, followedTrain: context?.followedTrain ?? null, drive: resolveFlags({ env: process.env.VITE_FLAGS, advancedMode: false }).agentDrive }),
+          tools: makeTools({ location, now: clock, emit: (command) => send({ type: "command", command }), actions: (a) => actions.add(a), sources: audit.ledger, deps: opts.deps, followedTrain: context?.followedTrain ?? null, drive: resolveFlags({ env: process.env.VITE_FLAGS, advancedMode: false }).agentDrive }),
           stopWhen: stepCountIs(8),
           maxRetries: 1,
           // The default handler console.logs the raw provider error; keep logs to the request id only.

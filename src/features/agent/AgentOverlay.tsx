@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils";
 import { useSpeech } from "@/lib/voice/useSpeech";
 import { spokenSummary } from "@/lib/voice/tts";
 import { executeCommand, type ExecutorContext } from "./executor";
-import { langTag, type MapAction, type Trip, type TripMode } from "./schema";
+import { PLAYBACK_SPEEDS, langTag, type MapAction, type PlaybackSpeed, type Trip, type TripMode } from "./schema";
 import { askAgent } from "./stream";
 import { TripSummary, selectAlternative } from "./TripSummary";
 import { routeColor, showPoints, showTrip } from "./tripLayer";
@@ -99,13 +99,39 @@ export default function AgentOverlay() {
   const voiceTurn = useRef(false);
   const speech = useSpeech({ onFinalTranscript: (t) => { voiceTurn.current = true; void send(t); }, lang: home ? lang : undefined });
   const player = usePlayer((text) => speech.speak(text));
+  /** Speed the next Play uses: the agent's pick or the person's last tap. */
+  const [prefSpeed, setPrefSpeed] = useState<PlaybackSpeed>(10);
   // Ask, the route fit, and the preview all move the camera. Follow and street
-  // view let go first, without the Stop following glide back.
-  const handoffCamera = () => {
+  // view let go first, without the Stop following glide back. Starting the
+  // preview keeps the player (it is the new camera owner).
+  const handoffCamera = (keepPreview = false) => {
     setFollowed(null);
-    player.release();
+    if (!keepPreview) player.release();
     stopWalk();
     getMapInstance()?.stop();
+  };
+  /**
+   * Another option chosen (chat card or trip panel): redraw it and, if the
+   * preview is loaded, restart it on that route from its start. A playing
+   * preview keeps the camera, so the map does not fit to the new route then.
+   */
+  const chooseTrip = (next: Trip) => {
+    revealTripBuses(next);
+    setTrip(next);
+    const m = getMapInstance();
+    if (m) showTrip(m, next, { fit: !player.state.playing });
+    player.select(next);
+  };
+  const chooseRef = useRef(chooseTrip);
+  chooseRef.current = chooseTrip;
+  /** The Play button: the only thing that starts the preview. */
+  const startPreview = (t: Trip, speed: PlaybackSpeed) => {
+    handoffCamera(true);
+    revealTripBuses(t);
+    setTrip(t);
+    setPrefSpeed(speed);
+    setChatOpen(false);
+    player.start(t, speed);
   };
 
   const ctx: ExecutorContext = {
@@ -114,10 +140,22 @@ export default function AgentOverlay() {
     openTrip: (t) => {
       revealTripBuses(t);
       setTrip(t);
-      showPanel({ id: `agent:trip:${t.id}`, title: `To ${t.destination.label}`, subtitle: `${t.departIso.slice(11)} → ${t.arriveIso.slice(11)}`, summary: <TripSummary trip={t} compact onSelect={(alt) => ctxRef.current.openTrip(selectAlternative(t, alt))} />, details: <TripSummary trip={t} bodyOnly /> });
+      showPanel({
+        id: `agent:trip:${t.id}`, title: `To ${t.destination.label}`, subtitle: `${t.departIso.slice(11)} → ${t.arriveIso.slice(11)}`,
+        summary: <TripSummary trip={t} compact onSelect={(alt) => { const next = selectAlternative(t, alt); chooseRef.current(next); ctxRef.current.openTrip(next); }} />,
+        details: <TripSummary trip={t} bodyOnly />,
+      });
     },
     enterStreetView: (lon, lat) => { handoffCamera(); startWalk({ lon, lat }); },
-    playFlythrough: (t, speed) => { handoffCamera(); revealTripBuses(t); setTrip(t); setChatOpen(false); player.start(t, speed); },
+    // The agent only loads the preview; it waits for Play (asking for a trip must not start it).
+    playFlythrough: (t, speed) => {
+      revealTripBuses(t);
+      setTrip(t);
+      setPrefSpeed(speed);
+      const m = getMapInstance();
+      if (m) showTrip(m, t);
+      player.load(t, speed);
+    },
     setTime: (iso) => setMapTime(iso),
   };
   const ctxRef = useRef(ctx);
@@ -326,8 +364,14 @@ export default function AgentOverlay() {
         {home && !compact && busy ? <WorkingPanel steps={steps} /> : null}
         {trip ? (
           <div className="rounded-lg border p-3">
-            <TripSummary trip={trip} mapTime={mapTime} onSelect={(alt) => ctx.showTrip(selectAlternative(trip, alt))} />
-            <Button size="sm" className="mt-3 w-full gap-2" onClick={() => ctx.playFlythrough(trip, 10)}><Play className="h-4 w-4" /> Preview trip</Button>
+            <TripSummary trip={trip} mapTime={mapTime} onSelect={(alt) => chooseTrip(selectAlternative(trip, alt))} />
+            <div className="mt-3 flex items-center gap-1.5">
+              <Button size="sm" className="flex-1 gap-2" onClick={() => (player.state.playing && player.state.tripId === trip.id ? player.toggle() : startPreview(trip, prefSpeed))}>
+                {player.state.playing && player.state.tripId === trip.id ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                {player.state.tripId !== trip.id ? "Play trip preview" : player.state.playing ? "Pause preview" : player.state.status === "paused" ? "Resume preview" : "Play trip preview"}
+              </Button>
+              <SpeedPicker speed={prefSpeed} onSpeed={(s) => { setPrefSpeed(s); player.setSpeed(s); }} label="Preview speed" />
+            </div>
           </div>
         ) : null}
     </>
@@ -427,7 +471,7 @@ export default function AgentOverlay() {
       callout={player.state.callout}
       step={`${player.state.seg + 1}/${player.state.segs.length}`}
       onToggle={player.toggle}
-      onSpeed={player.setSpeed}
+      onSpeed={(s) => { setPrefSpeed(s); player.setSpeed(s); }}
       onSkip={player.skip}
       onClose={player.stop}
     />
@@ -475,8 +519,22 @@ export default function AgentOverlay() {
           {body}
         </SheetContent>
       </Sheet>
-      {playback}
+      {/* On a phone the Ask sheet covers the bottom; the trip card's Play button stands in until it closes. */}
+      {isDesktop || !chatOpen ? playback : null}
     </>
+  );
+}
+
+/** 2x / 5x / 10x / 30x. A change keeps the camera where it is and changes the rate. */
+function SpeedPicker({ speed, onSpeed, label }: { speed: Speed; onSpeed: (s: Speed) => void; label: string }) {
+  return (
+    <div className="flex items-center" role="group" aria-label={label}>
+      {PLAYBACK_SPEEDS.map((s) => (
+        <Button key={s} type="button" size="sm" variant={speed === s ? "default" : "ghost"} className="h-8 rounded-full px-2 text-xs tabular-nums" aria-pressed={speed === s} onClick={() => onSpeed(s)}>
+          {s}x
+        </Button>
+      ))}
+    </div>
   );
 }
 
@@ -487,13 +545,7 @@ function PlaybackBar(p: { playing: boolean; speed: Speed; callout: string; step:
       <Button size="icon" variant="ghost" className="h-8 w-8 rounded-full" aria-label={p.playing ? "Pause preview" : "Play preview"} onClick={p.onToggle}>
         {p.playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
       </Button>
-      <div className="flex items-center" role="group" aria-label="Playback speed">
-        {([2, 10, 30] as const).map((s) => (
-          <Button key={s} type="button" size="sm" variant={p.speed === s ? "default" : "ghost"} className="h-8 rounded-full px-2 text-xs tabular-nums" aria-pressed={p.speed === s} onClick={() => p.onSpeed(s)}>
-            {s}x
-          </Button>
-        ))}
-      </div>
+      <SpeedPicker speed={p.speed} onSpeed={p.onSpeed} label="Playback speed" />
       <Button size="icon" variant="ghost" className="h-8 w-8 rounded-full" aria-label="Skip to next leg" onClick={p.onSkip}><SkipForward className="h-4 w-4" /></Button>
       <div className="min-w-0 flex-1 truncate px-1 text-sm" aria-live="polite">{p.callout}</div>
       <Badge variant="secondary" className="tabular-nums">{p.step}</Badge>

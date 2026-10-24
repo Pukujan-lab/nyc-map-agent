@@ -79,6 +79,7 @@ export function TripSummary({ trip, compact, mapTime, bodyOnly, onSelect }: { tr
         {mapTime ? <Badge variant="outline">Map time {mapTime.replace("T", " ")}</Badge> : null}
       </div>}
       {trip.exitAdvice && !bodyOnly ? <p className="font-medium">{trip.exitAdvice}</p> : null}
+      {trip.scheduled && !bodyOnly ? <p className="text-xs text-muted-foreground" data-testid="trip-when">{trip.scheduled.note}</p> : null}
       {compact ? <OtherOptions trip={trip} onSelect={onSelect} /> : (
         <>
           <ol className="list-decimal space-y-0.5 pl-5 text-muted-foreground">

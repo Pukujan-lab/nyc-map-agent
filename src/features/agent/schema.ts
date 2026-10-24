@@ -104,11 +104,21 @@ export const tripBase = z.object({
   stubbed: z.array(z.string()).default([]),
   /** "otp" when OpenTripPlanner planned it, "fallback" for the built-in subway router. */
   planner: z.enum(["otp", "fallback"]).optional(),
+  /**
+   * Set for a trip planned ahead ("tomorrow at 9am"): what is and is not known
+   * for that time. Planned work and the forecast cover it; live delays do not.
+   */
+  scheduled: z.object({ future: z.boolean(), note: z.string() }).optional(),
 });
 /** A trip plus up to two alternative itineraries (themselves without alternatives). */
 export const trip = tripBase.extend({ alternatives: z.array(tripBase).max(4).default([]) });
 export type TripCore = z.infer<typeof tripBase>;
 export type Trip = z.infer<typeof trip>;
+
+/** Trip preview playback speeds (#289): 2x, 5x, 10x, 30x real time. */
+export const PLAYBACK_SPEEDS = [2, 5, 10, 30] as const;
+export type PlaybackSpeed = (typeof PLAYBACK_SPEEDS)[number];
+export const playbackSpeed = z.union([z.literal(2), z.literal(5), z.literal(10), z.literal(30)]);
 
 /** Structured map commands the model returns and the client executes. Keep it small. */
 export const command = z.discriminatedUnion("type", [
@@ -116,7 +126,7 @@ export const command = z.discriminatedUnion("type", [
   z.object({ type: z.literal("showRoute"), trip }),
   z.object({ type: z.literal("openPanel"), trip }),
   z.object({ type: z.literal("enterStreetView"), lon: z.number().min(-180).max(180), lat: z.number().min(-90).max(90) }),
-  z.object({ type: z.literal("playFlythrough"), trip, speed: z.union([z.literal(2), z.literal(10), z.literal(30)]).default(10) }),
+  z.object({ type: z.literal("playFlythrough"), trip, speed: playbackSpeed.default(10) }),
   z.object({ type: z.literal("setTime"), iso: z.string() }),
 ]);
 export type AgentCommand = z.infer<typeof command>;
