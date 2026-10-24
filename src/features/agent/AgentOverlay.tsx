@@ -41,7 +41,12 @@ import { usePlayer, type Speed } from "./usePlayer";
 import { useWakePhrase } from "./useWakePhrase";
 import { useHandsFree } from "./useHandsFree";
 import { closeAsk, useAskRequest } from "@/lib/agent/streetContext";
-import { AgentHome, WorkingPanel } from "./AgentHome";
+import { AgentHome, AnswerCard, WorkingPanel } from "./AgentHome";
+import { DailyCard, TaskButtons } from "./HomeTasks";
+import { rememberCommute, useHomeWork } from "./commute";
+import { useFollowed } from "@/lib/transit/follow";
+import { useLinesControl } from "@/lib/transit/linesControl";
+import { useStationHelp } from "@/lib/underground/stationHelp";
 import { applyStep, statusLine, type AgentStep } from "./agentSteps";
 import { speechTag, statusLang } from "./statusLines";
 import { needsSharedOrigin, ORIGIN_PROMPT, replyAsksForOrigin } from "./needsOrigin";
@@ -69,6 +74,12 @@ export default function AgentOverlay() {
   const { showPanel, closeAll, content: panelContent, minimized: panelMinimized, drawerOpen } = usePanel();
   // Agent-first home (#370): bottom chat bar, voice waveform, visible steps.
   const home = useFlag("agentHome");
+  const undergroundOn = useFlag("underground");
+  const places = useHomeWork();
+  const followed = useFollowed();
+  const openLines = useLinesControl();
+  const stationHelp = useStationHelp();
+  const homeInput = useRef<HTMLInputElement>(null);
   const [lang] = useState(browserLang);
   // One panel at a time (#225): opening Ask closes the drawer and any sheet.
   useEffect(() => {
@@ -95,6 +106,8 @@ export default function AgentOverlay() {
   /** The question waiting on a shared location, so the button can ask it again. */
   const pendingQuestion = useRef<string | null>(null);
   const [handsFree, setHandsFree] = useState(false);
+  /** The answer whose extra map buttons Other options has revealed. */
+  const [moreActions, setMoreActions] = useState<string | null>(null);
   const askReq = useAskRequest();
   const compact = askReq !== null;
 
@@ -104,7 +117,31 @@ export default function AgentOverlay() {
   const [notice, setNotice] = useState<string | null>(null);
   /** The next send came from speech, so a long wait gets a spoken status line. */
   const voiceTurn = useRef(false);
-  const speech = useSpeech({ onFinalTranscript: (t) => { voiceTurn.current = true; void send(t); }, lang: home ? lang : undefined });
+  // The small mic dictates into the text box; the big button holds a hands-free conversation.
+  const [dictating, setDictating] = useState(false);
+  const dictatingRef = useRef(false);
+  const speech = useSpeech({
+    onFinalTranscript: (t) => {
+      if (dictatingRef.current) {
+        dictatingRef.current = false;
+        setDictating(false);
+        setInput((v) => (v.trim() ? `${v.trim()} ${t}` : t));
+        return;
+      }
+      voiceTurn.current = true;
+      void send(t);
+    },
+    lang: home ? lang : undefined,
+  });
+  // Dictation that ends without words (silence, an error) lets go of the mic button.
+  const wasListening = useRef(false);
+  useEffect(() => {
+    if (wasListening.current && !speech.listening && dictatingRef.current) {
+      dictatingRef.current = false;
+      setDictating(false);
+    }
+    wasListening.current = speech.listening;
+  }, [speech.listening]);
   const player = usePlayer((text) => speech.speak(text));
   /** Speed the next Play uses: the agent's pick or the person's last tap. */
   const [prefSpeed, setPrefSpeed] = useState<PlaybackSpeed>(10);
@@ -288,6 +325,10 @@ export default function AgentOverlay() {
   useEffect(() => () => abort.current?.abort(), []);
   // Other features (underground help) prepare for the trip on screen through core.
   useEffect(() => publishActiveTrip(trip), [trip]);
+  // A trip planned between saved Home and Work becomes the daily card's usual line (kept on this device).
+  useEffect(() => {
+    if (trip) rememberCommute(trip);
+  }, [trip]);
 
   const ModeIcon = MODES.find((m) => m.id === mode)!.Icon;
   const modes = MODES.filter((m) => m.id !== "drive" || driveOn);
@@ -487,31 +528,137 @@ export default function AgentOverlay() {
   ) : null;
 
   if (home) {
-    const tapVoice = () => {
-      if (!speech.sttSupported) { setNotice(VOICE_UNSUPPORTED); return; }
-      if (busy) return;
-      if (speech.listening) { speech.stopListening(); return; }
+    const voiceOff = () => setNotice(VOICE_UNSUPPORTED);
+    const toggleDictation = () => {
+      if (!speech.sttSupported) return voiceOff();
+      if (dictating) { dictatingRef.current = false; setDictating(false); speech.stopListening(); return; }
+      if (handsFree) setHandsFree(false);
+      speech.stopListening();
       setNotice(null);
       speech.clearError();
+      dictatingRef.current = true;
+      setDictating(true);
       speech.startListening();
     };
+    const toggleVoice = () => {
+      if (!speech.sttSupported) return voiceOff();
+      if (dictating) { dictatingRef.current = false; setDictating(false); speech.stopListening(); }
+      setNotice(null);
+      toggleHandsFree();
+    };
+    const stopOrb = () => { setHandsFree(false); speech.stopListening(); };
+
+    // The last exchange is the answer card; earlier turns stay in the history sent to the agent.
+    const lastUser = [...messages].reverse().find((m) => m.role === "user") ?? null;
+    const reply = messages.at(-1)?.role === "assistant" ? messages.at(-1)! : null;
+    const actions = reply?.actions ?? [];
+    const first = actions[0];
+    const placeOf = (): { name: string; lon: number; lat: number } | null => {
+      if (first?.kind === "showRestroom") return { name: formatStreetText(first.restroom.name), lon: first.restroom.lon, lat: first.restroom.lat };
+      if (first?.kind === "flyTo") return { name: first.label.replace(/^Show /, ""), lon: first.lon, lat: first.lat };
+      if (trip) return { name: trip.destination.label, lon: trip.destination.at[0], lat: trip.destination.at[1] };
+      const c = getMapInstance()?.getCenter();
+      return c ? { name: "the map centre", lon: c.lng, lat: c.lat } : null;
+    };
+    const at = (pl: { lon: number; lat: number }) => `(${pl.lat.toFixed(4)}, ${pl.lon.toFixed(4)})`;
+    const primary = first
+      ? first.kind === "showRestroom"
+        ? { label: "Walk me there", run: () => { const r = first.restroom; void send(`Walk me from here to ${formatStreetText(r.name)} ${at(r)}`); } }
+        : { label: first.label, run: () => runAction(first) }
+      : null;
+    const onNearby = () => {
+      const pl = placeOf();
+      void send(pl ? `What's near ${pl.name} ${at(pl)}? Landmarks, food and the closest subway station.` : "What's nearby? Landmarks, food and the closest subway station.");
+    };
+    const [showMore, setShowMore] = [moreActions === reply?.id, (v: boolean) => setMoreActions(v ? reply?.id ?? null : null)];
+    const onOther = () => {
+      if (actions.length > 1) return setShowMore(!showMore);
+      if (trip?.alternatives.length) return ctx.openTrip(trip);
+      void send("What are my other options?");
+    };
+    const homeAnswer = (
+      <AnswerCard
+        question={lastUser?.content ?? null}
+        text={reply?.content ?? ""}
+        busy={busy}
+        working={<WorkingPanel steps={steps} />}
+        sources={reply?.sources && (reply.sources.sources.length || reply.sources.unverified.length) ? <AnswerSources line={reply.sources} /> : null}
+        primary={primary}
+        onNearby={onNearby}
+        onOther={onOther}
+        extra={
+          <>
+            {showMore ? <AnswerActions actions={actions.slice(1)} onRun={runAction} /> : null}
+            {reply?.offerLocation && shared.status !== "on" ? (
+              <Button type="button" className="h-12 w-full gap-1.5 rounded-full" disabled={shared.status === "asking"} onClick={() => void enableLocation()}>
+                <LocateFixed className="h-4 w-4" aria-hidden="true" />
+                {shared.status === "asking" ? "Finding you…" : "Use my location"}
+              </Button>
+            ) : null}
+            {trip && !busy ? (
+              <div className="rounded-[18px] border border-[#22314a] bg-[#111c2f]/90 p-3 text-slate-100">
+                <TripSummary trip={trip} mapTime={mapTime} onSelect={(alt) => chooseTrip(selectAlternative(trip, alt))} />
+                <Button className="mt-3 h-11 w-full gap-2 rounded-full" onClick={() => (player.state.playing && player.state.tripId === trip.id ? player.toggle() : startPreview(trip, prefSpeed))}>
+                  {player.state.playing && player.state.tripId === trip.id ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                  Play trip preview
+                </Button>
+              </div>
+            ) : null}
+          </>
+        }
+      />
+    );
+
+    const trainRoute = trip?.legs.find((l) => l.kind === "ride")?.route;
+    const tasks = {
+      restroom: () => void send("Where's the nearest public restroom that's open now?"),
+      train: () => {
+        if (trainRoute) void send(`How is the ${trainRoute} train running right now?`);
+        else if (openLines) openLines();
+        else void send("How are the subway lines running right now?");
+      },
+      plan: () => {
+        setInput("Plan a trip to ");
+        window.requestAnimationFrame(() => {
+          const el = homeInput.current;
+          el?.focus();
+          el?.setSelectionRange(el.value.length, el.value.length);
+        });
+      },
+      exit: () => {
+        if (undergroundOn && stationHelp) stationHelp();
+        else void send("Which exit should I take at the nearest subway station?");
+      },
+    };
+    const panelUp = panelContent !== null && !panelMinimized;
+    const answerOpen = chatOpen && messages.length > 0;
+    const showIdle = !answerOpen && !busy && !handsFree && !drawerOpen && !panelUp && followed === null;
+    const idle = showIdle ? (
+      <>
+        <DailyCard places={places} onAsk={(q) => void send(q)} onFly={(sp) => flyTo({ lon: sp.lon, lat: sp.lat, zoom: 16 })} />
+        <TaskButtons on={tasks} />
+      </>
+    ) : null;
+
     return (
       <>
         <AgentHome
+          inputRef={homeInput}
           input={input}
           setInput={setInput}
           onSend={(t) => void send(t)}
           busy={busy}
-          voice={{ supported: speech.sttSupported, listening: speech.listening, interim: speech.interim, error: speech.error, start: speech.startListening, stop: speech.stopListening }}
+          interim={speech.interim}
+          dictation={{ supported: speech.sttSupported, on: dictating && speech.listening, toggle: toggleDictation }}
+          handsFree={{ on: handsFree, toggle: toggleVoice }}
+          orb={{ show: handsFree && speech.listening && !dictating, transcript: speech.interim, stop: stopOrb }}
           notice={notice ?? speech.error}
-          onVoiceTap={tapVoice}
-          sheetOpen={chatOpen}
-          onCloseSheet={() => setChatOpen(false)}
-          answers={answers}
-          controls={controls}
-          footer={<div className="pb-2">{footer}</div>}
-          // On a phone the place sheet and the layers drawer own the bottom; an open answer stays.
-          hidden={walking || streetViewOpen || player.state.active || (!isDesktop && !chatOpen && !busy && (drawerOpen || (panelContent !== null && !panelMinimized)))}
+          answerOpen={answerOpen}
+          onCloseAnswer={() => setChatOpen(false)}
+          answer={homeAnswer}
+          idle={idle}
+          // The bar stays on every screen; only street level and the trip preview take the bottom.
+          hidden={walking || streetViewOpen || player.state.active}
           lift={!isDesktop && panelContent !== null && panelMinimized}
         />
         {playback}
