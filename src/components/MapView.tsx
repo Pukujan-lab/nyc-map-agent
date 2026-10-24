@@ -15,7 +15,8 @@ import { busStopIconOpacity, busStopTextOpacity } from "@/lib/map/busStops";
 import { applyPlaces, placesStale, usePlaces, withQuickPlaces } from "@/lib/map/places";
 import { useMapOptions } from "@/lib/map/mapOptions";
 import { applyBuildings, cityDetail, mapLevel, wantsFlatBuildings } from "@/lib/map/buildings";
-import { installLandmarkLabels } from "@/lib/map/landmarkLabels";
+import { installLandmarkLabels, isLandmarkLayer } from "@/lib/map/landmarkLabels";
+import { describeGuide, pickGuideLandmarks } from "@/lib/guide/landmarkGuide";
 import { applyMapTheme, buildingEdge, setThemeCoords, usePalette } from "@/lib/theme";
 import { sharedCoords } from "@/lib/geo/sharedLocation";
 
@@ -1086,10 +1087,11 @@ export function MapView({
     // The sidewalk texture arrives a moment later; repaint once it has.
     if (walking) void loadStreetTextures(map).then(() => applyStreetPalette(map, true)).catch(() => {});
     // At eye level basemap labels stand on the horizon and float in the sky,
-    // so they step aside while walking; our own route markers stay.
+    // so they step aside while walking; our own route markers and the
+    // landmarks (how you know where you are) stay.
     const own = new Set(Object.keys(SOURCE_IDS).map((k) => SOURCE_IDS[k as keyof typeof SOURCE_IDS] as string));
     for (const layer of map.getStyle().layers ?? []) {
-      if (layer.type !== "symbol" || own.has((layer as { source?: string }).source ?? "")) continue;
+      if (layer.type !== "symbol" || own.has((layer as { source?: string }).source ?? "") || isLandmarkLayer(layer.id)) continue;
       map.setLayoutProperty(layer.id, "visibility", walking ? "none" : "visible");
     }
   }, [ready, walking, styleEpoch]);
@@ -1157,7 +1159,10 @@ export function MapView({
         at = { lng: c.lng, lat: c.lat };
         placed = true;
       }
-      const label = streetLabel(streetPosition(lines, c.lng, c.lat));
+      // Street, then the landmark you can see: "Grand St & Essex St · Empire State Building ahead".
+      const street = streetLabel(streetPosition(lines, c.lng, c.lat));
+      const guide = describeGuide(pickGuideLandmarks({ lon: c.lng, lat: c.lat }, eye ? eye.bearing : map.getBearing(), { max: 1 }));
+      const label = [street, guide].filter(Boolean).join(" · ") || null;
       setStreetHere((prev) => (prev === label ? prev : label));
     };
     update();
