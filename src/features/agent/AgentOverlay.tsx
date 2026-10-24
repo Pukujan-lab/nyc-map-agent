@@ -345,6 +345,21 @@ export default function AgentOverlay() {
   useEffect(() => () => abort.current?.abort(), []);
   // Other features (underground help) prepare for the trip on screen through core.
   useEffect(() => publishActiveTrip(trip), [trip]);
+  // A restroom answer shows the restroom on the map at once, framed with you when your
+  // location is shared, instead of leaving the whole city in view (owner report, 2026-10-24).
+  const lastActions = messages.at(-1)?.role === "assistant" ? messages.at(-1)?.actions : undefined;
+  useEffect(() => {
+    const a = lastActions?.[0];
+    if (!home || a?.kind !== "showRestroom") return;
+    const m = getMapInstance();
+    if (!m) return;
+    const r = a.restroom;
+    showPoints(m, [{ at: [r.lon, r.lat], name: formatStreetText(r.name) }], "#2563eb");
+    const me = sharedCoords();
+    const bottom = Math.round(window.innerHeight * (window.innerWidth >= 640 ? 0.2 : 0.55));
+    if (me) m.fitBounds([[Math.min(me.lon, r.lon), Math.min(me.lat, r.lat)], [Math.max(me.lon, r.lon), Math.max(me.lat, r.lat)]], { padding: { top: 110, bottom, left: 48, right: 48 }, maxZoom: 17, duration: 900 });
+    else m.flyTo({ center: [r.lon, r.lat], zoom: 16, duration: 900 });
+  }, [lastActions, home]);
   // A trip planned between saved Home and Work becomes the daily card's usual line (kept on this device).
   useEffect(() => {
     if (trip) rememberCommute(trip);
@@ -589,10 +604,22 @@ export default function AgentOverlay() {
       const c = getMapInstance()?.getCenter();
       return c ? { name: "the map centre", lon: c.lng, lat: c.lat } : null;
     };
-    const at = (pl: { lon: number; lat: number }) => `(${pl.lat.toFixed(4)}, ${pl.lon.toFixed(4)})`;
+    // Walk me there knows both ends: draw the walking route and start guidance directly.
+    // Sending it back through the agent made the walk router geocode the name again,
+    // which picked a different building a half hour away (owner report, 2026-10-24).
+    const walkTo = async (dest: { lon: number; lat: number }) => {
+      const from = sharedCoords() ?? (await startSharing());
+      if (!from) return;
+      setRoutePoint("start", { lon: from.lon, lat: from.lat });
+      setRoutePoint("end", { lon: dest.lon, lat: dest.lat });
+      setFollowingRoute(true);
+      setChatOpen(false);
+      flyTo({ lon: from.lon, lat: from.lat, zoom: 16 });
+    };
+
     const primary = first
       ? first.kind === "showRestroom"
-        ? { label: "Walk me there", run: () => { const r = first.restroom; void send(`Walk me from here to ${formatStreetText(r.name)} ${at(r)}`); } }
+        ? { label: "Walk me there", run: () => { void walkTo(first.restroom); } }
         : { label: first.label, run: () => runAction(first) }
       : null;
     const onNearby = () => { void send(followUpQuestion("nearby", placeOf())); };
