@@ -675,7 +675,7 @@ export function MapView({
           id: `restroom:${kiosk.lng.toFixed(5)},${kiosk.lat.toFixed(5)}`,
           title: name,
           subtitle: "Public restroom",
-          details: <RestroomDetails restroom={{ name, status: str("status"), hours: str("hours"), accessibility: str("accessibility"), operator: str("operator"), lon: kiosk.lng, lat: kiosk.lat }} />,
+          details: <RestroomDetails restroom={{ name, status: str("status"), hours: str("hours"), accessibility: str("accessibility"), operator: str("operator"), lon: kiosk.lng, lat: kiosk.lat, source: p.source === "openstreetmap" ? "openstreetmap" : "nyc-open-data", asOf: str("asOf") }} />,
         });
         return;
       }

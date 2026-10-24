@@ -27,6 +27,215 @@
           "error"
         ]
       },
+      "Restroom": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "osm:node/322546340"
+          },
+          "name": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "nyc-open-data",
+              "openstreetmap"
+            ],
+            "description": "Where the record comes from; a merged place keeps nyc-open-data"
+          },
+          "asOf": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the source last updated this record (ISO); city rows carry the dataset's row update time, OSM the last edit"
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hours": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "accessibility": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "operator": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "location_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fee": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "changingTable": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "unisex": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "osmId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The matched or source OpenStreetMap element"
+          },
+          "osmUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "filledFromOsm": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "City fields that were empty and were filled from the matched OSM toilet"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "source",
+          "asOf",
+          "status",
+          "hours",
+          "accessibility",
+          "operator",
+          "location_type",
+          "fee",
+          "changingTable",
+          "unisex",
+          "osmId",
+          "osmUrl",
+          "filledFromOsm"
+        ]
+      },
+      "RestroomsResponse": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "FeatureCollection"
+            ]
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "Feature"
+                  ]
+                },
+                "id": {
+                  "type": "string"
+                },
+                "geometry": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "Point"
+                      ]
+                    },
+                    "coordinates": {
+                      "type": "array",
+                      "prefixItems": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "coordinates"
+                  ]
+                },
+                "properties": {
+                  "$ref": "#/components/schemas/Restroom"
+                }
+              },
+              "required": [
+                "type",
+                "id",
+                "geometry",
+                "properties"
+              ]
+            }
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "enum": [
+                    "nyc-open-data",
+                    "openstreetmap"
+                  ]
+                },
+                "asOf": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "count": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "id",
+                "asOf",
+                "count"
+              ]
+            }
+          }
+        },
+        "required": [
+          "type",
+          "features",
+          "sources"
+        ]
+      },
       "EventsResponse": {
         "type": "object",
         "properties": {
@@ -1223,14 +1432,14 @@
     },
     "/api/v1/restrooms": {
       "get": {
-        "summary": "Public restrooms GeoJSON",
+        "summary": "Public restrooms GeoJSON: NYC Open Data merged with OpenStreetMap public toilets (ODbL); places within ~40 m are one record, each with its source and asOf",
         "responses": {
           "200": {
             "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Json"
+                  "$ref": "#/components/schemas/RestroomsResponse"
                 }
               }
             }
@@ -1260,7 +1469,7 @@
     },
     "/api/restrooms": {
       "get": {
-        "summary": "Public restrooms GeoJSON (alias of /api/v1/restrooms)",
+        "summary": "Public restrooms GeoJSON: NYC Open Data merged with OpenStreetMap public toilets (ODbL); places within ~40 m are one record, each with its source and asOf (alias of /api/v1/restrooms)",
         "deprecated": true,
         "responses": {
           "200": {
@@ -1268,7 +1477,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Json"
+                  "$ref": "#/components/schemas/RestroomsResponse"
                 }
               }
             }

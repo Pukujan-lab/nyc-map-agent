@@ -19,6 +19,7 @@ import { Query as LiveQuery } from "./features/transit/live";
 import { Query as BusSegmentsQuery, Response_ as BusSegmentsResponse } from "./features/transit/busSegments";
 import { EventsResponse, Query as EventsQuery } from "./features/events/schema";
 import { PlaceToiletsResponse } from "./features/place-toilets/schema";
+import { RestroomsResponse } from "./features/restrooms/schema";
 
 const Json = z.record(z.string(), z.unknown()).openapi("Json");
 const ApiError = z.object({ error: z.string(), issues: z.array(z.string()).optional() }).openapi("ApiError");
@@ -113,7 +114,12 @@ export const ROUTES = {
   "/api/blocks": jsonRoute("/api/blocks", "One row per area for a source", BlocksQuery),
   "/api/city-tiles": binaryRoute("/api/city-tiles", "Citywide 3D-city PMTiles"),
   "/api/vehicle-models/:mode": binaryRoute("/api/vehicle-models/{mode}", "Live-vehicle glTF model (subway, bus, rail)"),
-  "/api/restrooms": jsonRoute("/api/restrooms", "Public restrooms GeoJSON"),
+  "/api/restrooms": createRoute({
+    method: "get",
+    path: "/api/restrooms",
+    summary: "Public restrooms GeoJSON: NYC Open Data merged with OpenStreetMap public toilets (ODbL); places within ~40 m are one record, each with its source and asOf",
+    responses: { 200: { description: "OK", content: { "application/json": { schema: RestroomsResponse } } }, ...errors },
+  }),
   "/api/sources": jsonRoute("/api/sources", "Source registry metadata and freshness"),
   "/api/street": jsonRoute("/api/street", "Street noise / crash stats", StreetQuery),
   "/api/weather": jsonRoute("/api/weather", "Current weather near a point (Open-Meteo, NWS fallback)", WeatherQuery),

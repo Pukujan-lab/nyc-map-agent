@@ -6,18 +6,14 @@ import { currentOrigin } from "@/lib/geo/directionsFromHere";
 import { startSharing } from "@/lib/geo/sharedLocation";
 import { useDataView } from "@/lib/store/DataViewContext";
 import type { RestroomInfo } from "./layers";
+import { restroomRows, restroomSourceLine } from "./source";
 
 /** A clicked public restroom's details, shown in the map panel. */
 export function RestroomDetails({ restroom, distanceLabel }: { restroom: RestroomInfo; distanceLabel?: string | null }) {
   const { beginRestroomTrip } = useDataView();
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
-  const rows: Array<[string, string | null]> = [
-    ["Hours", restroom.hours],
-    ["Accessibility", restroom.accessibility],
-    ["Status", restroom.status],
-    ["Operator", restroom.operator],
-  ];
+  const rows = restroomRows(restroom);
 
   const simulate = () => {
     if (busy) return;
@@ -63,7 +59,7 @@ export function RestroomDetails({ restroom, distanceLabel }: { restroom: Restroo
         Simulate trip
       </Button>
       {note ? <p className="mt-1 text-[11px] leading-snug text-muted-foreground">{note}</p> : null}
-      <div className="mt-2 text-[10px] text-muted-foreground">NYC Open Data · Public Restrooms</div>
+      <div className="mt-2 text-[10px] text-muted-foreground">{restroomSourceLine(restroom)}</div>
     </div>
   );
 }
