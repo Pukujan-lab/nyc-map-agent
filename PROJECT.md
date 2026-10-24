@@ -11,7 +11,7 @@ The goal is *not* a dashboard. The technical dashboards and in-depth controls st
 Three kinds of people, in this order of priority:
 
 1. **The newcomer.** Someone visiting New York, or opening the app for the first time. They must get started immediately: no setup, no learning the map. The home screen shows the chat and four task buttons (Restroom, My train, Plan trip, Find exit), and one tap or one spoken question gets a useful answer.
-2. **The daily explorer.** Anyone who comes back to the app again and again, local or visitor, to get around and get things done: their train, their usual trips, a restroom on the way, what's nearby. They get a deeper "My day" dashboard built from their own habits: their usual trains and buses and any station issues on them, trips they have looked up, weather only when it affects their plans, and things to do on the way (food, cafés and more) through filters they turn on. Updates appear inside the app only, never as push notifications, and only when they concern that person today.
+2. **The daily explorer.** Anyone who comes back to the app again and again, local or visitor, to get around and get things done: their train, their usual trips, a restroom on the way, what's nearby. They get a deeper "My day" dashboard built from their own habits: their usual trains and buses and any station issues on them, trips they have looked up, and weather only when it affects their plans. The app never suggests food, cafés, shops or other things to do unless the person asks. Updates appear inside the app only, never as push notifications, and only when they concern that person today.
 3. **The technical user.** People looking for data about the city: noise, crashes, 311, neighbourhood comparisons. They get the dashboards, data layers (noise complaints, crashes, research data) and detailed controls, but deeper inside filters, "More layers" and settings, so the first two groups never trip over them. Above all, the interface stays clean enough for anyone to use.
 
 Design rule that follows: the first screen serves the newcomer, repeated use serves the daily explorer, and depth is opt-in for the technical user.
@@ -41,6 +41,7 @@ Virtual travel through NYC to find businesses and food and where they are, espec
 - **Fast and cheap to run.** Few backend calls; the server syncs upstream feeds, clients read from our server.
 - **Always answer.** The agent has fallback models, rate limits against abuse, and tells you (and says aloud) when something is slow.
 - **Remembers you, on your terms.** The app learns your daily pattern and the agent remembers earlier conversations, kept on your phone by default. The agent receives only short summaries a question needs, never full history or exact coordinates. A "What we remember" screen lets people see, pause or delete each kind of memory, or delete everything, and links to the plain-language data policy (`docs/PRIVACY.md`, draft in #384).
+- **No unasked recommendations.** Businesses, food and things to do appear only when someone asks for them.
 - **Never make up numbers.** Every figure comes from a data query, and the app shows each dataset's limits (311 counts are what people reported; crash data runs months behind).
 
 ## Where to read next
