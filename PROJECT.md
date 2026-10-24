@@ -36,6 +36,7 @@ Virtual travel through NYC to find businesses and food and where they are, espec
 ## Principles
 - **Show, do not tell.** Every answer carries buttons that draw it on the map.
 - **Clean by default.** Only what matters right now; landmarks always.
+- **The map stays visible.** Everything else opens from a button as a dropdown or drawer, one at a time, and closes back to the map. No full screens of text. The one exception is the technical user's analytics (311 complaints, crashes, research data), which can open as a focused dashboard on request.
 - **A simple, fast map by default.** Plain block shapes and only what answers the question; the detailed 3D city is an optional module, off by default.
 - **Top view is a flat 2D map.** 3D belongs to tilted and street-level views.
 - **Fast and cheap to run.** Few backend calls; the server syncs upstream feeds, clients read from our server.
