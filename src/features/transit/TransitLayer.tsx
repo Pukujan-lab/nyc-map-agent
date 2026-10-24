@@ -1132,7 +1132,8 @@ export default function TransitLayer() {
           paint={{ "icon-opacity": ["*", bulletAlpha, ["case", ["==", ["get", "grade"], "underground"], xrayOn ? 1 : 0.7, 1]] as unknown as number }} />
         {/* Buses: SQUARE badges, so they never read as round subway bullets. Zoomed out
             only the borough prefix (all shown, so each heading notch has its badge); from z15 or for the
-            selected route the badge widens to the full route, with collision detection.
+            selected route the badge widens to the full route. Every bus always draws: collision detection
+            hid them as you zoomed in, right when you wanted to tap one (owner report, 2026-10-24).
             A borough filter keeps the count down, so the badge matches a subway bullet. */}
         <Layer id="transit-bus-notch" type="symbol" filter={["all", ["==", ["get", "system"], "bus"], ["!=", ["get", "followed"], 1]]}
           layout={{ "icon-image": NOTCH_ICON, "icon-rotate": ["get", "bearing"], "icon-rotation-alignment": "map", "icon-allow-overlap": true, "icon-ignore-placement": true,
@@ -1142,7 +1143,7 @@ export default function TransitLayer() {
           layout={{ "icon-image": ["get", "badge"], "icon-allow-overlap": true, "icon-ignore-placement": true, "icon-size": busIconSize("prefix") }}
           paint={{ "icon-opacity": ["*", selBusRoute ? 0.4 : 0.85, ["get", "alpha"]] }} />
         <Layer id="transit-bus-badge-full" type="symbol" minzoom={15} filter={["all", ["==", ["get", "system"], "bus"], ["!=", ["get", "route"], selBusRoute], ["!=", ["get", "followed"], 1]]}
-          layout={{ "icon-image": ["get", "badgeFull"], "icon-allow-overlap": false, "icon-ignore-placement": true, "icon-padding": 1, "icon-size": busIconSize("full") }}
+          layout={{ "icon-image": ["get", "badgeFull"], "icon-allow-overlap": true, "icon-ignore-placement": true, "icon-padding": 1, "icon-size": busIconSize("full") }}
           paint={{ "icon-opacity": ["*", selBusRoute ? 0.45 : 1, ["get", "alpha"]] }} />
         <Layer id="transit-bus-badge-selected" type="symbol" filter={["all", ["==", ["get", "system"], "bus"], ["==", ["get", "route"], selBusRoute], ["!=", ["get", "followed"], 1]]}
           layout={{ "icon-image": ["get", "badgeFull"], "icon-allow-overlap": true, "symbol-sort-key": 1, "icon-size": busIconSize("selected") }}

@@ -101,8 +101,8 @@ export function ViewSwitcher() {
     ro.observe(outer);
     return () => ro.disconnect();
   }, [rowKey]);
-  // While following a train or bus the Street / Top switch stays: it is how you ride along or step back.
-  if (home && !followed) return null;
+  // Agent-first home: views and follow cameras live in the right-hand quick bar (Change view).
+  if (home) return null;
   return (
     <div
       data-testid="view-switcher"
