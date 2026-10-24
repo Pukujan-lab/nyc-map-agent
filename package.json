@@ -35,6 +35,7 @@
     "openapi": "tsx scripts/openapi.ts",
     "openapi:check": "tsx scripts/openapi.ts --check",
     "build:transit": "tsx scripts/build-transit.ts",
+    "build:equipment": "tsx scripts/build-equipment.ts",
     "build:transit-holds": "tsx scripts/build-transit-holds.ts",
     "build:e2e": "VITE_DATA_BACKEND=octo vite build --outDir .e2e-build --emptyOutDir",
     "e2e": "playwright test",
