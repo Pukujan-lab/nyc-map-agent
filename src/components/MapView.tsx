@@ -147,7 +147,7 @@ function eyeCamera(map: MaplibreMapInstance, eye: Eye): CameraOptions {
 import { useMapState } from "@/lib/store/MapStateContext";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 import { WalkControls } from "./WalkControls";
-import { StreetBubble } from "@/features/streetbubble/StreetBubble";
+import { setStreetHere as publishStreetHere } from "@/lib/map/streetHere";
 import { useQuickLayer } from "@/lib/quickLayers";
 import { QuickLayers } from "./QuickLayers";
 import { StreetMiniMap } from "./StreetMiniMap";
@@ -254,6 +254,8 @@ export function MapView({
   const [corner, setCorner] = useState<string | null>(null);
   /** "Grand Street & Essex Street": street underfoot and nearest cross street, throttled. */
   const [streetHere, setStreetHere] = useState<string | null>(null);
+  // Feature overlays (the street bubble) read the label from shared core.
+  useEffect(() => publishStreetHere(streetHere), [streetHere]);
   const { showPanel, emptyMapTap, content: panelContent, minimized: panelMinimized, drawerOpen } = usePanel();
   // The hover card is a mouse affordance; on touch / narrow screens the sheet
   // already shows the same numbers.
@@ -1566,7 +1568,6 @@ export function MapView({
           }}
         />
       ) : null}
-      {walking ? <StreetBubble street={streetHere} /> : null}
       {walking && ready && mapRef.current ? (
         <StreetMiniMap main={mapRef.current.getMap()} getEye={getEye} onExit={stopWalk} />
       ) : null}

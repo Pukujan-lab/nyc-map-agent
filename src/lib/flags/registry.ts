@@ -30,6 +30,7 @@ export const FLAGS = {
   schools: { tier: "basic", default: true, label: "School buildings" },
   signs: { tier: "basic", default: true, label: "Street signs" },
   streetLevel: { tier: "basic", default: true, label: "Street level" },
+  streetBubble: { tier: "basic", default: true, label: "Street noise and crash levels while walking" },
   city3d: { tier: "basic", default: true, label: "Textured 3D city" },
   noise: { tier: "advanced", default: true, label: "Noise layer" },
   blockDensity: { tier: "basic", default: true, label: "Shade blocks per hectare" },
