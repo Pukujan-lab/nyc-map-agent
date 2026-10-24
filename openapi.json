@@ -3004,7 +3004,7 @@
     },
     "/api/v1/transit/{system}": {
       "get": {
-        "summary": "Live MTA GTFS-rt (subway / lirr / mnr trips, bus positions, alerts + elevator outages), cached ~15 s; bus?routes=Q1,Q2 filters the cached fleet to at most 20 routes; bus-lines is the borough page catalog; bus-trip?vehicle= (one bus's headsign + upcoming stops), bus-route?route= (route shape + stops) and bus-stops?lat=&lon= (stops within ~300 m with the routes serving each)",
+        "summary": "Live MTA GTFS-rt (subway / lirr / mnr trips, bus positions, alerts + elevator outages), cached ~15 s; bus?routes=Q1,Q2 filters the cached fleet to at most 20 routes; bus-lines is the borough page catalog; bus-trip?vehicle= (one bus's headsign + upcoming stops), bus-route?route= (route shape + stops) and bus-stops?lat=&lon= (stops within ~300 m with the routes serving each) and bus-arrivals?stop= (next buses at one stop)",
         "parameters": [
           {
             "schema": {
@@ -3018,7 +3018,8 @@
                 "alerts",
                 "bus-trip",
                 "bus-route",
-                "bus-stops"
+                "bus-stops",
+                "bus-arrivals"
               ],
               "example": "subway"
             },
@@ -3051,6 +3052,15 @@
             },
             "required": false,
             "name": "routes",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 20
+            },
+            "required": false,
+            "name": "stop",
             "in": "query"
           },
           {
@@ -3108,7 +3118,7 @@
     },
     "/api/transit/{system}": {
       "get": {
-        "summary": "Live MTA GTFS-rt (subway / lirr / mnr trips, bus positions, alerts + elevator outages), cached ~15 s; bus?routes=Q1,Q2 filters the cached fleet to at most 20 routes; bus-lines is the borough page catalog; bus-trip?vehicle= (one bus's headsign + upcoming stops), bus-route?route= (route shape + stops) and bus-stops?lat=&lon= (stops within ~300 m with the routes serving each) (alias of /api/v1/transit/{system})",
+        "summary": "Live MTA GTFS-rt (subway / lirr / mnr trips, bus positions, alerts + elevator outages), cached ~15 s; bus?routes=Q1,Q2 filters the cached fleet to at most 20 routes; bus-lines is the borough page catalog; bus-trip?vehicle= (one bus's headsign + upcoming stops), bus-route?route= (route shape + stops) and bus-stops?lat=&lon= (stops within ~300 m with the routes serving each) and bus-arrivals?stop= (next buses at one stop) (alias of /api/v1/transit/{system})",
         "deprecated": true,
         "parameters": [
           {
@@ -3123,7 +3133,8 @@
                 "alerts",
                 "bus-trip",
                 "bus-route",
-                "bus-stops"
+                "bus-stops",
+                "bus-arrivals"
               ],
               "example": "subway"
             },
@@ -3156,6 +3167,15 @@
             },
             "required": false,
             "name": "routes",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 20
+            },
+            "required": false,
+            "name": "stop",
             "in": "query"
           },
           {

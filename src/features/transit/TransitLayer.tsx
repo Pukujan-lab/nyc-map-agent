@@ -39,6 +39,8 @@ import { FollowCard, StationDetails } from "./TransitCard";
 import { TransitStatusDetails } from "./TransitStatus";
 import { alertGeometry, setAlertFocus, stationChanges, useAlertFocus } from "./alertFocus";
 import { LinesDrawer } from "./LinesDrawer";
+import { BusStopDetails } from "./BusStopDetails";
+import { busStopAt } from "@/lib/map/busStops";
 import { lineOpacity, useMapOptions } from "@/lib/map/mapOptions";
 import { NOTCH_ICON, addBulletImage, lineColor as lineColorOf, stationRowId, bulletId, busBadgeId, busIconSize, busPrefix } from "@/lib/transit/bullets";
 import { usePalette } from "@/lib/theme";
@@ -717,6 +719,22 @@ export default function TransitLayer() {
     map.on("click", onClick);
     return () => { map.off("click", onClick); };
   }, [map, openStation, setDrawerOpen]);
+
+  // A basemap bus-stop icon shows its routes and next buses (transit features win).
+  const busStopsShown = opts.busStops;
+  useEffect(() => {
+    if (!map || !busStopsShown) return;
+    const onClick = (e: MapLayerMouseEvent) => {
+      const layers = TRANSIT_CLICK_LAYERS.filter((id) => map.getLayer(id));
+      if (layers.length && map.queryRenderedFeatures(e.point, { layers }).length) return;
+      const stop = busStopAt(map, e.point);
+      if (!stop) return;
+      const { lng, lat } = e.lngLat;
+      showPanel({ id: `busstop:${lng.toFixed(5)},${lat.toFixed(5)}`, title: formatStreetText(stop.name), subtitle: "Bus stop", details: <BusStopDetails lon={lng} lat={lat} /> });
+    };
+    map.on("click", onClick);
+    return () => { map.off("click", onClick); };
+  }, [map, busStopsShown, showPanel]);
 
   // Notices for alerts touching starred lines or stations (in-app + optional browser).
   const notified = useRef(new Set<string>());

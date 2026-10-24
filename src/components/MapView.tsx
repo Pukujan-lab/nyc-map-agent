@@ -11,8 +11,7 @@ import { useMediaQuery } from "@/lib/useMediaQuery";
 import { MapCompass } from "./MapCompass";
 import { ViewSwitcher } from "./ViewSwitcher";
 import { applyReadable } from "@/lib/map/readable";
-import { BusStopDetails } from "@/features/transit/BusStopDetails";
-import { busStopIconOpacity, busStopTextOpacity } from "@/lib/map/busStops";
+import { busStopAt, busStopIconOpacity, busStopTextOpacity } from "@/lib/map/busStops";
 import { applyPlaces, placesStale, usePlaces, withQuickPlaces } from "@/lib/map/places";
 import { useMapOptions } from "@/lib/map/mapOptions";
 import { applyBuildings, wantsFlatBuildings } from "@/lib/map/buildings";
@@ -650,16 +649,9 @@ export function MapView({
       };
       const transitIds = FEATURES.filter((f) => f.id === "transit").flatMap((f) => f.clickLayers ?? []);
       if (hitsAny(transitIds)) return;
-      // A bus-stop icon (basemap poi_transit, class "bus") shows its routes and next buses.
-      if (opts.busStops && clicked?.getLayer("poi_transit")) {
-        const stopHit = clicked.queryRenderedFeatures([[event.point.x - 8, event.point.y - 8], [event.point.x + 8, event.point.y + 8]], { layers: ["poi_transit"] }).find((f) => f.properties?.class === "bus");
-        if (stopHit) {
-          const { lng, lat } = event.lngLat;
-          const name = typeof stopHit.properties?.name === "string" && stopHit.properties.name ? stopHit.properties.name : "Bus stop";
-          showPanel({ id: `busstop:${lng.toFixed(5)},${lat.toFixed(5)}`, title: formatStreetText(name), subtitle: "Bus stop", details: <BusStopDetails lon={lng} lat={lat} /> });
-          return;
-        }
-      }
+      // A bus-stop icon (basemap poi_transit, class "bus"): the transit feature
+      // opens its routes and next buses, so skip the area pick.
+      if (opts.busStops && analyticsFlags.transit && clicked && busStopAt(clicked, event.point)) return;
       // 3D restroom kiosks at street level: public ones open here, shop/café
       // ones are opened by the place-toilets feature's own click handler.
       const kiosk = walking ? pickFurniture(event.target, event.point.x, event.point.y) : null;
@@ -752,7 +744,7 @@ export function MapView({
         selectNta(picked.datum.ntaCode);
       }
     },
-    [opts.busStops, pickAt, selectBlock, selectNta, routePicking, setRoutePoint, showPanel, emptyMapTap, city3d, walking, analytics],
+    [opts.busStops, analyticsFlags.transit, pickAt, selectBlock, selectNta, routePicking, setRoutePoint, showPanel, emptyMapTap, city3d, walking, analytics],
   );
 
   const handleMoveEnd = useCallback(() => {
