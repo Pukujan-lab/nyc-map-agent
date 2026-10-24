@@ -47,6 +47,8 @@ describe("daily commute", () => {
       color: "#2850ad",
       minutes: 24,
       board: "Astoria Blvd",
+      hour: 4,
+      minute: 30,
       transfers: [],
       alternatives: [{ route: "R", color: "#2850ad", minutes: 28, board: "Steinway St", transfers: ["Change at Queensboro Plaza to the 7"] }],
     });

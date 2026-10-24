@@ -60,4 +60,13 @@ describe("system prompt: the owner's standing rules", () => {
     expect(prompt).toMatch(/use it only for the question asked/);
     expect(prompt).toMatch(/What we remember/);
   });
+
+  it("adds a habits line only when the client sent one", () => {
+    const line = "Usually takes the A from 59 St to 14 St around 8:40 AM on weekdays";
+    expect(prompt).not.toContain("Usually takes");
+    expect(prompt).not.toContain("What we remember:");
+    const present = systemPrompt("2026-10-23T09:00", null, "transit", undefined, undefined, line);
+    expect(present).toContain(`What we remember: ${line}`);
+    expect(present).not.toMatch(/-73\.|40\.7\d/);
+  });
 });

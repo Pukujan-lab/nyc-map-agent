@@ -248,5 +248,10 @@ export const requestBody = z.object({
   context: askContext.optional(),
   /** The browser's language (BCP 47, e.g. "es-US"); the reply follows the question's language, this is the tie-break. */
   lang: langTag.optional(),
+  /**
+   * One line about usual rides or Home and Work, sent only while that memory
+   * is on. Never a history, and never coordinates.
+   */
+  memory: z.string().max(240).optional(),
 });
 export type AgentRequest = z.infer<typeof requestBody>;

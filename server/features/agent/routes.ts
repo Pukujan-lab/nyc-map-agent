@@ -47,7 +47,7 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
   const limit = fair.limiter.take(`ip:${clientIp(request.headers)}`);
   if (!limit.ok) return limitedResponse(limit.retryAt, limit.reason, fair.now());
   const budget = fair.budget.tier();
-  const { messages, now, mode, context, lang } = parsed.data;
+  const { messages, now, mode, context, lang, memory } = parsed.data;
   // Street view's spot counts as the shared location for "here".
   const location = parsed.data.location ?? (context ? { lon: context.lon, lat: context.lat } : null);
   const enc = new TextEncoder();
@@ -79,7 +79,7 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
         const model = opts.model ?? defaultModel(budget.tier === "cheap" ? budget.model : undefined);
         const result = streamText({
           model,
-          system: systemPrompt(nowLocal, location, mode, context, lang),
+          system: systemPrompt(nowLocal, location, mode, context, lang, memory),
           messages,
           tools: makeTools({ location, now: clock, emit: (command) => send({ type: "command", command }), actions: (a) => actions.add(a), sources: audit.ledger, deps: opts.deps, followedTrain: context?.followedTrain ?? null, drive: resolveFlags({ env: process.env.VITE_FLAGS, advancedMode: false }).agentDrive }),
           stopWhen: stepCountIs(8),

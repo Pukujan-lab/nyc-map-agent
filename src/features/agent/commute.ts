@@ -83,6 +83,11 @@ const usualRide = z.object({
   minutes: z.number().int().positive(),
   /** Where the first train is boarded, as the planner named it. */
   board: z.string().max(80).optional(),
+  /** Where the last train is left. A name only, never a coordinate. */
+  alight: z.string().max(80).optional(),
+  /** Departure clock in New York, so a summary can say "around 8:40" without storing a place. */
+  hour: z.number().int().min(0).max(23).optional(),
+  minute: z.number().int().min(0).max(59).optional(),
   /** Each change of train: "Change at Times Sq-42 St to the 7". Empty when there is none. */
   transfers: z.array(z.string().max(120)).max(4).default([]),
 });
@@ -97,6 +102,19 @@ const metres = (a: readonly [number, number], b: SavedSpot) => {
 /** A trip end this close to a saved spot counts as that spot. */
 const NEAR_M = 900;
 
+/** Hour and minute in New York. Null when the timestamp is missing or broken. */
+export function nyClock(iso: string | undefined): { hour: number; minute: number } | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(d);
+  let hour = Number(parts.find((p) => p.type === "hour")?.value);
+  const minute = Number(parts.find((p) => p.type === "minute")?.value);
+  if (hour === 24) hour = 0;
+  if (!Number.isInteger(hour) || hour > 23 || !Number.isInteger(minute) || minute > 59) return null;
+  return { hour, minute };
+}
+
 function rideOf(t: TripCore): UsualRide | null {
   const rides = t.legs.flatMap((l) => (l.kind === "ride" ? [l] : []));
   const ride = rides[0];
@@ -107,7 +125,17 @@ function rideOf(t: TripCore): UsualRide | null {
     const at = rides[i].toStop ?? next.fromStop;
     return `Change${at ? ` at ${at}` : ""} to the ${next.route}`;
   });
-  return { route: ride.route, ...(ride.color ? { color: ride.color } : {}), minutes, ...(ride.fromStop ? { board: ride.fromStop } : {}), transfers };
+  const alight = rides.at(-1)?.toStop;
+  const clock = nyClock(t.departIso);
+  return {
+    route: ride.route,
+    ...(ride.color ? { color: ride.color } : {}),
+    minutes,
+    ...(ride.fromStop ? { board: ride.fromStop } : {}),
+    ...(alight ? { alight } : {}),
+    ...(clock ?? {}),
+    transfers,
+  };
 }
 
 /** Which way a planned trip goes between Home and Work, or null when it is not a commute. */
@@ -121,11 +149,14 @@ export function commuteOf(trip: TripCore, places: HomeWork): CommuteTo | null {
   return null;
 }
 
-/** The usual line and its alternatives from a planned commute. */
+/** The usual line and its alternatives from a planned commute. The clock and the last stop stay on the ride the person takes, not on each alternative. */
 export function usualFromTrip(trip: Trip): UsualTrip | null {
   const main = rideOf(trip);
   if (!main) return null;
-  const alternatives = trip.alternatives.map(rideOf).filter((r): r is UsualRide => !!r && r.route !== main.route);
+  const alternatives = trip.alternatives.map(rideOf).flatMap((r) => {
+    if (!r || r.route === main.route) return [];
+    return [{ route: r.route, ...(r.color ? { color: r.color } : {}), minutes: r.minutes, ...(r.board ? { board: r.board } : {}), transfers: r.transfers }];
+  });
   return { ...main, alternatives };
 }
 

@@ -654,6 +654,14 @@
               "lon",
               "lat"
             ]
+          },
+          "lang": {
+            "type": "string",
+            "maxLength": 35
+          },
+          "memory": {
+            "type": "string",
+            "maxLength": 240
           }
         },
         "required": [

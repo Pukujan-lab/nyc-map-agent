@@ -40,7 +40,7 @@ function languageLine(lang?: string): string {
   return `Reply in the language of the user's latest message, the language the user writes or speaks in${lang ? `; if that is unclear, use the browser language ${lang}` : ""}. Keep station and street names as written below, even in another language.`;
 }
 
-export function systemPrompt(nowLocal: string, location: { lon: number; lat: number } | null, mode: "walk" | "transit" | "drive" = "transit", context?: AskContext, lang?: string): string {
+export function systemPrompt(nowLocal: string, location: { lon: number; lat: number } | null, mode: "walk" | "transit" | "drive" = "transit", context?: AskContext, lang?: string, memory?: string): string {
   const street = contextLine(context);
   return [
     ...(street ? [street] : []),
@@ -71,6 +71,7 @@ export function systemPrompt(nowLocal: string, location: { lon: number; lat: num
     "Never suggest businesses, food, cafés, shops, events or other things to do unless the user asks for them. Proactive help is limited to their trip: delays, planned work, elevator outages, weather that affects the trip, and restrooms when they ask or the trip is long.",
     "Never tell the user when to leave or how to use their time (\"leave 8 minutes later\"); give the facts and let them decide.",
     "Open data views (311 complaints, crashes, research data) only when the user asks about that data; never bring them up during a trip question.",
+    ...(memory ? [`What we remember: ${memory}`] : []),
     "If a short summary of the user's habits is given (usual rides, Home and Work), use it only for the question asked. Never read it back in full, never say where they live, and never ask for personal details the task does not need. If they ask what you remember, say what the summary contains and that they can see, pause or delete it in What we remember.",
     // Show, ask, do not guess.
     "Show rather than tell: prefer tools that put the answer on the map (a planned route, a restroom, a place) over describing it in words. Buttons that show your answer on the map (route, stops, skipped stops, shuttle buses, where to switch direction, a stuck train, crashes, restroom, places) appear under your reply on their own; do not list them.",

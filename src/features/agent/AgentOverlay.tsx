@@ -44,6 +44,7 @@ import { closeAsk, useAskRequest } from "@/lib/agent/streetContext";
 import { AgentHome, AnswerCard, WorkingPanel } from "./AgentHome";
 import { DailyCard, TaskButtons } from "./HomeTasks";
 import { rememberCommute, useHomeWork } from "./commute";
+import { memorySummary } from "./memorySummary";
 import { rememberChat, rememberLookup } from "@/lib/memory/memory";
 import { useLangPref } from "@/lib/voice/langPref";
 import { useVoicePrefs } from "@/lib/voice/voicePrefs";
@@ -273,7 +274,8 @@ export default function AgentOverlay() {
     const sayIn = statusLang(q, lang);
     const statusTimer = home && byVoice ? window.setTimeout(() => speech.speak(statusLine(stepsRef.current, sayIn), { lang: speechTag(sayIn, lang) }), STATUS_AFTER_MS) : undefined;
     try {
-      for await (const ev of askAgent({ messages: history.map(({ role, content }) => ({ role, content })), location, mode, now: new Date().toISOString(), ...(askReq ? { context: askReq.context } : {}), ...(home && lang ? { lang } : {}) }, abort.current.signal)) {
+      const memory = home ? memorySummary() : null;
+      for await (const ev of askAgent({ messages: history.map(({ role, content }) => ({ role, content })), location, mode, now: new Date().toISOString(), ...(askReq ? { context: askReq.context } : {}), ...(home && lang ? { lang } : {}), ...(memory ? { memory } : {}) }, abort.current.signal)) {
         setSteps((s) => applyStep(s, ev));
         if (ev.type === "text") {
           spoken += ev.text;

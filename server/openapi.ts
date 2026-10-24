@@ -77,6 +77,8 @@ export const AGENT_ROUTE = createRoute({
                   followedTrain: z.string().nullable().optional(),
                 })
                 .optional(),
+              lang: z.string().max(35).optional(),
+              memory: z.string().max(240).optional(),
             })
             .openapi("AgentRequest"),
         },
