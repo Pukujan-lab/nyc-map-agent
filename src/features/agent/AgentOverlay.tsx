@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useFlag } from "@/lib/flags";
 import { getMapInstance } from "@/lib/map/mapInstance";
 import { useMapState } from "@/lib/store/MapStateContext";
+import { publishActiveTrip } from "@/lib/transit/activeTrip";
 import { revealTripBuses } from "@/lib/transit/busReveal";
 import { setFollowed } from "@/lib/transit/follow";
 import { usePanel } from "@/lib/store/PanelContext";
@@ -279,6 +280,8 @@ export default function AgentOverlay() {
 
   useWakePhrase(wake && speech.sttSupported, speech.listening || busy || speech.speaking, (t) => { voiceTurn.current = true; void send(t); });
   useEffect(() => () => abort.current?.abort(), []);
+  // Other features (underground help) prepare for the trip on screen through core.
+  useEffect(() => publishActiveTrip(trip), [trip]);
 
   const ModeIcon = MODES.find((m) => m.id === mode)!.Icon;
   const modes = MODES.filter((m) => m.id !== "drive" || driveOn);

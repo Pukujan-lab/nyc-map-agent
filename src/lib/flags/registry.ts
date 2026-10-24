@@ -47,6 +47,7 @@ export const FLAGS = {
   feedHealth: { tier: "advanced", default: true, label: "Feed health" },
   ferry: { tier: "basic", default: true, label: "Ferries (NYC Ferry and Staten Island Ferry; layer off until chosen)" },
   events: { tier: "basic", default: true, label: "Events (street fairs, markets, pop-ups; layer off until chosen)" },
+  underground: { tier: "basic", default: false, label: "Underground help: station exits and the walk out, saved for when there is no signal" },
 } as const satisfies Record<string, FlagMeta>;
 
 export type FlagId = keyof typeof FLAGS;
