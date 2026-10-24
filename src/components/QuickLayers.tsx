@@ -12,7 +12,7 @@ import { useMapState } from "@/lib/store/MapStateContext";
  * The "Layers" quick dropdown: plain on/off switches. It sits in the top bar's
  * button row beside "Layers & filters" and Transit, so the top of the screen
  * has one controls bar instead of a second floating button. The menu opens
- * under the row, scrolls rather than covering the camera row, closes on a tap
+ * under the row (and under the follow card, whose height is --follow-card-h, 0 when nothing is followed), scrolls rather than covering the camera row, closes on a tap
  * outside it, and closes on a swipe right.
  */
 function useRow(id: QuickId, label: string): Row {
@@ -58,7 +58,7 @@ export function QuickLayers() {
           data-testid="quick-layers"
           onPointerDown={(e) => (x0.current = e.clientX)}
           onPointerUp={(e) => { if (x0.current !== null && e.clientX - x0.current > 40) setOpen(false); x0.current = null; }}
-          className="absolute right-0 top-full z-40 mt-[var(--sp-2)] max-h-[60dvh] w-52 space-y-[var(--sp-1)] overflow-y-auto rounded-[18px] border border-border bg-card p-[var(--sp-3)] text-foreground shadow-xl"
+          className="absolute right-0 top-full z-40 mt-[calc(var(--sp-2)+var(--follow-card-h))] max-h-[calc(60dvh-var(--follow-card-h))] w-52 space-y-[var(--sp-1)] overflow-y-auto rounded-[18px] border border-border bg-card p-[var(--sp-3)] text-foreground shadow-xl"
         >
           {rows.map(([label, value, set]) => (
             <label key={label} className="flex h-9 items-center justify-between gap-2 text-[13px] font-medium">
