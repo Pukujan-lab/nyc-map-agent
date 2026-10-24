@@ -12,7 +12,7 @@ Three kinds of people, in this order of priority:
 
 1. **The newcomer.** Someone visiting New York, or opening the app for the first time. They must get started immediately: no setup, no learning the map. The home screen shows the chat and four task buttons (Restroom, My train, Plan trip, Find exit), and one tap or one spoken question gets a useful answer.
 2. **The daily explorer.** Anyone who comes back to the app again and again, local or visitor, to get around and get things done: their train, their usual trips, a restroom on the way, what's nearby. They get a deeper "My day" dashboard built from their own habits: their usual trains and buses and any station issues on them, trips they have looked up, weather only when it affects their plans, and things to do on the way (food, cafés and more) through filters they turn on. Updates appear inside the app only, never as push notifications, and only when they concern that person today.
-3. **The technical user.** People looking for data about the city: noise, crashes, 311, neighbourhood comparisons. They get the dashboards, data layers and detailed controls, but behind "More layers" and advanced mode, so the first two groups never trip over them.
+3. **The technical user.** People looking for data about the city: noise, crashes, 311, neighbourhood comparisons. They get the dashboards, data layers (noise complaints, crashes, research data) and detailed controls, but deeper inside filters, "More layers" and settings, so the first two groups never trip over them. Above all, the interface stays clean enough for anyone to use.
 
 Design rule that follows: the first screen serves the newcomer, repeated use serves the daily explorer, and depth is opt-in for the technical user.
 
