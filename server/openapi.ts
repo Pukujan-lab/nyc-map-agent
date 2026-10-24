@@ -50,6 +50,25 @@ const binaryRoute = (path: string, summary: string) =>
     },
   });
 
+/**
+ * POST /api/stt: speech-to-text for browsers without a working recognizer.
+ * multipart/form-data with `audio` (one short recording, at most 2 MB) and an
+ * optional `lang` (BCP 47). The body is read by the handler, not validated here.
+ */
+export const STT_ROUTE = createRoute({
+  method: "post",
+  path: "/api/stt",
+  summary: "Transcribe one short voice turn (Whisper); the audio is not stored",
+  responses: {
+    200: { description: "The words heard", content: { "application/json": { schema: z.object({ text: z.string() }).openapi("SttResult") } } },
+    400: { description: "No recording", content: { "application/json": { schema: ApiError } } },
+    413: { description: "Recording too long", content: { "application/json": { schema: ApiError } } },
+    429: { description: "Too many requests", content: { "application/json": { schema: ApiError } } },
+    502: { description: "Transcription failed", content: { "application/json": { schema: ApiError } } },
+    503: { description: "Speech-to-text is not set up on this server", content: { "application/json": { schema: ApiError } } },
+  },
+});
+
 /** POST /api/agent: the smart-mode trip agent. Body mirrors src/features/agent/schema.ts `requestBody`. */
 export const AGENT_ROUTE = createRoute({
   method: "post",

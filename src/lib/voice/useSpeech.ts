@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isBrave, recordTurn, serverSttAvailable, transcribeTurn, type Recording } from "./serverStt";
 import { startBargeIn } from "./bargeIn";
 import { speakQueued } from "./tts";
 
@@ -79,7 +80,12 @@ export function useSpeech({
   onFinalTranscript,
   lang = "en-US",
 }: UseSpeechOptions): UseSpeechResult {
-  const [sttSupported] = useState(() => getRecognitionCtor() !== null);
+  const [sttSupported] = useState(() => getRecognitionCtor() !== null || serverSttAvailable());
+  // Brave (and any browser whose recognizer fails with "network") records the turn and
+  // transcribes it on our server instead.
+  const serverModeRef = useRef(isBrave() || (getRecognitionCtor() === null && serverSttAvailable()));
+  const recordingRef = useRef<Recording | null>(null);
+  const retryOnServerRef = useRef(false);
   const [listening, setListening] = useState(false);
   const [interim, setInterim] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -95,7 +101,37 @@ export function useSpeech({
   const callbackRef = useRef(onFinalTranscript);
   callbackRef.current = onFinalTranscript;
 
+  const startServerTurn = useCallback(() => {
+    if (recordingRef.current) return;
+    setError(null);
+    setInterim("");
+    setListening(true);
+    recordTurn(END_OF_TURN_MS).then((rec) => {
+      recordingRef.current = rec;
+      void rec.done.then(async ({ blob, reason }) => {
+        recordingRef.current = null;
+        if (!blob) {
+          setListening(false);
+          if (reason === "no-speech") setError("I didn't catch that. Try again, a little closer to the mic.");
+          return;
+        }
+        setInterim("…");
+        const out = await transcribeTurn(blob, lang);
+        setListening(false);
+        setInterim("");
+        if ("text" in out) { if (out.text) callbackRef.current(out.text); return; }
+        setError(out.error === "unavailable" ? "Voice isn't set up on this server yet. Type your question instead."
+          : out.error === "busy" ? "Too many voice requests just now. Try again in a minute."
+          : "I couldn't make that out. Try again, or type it.");
+      });
+    }).catch(() => {
+      setListening(false);
+      setError("Microphone access is blocked. Type your question instead.");
+    });
+  }, [lang]);
+
   const startListening = useCallback(() => {
+    if (serverModeRef.current) { startServerTurn(); return; }
     const Ctor = getRecognitionCtor();
     if (!Ctor) {
       setError("Speech recognition isn't available in this browser.");
@@ -141,6 +177,10 @@ export function useSpeech({
         setError("I didn't catch that. Try again, a little closer to the mic.");
       } else if (event.error === "audio-capture") {
         setError("No microphone was found. You can still type your question.");
+      } else if (event.error === "network" && serverSttAvailable()) {
+        // The browser's speech service is blocked (Brave): switch to our server and retry this turn.
+        serverModeRef.current = true;
+        retryOnServerRef.current = true;
       } else {
         setError(`Speech recognition failed (${event.error}).`);
       }
@@ -156,6 +196,7 @@ export function useSpeech({
       finalRef.current = "";
       interimRef.current = "";
       if (transcript) callbackRef.current(transcript);
+      if (retryOnServerRef.current) { retryOnServerRef.current = false; startServerTurn(); }
     };
 
     recognition.onstart = () => setListening(true);
@@ -167,10 +208,11 @@ export function useSpeech({
     } catch {
       setError("Could not start the microphone.");
     }
-  }, [lang]);
+  }, [lang, startServerTurn]);
 
   const stopListening = useCallback(() => {
     recognitionRef.current?.stop();
+    recordingRef.current?.stop();
   }, []);
 
   const stopSpeaking = useCallback(() => {
@@ -213,6 +255,7 @@ export function useSpeech({
   useEffect(() => {
     return () => {
       recognitionRef.current?.abort();
+      recordingRef.current?.stop();
       if (silenceRef.current) clearTimeout(silenceRef.current);
       stopBargeRef.current?.();
       cancelSpeechRef.current?.();

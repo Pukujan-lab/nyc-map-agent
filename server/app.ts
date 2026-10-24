@@ -7,7 +7,7 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import type { Context } from "hono";
 import { compress } from "hono/compress";
-import { AGENT_ROUTE, API_INFO, ROUTES, legacyAlias, toV1, toV1Route } from "./openapi";
+import { AGENT_ROUTE, STT_ROUTE, API_INFO, ROUTES, legacyAlias, toV1, toV1Route } from "./openapi";
 import * as aggregate from "../api/aggregate";
 import * as area from "../api/area/[block]";
 import * as areas from "../api/areas";
@@ -24,6 +24,7 @@ import * as ferry from "./features/ferry/routes";
 import * as traffic from "./features/traffic/routes";
 import * as parking from "./features/parking/routes";
 import * as agent from "./features/agent/routes";
+import { transcribe } from "./features/agent/stt";
 import * as transit from "./features/transit/routes";
 import * as transitSegments from "./features/transit/segments";
 import * as transitLive from "./features/transit/live";
@@ -111,6 +112,11 @@ const agentHandler = async (c: Context) => {
 };
 app.openapi(toV1Route(AGENT_ROUTE), agentHandler as never);
 app.openapi(legacyAlias(AGENT_ROUTE), agentHandler as never);
+
+// Speech-to-text fallback (multipart; the handler reads the form itself).
+const sttHandler = async (c: Context) => transcribe(await c.req.formData(), c.req.raw.headers);
+app.openapi(toV1Route(STT_ROUTE), sttHandler as never);
+app.openapi(legacyAlias(STT_ROUTE), sttHandler as never);
 
 const docConfig = { openapi: "3.1.0", info: API_INFO };
 app.doc31("/api/v1/openapi.json", docConfig);
