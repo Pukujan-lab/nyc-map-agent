@@ -100,7 +100,7 @@ function LocateButton({ map, className, style }: { map: MapLibreMap | null; clas
   };
   return (
     <button type="button" aria-label="Center on my location" aria-busy={asking} onClick={locate} data-testid="locate-button"
-      className={`${ROUND} border border-[#263449] bg-[rgba(15,23,42,0.92)] pointer-events-auto text-[#60a5fa]${asking ? "animate-pulse motion-reduce:animate-none" : ""} ${className ?? ""}`} style={style}>
+      className={`${ROUND} border border-[#263449] bg-[rgba(15,23,42,0.92)] pointer-events-auto text-[#60a5fa] ${asking ? "animate-pulse motion-reduce:animate-none" : ""} ${className ?? ""}`} style={style}>
       <LocateIcon />
     </button>
   );
@@ -166,8 +166,9 @@ export function MapChrome() {
           </div>
         ) : null}
       </div>
-      <LocateButton map={map} />
+      {/* Quick bar, top to bottom: Change view, the compass (only while rotated or tilted), Center on my location. */}
       {rotated && map ? <Compass map={map} bearing={bearing} /> : null}
+      <LocateButton map={map} />
     </div>
   );
 }
