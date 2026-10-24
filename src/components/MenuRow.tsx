@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
-  BarChart3, BusFront, Building2, CalendarDays, ChevronRight, CircleDot, Database, Ear, History, House, Info, Layers,
+  BarChart3, BusFront, Building2, CalendarDays, ChevronRight, CircleDot, Database, Ear, History, House, Info, Languages, Layers,
   Leaf, Lightbulb, LocateFixed, Lock, MessageSquare, Box, Palette, Settings, Shield, Signpost, SlidersHorizontal, Sun, TrainFront, Trash2, Volume2, Gauge, CloudSun, type LucideIcon,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
@@ -17,6 +17,7 @@ import { usePanel } from "@/lib/store/PanelContext";
 import { CHOICES, THEMES, setTheme, useTheme } from "@/lib/theme";
 import { useFollowed } from "@/lib/transit/follow";
 import { useSelectedLine } from "@/lib/transit/selectedLine";
+import { APP_LANGS, LANG_LABELS, setLangPref, useLangPref, type AppLang } from "@/lib/voice/langPref";
 import { setVoicePrefs, useVoicePrefs } from "@/lib/voice/voicePrefs";
 
 /**
@@ -62,9 +63,9 @@ export function rowOrder<T extends { id: string }>(items: T[], active: string): 
   return [...items.slice(i), ...items.slice(0, i)];
 }
 
-function SwitchRow({ icon, label, on, onChange, disabled, testId }: { icon: ReactNode; label: string; on: boolean; onChange: (on: boolean) => void; disabled?: boolean; testId?: string }) {
+function SwitchRow({ icon, label, on, onChange, disabled, testId, className }: { icon: ReactNode; label: string; on: boolean; onChange: (on: boolean) => void; disabled?: boolean; testId?: string; className?: string }) {
   return (
-    <label className={`flex min-h-12 cursor-pointer items-center gap-3 px-2 text-[14px] font-medium ${disabled ? "opacity-50" : ""}`} data-testid={testId}>
+    <label className={`flex min-h-12 cursor-pointer items-center gap-3 px-2 text-[14px] font-medium ${disabled ? "opacity-50" : ""} ${className ?? ""}`} data-testid={testId}>
       {icon}
       <span className="flex-1">{label}</span>
       <Switch checked={on} onCheckedChange={onChange} disabled={disabled} aria-label={label} className={SWITCH} />
@@ -92,6 +93,9 @@ function Choice<T extends string>({ icon, label, value, options, onChange }: { i
 const MY_DAY = FEATURES.find((f) => f.myDay);
 const MyDayBody = MY_DAY?.myDay ? lazy(MY_DAY.myDay.load) : null;
 
+const LAYER_ICON = "h-[22px] w-[22px] shrink-0";
+const LAYER_ROW = "min-h-[52px] text-[15px]";
+
 function LayersBody({ onClose }: { onClose: () => void }) {
   const { chips, setDrawerOpen } = usePanel();
   const { restrooms, setRestrooms } = useMapState();
@@ -100,11 +104,11 @@ function LayersBody({ onClose }: { onClose: () => void }) {
   const buses = chips.find((c) => c.id === "liveBuses");
   return (
     <div data-testid="layers-panel">
-      {trains ? <SwitchRow icon={<TrainFront className={ICON} aria-hidden />} label="Live trains" on={trains.active} onChange={trains.onToggle} /> : null}
-      {buses ? <SwitchRow icon={<BusFront className={ICON} aria-hidden />} label="Live buses" on={buses.active} onChange={buses.onToggle} /> : null}
-      {flags.restrooms ? <SwitchRow icon={<RestroomIcon />} label="Restrooms" on={restrooms} onChange={() => setRestrooms(!restrooms)} /> : null}
+      {trains ? <SwitchRow className={LAYER_ROW} icon={<TrainFront className={LAYER_ICON} aria-hidden />} label="Live trains" on={trains.active} onChange={trains.onToggle} /> : null}
+      {buses ? <SwitchRow className={LAYER_ROW} icon={<BusFront className={LAYER_ICON} aria-hidden />} label="Live buses" on={buses.active} onChange={buses.onToggle} /> : null}
+      {flags.restrooms ? <SwitchRow className={LAYER_ROW} icon={<RestroomIcon />} label="Restrooms" on={restrooms} onChange={() => setRestrooms(!restrooms)} /> : null}
       <Divider />
-      <button type="button" className={ROW} onClick={() => { onClose(); setDrawerOpen(true); }}>
+      <button type="button" className={`${ROW} text-[#cbd5e1]`} onClick={() => { onClose(); setDrawerOpen(true); }}>
         <Layers className={ICON} aria-hidden /><span className="flex-1">More layers</span><ChevronRight className="h-4 w-4 text-[#a5b4cb]" aria-hidden />
       </button>
     </div>
@@ -112,7 +116,7 @@ function LayersBody({ onClose }: { onClose: () => void }) {
 }
 
 const RestroomIcon = () => (
-  <svg width={20} height={20} viewBox="0 0 24 24" fill="currentColor" aria-hidden className="shrink-0">
+  <svg width={22} height={22} viewBox="0 0 24 24" fill="currentColor" aria-hidden className="shrink-0">
     <circle cx="7" cy="4" r="2" /><path d="M5 7h4l1 7H8.5v7h-3v-7H4l1-7Z" /><circle cx="17" cy="4" r="2" /><path d="M15.2 7h3.6l2.2 8h-2.5v6h-3v-6H13l2.2-8Z" />
   </svg>
 );
@@ -222,12 +226,16 @@ function CityDataBody({ onClose, onOpenDashboard, onOpenSources }: { onClose: ()
 function SettingsBody() {
   const [advanced, setAdvanced] = useAdvancedMode();
   const voice = useVoicePrefs();
+  const lang = useLangPref();
   const flags = useFlags();
   const ambient = useAmbient();
   const theme = useTheme();
   const { eco, setEco, city3d, setCity3d } = useMapState();
   return (
     <div data-testid="settings-panel">
+      <Choice icon={<Languages className={ICON} aria-hidden />} label="Language" value={lang ?? ""}
+        onChange={(v) => setLangPref(v === "" ? null : v)}
+        options={[["", "This phone"], ...APP_LANGS.map((code): [AppLang, string] => [code, LANG_LABELS[code]])]} />
       <SwitchRow icon={<Volume2 className={ICON} aria-hidden />} label="Speak answers" on={voice.speak} onChange={(v) => setVoicePrefs({ speak: v })} />
       <SwitchRow icon={<Ear className={ICON} aria-hidden />} label="Listen for “Hey map”" on={voice.wake} onChange={(v) => setVoicePrefs({ wake: v })} />
       <Divider />

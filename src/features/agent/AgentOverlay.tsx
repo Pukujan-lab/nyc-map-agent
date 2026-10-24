@@ -45,6 +45,7 @@ import { AgentHome, AnswerCard, WorkingPanel } from "./AgentHome";
 import { DailyCard, TaskButtons } from "./HomeTasks";
 import { rememberCommute, useHomeWork } from "./commute";
 import { rememberChat, rememberLookup } from "@/lib/memory/memory";
+import { useLangPref } from "@/lib/voice/langPref";
 import { useVoicePrefs } from "@/lib/voice/voicePrefs";
 import { useFollowed } from "@/lib/transit/follow";
 import { useLinesControl } from "@/lib/transit/linesControl";
@@ -82,7 +83,9 @@ export default function AgentOverlay() {
   const openLines = useLinesControl();
   const stationHelp = useStationHelp();
   const homeInput = useRef<HTMLInputElement>(null);
-  const [lang] = useState(browserLang);
+  // A stored language wins; otherwise the browser's, read when it changes.
+  const storedLang = useLangPref();
+  const lang = storedLang ?? browserLang();
   // One panel at a time (#225): opening Ask closes the drawer and any sheet.
   useEffect(() => {
     if (chatOpen) closeAll();
