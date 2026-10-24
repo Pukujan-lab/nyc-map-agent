@@ -85,6 +85,17 @@ export const AGENT_ROUTE = createRoute({
   responses: {
     200: { description: "One JSON StreamEvent per line", content: { "application/x-ndjson": { schema: z.string() } } },
     400: { description: "Invalid body", content: { "application/json": { schema: ApiError } } },
+    429: {
+      description: "Fair-use limit for this client; Retry-After says when the next question frees up",
+      headers: { "Retry-After": { description: "Seconds until the next question is allowed", schema: { type: "integer" } } },
+      content: {
+        "application/json": {
+          schema: z
+            .object({ error: z.literal("rate_limited"), message: z.string(), retryAfterSeconds: z.number().int(), retryAt: z.string() })
+            .openapi("AgentRateLimited"),
+        },
+      },
+    },
   },
 });
 
