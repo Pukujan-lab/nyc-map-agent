@@ -8,7 +8,9 @@ import type { FeatureModule } from "@/lib/features/types";
  */
 const storefronts: FeatureModule = {
   id: "storefronts",
-  layers: () => import("@/lib/map/threeLayer"),
+  // No `layers`: the sign layer has no mount(); MapView adds it with the
+  // textured city. A `layers` chunk here downloaded three.js on every first
+  // load, Top view included (#364).
   panel: { idPrefix: "directory:" },
   flags: ["storefronts", "city3d"],
 };

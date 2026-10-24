@@ -14,7 +14,8 @@ import { applyReadable } from "@/lib/map/readable";
 import { busStopIconOpacity, busStopTextOpacity } from "@/lib/map/busStops";
 import { applyPlaces, placesStale, usePlaces, withQuickPlaces } from "@/lib/map/places";
 import { useMapOptions } from "@/lib/map/mapOptions";
-import { applyBuildings, wantsFlatBuildings } from "@/lib/map/buildings";
+import { applyBuildings, cityDetail, mapLevel, wantsFlatBuildings } from "@/lib/map/buildings";
+import { installLandmarkLabels } from "@/lib/map/landmarkLabels";
 import { applyMapTheme, buildingEdge, setThemeCoords, usePalette } from "@/lib/theme";
 import { sharedCoords } from "@/lib/geo/sharedLocation";
 
@@ -469,10 +470,15 @@ export function MapView({
   const places = usePlaces();
   const opts = useMapOptions();
   const t = usePalette();
-  // Flat footprints at every level, including street view. 3D buildings is what
-  // extrudes the basemap and turns on the textured city. Ignoring Flat during a
-  // walk loaded that city under Simple streets too.
+  // At street level Flat keeps footprints flat; 3D buildings extrudes the
+  // basemap and turns on the textured city. Ignoring Flat during a walk loaded
+  // that city under Simple streets too.
   const flatBuildings = wantsFlatBuildings(opts.buildings);
+  // Top view is a flat 2D overview (#364). Tilted views are a simple block map;
+  // the detailed city above street level is an advanced, off-by-default flag (#363).
+  const detailedCity = useFlag("detailedCity");
+  const level = mapLevel(walking, tilted);
+  const { extrude, skyline: skylineOn, textured: texturedOn } = cityDetail({ level, flat: flatBuildings, eco, city3d, detailed: detailedCity });
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!map || !ready) return;
@@ -498,11 +504,13 @@ export function MapView({
       if (!analytics && map.getLayer("label_other") && map.getLayoutProperty("label_other", "visibility") !== "none") map.setLayoutProperty("label_other", "visibility", "none");
     };
     map.on("styledata", keep);
-    applyBuildings(map, flatBuildings, t.building, buildingEdge(t));
+    applyBuildings(map, !extrude, t.building, buildingEdge(t), flatBuildings);
+    // A few named landmarks so the light map still says where you are (#363).
+    installLandmarkLabels(map, t.dark ? "#f1f5f9" : "#1f2937", t.land);
     return () => {
       map.off("styledata", keep);
     };
-  }, [ready, styleEpoch, transitFocus, places, businesses, health, parksPlaces, citibike, opts, t, flatBuildings, analytics]);
+  }, [ready, styleEpoch, transitFocus, places, businesses, health, parksPlaces, citibike, opts, t, extrude, flatBuildings, analytics]);
 
   const handleLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
@@ -958,18 +966,24 @@ export function MapView({
     if (!map) return;
     let cancelled = false;
     let cleanup: (() => void) | null = null;
+    const skyline = skylineOn;
+    const city3dOn = texturedOn;
+    // Nothing to draw (Top view, flat buildings, no school icons) and nothing
+    // loaded yet: skip the chunk, so Top view requests no 3D code (#364).
+    if (!skyline && !city3dOn && !schoolIcons && !city3dMod.current) return;
     // Lazy chunk: users who never turn it on never download it.
-    const city3dOn = city3d && !flatBuildings;
     import("@/lib/map/city3d")
       .then(async (mod) => {
         const { installCity3d, setCity3dVisible, city3dCoversView } = mod;
         city3dMod.current = mod;
         // Distance skyline (z11-14): on unless low-power mode; tiny and plain colour.
-        if (!eco && !flatBuildings) await mod.installSkyline(map);
+        if (skyline) await mod.installSkyline(map);
         if (cancelled) return;
-        mod.setSkylineVisible(map, !eco && !flatBuildings);
-        if (!city3dOn && !schoolIcons) {
+        mod.setSkylineVisible(map, skyline);
+        if (!city3dOn) {
           setCity3dVisible(map, false);
+          // School icons need only the tiles source, not the three.js layers.
+          await mod.showSchoolIcons(map, schoolIcons);
           return;
         }
         await installCity3d(map);
@@ -982,10 +996,6 @@ export function MapView({
         if (storefrontsOn && !map.getLayer(signs.STOREFRONT_LAYER)) map.addLayer(signs.createStorefrontLayer());
         // Quick Layers > Businesses off takes the sign bands away.
         if (!storefrontsOn && map.getLayer(signs.STOREFRONT_LAYER)) map.removeLayer(signs.STOREFRONT_LAYER);
-        if (!city3dOn) {
-          setCity3dVisible(map, false);
-          return;
-        }
         // Basemap buildings only step aside where textured tiles exist.
         let covered: boolean | null = null;
         const sync = () => {
@@ -1004,7 +1014,7 @@ export function MapView({
       cancelled = true;
       cleanup?.();
     };
-  }, [ready, styleEpoch, city3d, schoolIcons, storefrontsOn, eco, flatBuildings]);
+  }, [ready, styleEpoch, skylineOn, texturedOn, schoolIcons, storefrontsOn]);
 
   useEffect(() => {
     if (!ready) return;
