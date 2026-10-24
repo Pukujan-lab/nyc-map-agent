@@ -2,6 +2,14 @@
 
 *Written 2026-10-23 from the owner's realignment conversation. "Exists" means present in the repo or in an open PR; nothing here has been verified as working for a real user unless it says so. PR and issue numbers refer to `Pukujan/nyc-map-agent`.*
 
+## Decisions, 2026-10-23 (owner)
+- **Simple, fast map is the default.** Plain colored block shapes (the repo already has real tax-block tiles), only the route and the data that answers the question, few labels, drawn by MapLibre alone. Reference: the owner's "Walk mode · live" mock with an "Agents working" panel (Planner, Data query, Search) as the loading state.
+- **The detailed 3D city becomes an optional module, off by default.** It is heavy, does not run on many computers, and slows the owner's work computer. It stays behind a flag (the flag registry's advanced tier) for later work; fixing it is not on the critical path.
+- **Landmarks stay recognisable** in the simple map so people know where they are. Street level and Live View keep real detail for the underground and exit problem.
+- **Fix duplicate filters.** The Layers menu and Layers & filters overlap. (An older branch, `fix/layers-dedupe-44`, may be related; not checked.)
+- **Secondary goal: know exactly which street a shop or restaurant is on** ("that's where McDonald's is"), fast and easy. Storefront layers and signs exist (`src/features/storefronts`); a fast find-it flow does not.
+- **Order of work:** keep the app fast and accessible and deliver the main goal first; optional modules come later.
+
 ## Main goal
 An accessible chat and voice agent that shows its answers on a clean map (`PROJECT.md`). Work so far leaned toward visual polish and technical issues; from now on, rank work by whether it moves this goal.
 

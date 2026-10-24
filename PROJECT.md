@@ -25,11 +25,12 @@ Being looked after. The app notices what you are doing (on a train, underground,
 Questions about a place from the data: noise level of a neighbourhood from 311 complaints, how it changed over the years, what people complain about, how authorities respond, and how it compares with the borough and the city average; accidents on a street; a child's school route and which streets on it have crashes. Always shown on the map, never only told.
 
 ## Third
-Virtual travel through NYC to find businesses and food and where they are.
+Virtual travel through NYC to find businesses and food and where they are, especially knowing exactly which street a shop or restaurant is on (the owner also counts this as a secondary goal).
 
 ## Principles
 - **Show, do not tell.** Every answer carries buttons that draw it on the map.
 - **Clean by default.** Only what matters right now; landmarks always.
+- **A simple, fast map by default.** Plain block shapes and only what answers the question; the detailed 3D city is an optional module, off by default.
 - **Top view is a flat 2D map.** 3D belongs to tilted and street-level views.
 - **Fast and cheap to run.** Few backend calls; the server syncs upstream feeds, clients read from our server.
 - **Always answer.** The agent has fallback models, rate limits against abuse, and tells you (and says aloud) when something is slow.
