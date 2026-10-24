@@ -2413,6 +2413,267 @@
         }
       }
     },
+    "/api/v1/transit-segments/all": {
+      "get": {
+        "summary": "Historical subway segment travel and dwell times for many routes at once, keyed by route; cached for hours when dow and hour are given",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 200,
+              "pattern": "^[A-Za-z0-9]{1,4}(,[A-Za-z0-9]{1,4}){0,49}$"
+            },
+            "required": true,
+            "name": "routes",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 7
+            },
+            "required": false,
+            "name": "dow",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 23
+            },
+            "required": false,
+            "name": "hour",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "dow": {
+                      "type": "integer"
+                    },
+                    "hour": {
+                      "type": "integer"
+                    },
+                    "routes": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "dir": {
+                              "type": "integer"
+                            },
+                            "from": {
+                              "type": "string"
+                            },
+                            "to": {
+                              "type": "string"
+                            },
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "travel",
+                                "dwell"
+                              ]
+                            },
+                            "n": {
+                              "type": "integer"
+                            },
+                            "median": {
+                              "type": "number"
+                            },
+                            "p80": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "dir",
+                            "from",
+                            "to",
+                            "kind",
+                            "n",
+                            "median",
+                            "p80"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "dow",
+                    "hour",
+                    "routes"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transit-segments/all": {
+      "get": {
+        "summary": "Historical subway segment travel and dwell times for many routes at once, keyed by route; cached for hours when dow and hour are given (alias of /api/v1/transit-segments/all)",
+        "deprecated": true,
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 200,
+              "pattern": "^[A-Za-z0-9]{1,4}(,[A-Za-z0-9]{1,4}){0,49}$"
+            },
+            "required": true,
+            "name": "routes",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 7
+            },
+            "required": false,
+            "name": "dow",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 23
+            },
+            "required": false,
+            "name": "hour",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "dow": {
+                      "type": "integer"
+                    },
+                    "hour": {
+                      "type": "integer"
+                    },
+                    "routes": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "dir": {
+                              "type": "integer"
+                            },
+                            "from": {
+                              "type": "string"
+                            },
+                            "to": {
+                              "type": "string"
+                            },
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "travel",
+                                "dwell"
+                              ]
+                            },
+                            "n": {
+                              "type": "integer"
+                            },
+                            "median": {
+                              "type": "number"
+                            },
+                            "p80": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "dir",
+                            "from",
+                            "to",
+                            "kind",
+                            "n",
+                            "median",
+                            "p80"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "dow",
+                    "hour",
+                    "routes"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/transit-segments": {
       "get": {
         "summary": "Historical subway segment travel and dwell times (median, p80) for a route at an hour of the week",
@@ -2650,6 +2911,135 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/transit-live": {
+      "get": {
+        "summary": "Live subway / LIRR / Metro-North trips and (alerts=1) service alerts in one response; ETag + If-None-Match (304), Cache-Control public, s-maxage=30, stale-while-revalidate=30",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 40,
+              "pattern": "^((subway|lirr|mnr)(,(subway|lirr|mnr))*)?$"
+            },
+            "required": false,
+            "name": "systems",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "0",
+                "1"
+              ]
+            },
+            "required": false,
+            "name": "alerts",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK ({ at, systems: { subway?, lirr?, mnr? }, alerts?, failed? })",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified (If-None-Match matched the ETag)"
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transit-live": {
+      "get": {
+        "summary": "Live subway / LIRR / Metro-North trips and (alerts=1) service alerts in one response; ETag + If-None-Match (304), Cache-Control public, s-maxage=30, stale-while-revalidate=30 (alias of /api/v1/transit-live)",
+        "deprecated": true,
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 40,
+              "pattern": "^((subway|lirr|mnr)(,(subway|lirr|mnr))*)?$"
+            },
+            "required": false,
+            "name": "systems",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "0",
+                "1"
+              ]
+            },
+            "required": false,
+            "name": "alerts",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK ({ at, systems: { subway?, lirr?, mnr? }, alerts?, failed? })",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified (If-None-Match matched the ETag)"
           },
           "400": {
             "description": "Invalid query",

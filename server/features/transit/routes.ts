@@ -11,6 +11,8 @@
  *   /api/transit/bus-trip?vehicle=&route= → one bus: headsign + upcoming stops with ETAs (SIRI)
  *   /api/transit/bus-route?route=        → one route's shape + stops, on demand (Bus Time OBA)
  *   /api/transit/bus-stops?lat=&lon=     → stops within ~300 m and the routes serving each (Bus Time OBA)
+ *
+ * /api/transit-live (live.ts) batches the rail systems and alerts into one edge-cached response.
  */
 import GtfsRealtimeBindings from "gtfs-realtime-bindings";
 import { json } from "../../../api/_lib/http";
@@ -28,7 +30,7 @@ const FEEDS: Record<string, string[]> = {
 const TTL = 15_000;
 const cache = new Map<string, { at: number; body: Promise<unknown> }>();
 
-function cached(key: string, load: () => Promise<unknown>, ttl = TTL): Promise<unknown> {
+export function cached(key: string, load: () => Promise<unknown>, ttl = TTL): Promise<unknown> {
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < ttl) return hit.body;
   // Per-vehicle keys come and go; drop stale ones so the map cannot grow without bound.
@@ -116,7 +118,7 @@ export async function loadBuses(key: string) {
   return { at: Math.round(Date.now() / 1000), buses };
 }
 
-async function loadAlerts() {
+export async function loadAlerts() {
   const get = (path: string) => fetch(`${MTA}${path}`, { signal: AbortSignal.timeout(10_000) }).then((r) => r.json());
   const [alertsRes, eneRes, equipRes] = await Promise.allSettled([
     get("camsys%2Fall-alerts.json"),
