@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { Layer, Source, useMap } from "react-map-gl/maplibre";
-import { LngLat, type Map as MaplibreMap, type MapLayerMouseEvent } from "maplibre-gl";
+import { LngLat, type GeoJSONSource, type Map as MaplibreMap, type MapLayerMouseEvent } from "maplibre-gl";
 import { Accessibility, Navigation2, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -41,7 +41,7 @@ import { alertGeometry, setAlertFocus, stationChanges, useAlertFocus } from "./a
 import { LinesDrawer } from "./LinesDrawer";
 import { lineOpacity, useMapOptions } from "@/lib/map/mapOptions";
 import { NOTCH_ICON, addBulletImage, lineColor as lineColorOf, stationRowId, bulletId, busBadgeId, busIconSize, busPrefix } from "@/lib/transit/bullets";
-import { usePalette } from "@/lib/theme";
+import { usePalette, type Palette } from "@/lib/theme";
 import { FOCUS_OPACITY, FOCUS_VEIL_ID, WORLD, focusVeil, useTransitFocus } from "@/lib/map/transitFocus";
 
 /** Layers a click on the map should hand to transit instead of the area pick. */
@@ -97,18 +97,63 @@ function addSkipIcons(map: MaplibreMap) {
   }
 }
 
+/** SVG markup per icon, rendered once (no server renderer in the bundle). */
+const ICON_SVG = new Map<string, string>();
+function iconSvg(id: string, node: JSX.Element): string {
+  let svg = ICON_SVG.get(id);
+  if (svg === undefined) {
+    const host = document.createElement("div");
+    const root = createRoot(host);
+    flushSync(() => root.render(node));
+    svg = host.innerHTML;
+    root.unmount();
+    ICON_SVG.set(id, svg);
+  }
+  return svg;
+}
+
 function addIcon(map: MaplibreMap, id: string) {
   const def = ICONS[id];
   if (!def || map.hasImage(id)) return;
-  const img = new Image(48, 48);
-  img.onload = () => { if (!map.hasImage(id)) map.addImage(id, img, { sdf: def.sdf, pixelRatio: 2 }); };
-  // Render the lucide icon once to SVG markup (no server renderer in the bundle).
-  const host = document.createElement("div");
-  const root = createRoot(host);
-  flushSync(() => root.render(def.node));
-  const svg = host.innerHTML;
-  root.unmount();
-  img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  // MapLibre can raise styleimagemissing while React is committing (a <Layer> mounting);
+  // rendering a React root synchronously there trips React's flushSync warning, so wait a tick.
+  queueMicrotask(() => {
+    if (map.hasImage(id)) return;
+    const img = new Image(48, 48);
+    img.onload = () => { if (!map.hasImage(id)) map.addImage(id, img, { sdf: def.sdf, pixelRatio: 2 }); };
+    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(iconSvg(id, def.node))}`;
+  });
+}
+
+/** The latest render's values the draw loop reads (the loop itself never re-renders). */
+type FrameInputs = {
+  map: MaplibreMap | undefined;
+  three: boolean;
+  xrayOn: boolean;
+  followedKey: string | null | undefined;
+  followMode: Parameters<typeof followRig>[0];
+  hide: boolean;
+  alerted: Set<string>;
+  theme: Palette;
+};
+
+/** Map features for the drawn vehicles: route bullets, bus badges, rail arrows. */
+function vehicleCollection(list: Vehicle[], alerted: Set<string>, theme: Palette): GeoJSON.FeatureCollection {
+  return {
+    type: "FeatureCollection",
+    features: list.map((v) => {
+      const alert = alerted.has(v.route);
+      let bullet = "", badge = "", badgeFull = "";
+      if (v.system === "subway") bullet = bulletId(v.route, v.color, alert);
+      if (v.system === "bus") {
+        const p = busPrefix(v.route);
+        const c = p.express ? theme.busExpress : theme.bus;
+        badge = busBadgeId(p.text, c); // the tiny prefix badge stays plain; the "!" rides the full badge
+        badgeFull = busBadgeId(v.route, c, alert);
+      }
+      return { type: "Feature", properties: { key: v.key, color: v.color, bearing: v.bearing, grade: v.grade, label: v.label, system: v.system, route: v.route, bullet, badge, badgeFull, alpha: v.alpha ?? 1 }, geometry: { type: "Point", coordinates: [v.lon, v.lat] } };
+    }),
+  };
 }
 
 /** Slice of a route shape between two stops, for marking planned work on the exact segment. */
@@ -190,7 +235,8 @@ export default function TransitLayer() {
     // The map is read once per refresh, not on every move: re-running on `map` would reshuffle buses as you pan.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buses.data, busShapes, show.routes, busCap]);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  // The followed vehicle as React sees it: refreshed only when what its card shows changes.
+  const [followed, setFollowedVehicle] = useState<Vehicle | undefined>(undefined);
 
   const openStation = useCallback(
     (system: SystemId, id: string, name: string) =>
@@ -217,12 +263,15 @@ export default function TransitLayer() {
   }, [focus, anyOn, set, setFocus]);
   const opts = useMapOptions();
   const lineAlpha = lineOpacity(opts.routes, focus) as number;
-  const toggleTrains = useCallback(() => set("subway", !on.has("subway")), [on, set]);
+  // `on` is a new Set every render: depending on it re-registered the chip on every render,
+  // which re-rendered this layer through the panel context ("Maximum update depth exceeded").
+  const trainsOn = on.has("subway");
+  const toggleTrains = useCallback(() => set("subway", !trainsOn), [trainsOn, set]);
   const toggleBuses = useCallback(() => {
     if (show.routes.length > 0) { holdShuttle(alertFocus?.id ?? null); set("bus", false); return; }
     setDrawerOpen(true);
   }, [show.routes.length, alertFocus, set, setDrawerOpen]);
-  usePanelChip({ id: "liveTrains", label: "Live trains", active: on.has("subway"), onToggle: toggleTrains });
+  usePanelChip({ id: "liveTrains", label: "Live trains", active: trainsOn, onToggle: toggleTrains });
   usePanelChip(meta.data?.bus === true ? { id: "liveBuses", label: "Live buses", active: show.routes.length > 0, onToggle: toggleBuses } : null);
   usePanelChip({ id: "transitFocus", label: "Transit Focus", active: focus && anyOn, onToggle: toggleFocus });
 
@@ -432,7 +481,52 @@ export default function TransitLayer() {
     return () => window.clearInterval(id);
   }, [map, rail.join(","), data, buses.data, selectedKey, followedKey, history, walking, show.routes]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Tween displayed positions and headings toward the targets (~20 fps).
+  // What the draw loop needs from the latest render; assigned on every render below.
+  const frame = useRef<FrameInputs | null>(null);
+  const followSig = useRef("");
+  // One pose per displayed vehicle. A fresh glide every update piled up and
+  // fought the trip preview. A heading that flips almost backward waits out.
+  const headingKey = useRef<string | null>(null);
+  const headingHold = useRef({ bearing: 0, streak: 0 });
+  // Positions go straight to MapLibre (GeoJSON source) and the three.js layer, never through
+  // React state: a per-frame setState re-rendered this whole layer ~15 times a second (#365).
+  const drawFrame = useCallback((list: Vehicle[]) => {
+    const f = frame.current;
+    const m = f?.map;
+    if (!f || !m) return;
+    const src = m.getSource<GeoJSONSource>("transit-vehicles");
+    src?.setData(f.hide ? EMPTY : vehicleCollection(list, f.alerted, f.theme));
+    if (f.three) {
+      v3d.current?.update(
+        list
+          // The followed (boarded) train always draws, whatever its grade.
+          .filter((v) => v.key === f.followedKey || f.xrayOn || v.grade !== "underground")
+          .map((v) => {
+            const ghost = v.grade === "underground";
+            return { lon: v.lon, lat: v.lat, bearing: v.bearing, z: ghost ? XRAY_DEPTH_M : v.z ?? 0, color: v.system === "bus" ? "#f8fafc" : v.color, kind: v.system === "bus" ? "bus" : v.system === "subway" ? "subway" : "rail", ghost };
+          }),
+      );
+    }
+    // Follow: the card re-renders only when what it shows changes; the camera rides every frame.
+    const fv = f.followedKey ? list.find((v) => v.key === f.followedKey) : undefined;
+    const sig = fv ? [fv.key, fv.route, fv.grade, fv.nextStop, fv.eta, fv.stopped?.kind, fv.stopped?.stop].join("|") : "";
+    if (sig !== followSig.current) {
+      followSig.current = sig;
+      setFollowedVehicle(fv);
+    }
+    if (!fv) return;
+    if (headingKey.current !== fv.key) {
+      headingKey.current = fv.key;
+      headingHold.current = stableHeading(null, fv.bearing, 0);
+    } else {
+      headingHold.current = stableHeading(headingHold.current.bearing, fv.bearing, headingHold.current.streak);
+    }
+    const { eye, look } = followRig(f.followMode, headingHold.current.bearing, fv.z ?? 0);
+    const at = (dx: number, dy: number) => new LngLat(fv.lon + dx / (111_320 * Math.cos((fv.lat * Math.PI) / 180)), fv.lat + dy / 111_320);
+    m.jumpTo(m.calculateCameraOptionsFromTo(at(eye[0], eye[1]), eye[2], at(look[0], look[1]), look[2]));
+  }, []);
+
+  // Tween displayed positions and headings toward the targets (~15 fps).
   useEffect(() => {
     let raf = 0, last = 0;
     const loop = (t: number) => {
@@ -454,23 +548,24 @@ export default function TransitLayer() {
         next.set(v.key, { ...v, lon: d.lon + (v.lon - d.lon) * 0.15, lat: d.lat + (v.lat - d.lat) * 0.15, bearing: (d.bearing + db * 0.2 + 360) % 360 });
       }
       display.current = next;
-      setVehicles([...next.values()]);
+      drawFrame([...next.values()]);
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, []);
+  }, [drawFrame]);
 
   // Dev-only: lets headless QA read the drawn vehicles.
   useEffect(() => {
     if (import.meta.env.DEV) Object.assign(window, { __vehicles: () => [...display.current.values()] });
   }, []);
   // 3D click targets only need ~1 Hz accuracy; re-tiling them every frame is wasted work.
-  const [hitFc, setHitFc] = useState<GeoJSON.FeatureCollection>(EMPTY);
+  // Written straight to the source, like the vehicles themselves.
   useEffect(() => {
-    if (!three) return;
-    const id = window.setInterval(() => setHitFc({ type: "FeatureCollection", features: [...display.current.values()].map((v) => ({ type: "Feature", properties: { key: v.key, label: v.label }, geometry: { type: "Point", coordinates: [v.lon, v.lat] } })) }), 1000);
-    return () => window.clearInterval(id);
-  }, [three]);
+    if (!map || !three) return;
+    const hits = () => map.getSource<GeoJSONSource>("transit-vehicle-hits");
+    const id = window.setInterval(() => hits()?.setData({ type: "FeatureCollection", features: [...display.current.values()].map((v) => ({ type: "Feature", properties: { key: v.key, label: v.label }, geometry: { type: "Point", coordinates: [v.lon, v.lat] } })) }), 1000);
+    return () => { window.clearInterval(id); hits()?.setData(EMPTY); };
+  }, [map, three]);
   const theme = usePalette();
   // Street level: publish the drawn vehicles once a second for the mini map.
   useEffect(() => {
@@ -493,23 +588,10 @@ export default function TransitLayer() {
     return () => { map.off("mousemove", move); };
   }, [map]);
   const alerted = useMemo(() => alertedRoutes(alerts.data?.alerts), [alerts.data]);
-  const visible = useMemo(() => shownVehicles(vehicles, show.routes), [vehicles, show.routes]);
-  const vehicleFc = useMemo<GeoJSON.FeatureCollection>(() => ({
-    type: "FeatureCollection",
-    features: visible.map((v) => {
-      const alert = alerted.has(v.route);
-      let bullet = "", badge = "", badgeFull = "";
-      if (v.system === "subway") bullet = bulletId(v.route, v.color, alert);
-      if (v.system === "bus") {
-        const p = busPrefix(v.route);
-        const c = p.express ? theme.busExpress : theme.bus;
-        badge = busBadgeId(p.text, c); // the tiny prefix badge stays plain; the "!" rides the full badge
-        badgeFull = busBadgeId(v.route, c, alert);
-      }
-      return { type: "Feature", properties: { key: v.key, color: v.color, bearing: v.bearing, grade: v.grade, label: v.label, system: v.system, route: v.route, bullet, badge, badgeFull, alpha: v.alpha ?? 1 }, geometry: { type: "Point", coordinates: [v.lon, v.lat] } };
-    }),
-  }), [visible, alerted, theme]);
-  const selBusRoute = (show.routes.length && selectedKey?.startsWith("bus:") ? visible.find((v) => v.key === selectedKey)?.route : undefined) ?? "";
+  // The selected bus's route comes from the feed, not the animated positions, so it changes only with data.
+  const selBusId = show.routes.length && selectedKey?.startsWith("bus:") ? selectedKey.slice(4) : "";
+  const selBusFeedRoute = selBusId ? buses.data?.buses.find((b) => b.id === selBusId)?.route : undefined;
+  const selBusRoute = selBusFeedRoute && show.routes.some((r) => r.toUpperCase() === selBusFeedRoute.toUpperCase()) ? selBusFeedRoute : "";
   const busRoute = useBusRoute(selBusRoute || undefined);
   const busRouteFc = useMemo<GeoJSON.FeatureCollection>(() => {
     const features: GeoJSON.Feature[] = [];
@@ -617,18 +699,6 @@ export default function TransitLayer() {
     };
   }, [map, three, xrayOn]);
   useEffect(() => {
-    if (!three) return;
-    v3d.current?.update(
-      visible
-        // The followed (boarded) train always draws, whatever its grade.
-        .filter((v) => v.key === followedKey || xrayOn || v.grade !== "underground")
-        .map((v) => {
-          const ghost = v.grade === "underground";
-          return { lon: v.lon, lat: v.lat, bearing: v.bearing, z: ghost ? XRAY_DEPTH_M : v.z ?? 0, color: v.system === "bus" ? "#f8fafc" : v.color, kind: v.system === "bus" ? "bus" : v.system === "subway" ? "subway" : "rail", ghost };
-        }),
-    );
-  }, [visible, three, xrayOn, followedKey]);
-  useEffect(() => {
     if (!map || !three || !xrayOn) { v3d.current?.setGroundVeil(null); return; }
     const sync = () => {
       const v = v3d.current;
@@ -647,7 +717,6 @@ export default function TransitLayer() {
 
   // Follow mode: tap a train or bus (map or street level) and the camera rides along.
   const followMode = useFollowMode();
-  const followed = followedKey ? vehicles.find((v) => v.key === followedKey) : undefined;
   const following = Boolean(followedKey);
   // X-ray matches the track under the train you boarded, and turns off when you step off.
   const followedUnder = followed ? followed.grade === "underground" : null;
@@ -669,23 +738,6 @@ export default function TransitLayer() {
     const c = map.getCenter();
     rememberFollowOrigin({ center: [c.lng, c.lat], zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() });
   }, [map, followedKey]);
-  // One pose per displayed vehicle. A fresh glide every update piled up and
-  // fought the trip preview. A heading that flips almost backward waits out.
-  const headingKey = useRef<string | null>(null);
-  const headingHold = useRef({ bearing: 0, streak: 0 });
-  useEffect(() => {
-    if (!map || !followed) return;
-    if (headingKey.current !== followed.key) {
-      headingKey.current = followed.key;
-      headingHold.current = stableHeading(null, followed.bearing, 0);
-    } else {
-      headingHold.current = stableHeading(headingHold.current.bearing, followed.bearing, headingHold.current.streak);
-    }
-    const { eye, look } = followRig(followMode, headingHold.current.bearing, followed.z ?? 0);
-    const at = (dx: number, dy: number) => new LngLat(followed.lon + dx / (111_320 * Math.cos((followed.lat * Math.PI) / 180)), followed.lat + dy / 111_320);
-    const cam = map.calculateCameraOptionsFromTo(at(eye[0], eye[1]), eye[2], at(look[0], look[1]), look[2]);
-    map.jumpTo(cam);
-  }, [map, followed, followMode]);
   useEffect(() => {
     if (!map || followedKey) return;
     const back = takeFollowRestore();
@@ -740,11 +792,12 @@ export default function TransitLayer() {
     }
   }, [alerts.data, stars]);
 
-  if (!enabled || (!rail.length && !busOn)) return null;
-
   // Route bullets stay on in every view but street level: symbols draw above the 3D
   // buildings, so a train is never lost behind a tower or under the ground when tilted.
-  const hide2d = walking;
+  frame.current = { map, three, xrayOn, followedKey, followMode, hide: walking || Boolean(opts.stationsOnly), alerted, theme };
+
+  if (!enabled || (!rail.length && !busOn)) return null;
+
   const bulletAlpha = (alertFocus ? ["case", ["in", ["get", "route"], ["literal", alertFocus.routes]], 1, 0.15] : opts.routes.length ? ["case", ["in", ["get", "route"], ["literal", [...opts.routes]]], 1, 0.15] : 1) as number;
   const dimLines = (alertFocus ? 0.12 : lineAlpha);
   // Isolated lines: their stations stay, the rest fade.
@@ -846,7 +899,8 @@ export default function TransitLayer() {
         <Layer id="transit-access" type="symbol" minzoom={11}
           layout={{ "icon-image": "transit-access", "icon-size": ["interpolate", ["linear"], ["zoom"], 11, 0.35, 16, 0.6], "icon-offset": [-18, -18], "icon-allow-overlap": true }} />
       </Source>
-      <Source id="transit-vehicle-hits" type="geojson" data={three ? hitFc : EMPTY}>
+      {/* Data is written by the hit-target timer, never from render. */}
+      <Source id="transit-vehicle-hits" type="geojson" data={EMPTY}>
         <Layer id="transit-vehicle-hit" type="circle" paint={{ "circle-radius": 14, "circle-opacity": 0, "circle-pitch-alignment": "map" }} />
       </Source>
       <Source id="transit-bus-route" type="geojson" data={busRouteFc}>
@@ -858,7 +912,8 @@ export default function TransitLayer() {
           layout={{ "text-field": ["get", "name"], "text-size": 10, "text-font": ["Noto Sans Regular"], "text-offset": [0, 1], "text-anchor": "top", "text-optional": true }}
           paint={{ "text-color": theme.label_, "text-halo-color": theme.land, "text-halo-width": 1.5 }} />
       </Source>
-      <Source id="transit-vehicles" type="geojson" data={hide2d || opts.stationsOnly ? EMPTY : vehicleFc}>
+      {/* Data is written by the draw loop (drawFrame), never from render. */}
+      <Source id="transit-vehicles" type="geojson" data={EMPTY}>
         {/* Rail (LIRR, Metro-North) keeps heading arrows. */}
         <Layer id="transit-vehicle-2d" type="symbol"
           filter={["in", ["get", "system"], ["literal", ["lirr", "mnr"]]]}
