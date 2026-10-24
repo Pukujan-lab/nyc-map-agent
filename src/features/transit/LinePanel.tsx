@@ -2,10 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Marker, type Map as MaplibreMap } from "maplibre-gl";
 import { X } from "lucide-react";
 import { lineColor } from "@/lib/transit/bullets";
-import { setSelectedLine } from "@/lib/transit/selectedLine";
+import { setSelectedLine, useSelectedLine } from "@/lib/transit/selectedLine";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { setAlertFocus } from "./alertFocus";
-import { useAlerts, useTransitData } from "./hooks";
+import { useAlerts, useNow, useTransitData } from "./hooks";
+import { boardingArrivals, minutesUntil } from "./model";
 import { TONE, lineNotices, type LineNotice } from "./lineNotices";
 import { NoticeIcon, noticeKind } from "./noticeKind";
 
@@ -68,6 +69,9 @@ export function LinePanel({ map, route, onFollow }: { map: MaplibreMap | undefin
     setAlertFocus(pickedAlert);
     return () => setAlertFocus(null);
   }, [pickedAlert]);
+  const ride = useSelectedLine()?.ride;
+  const now = useNow(Boolean(ride));
+  const board = ride && sys ? boardingArrivals(sys, data.subway?.live, route, ride.from, ride.to, now) : null;
   const { seedChat, setChatOpen } = useMapState();
   const info = sys?.routes[route];
   const color = info?.color ?? lineColor(route);
@@ -98,6 +102,18 @@ export function LinePanel({ map, route, onFollow }: { map: MaplibreMap | undefin
         </button>
       </div>
       <div ref={panelRef} className="pointer-events-auto flex min-h-0 flex-col gap-2.5 rounded-[22px] border border-[rgba(148,163,184,0.16)] bg-[rgba(11,18,32,0.45)] p-2.5 backdrop-blur-[14px]">
+        {board ? (
+          <div data-testid="line-board" className="rounded-[14px] border border-[rgba(148,163,184,0.16)] bg-[rgba(15,23,42,0.35)] px-3 py-2.5 text-[14px]">
+            <div className="font-semibold">Next {route} at {board.name}</div>
+            {board.toward ? <div className="truncate text-[13px] text-[#cbd5e1]">Toward {board.toward}</div> : null}
+            <div className="mt-1.5 flex gap-2" aria-live="polite">
+              {board.times.length ? board.times.map((t) => {
+                const m = minutesUntil(t, now);
+                return <span key={t} className="rounded-full bg-[rgba(37,99,235,0.28)] px-2.5 py-0.5 text-[13px] font-semibold">{m < 1 ? "Now" : `${m} min`}</span>;
+              }) : <span className="text-[13px] text-[#cbd5e1]">No live times for this stop right now.</span>}
+            </div>
+          </div>
+        ) : null}
         {count ? (
           <ul className="flex max-h-[236px] min-h-0 flex-col gap-2 overflow-y-auto overscroll-contain pr-0.5" aria-label={`${route} line notices`}>
             {notices.map((n) => {

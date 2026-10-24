@@ -169,3 +169,25 @@ describe("x-ray", () => {
     expect(p.find((q) => q.kind === "shaft" && q.width > 1)?.color).toBe("#ef4444");
   });
 });
+
+import { boardingArrivals } from "./model";
+describe("boardingArrivals", () => {
+  const st = (id: string, name: string, lat: number) => ({ type: "Feature" as const, geometry: { type: "Point" as const, coordinates: [-73.95, lat] }, properties: { id, name, routes: "R" } });
+  const line = { ...sys, stations: { type: "FeatureCollection" as const, features: [st("A", "Forest Hills", 40.70), st("B", "Rego Park", 40.71), st("C", "Astoria", 40.72)] }, stopM: { R: { A: 0, B: 1000, C: 2000 } } } as StaticSystem;
+  const trip = (id: string, stops: Array<[string, number]>) => ({ id, route: "R", dir: null, stops });
+
+  it("keeps only trains at the boarding stop heading toward the stop you get off at", () => {
+    const live = { at: 0, trips: [
+      trip("toward-C", [["BN", 300], ["CN", 400]]),
+      trip("toward-A", [["BS", 200], ["AS", 300]]),
+      trip("later", [["AN", 500], ["BN", 600]]),
+      trip("gone", [["BN", -100], ["CN", 0]]),
+    ] };
+    const b = boardingArrivals(line, live, "R", [-73.95, 40.7101], [-73.95, 40.7199], 0)!;
+    expect(b).toEqual({ station: "B", name: "Rego Park", toward: "Astoria", times: [300, 600] });
+  });
+
+  it("has no boarding stop when both ends are the same station", () => {
+    expect(boardingArrivals(line, undefined, "R", [-73.95, 40.71], [-73.95, 40.7101], 0)).toBeNull();
+  });
+});

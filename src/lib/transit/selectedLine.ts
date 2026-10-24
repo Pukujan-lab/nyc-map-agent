@@ -10,14 +10,16 @@ import { useSyncExternalStore } from "react";
 export interface SelectedLine {
   route: string;
   train: string | null;
+  /** A chosen trip's ride on this line: the panel shows the next trains at its boarding stop. */
+  ride?: { from: [number, number]; to: [number, number] };
 }
 
 let selected: SelectedLine | null = null;
 const subs = new Set<() => void>();
 
-export function setSelectedLine(route: string | null, train: string | null = null): void {
-  const next = route ? { route, train } : null;
-  if (next?.route === selected?.route && next?.train === selected?.train) return;
+export function setSelectedLine(route: string | null, train: string | null = null, ride?: SelectedLine["ride"]): void {
+  const next = route ? { route, train, ...(ride ? { ride } : {}) } : null;
+  if (next?.route === selected?.route && next?.train === selected?.train && next?.ride === selected?.ride) return;
   selected = next;
   subs.forEach((f) => f());
 }

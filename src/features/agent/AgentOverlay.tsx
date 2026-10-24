@@ -22,7 +22,7 @@ import { getMapInstance } from "@/lib/map/mapInstance";
 import { useDataView } from "@/lib/store/DataViewContext";
 import { followTripRoute } from "@/lib/transit/routeFollow";
 import { followUpQuestion } from "./followUpQuestion";
-import { setSelectedLine, useSelectedLine } from "@/lib/transit/selectedLine";
+import { lineOf, setSelectedLine, useSelectedLine } from "@/lib/transit/selectedLine";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { publishActiveTrip } from "@/lib/transit/activeTrip";
 import { revealTripBuses } from "@/lib/transit/busReveal";
@@ -743,10 +743,9 @@ export default function AgentOverlay() {
           onUse={() => {
             player.release();
             const ride = trip.legs.find((l) => l.kind === "ride");
-            if (ride && (ride.mode === "subway" || ride.mode === "bus")) {
-              if (followTripRoute({ system: ride.mode, route: ride.route, at: ride.coords[0] })) return;
-              if (ride.mode === "subway") { setSelectedLine(ride.route); return; }
-            }
+            // A subway ride shows when its trains reach your stop, not a train somewhere else on the line.
+            if (ride?.mode === "subway") { setSelectedLine(lineOf(ride.route), null, { from: ride.coords[0], to: ride.coords[ride.coords.length - 1] }); return; }
+            if (ride?.mode === "bus" && followTripRoute({ system: "bus", route: ride.route, at: ride.coords[0] })) return;
             if (trip.mode === "walk") {
               setRoutePoint("start", { lon: trip.origin.at[0], lat: trip.origin.at[1] });
               setRoutePoint("end", { lon: trip.destination.at[0], lat: trip.destination.at[1] });
