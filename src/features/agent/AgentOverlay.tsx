@@ -193,10 +193,14 @@ export default function AgentOverlay() {
     player.start(t, speed);
   };
 
+  /** Close the line panel and stop following, so a new trip or answer starts on a clean map. */
+  const clearMapTask = () => { setSelectedLine(null); setFollowed(null); };
   const ctx: ExecutorContext = {
     flyTo: (lon, lat, zoom) => { handoffCamera(); flyTo({ lon, lat, zoom }); },
-    showTrip: (t) => { handoffCamera(); revealTripBuses(t); setTrip(t); const m = getMapInstance(); if (m) showTrip(m, t); },
+    // A new trip replaces whatever the map was showing: a picked line, a followed train.
+    showTrip: (t) => { clearMapTask(); handoffCamera(); revealTripBuses(t); setTrip(t); const m = getMapInstance(); if (m) showTrip(m, t); },
     openTrip: (t) => {
+      clearMapTask();
       revealTripBuses(t);
       setTrip(t);
       if (home) { setChatOpen(false); player.load(t, prefSpeed); return; }
