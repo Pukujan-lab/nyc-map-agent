@@ -2,8 +2,8 @@ import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import { eyeOrCenter } from "@/lib/map/streetPick";
 
 /**
- * Public restrooms (NYC Open Data i7jb-7jku, ingested into Octo core.restrooms)
- * as one MapLibre symbol layer. The city-wide list from /api/restrooms is
+ * Public restrooms (NYC Open Data i7jb-7jku merged server-side with OpenStreetMap
+ * public toilets) as one MapLibre symbol layer. The city-wide list from /api/restrooms is
  * fetched once. City and neighbourhood zoom draw a spread across the view so
  * the open map is not five dots at the centre. Street zoom (17 and closer)
  * keeps the restrooms within a few blocks, which is what the 3D kiosks can
@@ -26,8 +26,18 @@ export interface RestroomInfo {
   operator: string | null;
   lon: number;
   lat: number;
+  /** Which list the record comes from (/api/restrooms merges NYC Open Data and OpenStreetMap). */
+  source?: "nyc-open-data" | "openstreetmap";
+  /** When that source last updated the record (ISO). */
+  asOf?: string | null;
+  fee?: boolean | null;
+  changingTable?: boolean | null;
+  unisex?: boolean | null;
+  /** City fields filled from a matched OpenStreetMap toilet. */
+  filledFromOsm?: string[];
 }
 
+const RESTROOM_ATTRIBUTION = "NYC Open Data (Public Restrooms), © OpenStreetMap contributors";
 const INK = "#121212";
 const CHARTREUSE = "#c6f702";
 
@@ -201,6 +211,7 @@ export function restroomInfo(f: GeoJSON.Feature): RestroomInfo | null {
   if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
   const p = (f.properties ?? {}) as Record<string, unknown>;
   const s = (k: string) => (typeof p[k] === "string" && p[k] ? p[k] : null);
+  const b = (k: string) => (typeof p[k] === "boolean" ? p[k] : null);
   return {
     name: s("name") ?? "Public restroom",
     status: s("status"),
@@ -209,7 +220,26 @@ export function restroomInfo(f: GeoJSON.Feature): RestroomInfo | null {
     operator: s("operator"),
     lon,
     lat,
+    source: p.source === "openstreetmap" ? "openstreetmap" : "nyc-open-data",
+    asOf: s("asOf"),
+    fee: b("fee"),
+    changingTable: b("changingTable"),
+    unisex: b("unisex"),
+    filledFromOsm: stringList(p.filledFromOsm),
   };
+}
+
+/** A string-array property; MapLibre hands a rendered feature's arrays back as JSON text. */
+function stringList(v: unknown): string[] {
+  let x = v;
+  if (typeof x === "string") {
+    try {
+      x = JSON.parse(x);
+    } catch {
+      return [];
+    }
+  }
+  return Array.isArray(x) ? x.filter((i): i is string => typeof i === "string") : [];
 }
 
 /** The single closest restroom, with the walking distance. */
@@ -321,7 +351,7 @@ export function installRestrooms(map: MapLibreMap): void {
     map.addSource(SOURCE, {
       type: "geojson",
       data: EMPTY,
-      attribution: "NYC Open Data (Public Restrooms)",
+      attribution: RESTROOM_ATTRIBUTION,
     });
   }
   wireNearest(map);
@@ -344,7 +374,7 @@ export function setRestroomsVisible(map: MapLibreMap, on: boolean): void {
 /** WC icons for the street-view inset. The caller fills the source. */
 export function mountMiniRestrooms(map: MapLibreMap): void {
   if (!map.hasImage(ICON)) map.addImage(ICON, restroomIcon(), { pixelRatio: 2 });
-  if (!map.getSource(MINI_SOURCE)) map.addSource(MINI_SOURCE, { type: "geojson", data: EMPTY, attribution: "NYC Open Data (Public Restrooms)" });
+  if (!map.getSource(MINI_SOURCE)) map.addSource(MINI_SOURCE, { type: "geojson", data: EMPTY, attribution: RESTROOM_ATTRIBUTION });
   if (!map.getLayer(MINI_RESTROOMS_LAYER)) {
     map.addLayer({
       id: MINI_RESTROOMS_LAYER,
