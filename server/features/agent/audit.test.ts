@@ -4,6 +4,7 @@ import { streamEvent, type StreamEvent } from "../../../src/features/agent/schem
 import { noteSource } from "./freshness";
 import { POST } from "./routes";
 import type { RestroomRow } from "./services";
+import type { ToolContext } from "./tools";
 
 const usage = { inputTokens: { total: 100, noCache: 100, cacheRead: 0, cacheWrite: 0 }, outputTokens: { total: 20, text: 20, reasoning: 0 } };
 const finish = (reason: "tool-calls" | "stop") => ({ type: "finish", finishReason: { unified: reason, raw: reason }, usage }) as const;
@@ -21,7 +22,7 @@ function model(reply: string, call?: { toolName: string; input: unknown }) {
   });
 }
 
-async function ask(m: MockLanguageModelV4, question: string, deps?: Parameters<typeof POST>[1]["deps"]): Promise<StreamEvent[]> {
+async function ask(m: MockLanguageModelV4, question: string, deps?: ToolContext["deps"]): Promise<StreamEvent[]> {
   const body = { messages: [{ role: "user", content: question }], location: { lon: -73.984, lat: 40.754 } };
   const res = await POST(new Request("http://x/api/agent", { method: "POST", body: JSON.stringify(body) }), { model: m, deps });
   return (await res.text()).trim().split("\n").map((l) => streamEvent.parse(JSON.parse(l)));
@@ -55,10 +56,12 @@ describe("no guessing: the server flags figures no tool returned (#375)", () => 
 describe("freshness: data answers carry their source and age (#375)", () => {
   it("a restroom answer gets a sources line, and the tool result tells the model its source and age", async () => {
     const m = model("Bryant Park is 120 meters away, open 7am to 10pm.", { toolName: "nearest_restroom", input: { place: "here" } });
-    const restrooms = async () => { noteSource("restrooms", "2025-06-27T13:37:17Z"); return [ROW]; };
+    const restrooms = () => { noteSource("restrooms", "2025-06-27T13:37:17Z"); return Promise.resolve([ROW]); };
     const events = await ask(m, "nearest bathroom?", { restrooms });
     const line = sourcesOf(events);
-    expect(line?.sources).toEqual([expect.objectContaining({ id: "restrooms", label: "NYC public restrooms", asOf: "2025-06-27T13:37:17.000Z", stale: true, url: expect.stringContaining("i7jb-7jku") })]);
+    expect(line?.sources).toHaveLength(1);
+    expect(line?.sources[0]).toMatchObject({ id: "restrooms", label: "NYC public restrooms", asOf: "2025-06-27T13:37:17.000Z", stale: true });
+    expect(line?.sources[0].url).toContain("i7jb-7jku");
     // A data tool ran, so its figures are not flagged.
     expect(line?.unverified).toEqual([]);
     const toolMsg = JSON.stringify(m.doStreamCalls[1]?.prompt);
@@ -68,7 +71,7 @@ describe("freshness: data answers carry their source and age (#375)", () => {
 
   it("line_status reports live alerts with the MTA feed's age and offers the skipped stops", async () => {
     const m = model("The L is skipping Bedford Av.", { toolName: "line_status", input: { lines: ["l"] } });
-    const alerts = async () => { noteSource("mta-alerts", Date.now() - 30_000); return ["L trains are running with delays"]; };
+    const alerts = () => { noteSource("mta-alerts", Date.now() - 30_000); return Promise.resolve(["L trains are running with delays"]); };
     const events = await ask(m, "is the L ok?", { alerts, changes: [] });
     expect(sourcesOf(events)?.sources[0]).toMatchObject({ id: "mta-alerts", stale: false });
     expect(JSON.stringify(m.doStreamCalls[1]?.prompt)).toContain("L trains are running with delays");

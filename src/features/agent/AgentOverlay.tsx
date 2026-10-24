@@ -32,6 +32,7 @@ import { TripSummary, selectAlternative } from "./TripSummary";
 import { routeColor, showPoints, showTrip } from "./tripLayer";
 import { runMapAction, type MapActionContext } from "./mapActions";
 import { AnswerActions, RestroomSpotDetails } from "./AnswerActions";
+import { AnswerSources, type AnswerSourcesLine } from "./AnswerSources";
 import { formatStreetText } from "@/lib/streetName";
 import { sharedCoords, startSharing, stopSharing, useSharedLocation } from "@/lib/geo/sharedLocation";
 import { usePlayer, type Speed } from "./usePlayer";
@@ -40,7 +41,7 @@ import { useHandsFree } from "./useHandsFree";
 import { closeAsk, useAskRequest } from "@/lib/agent/streetContext";
 import { needsSharedOrigin, ORIGIN_PROMPT, replyAsksForOrigin } from "./needsOrigin";
 
-interface Msg { id: string; role: "user" | "assistant"; content: string; offerLocation?: boolean; actions?: MapAction[] }
+interface Msg { id: string; role: "user" | "assistant"; content: string; offerLocation?: boolean; actions?: MapAction[]; sources?: AnswerSourcesLine }
 
 const MODES: Array<{ id: TripMode; label: string; Icon: typeof Bus }> = [
   { id: "walk", label: "Walk", Icon: Footprints },
@@ -159,6 +160,8 @@ export default function AgentOverlay() {
           executeCommand(ev.command, ctxRef.current);
         } else if (ev.type === "actions") {
           setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, actions: ev.actions } : x)));
+        } else if (ev.type === "sources") {
+          setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, sources: ev } : x)));
         } else if (ev.type === "error") {
           setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, content: x.content || ev.message } : x)));
         }
@@ -283,6 +286,7 @@ export default function AgentOverlay() {
             <div key={m.id} className={cn("max-w-[90%] rounded-lg px-3 py-2 text-sm", m.role === "user" ? "ml-auto bg-primary text-primary-foreground" : "bg-muted")}>
               {m.content || (busy ? "…" : "")}
               {m.actions?.length ? <AnswerActions actions={m.actions} onRun={runAction} /> : null}
+              {m.sources ? <AnswerSources line={m.sources} /> : null}
               {m.offerLocation && shared.status !== "on" ? (
                 <Button type="button" size="sm" className="mt-2 h-8 w-full gap-1.5" disabled={shared.status === "asking"} onClick={() => void enableLocation()}>
                   <LocateFixed className="h-4 w-4" aria-hidden="true" />

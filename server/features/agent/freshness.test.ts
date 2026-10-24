@@ -16,13 +16,15 @@ describe("source ledger", () => {
     const byId = Object.fromEntries(l.list(NOW).map((s) => [s.id, s]));
     expect(byId["mta-alerts"]).toMatchObject({ label: "MTA service alerts", asOf: new Date(NOW - 3 * 60_000).toISOString(), stale: true });
     expect(byId.forecast.stale).toBe(false);
-    expect(byId.restrooms).toMatchObject({ stale: true, note: expect.stringMatching(/out of date/) });
+    expect(byId.restrooms.stale).toBe(true);
+    expect(byId.restrooms.note).toMatch(/out of date/);
   });
 
   it("a known time replaces an unknown one; an unknown age is never called stale", () => {
     const l = new SourceLedger();
     l.note("crashes", null);
-    expect(l.list(NOW)[0]).toMatchObject({ asOf: null, stale: false, note: expect.stringMatching(/months behind/) });
+    expect(l.list(NOW)[0]).toMatchObject({ asOf: null, stale: false });
+    expect(l.list(NOW)[0].note).toMatch(/months behind/);
     l.note("crashes", NOW);
     expect(l.list(NOW)[0].asOf).toBe(new Date(NOW).toISOString());
   });
@@ -44,13 +46,13 @@ describe("source ledger", () => {
 describe("feeds note their own timestamps", () => {
   it("MTA alerts use the GTFS-rt header time, not the fetch time", async () => {
     const ts = Math.floor(NOW / 1000) - 30;
-    vi.stubGlobal("fetch", async () => Response.json({ header: { timestamp: ts }, entity: [] }));
+    vi.stubGlobal("fetch", () => Promise.resolve(Response.json({ header: { timestamp: ts }, entity: [] })));
     const { sources } = await withSources(undefined, () => serviceAlerts(["L"], ts));
     expect(sources[0]).toMatchObject({ id: "mta-alerts", asOf: new Date(ts * 1000).toISOString() });
   });
 
   it("restrooms use the dataset's last update from Socrata", async () => {
-    vi.stubGlobal("fetch", async () => Response.json([], { headers: { "X-SODA2-Truth-Last-Modified": "Fri, 27 Jun 2025 13:37:17 GMT" } }));
+    vi.stubGlobal("fetch", () => Promise.resolve(Response.json([], { headers: { "X-SODA2-Truth-Last-Modified": "Fri, 27 Jun 2025 13:37:17 GMT" } })));
     const { sources } = await withSources(undefined, () => publicRestrooms());
     expect(sources[0]).toMatchObject({ id: "restrooms", asOf: "2025-06-27T13:37:17.000Z", stale: true });
   });
