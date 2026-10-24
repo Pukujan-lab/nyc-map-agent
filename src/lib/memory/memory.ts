@@ -243,6 +243,11 @@ export function listStored(now = Date.now(), storage: Pick<Storage, "getItem"> |
   return out;
 }
 
+/** How many kinds are still being kept. Exact location starts off, so the usual count is 4 of 5. */
+export function rememberedCount(prefs: Record<MemoryKind, boolean>): number {
+  return MEMORY_KINDS.reduce((n, k) => n + (prefs[k] ? 1 : 0), 0);
+}
+
 export const MEMORY_LABELS: Record<MemoryKind, string> = {
   rides: "Daily rides",
   homeWork: "Home & Work",

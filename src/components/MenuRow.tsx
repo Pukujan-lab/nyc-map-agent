@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   BarChart3, BusFront, Building2, CalendarDays, ChevronRight, CircleDot, Database, Ear, History, House, Info, Layers,
-  Leaf, LocateFixed, Lock, MessageSquare, Box, Palette, Settings, Signpost, SlidersHorizontal, Sun, TrainFront, Volume2, Gauge, CloudSun, type LucideIcon,
+  Leaf, Lightbulb, LocateFixed, Lock, MessageSquare, Box, Palette, Settings, Shield, Signpost, SlidersHorizontal, Sun, TrainFront, Trash2, Volume2, Gauge, CloudSun, type LucideIcon,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { FEATURES } from "@/features";
@@ -9,7 +9,7 @@ import { setAmbient, useAmbient, type LightingMode, type WeatherMode } from "@/l
 import { useAdvancedMode, useFlags } from "@/lib/flags";
 import { setOptions, useMapOptions } from "@/lib/map/mapOptions";
 import {
-  MEMORY_KINDS, MEMORY_LABELS, forgetEverything, listStored, setRemembering, useMemoryPrefs, type MemoryKind, type StoredItem,
+  MEMORY_KINDS, MEMORY_LABELS, forgetEverything, listStored, rememberedCount, setRemembering, useMemoryPrefs, type MemoryKind, type StoredItem,
 } from "@/lib/memory/memory";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { setOpenMenu, useOpenMenu, type OpenMenu } from "@/lib/store/openMenu";
@@ -136,39 +136,65 @@ function FiltersBody({ onClose }: { onClose: () => void }) {
 
 const KIND_ICON: Record<MemoryKind, LucideIcon> = { rides: TrainFront, homeWork: House, chats: MessageSquare, trips: History, exactLocation: LocateFixed };
 
+type DataSection = "kept" | "yours";
+
 function DataBody() {
   const prefs = useMemoryPrefs();
+  const [section, setSection] = useState<DataSection | null>("kept");
   const [seeAll, setSeeAll] = useState<StoredItem[] | null>(null);
+  const [policy, setPolicy] = useState(false);
   const [confirm, setConfirm] = useState<"ask" | "done" | null>(null);
+  const toggle = (id: DataSection) => setSection(section === id ? null : id);
   const refresh = () => { if (seeAll) setSeeAll(listStored()); };
+  const head = (id: DataSection, icon: ReactNode, label: string, extra?: ReactNode) => (
+    <button type="button" aria-expanded={section === id} onClick={() => toggle(id)}
+      className="flex min-h-12 w-full items-center gap-2.5 px-2.5 text-left text-[15px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]">
+      {icon}
+      <span className="flex-1">{label}</span>
+      {extra}
+      <span aria-hidden className="text-[#a5b4cb]">{section === id ? "▴" : "▾"}</span>
+    </button>
+  );
   return (
     <div data-testid="data-panel">
-      {MEMORY_KINDS.map((k) => {
-        const Icon = KIND_ICON[k];
-        return <SwitchRow key={k} testId={`memory-${k}`} icon={<Icon className={ICON} aria-hidden />} label={MEMORY_LABELS[k]} on={prefs[k]} onChange={(v) => { setRemembering(k, v); refresh(); }} />;
-      })}
-      <Divider />
-      <button type="button" className={ROW} aria-expanded={seeAll !== null} onClick={() => setSeeAll(seeAll ? null : listStored())}>
-        <Database className={ICON} aria-hidden /><span className="flex-1">See all</span><ChevronRight className={`h-4 w-4 text-[#a5b4cb] transition-transform ${seeAll ? "rotate-90" : ""}`} aria-hidden />
-      </button>
-      {seeAll ? (
-        <ul className="mx-2 mb-1 flex max-h-40 flex-col gap-1 overflow-y-auto rounded-[12px] bg-[rgba(15,23,42,0.55)] p-2 text-[13px] text-[#cbd5e1]" data-testid="memory-list">
-          {seeAll.length ? seeAll.map((s, i) => <li key={i} className="truncate">{s.text}</li>) : <li>Nothing kept</li>}
-        </ul>
+      {head("kept", <Lightbulb className="h-5 w-5 text-[#93c5fd]" aria-hidden />, "Remembered",
+        <span className="text-[13px] font-medium text-[#a5b4cb]">{rememberedCount(prefs)} of {MEMORY_KINDS.length}</span>)}
+      {section === "kept" ? (
+        <div className="pb-1">
+          {MEMORY_KINDS.map((k) => {
+            const Icon = KIND_ICON[k];
+            return <SwitchRow key={k} testId={`memory-${k}`} icon={<Icon className={ICON} aria-hidden />} label={MEMORY_LABELS[k]} on={prefs[k]} onChange={(v) => { setRemembering(k, v); refresh(); }} />;
+          })}
+        </div>
       ) : null}
-      <button type="button" className={ROW} disabled aria-describedby="policy-note">
-        <Info className={ICON} aria-hidden />
-        <span className="flex flex-1 flex-col"><span>Data policy</span><span id="policy-note" className="text-[12px] text-[#a5b4cb]">Draft, not published yet</span></span>
-      </button>
-      <button type="button" data-testid="forget-everything" className={`${ROW} text-[#f87171]`}
-        onClick={() => {
-          if (confirm !== "ask") { setConfirm("ask"); return; }
-          forgetEverything();
-          setConfirm("done");
-          refresh();
-        }}>
-        <span className="flex-1 font-semibold">{confirm === "ask" ? "Tap again to delete everything" : confirm === "done" ? "Deleted" : "Delete everything"}</span>
-      </button>
+      <Divider />
+      {head("yours", <Shield className="h-5 w-5 text-[#93c5fd]" aria-hidden />, "Your data")}
+      {section === "yours" ? (
+        <div className="flex flex-col gap-1 px-1 pb-1">
+          <button type="button" className={ROW} aria-expanded={seeAll !== null} onClick={() => setSeeAll(seeAll ? null : listStored())}>
+            <Database className={ICON} aria-hidden /><span className="flex-1">See all</span><ChevronRight className={`h-4 w-4 text-[#a5b4cb] transition-transform ${seeAll ? "rotate-90" : ""}`} aria-hidden />
+          </button>
+          {seeAll ? (
+            <ul className="mx-1 flex max-h-40 flex-col gap-1 overflow-y-auto rounded-[12px] bg-[rgba(15,23,42,0.55)] p-2 text-[13px] text-[#cbd5e1]" data-testid="memory-list">
+              {seeAll.length ? seeAll.map((s, i) => <li key={i} className="truncate">{s.text}</li>) : <li>Nothing kept</li>}
+            </ul>
+          ) : null}
+          <button type="button" className={ROW} aria-expanded={policy} onClick={() => setPolicy((v) => !v)}>
+            <Info className={ICON} aria-hidden /><span className="flex-1">Data policy</span><ChevronRight className={`h-4 w-4 text-[#a5b4cb] transition-transform ${policy ? "rotate-90" : ""}`} aria-hidden />
+          </button>
+          {policy ? <p className="m-0 px-2 text-[13px] leading-snug text-[#a5b4cb]">Kept on this phone. A draft, not a published policy yet.</p> : null}
+          <button type="button" data-testid="forget-everything" className={`${ROW} bg-[rgba(127,29,29,0.3)] font-semibold text-[#fca5a5]`}
+            onClick={() => {
+              if (confirm !== "ask") { setConfirm("ask"); return; }
+              forgetEverything();
+              setConfirm("done");
+              refresh();
+            }}>
+            <Trash2 className={ICON} aria-hidden />
+            <span className="flex-1">{confirm === "ask" ? "Tap again to delete everything" : confirm === "done" ? "Deleted" : "Delete everything"}</span>
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

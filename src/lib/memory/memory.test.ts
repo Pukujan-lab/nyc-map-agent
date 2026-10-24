@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
   CHATS_KEY, COMMUTE_KEY, HOME_WORK_KEY, LOOKED_UP_KEY, MEMORY_KINDS, forgetEverything, listStored, readChats, readLookedUp,
-  rememberChat, rememberLookup, remembers, setRemembering,
+  rememberedCount, rememberChat, rememberLookup, remembers, setRemembering,
 } from "./memory";
 
 function fakeStorage(init: Record<string, string> = {}) {
@@ -60,6 +60,11 @@ describe("what we remember", () => {
     rememberChat("old question", 0, s);
     rememberChat("new question", 40 * day, s);
     expect(readChats(40 * day, s).map((c) => c.q)).toEqual(["new question"]);
+  });
+
+  it("counts the switches that are on, with Exact location off by default", () => {
+    expect(rememberedCount({ rides: true, homeWork: true, chats: true, trips: true, exactLocation: false })).toBe(4);
+    expect(rememberedCount({ rides: false, homeWork: false, chats: false, trips: false, exactLocation: false })).toBe(0);
   });
 
   it("Delete everything clears every kind and See all lists what is kept", () => {
