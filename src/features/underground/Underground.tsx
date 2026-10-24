@@ -9,6 +9,7 @@ import { useMapState } from "@/lib/store/MapStateContext";
 import { useActiveTrip } from "@/lib/transit/activeTrip";
 import type { StreetUnit } from "@/lib/transit/equipment";
 import { useFollowed } from "@/lib/transit/follow";
+import { setStationHelp } from "@/lib/underground/stationHelp";
 import { LANDMARKS } from "@/lib/map/landmarks";
 import { SurfaceCalibration } from "./SurfaceCalibration";
 import { SURFACE_CAL_MS, disagreementTrigger, lateOpenTrigger, movementCorrection, openedAfterTrip } from "./surface";
@@ -486,6 +487,13 @@ export default function Underground() {
     if (st) showStation(st.id);
     else if (store?.packs[0]) showStation(store.packs[0].station.id);
   };
+  // The home's Find exit button opens the same station view as "I'm in the station".
+  const enterRef = useRef(enterStation);
+  enterRef.current = enterStation;
+  useEffect(() => {
+    setStationHelp(() => enterRef.current());
+    return () => setStationHelp(null);
+  }, []);
 
   const answerNo = () => {
     if (!ask) return;
