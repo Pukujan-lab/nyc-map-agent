@@ -14,7 +14,8 @@ import { NearQuery as ParkingNearQuery } from "./features/parking/routes";
 import { BrandsBox as StorefrontBrandsQuery, LogoQuery as StorefrontLogoQuery } from "./features/storefronts/routes";
 import { AlongQuery as TrafficAlongQuery } from "./features/traffic/routes";
 import { Query as WeatherQuery } from "./features/weather/routes";
-import { Query as SegmentsQuery, Response_ as SegmentsResponse } from "./features/transit/segments";
+import { AllQuery as AllSegmentsQuery, AllResponse as AllSegmentsResponse, Query as SegmentsQuery, Response_ as SegmentsResponse } from "./features/transit/segments";
+import { Query as LiveQuery } from "./features/transit/live";
 import { Query as BusSegmentsQuery, Response_ as BusSegmentsResponse } from "./features/transit/busSegments";
 import { EventsResponse, Query as EventsQuery } from "./features/events/schema";
 import { PlaceToiletsResponse } from "./features/place-toilets/schema";
@@ -114,6 +115,13 @@ export const ROUTES = {
   "/api/storefronts/brands": jsonRoute("/api/storefronts/brands", "OSM shops and amenities with brand:wikidata in a small bbox (ODbL)", StorefrontBrandsQuery),
   "/api/storefronts/logo": jsonRoute("/api/storefronts/logo", "A brand's freely licensed Wikidata P154 logo, re-hosted via Octo files (R2)", StorefrontLogoQuery),
   "/api/parking": jsonRoute("/api/parking", "Licensed garages and lots GeoJSON (DCWP + OSM)"),
+  "/api/transit-segments/all": createRoute({
+    method: "get",
+    path: "/api/transit-segments/all",
+    summary: "Historical subway segment travel and dwell times for many routes at once, keyed by route; cached for hours when dow and hour are given",
+    request: { query: AllSegmentsQuery },
+    responses: { 200: { description: "OK", content: { "application/json": { schema: AllSegmentsResponse } } }, ...errors },
+  }),
   "/api/transit-segments": createRoute({
     method: "get",
     path: "/api/transit-segments",
@@ -127,6 +135,17 @@ export const ROUTES = {
     summary: "Learned bus stop-to-stop travel and stop dwell times (median seconds) for a route at an hour of the week",
     request: { query: BusSegmentsQuery },
     responses: { 200: { description: "OK", content: { "application/json": { schema: BusSegmentsResponse } } }, ...errors },
+  }),
+  "/api/transit-live": createRoute({
+    method: "get",
+    path: "/api/transit-live",
+    summary: "Live subway / LIRR / Metro-North trips and (alerts=1) service alerts in one response; ETag + If-None-Match (304), Cache-Control public, s-maxage=30, stale-while-revalidate=30",
+    request: { query: LiveQuery },
+    responses: {
+      200: { description: "OK ({ at, systems: { subway?, lirr?, mnr? }, alerts?, failed? })", content: { "application/json": { schema: Json } } },
+      304: { description: "Not modified (If-None-Match matched the ETag)" },
+      ...errors,
+    },
   }),
   "/api/transit": jsonRoute("/api/transit", "Live transit capabilities ({ bus })"),
   "/api/transit/:system": jsonRoute(
