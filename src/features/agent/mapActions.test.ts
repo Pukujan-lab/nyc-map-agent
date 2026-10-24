@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { CRASH_COLOR, distanceText, runMapAction, SKIP_COLOR, type MapActionContext } from "./mapActions";
+import { CRASH_COLOR, distanceText, runMapAction, SKIP_COLOR, TROUBLE_COLOR, type MapActionContext } from "./mapActions";
 import { streamEvent } from "./schema";
 import { pointsToGeoJson, routeColor } from "./tripLayer";
 
@@ -32,6 +32,16 @@ describe("answer map actions", () => {
     const c = ctx();
     runMapAction({ kind: "showCrashes", id: "c", label: "Show crashes on this route", points: stops }, c, routeColor);
     expect(c.showPoints).toHaveBeenCalledWith(stops, { color: CRASH_COLOR, title: "Show crashes on this route" });
+  });
+
+  it("MTA trouble draws each kind in its own colour (#361)", () => {
+    const c = ctx();
+    const shuttle = [{ at: [-73.94905, 40.69457] as [number, number], name: "Shuttle bus: Nostrand Av at Myrtle Av (to Bedford-Nostrand Avs)" }];
+    for (const style of ["problem", "shuttle", "switch", "stuck"] as const) {
+      expect(runMapAction({ kind: "showTrouble", id: style, label: `Show ${style}`, route: "G", style, points: shuttle }, c, routeColor)).toEqual({ ok: true, kind: "showTrouble" });
+    }
+    expect(vi.mocked(c.showPoints).mock.calls.map(([, s]) => s.color)).toEqual([TROUBLE_COLOR.problem, TROUBLE_COLOR.shuttle, TROUBLE_COLOR.switch, TROUBLE_COLOR.stuck]);
+    expect(runMapAction({ kind: "showTrouble", id: "x", label: "x", route: "G", style: "detour", points: shuttle }, c, routeColor).ok).toBe(false);
   });
 
   it("rejects an invalid action without throwing", () => {

@@ -67,9 +67,9 @@ describe("troubleFromAlert on recorded MTA alerts", () => {
     expect(names(g.skipped)).toEqual(["Court Sq", "21 St", "Greenpoint Av", "Nassau Av", "Metropolitan Av", "Broadway", "Flushing Av", "Myrtle-Willoughby Avs"]);
     expect(g.shuttle?.buses).toEqual(["T403"]);
     expect(names(g.shuttle!.between)).toEqual(["Bedford-Nostrand Avs", "Court Sq"]);
-    expect(g.shuttle!.stops.filter((s) => s.station.id === "G32")).toEqual([
-      { station: expect.objectContaining({ name: "Myrtle-Willoughby Avs" }), where: "Nostrand Av at Myrtle Av", toward: "Bedford-Nostrand Avs" },
-      { station: expect.objectContaining({ name: "Myrtle-Willoughby Avs" }), where: "Marcy Av at Willoughby Av", toward: "Court Sq" },
+    expect(g.shuttle!.stops.filter((s) => s.station.id === "G32").map((s) => [s.station.name, s.where, s.toward])).toEqual([
+      ["Myrtle-Willoughby Avs", "Nostrand Av at Myrtle Av", "Bedford-Nostrand Avs"],
+      ["Myrtle-Willoughby Avs", "Marcy Av at Willoughby Av", "Court Sq"],
     ]);
     expect([names(g.rejoin), g.rejoinLine]).toEqual([["Bedford-Nostrand Avs"], "G"]);
   });

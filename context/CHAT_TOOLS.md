@@ -20,7 +20,7 @@ The lists of live feeds and map layers in the prompt are generated from `SOURCE_
 | `drive_plan` | Car trips | OSRM car route, DOT traffic speeds, street and event closures, 511NY (needs a key), MTA toll table, crash hotspots |
 | `route_walk` | Walking routes | OSRM foot profile |
 | `nearest_restroom` | "Nearest toilet" | NYC Open Data Public Restrooms; open ones first; the list updates irregularly |
-| `line_status` | "Is the L running?", delays, skipped stops | MTA subway alerts feed only (no buses, LIRR or Metro-North) |
+| `line_status` | "Is the L running?", delays, skipped stops, shuttle buses and where to board them, where to get the train back, where to switch direction, other lines at a skipped station, a stuck train | MTA subway alerts feed only (no buses, LIRR or Metro-North). Shuttle stops and switch stations only when the alert text names them; no dataset lists free crossovers. A stuck train is one with no position update for 5 min, mid-trip, on a line with a live delay alert; it is placed at its station (the feed has no coordinates). |
 | `elevator_status` | Elevator and escalator outages at a station | MTA elevator and escalator feed |
 | `weather_forecast`, `hazards` | Weather at a place and time, active warnings | Open-Meteo (up to 7 days ahead), National Weather Service alerts |
 | `geocode`, `flyTo`, `enterStreetView` | Landmarks and addresses | Curated landmarks, station names, NYC GeoSearch |

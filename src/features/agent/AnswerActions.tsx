@@ -1,9 +1,10 @@
-import { Ban, ListOrdered, MapPin, Route, TriangleAlert } from "lucide-react";
+import { ArrowLeftRight, Ban, Bus, ListOrdered, MapPin, Route, TrainFront, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { distanceText } from "./mapActions";
 import type { MapAction, RestroomSpot } from "./schema";
 
-const ICON: Record<MapAction["kind"], typeof MapPin> = { flyTo: MapPin, showRestroom: MapPin, showRoute: Route, showStops: ListOrdered, showCrashes: TriangleAlert };
+const ICON: Record<MapAction["kind"], typeof MapPin> = { flyTo: MapPin, showRestroom: MapPin, showRoute: Route, showStops: ListOrdered, showCrashes: TriangleAlert, showTrouble: TriangleAlert };
+const TROUBLE_ICON: Record<Extract<MapAction, { kind: "showTrouble" }>["style"], typeof MapPin> = { problem: TriangleAlert, shuttle: Bus, switch: ArrowLeftRight, stuck: TrainFront };
 
 /** The "show it on the map" buttons under an answer (#371). */
 export function AnswerActions({ actions, onRun }: { actions: MapAction[]; onRun: (a: MapAction) => void }) {
@@ -11,7 +12,7 @@ export function AnswerActions({ actions, onRun }: { actions: MapAction[]; onRun:
   return (
     <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Show on the map" data-testid="answer-actions">
       {actions.map((a) => {
-        const Icon = a.kind === "showStops" && a.skipped ? Ban : ICON[a.kind];
+        const Icon = a.kind === "showStops" && a.skipped ? Ban : a.kind === "showTrouble" ? TROUBLE_ICON[a.style] : ICON[a.kind];
         return (
           <Button key={a.id} type="button" size="sm" variant="outline" className="h-8 gap-1.5 rounded-full bg-background px-3 text-xs" onClick={() => onRun(a)}>
             <Icon className="h-3.5 w-3.5" aria-hidden="true" />

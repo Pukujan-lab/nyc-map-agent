@@ -5,6 +5,8 @@
 import { formatStreetText } from "../../../src/lib/streetName";
 import { serviceChanges, type ServiceChange } from "../../../src/lib/transit/serviceChanges";
 import { z } from "zod";
+import GtfsRealtimeBindings from "gtfs-realtime-bindings";
+import type { FeedAlert, LiveVehicle, TroubleStation } from "../../../src/lib/transit/trouble";
 import type { LngLatTuple, RestroomSpot } from "../../../src/features/agent/schema";
 import { bestCandidate, matchLandmark, matchStation, type GeoCandidate } from "./places";
 import { distM, openDataEntrances, type Station } from "./transit";
@@ -217,4 +219,70 @@ export async function stationServiceChanges(atEpochS: number): Promise<ServiceCh
     if (!active || !text) return [];
     return serviceChanges({ id, text, routes: [...new Set(alert.informed_entity.map((e) => e.route_id).filter((r): r is string => Boolean(r)))] });
   });
+}
+
+/* ---------- MTA trouble per line (#361): alerts, stations, live trains ---------- */
+const troubleFeedSchema = z.object({ header: feedHeader, entity: z.array(z.object({ id: z.string().default(""), alert: z.object({}).passthrough() })) });
+let troubleFeed: { at: number; alerts: FeedAlert[]; header: z.infer<typeof feedHeader> } | null = null;
+/** The camsys subway alerts as raw entities (Mercury extension kept), cached 30 s. */
+export async function subwayAlertEntities(): Promise<FeedAlert[]> {
+  if (!troubleFeed || Date.now() - troubleFeed.at >= 30_000) {
+    const data = troubleFeedSchema.parse(await getJson("https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys%2Fsubway-alerts.json"));
+    troubleFeed = { at: Date.now(), alerts: data.entity as FeedAlert[], header: data.header };
+  }
+  noteAlertsFeed(troubleFeed.header);
+  return troubleFeed.alerts;
+}
+
+/** Agent stations (39hk-dx4f) in the shape the trouble model reads; rows without a GTFS id are left out. */
+export const troubleStations = (stations: Station[]): TroubleStation[] =>
+  stations.flatMap((s) => (s.gtfsId ? [{ gtfsId: s.gtfsId, complexId: s.complexId, name: s.name, routes: s.routes, at: s.at, north: s.north, south: s.south }] : []));
+
+/** Which NYCT realtime feed carries a line. */
+export function feedForRoute(route: string): string | null {
+  const r = route.toUpperCase().replace(/X$/, "");
+  if (/^[1-7]$|^GS$/.test(r)) return "gtfs";
+  if (/^(A|C|E|H|FS)$/.test(r)) return "gtfs-ace";
+  if (/^(B|D|F|M)$/.test(r)) return "gtfs-bdfm";
+  if (r === "G") return "gtfs-g";
+  if (/^(J|Z)$/.test(r)) return "gtfs-jz";
+  if (/^(N|Q|R|W)$/.test(r)) return "gtfs-nqrw";
+  if (r === "L") return "gtfs-l";
+  if (r === "SI" || r === "SIR") return "gtfs-si";
+  return null;
+}
+
+const { FeedMessage, VehiclePosition } = GtfsRealtimeBindings.transit_realtime;
+/** Live vehicles on these lines (NYCT GTFS-rt), each joined with its trip update. */
+export async function subwayVehicles(routes: string[]): Promise<LiveVehicle[]> {
+  const feeds = [...new Set(routes.map(feedForRoute).filter((f): f is string => Boolean(f)))];
+  const want = new Set(routes.map((r) => r.toUpperCase()));
+  const out: LiveVehicle[] = [];
+  let oldest: number | null = null;
+  for (const f of feeds) {
+    const res = await fetch(`https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2F${f}`, { headers: UA, signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) throw new Error(`MTA ${f} returned ${res.status}`);
+    const msg = FeedMessage.decode(new Uint8Array(await res.arrayBuffer()));
+    const at = Number(msg.header.timestamp) * 1000;
+    if (at && (oldest === null || at < oldest)) oldest = at;
+    const updates = new Map(msg.entity.flatMap((e) => (e.tripUpdate?.trip?.tripId ? [[e.tripUpdate.trip.tripId, e.tripUpdate.stopTimeUpdate ?? []] as const] : [])));
+    for (const e of msg.entity) {
+      const v = e.vehicle;
+      const tripId = v?.trip?.tripId;
+      const route = v?.trip?.routeId ?? "";
+      if (!v || !tripId || !v.stopId || !want.has(route)) continue;
+      const u = updates.get(tripId) ?? [];
+      out.push({
+        tripId,
+        route,
+        stopId: v.stopId,
+        stopped: v.currentStatus === VehiclePosition.VehicleStopStatus.STOPPED_AT,
+        ts: Number(v.timestamp ?? 0),
+        remaining: u.length,
+        atOrigin: !!u[0] && !Number(u[0].arrival?.time ?? 0) && !!Number(u[0].departure?.time ?? 0),
+      });
+    }
+  }
+  noteSource("mta-trains", oldest ?? Date.now());
+  return out;
 }

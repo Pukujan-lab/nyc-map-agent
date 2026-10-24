@@ -26,6 +26,8 @@ export interface SourceInfo {
 export const SOURCE_INFO = {
   "mta-alerts": { label: "MTA service alerts", url: "https://new.mta.info/alerts", staleAfterMs: 2 * MIN },
   // The elevator feed is cached 5 min server-side and updates every few minutes.
+  // Live subway positions (NYCT GTFS-rt), read for stuck trains (#361). No coordinates: a train is placed at its station.
+  "mta-trains": { label: "MTA live subway trains", url: "https://new.mta.info/developers", staleAfterMs: 2 * MIN },
   "mta-elevators": { label: "MTA elevator status", url: "https://new.mta.info/elevator-escalator-status", staleAfterMs: 10 * MIN },
   forecast: { label: "Open-Meteo forecast", url: "https://open-meteo.com", staleAfterMs: 3 * 60 * MIN },
   "weather-alerts": { label: "National Weather Service alerts", url: "https://www.weather.gov/okx/", staleAfterMs: 30 * MIN },
