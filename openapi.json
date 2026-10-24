@@ -27,6 +27,103 @@
           "error"
         ]
       },
+      "RestroomsResponse": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "FeatureCollection"
+            ]
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "Feature"
+                  ]
+                },
+                "id": {
+                  "type": "string"
+                },
+                "geometry": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "Point"
+                      ]
+                    },
+                    "coordinates": {
+                      "type": "array",
+                      "prefixItems": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "coordinates"
+                  ]
+                },
+                "properties": {
+                  "$ref": "#/components/schemas/Restroom"
+                }
+              },
+              "required": [
+                "type",
+                "id",
+                "geometry",
+                "properties"
+              ]
+            }
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "enum": [
+                    "nyc-open-data",
+                    "openstreetmap"
+                  ]
+                },
+                "asOf": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "count": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "id",
+                "asOf",
+                "count"
+              ]
+            }
+          }
+        },
+        "required": [
+          "type",
+          "features",
+          "sources"
+        ]
+      },
       "Restroom": {
         "type": "object",
         "properties": {
@@ -137,103 +234,6 @@
           "osmId",
           "osmUrl",
           "filledFromOsm"
-        ]
-      },
-      "RestroomsResponse": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "FeatureCollection"
-            ]
-          },
-          "features": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "type": {
-                  "type": "string",
-                  "enum": [
-                    "Feature"
-                  ]
-                },
-                "id": {
-                  "type": "string"
-                },
-                "geometry": {
-                  "type": "object",
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "enum": [
-                        "Point"
-                      ]
-                    },
-                    "coordinates": {
-                      "type": "array",
-                      "prefixItems": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "number"
-                        }
-                      ]
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "coordinates"
-                  ]
-                },
-                "properties": {
-                  "$ref": "#/components/schemas/Restroom"
-                }
-              },
-              "required": [
-                "type",
-                "id",
-                "geometry",
-                "properties"
-              ]
-            }
-          },
-          "sources": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "id": {
-                  "type": "string",
-                  "enum": [
-                    "nyc-open-data",
-                    "openstreetmap"
-                  ]
-                },
-                "asOf": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                },
-                "count": {
-                  "type": "number"
-                }
-              },
-              "required": [
-                "id",
-                "asOf",
-                "count"
-              ]
-            }
-          }
-        },
-        "required": [
-          "type",
-          "features",
-          "sources"
         ]
       },
       "EventsResponse": {
@@ -1781,6 +1781,143 @@
                 "schema": {
                   "type": "string",
                   "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/weather/hour": {
+      "get": {
+        "summary": "One forecast hour (Open-Meteo) and active NWS alerts near a point, rounded to about 1 km",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 39,
+              "maximum": 42
+            },
+            "required": true,
+            "name": "lat",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": -75.5,
+              "maximum": -72.5
+            },
+            "required": true,
+            "name": "lon",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}"
+            },
+            "required": false,
+            "name": "at",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/weather/hour": {
+      "get": {
+        "summary": "One forecast hour (Open-Meteo) and active NWS alerts near a point, rounded to about 1 km (alias of /api/v1/weather/hour)",
+        "deprecated": true,
+        "parameters": [
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 39,
+              "maximum": 42
+            },
+            "required": true,
+            "name": "lat",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": -75.5,
+              "maximum": -72.5
+            },
+            "required": true,
+            "name": "lon",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}"
+            },
+            "required": false,
+            "name": "at",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
                 }
               }
             }
