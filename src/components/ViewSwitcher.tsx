@@ -33,7 +33,8 @@ const LEVELS: Array<{ id: ViewLevel; label: string }> = [
   { id: "up", label: "Up" },
   { id: "top", label: "Top" },
 ];
-const FOLLOW: Array<{ id: FollowMode; label: string; trainOnly?: boolean }> = [
+const FOLLOW: Array<{ id: FollowMode; label: string; trainOnly?: boolean; homeOnly?: boolean }> = [
+  { id: "map", label: "Map", homeOnly: true },
   { id: "chase", label: "Chase" },
   { id: "side", label: "Side" },
   { id: "overhead", label: "Overhead" },
@@ -116,7 +117,7 @@ export function ViewSwitcher() {
         >
       <div role="group" aria-label={followed ? "Follow camera" : "View level"} className="pointer-events-auto flex shrink-0 items-center gap-0.5 rounded-full border border-border bg-card p-0.5 shadow-md">
         {followed
-          ? FOLLOW.filter((f) => train || !f.trainOnly).map((f) => (
+          ? FOLLOW.filter((f) => (train || !f.trainOnly) && (home || !f.homeOnly)).map((f) => (
             <button key={f.id} type="button" aria-pressed={mode === f.id} onClick={() => setFollowMode(f.id)}
               className={cn(seg, mode === f.id ? "bg-foreground text-background" : "text-foreground hover:bg-muted")}>{f.label}</button>
           ))

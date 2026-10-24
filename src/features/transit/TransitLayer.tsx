@@ -28,7 +28,7 @@ import { useMapState } from "@/lib/store/MapStateContext";
 import { useFlag } from "@/lib/flags";
 import { usePanel, usePanelChip, usePanelMode, usePanelSearch, type SearchProvider } from "@/lib/store/PanelContext";
 import { pickRouteVehicle, registerRouteFollower } from "@/lib/transit/routeFollow";
-import { followRig, rememberFollowOrigin, setFollowMode, setFollowed, stableHeading, takeFollowRestore, useFollowMode, useFollowed } from "./follow";
+import { ZoomKeeper, followRig, rememberFollowOrigin, setFollowMode, setFollowed, stableHeading, takeFollowRestore, useFollowMode, useFollowed } from "./follow";
 import { followActionForMapClick } from "./followClick";
 import { publishSubway } from "@/lib/agent/streetContext";
 import { busesToShow, capPerLine, holdShuttle, registerBusToggle, setShuttleBuses, shownVehicles, useBusPins } from "@/lib/transit/busReveal";
@@ -252,6 +252,9 @@ export default function TransitLayer() {
   // The panel owns what is open; a vehicle stays "selected" while its panel is up.
   const selectedKey = content?.id.startsWith("transit:vehicle:") ? content.id.slice(16) : undefined;
   const followedKey = useFollowed();
+  // On the agent-first home a new follow starts on the flat Map view; Chase, Side, Overhead and Cab are a tap away.
+  const homeFlag = useFlag("agentHome");
+  useEffect(() => { if (homeFlag && followedKey) setFollowMode("map"); }, [homeFlag, followedKey]);
   useEffect(() => {
     if (!show.routes.length && followedKey?.startsWith("bus:")) setFollowed(null);
   }, [show.routes.length, followedKey]);
@@ -588,13 +591,16 @@ export default function TransitLayer() {
     } else {
       headingHold.current = stableHeading(headingHold.current.bearing, fv.bearing, headingHold.current.streak);
     }
-    if (homeRef.current) {
-      m.jumpTo({ center: [fv.lon, fv.lat], zoom: fv.system === "bus" ? 15.5 : 14.8, pitch: 0, bearing: 0 });
+    // Your own zoom stays on top of the follow camera, in every mode.
+    if (followZoomKey.current !== fv.key) { followZoomKey.current = fv.key; followZoom.current.reset(); }
+    if (f.followMode === "map") {
+      m.jumpTo({ center: [fv.lon, fv.lat], zoom: followZoom.current.next(fv.system === "bus" ? 15.5 : 14.8, m.getZoom()), pitch: 0, bearing: 0 });
       return;
     }
     const { eye, look } = followRig(f.followMode, headingHold.current.bearing, fv.z ?? 0);
     const at = (dx: number, dy: number) => new LngLat(fv.lon + dx / (111_320 * Math.cos((fv.lat * Math.PI) / 180)), fv.lat + dy / 111_320);
-    m.jumpTo(m.calculateCameraOptionsFromTo(at(eye[0], eye[1]), eye[2], at(look[0], look[1]), look[2]));
+    const cam = m.calculateCameraOptionsFromTo(at(eye[0], eye[1]), eye[2], at(look[0], look[1]), look[2]);
+    m.jumpTo(cam.zoom === undefined ? cam : { ...cam, zoom: followZoom.current.next(cam.zoom, m.getZoom()) });
   }, []);
 
   // Tween displayed positions and headings toward the targets (~15 fps).
@@ -841,6 +847,8 @@ export default function TransitLayer() {
 
   const homeRef = useRef(home);
   homeRef.current = home;
+  const followZoom = useRef(new ZoomKeeper());
+  const followZoomKey = useRef<string | null>(null);
   // A train or bus starts Follow. Any other map click, including empty map, drops it in place.
   useEffect(() => {
     if (!map) return;

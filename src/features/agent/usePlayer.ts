@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { ZoomKeeper } from "@/lib/transit/follow";
 import { getMapInstance } from "@/lib/map/mapInstance";
 import { bindPreviewRelease } from "@/lib/transit/follow";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
@@ -30,6 +31,7 @@ export function usePlayer(onCallout?: (text: string) => void) {
   /** Which restart and leg `elapsed` belongs to; a new one starts the leg at 0. */
   const counted = useRef({ restart: -1, seg: -1 });
   const lastCallout = useRef("");
+  const zoomKeeper = useRef(new ZoomKeeper());
   const styledSeg = useRef(-1);
   const say = useRef(onCallout);
   say.current = onCallout;
@@ -46,6 +48,7 @@ export function usePlayer(onCallout?: (text: string) => void) {
   /** Put a trip in the player, paused at its start. Nothing moves until play(). */
   const load = useCallback((trip: Trip, speed?: Speed) => {
     const t = buildTimeline(trip);
+    zoomKeeper.current.reset();
     setSegs(t);
     setCallout(t[0]?.label ?? "");
     dispatch({ type: "load", tripId: trip.id, segCount: t.length, speed });
@@ -126,7 +129,8 @@ export function usePlayer(onCallout?: (text: string) => void) {
         setPreviewDim(map, true);
         setXray(map, seg.underground && seg.kind !== "walk");
       }
-      map.jumpTo({ center: pose.center, bearing: pose.bearing, pitch: pose.pitch, zoom: pose.zoom });
+      // Your own zoom (wheel, pinch, +/-) stays on top of the preview camera.
+      map.jumpTo({ center: pose.center, bearing: pose.bearing, pitch: pose.pitch, zoom: zoomKeeper.current.next(pose.zoom, map.getZoom()) });
       setMarker(map, seg.kind === "ride" ? along(seg.coords, f) : pose.center, seg.route);
       const { text, quiet } = calloutInfoAt(seg, f);
       if (text !== lastCallout.current) {
