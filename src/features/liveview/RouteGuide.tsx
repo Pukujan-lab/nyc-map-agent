@@ -7,18 +7,20 @@ import { nextCheckpoint } from "./checkpoints";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowUp, CornerUpLeft, CornerUpRight, Flag, LocateFixed, Navigation, Square, Undo2 } from "lucide-react";
 import type { Map as MapLibreMap } from "maplibre-gl";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { onMapInstance } from "@/lib/map/mapInstance";
 import { LOOK_CENTER_DISTANCE_M, poseAlongRoute } from "@/lib/map/walk";
 import { useDataView } from "@/lib/store/DataViewContext";
 import { appGeo } from "@/lib/geo/devGeo";
 import { useMapState } from "@/lib/store/MapStateContext";
+import { bearingTo } from "./heading";
 import { installNavLayers, readNavColors, removeNavLayers, roadNameAt, updateNavLayers } from "./layers";
 import { distanceAlong, fetchGuidedRoute, formatMetres, metresLeft, progressAt, type RouteStep } from "./steps";
 import { sendCamera, useCameraMode } from "@/lib/map/cameraMode";
 
 const MILE = 1609.344;
+const LiveViewBeta = lazy(() => import("./LiveViewBeta"));
 
 function TurnIcon({ step }: { step: RouteStep | null }) {
   const cls = "h-7 w-7 shrink-0 text-primary";
@@ -65,6 +67,7 @@ export default function RouteGuide() {
   const [fix, setFix] = useState<Fix | null>(null);
   const [geoError, setGeoError] = useState<string | null>(null);
   const watchRef = useRef<number | null>(null);
+  const arFlag = useFlag("liveviewAr");
 
   useEffect(() => onMapInstance(setMap), []);
 
@@ -263,6 +266,16 @@ export default function RouteGuide() {
             {navigating ? <Square className="h-4 w-4" /> : <Navigation className="h-4 w-4" />}
             {navigating ? "Stop navigation" : "Navigate"}
           </Button>
+          {arFlag && navigating && progress ? (
+            <Suspense fallback={null}>
+              <LiveViewBeta
+                accuracyM={fix?.accuracy ?? null}
+                targetBearing={fix ? bearingTo(fix, { lon: progress.next.location[0], lat: progress.next.location[1] }) : routeBearing}
+                instruction={progress.instruction}
+                distanceLabel={formatMetres(progress.metresToNext)}
+              />
+            </Suspense>
+          ) : null}
           {navigating && fix ? (
             <span className="rounded bg-background/90 px-2 py-0.5 text-[11px] text-muted-foreground">
               Location accuracy: about {Math.round(fix.accuracy)} m
