@@ -12,6 +12,8 @@ export interface MapActionContext {
   remind: (trip: Trip) => void;
   /** Turn one Layers-menu switch on (#313). */
   showLayer: (layer: LayerHelpId) => void;
+  /** Open one subway line: its live trains, its notices, Follow a train. */
+  showLine: (route: string) => void;
 }
 
 /** Skipped stations and crash hotspots read as trouble; a plain stop list uses the line's colour. */
@@ -37,6 +39,7 @@ export function runMapAction(raw: unknown, ctx: MapActionContext, routeColor: (r
       case "showTrouble": ctx.showPoints(a.points, { color: TROUBLE_COLOR[a.style], title: a.label }); break;
       case "remindTrip": ctx.remind(a.trip); break;
       case "showLayer": ctx.showLayer(a.layer); break;
+      case "showLine": ctx.showLine(a.route); break;
     }
     return { ok: true, kind: a.kind };
   } catch (e) {

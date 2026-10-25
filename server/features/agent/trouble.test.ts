@@ -93,7 +93,7 @@ describe("line_status with MTA trouble", () => {
     expect(mine.trainsNotMoving).toEqual([{ line: "Q", toward: "Downtown", station: "Canal St", stoppedAtStation: true, minutesWithoutMoving: 6, isTheTrainTheUserFollows: true }]);
     const { run, offered } = lineStatus();
     expect(((await run(["Q"])).trainsNotMoving as Array<Record<string, unknown>>)[0].isTheTrainTheUserFollows).toBeUndefined();
-    expect(offered.map((a) => a.id)).toEqual(["trouble:stuck:143600_Q..S39R", "trouble:problem:Q"]);
+    expect(offered.map((a) => a.id)).toEqual(["trouble:stuck:143600_Q..S39R", "trouble:problem:Q", "line:Q"]);
   });
 });
 

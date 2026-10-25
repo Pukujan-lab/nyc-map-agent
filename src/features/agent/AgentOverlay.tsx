@@ -294,6 +294,7 @@ export default function AgentOverlay() {
     },
     // The same switch as the Layers menu, so turning it off again is where people expect.
     showLayer: (layer) => { if (layer === "busStops") setOptions({ busStops: true }); else setQuickLayer(layer, true); },
+    showLine: (route) => setSelectedLine(lineOf(route)),
   };
   const runAction = (a: MapAction) => {
     runMapAction(a, actionCtx, routeColor);

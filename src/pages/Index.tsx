@@ -45,6 +45,8 @@ export default function Index() {
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const { enabledSources, viewMode, routeStart, routeEnd } = useDataView();
   const isDesktop = useMediaQuery("(min-width: 1024px)");
+  // Phones are chat-first: just the map, the chat and voice; menus are asked for in the chat (owner, 2026-10-25).
+  const wide = useMediaQuery("(min-width: 640px)");
   const flags = useFlags();
   const analytics = flags.noise || flags.crashes || flags.combined || flags.dataLayers;
   const data = useMapData(windowId, analytics);
@@ -233,7 +235,7 @@ export default function Index() {
       )}
       <FeatureOverlays />
       <ContextCleanChip />
-      {agentHome ? <MenuRow onOpenDashboard={() => setControlsOpen(true)} onOpenSources={() => setSourcesOpen(true)} /> : null}
+      {agentHome && wide ? <MenuRow onOpenDashboard={() => setControlsOpen(true)} onOpenSources={() => setSourcesOpen(true)} /> : null}
 
       <MapPanel
         isDesktop={isDesktop}

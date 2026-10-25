@@ -7,6 +7,8 @@ import { useMapState } from "@/lib/store/MapStateContext";
 import { setOpenMenu, useOpenMenu } from "@/lib/store/openMenu";
 import { setFollowMode, stopFollowing, useFollowMode, useFollowed, type FollowMode } from "@/lib/transit/follow";
 import { useSelectedLine } from "@/lib/transit/selectedLine";
+import { useMenuT } from "@/lib/i18n/menuText";
+import { APP_LANGS, LANG_LABELS, setLangPref, useLangPref, type AppLang } from "@/lib/voice/langPref";
 import { MID_HEIGHT_M, levelOf, type ViewLevel } from "./ViewSwitcher";
 
 /**
@@ -19,7 +21,7 @@ const AERIAL_PITCH = 45;
 
 /**
  * Agent-first map chrome (#370, #372): the round buttons at the top right
- * (Change view, Center on my location), the view menu, and a compass that
+ * (Change view, Center on my location; on a phone also the language), the view menu, and a compass that
  * shows only while the map is rotated or tilted. Layers and every other menu
  * live in the top-left menu row (MenuRow).
  */
@@ -70,6 +72,26 @@ function QrButton() {
       </div>
     ) : null}
   </>;
+}
+
+/**
+ * Phones only: the language, as a small chip in the rail. The menu row with Settings is gone on a
+ * phone, and someone who does not read English must still be able to switch (owner, 2026-10-25).
+ * A native select sits over the chip, so a phone opens its own picker.
+ */
+function LangChip() {
+  const lang = useLangPref();
+  const t = useMenuT();
+  return (
+    <label data-testid="lang-chip" className={`${ROUND} ${DARK} pointer-events-auto relative text-[13px] font-bold uppercase sm:hidden`}>
+      {lang ?? <svg {...svg} width={20} height={20}><path d="m5 8 6 6M4 14l6-6 2-3M2 5h12M7 2h1M22 22l-5-10-5 10M14 18h6" /></svg>}
+      <select value={lang ?? ""} aria-label={t("language")} onChange={(e) => setLangPref((e.target.value || null) as AppLang | null)}
+        className="absolute inset-0 cursor-pointer appearance-none opacity-0">
+        <option value="">{t("thisPhone")}</option>
+        {APP_LANGS.map((code) => <option key={code} value={code}>{LANG_LABELS[code]}</option>)}
+      </select>
+    </label>
+  );
 }
 
 /** The live map and its bearing and pitch, outside the react-map-gl tree. */
@@ -173,7 +195,7 @@ function ZoomControl({ map }: { map: MapLibreMap | null }) {
   const set = (next: number) => map?.setZoom(Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, next)));
   const step = "flex h-9 w-11 items-center justify-center text-[20px] font-semibold leading-none text-[#f1f5f9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]";
   return (
-    <div data-testid="zoom-control" className="pointer-events-auto flex w-11 flex-col items-center rounded-full border border-[#263449] bg-[rgba(15,23,42,0.92)] py-1 shadow-[0_6px_18px_rgba(0,0,0,0.35)]">
+    <div data-testid="zoom-control" className="pointer-events-auto flex max-sm:hidden w-11 flex-col items-center rounded-full border border-[#263449] bg-[rgba(15,23,42,0.92)] py-1 shadow-[0_6px_18px_rgba(0,0,0,0.35)]">
       <button type="button" aria-label="Zoom in" className={step} onClick={() => set(z + 1)}>+</button>
       <input type="range" aria-label="Zoom" min={ZOOM_MIN} max={ZOOM_MAX} step={0.1} value={z} onChange={(e) => set(Number(e.target.value))}
         className="h-24 w-6 cursor-pointer accent-[#60a5fa]" style={{ writingMode: "vertical-lr", direction: "rtl" }} />
@@ -251,6 +273,7 @@ export function MapChrome() {
         </div>
         <ZoomControl map={map} />
         <LocateButton map={map} />
+        <LangChip />
         <QrButton />
       </div>
     );
@@ -281,6 +304,7 @@ export function MapChrome() {
       <ZoomControl map={map} />
       {rotated && map ? <Compass map={map} bearing={bearing} /> : null}
       <LocateButton map={map} />
+      <LangChip />
       <QrButton />
     </div>
   );

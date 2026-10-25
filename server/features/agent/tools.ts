@@ -3,7 +3,7 @@ import { findEvent, readPage } from "./webLookup";
 import { z } from "zod";
 import { command, LAYER_HELP_IDS, playbackSpeed, type AgentCommand, type LngLatTuple, type MapAction, type Trip } from "../../../src/features/agent/schema";
 import { elevatorStatus, geocode, hazardsAt, nearestRestrooms, publicRestrooms, routeWalk, serviceAlerts, subwayAlertEntities, subwayVehicles, troubleStations, weatherAt, type Place, type RestroomRow, type WalkResult } from "./services";
-import { LAYER_HELP, layerAction, placeActions, restroomActions, troubleActions, tripActions } from "./mapActions";
+import { LAYER_HELP, layerAction, lineAction, placeActions, restroomActions, troubleActions, tripActions } from "./mapActions";
 import { buildDriveTrip } from "./drive/trip";
 import type { DriveRouter } from "./drive/router";
 import { portalFor, safe, toNyLocal, tripBrief } from "./trip";
@@ -271,6 +271,7 @@ function allTools(ctx: ToolContext) {
         const vehicles = delayed.length ? await safe((ctx.deps?.vehicles ?? subwayVehicles)(delayed), [] as LiveVehicle[]) : [];
         const stuck = stuckTrains(vehicles, troubles, stations, nowS);
         offer(troubleActions(troubles, stuck));
+        offer(routes.slice(0, 2).map(lineAction));
         const followed = ctx.followedTrain?.replace(/^subway:/, "") ?? null;
         const followedSeen = followed ? vehicles.find((v) => v.tripId === followed) : undefined;
         return {

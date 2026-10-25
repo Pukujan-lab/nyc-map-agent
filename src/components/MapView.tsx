@@ -227,6 +227,20 @@ function detailForBlock(datum: BlockDatum, layer: MapModel["layer"]): string {
   return `${formatCount(datum.noiseCount)} noise · ${formatCount(datum.crashCount)} crashes`;
 }
 
+/**
+ * Phones: the credits start folded behind the "i" toggle; one tap shows them, as the licence asks.
+ * MapLibre unfolds them when the first credits arrive, which can be before or long after "load",
+ * so every source event checks until they have been folded once (the way a drag of the map does).
+ */
+let creditsFolded = false;
+function foldCredits(map: MaplibreMapInstance) {
+  if (creditsFolded || window.innerWidth >= 768) return;
+  const attrib = map.getContainer().querySelector(".maplibregl-ctrl-attrib");
+  if (!attrib?.classList.contains("maplibregl-compact")) return;
+  attrib.classList.remove("maplibregl-compact-show");
+  creditsFolded = true;
+}
+
 export function MapView({
   model,
   boundaries,
@@ -554,13 +568,6 @@ export function MapView({
     watchMapCovers(map);
     setStyleEpoch((epoch) => epoch + 1);
     setReady(true);
-    // Phones: the credits start folded behind the "i" toggle (MapLibre opens
-    // compact attribution on load); one tap shows them, as the licence asks.
-    if (window.innerWidth < 768) {
-      const attrib = map.getContainer().querySelector(".maplibregl-ctrl-attrib");
-      attrib?.classList.remove("maplibregl-compact-show");
-      attrib?.removeAttribute("open");
-    }
     const blockTiles = () =>
       void installBlockTiles(map).then((swapped) => swapped && setStyleEpoch((epoch) => epoch + 1));
     blockTiles();
@@ -1672,6 +1679,7 @@ export function MapView({
         onLoad={handleLoad}
         onSourceData={(e) => {
           if (e.sourceId === VECTOR_SOURCE && e.isSourceLoaded) markBasemapReady();
+          foldCredits(e.target);
         }}
         onError={handleError}
         onMouseMove={handleMouseMove}
