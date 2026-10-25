@@ -201,7 +201,9 @@ export function MapChrome() {
     window.addEventListener("keydown", key);
     return () => { document.removeEventListener("pointerdown", down); window.removeEventListener("keydown", key); };
   }, [open]);
-  useEffect(() => { if (line && open) setOpenMenu(null); }, [line, open]);
+  // A newly picked line closes the menu; while following, the followed train's line is always
+  // selected, so that rule would shut the follow view menu the moment it opened.
+  useEffect(() => { if (line && open && !followed) setOpenMenu(null); }, [line, open, followed]);
 
   const top = "calc(env(safe-area-inset-top) + 16px)";
   // Following: the same quick bar, with the follow cameras under Change view.
