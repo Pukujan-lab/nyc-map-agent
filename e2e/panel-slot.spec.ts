@@ -80,6 +80,13 @@ test("a vehicle tap closes the drawer and follows it with a slim card", async ({
   }, { timeout: 30_000 }).toBeGreaterThan(0);
   await expect(drawer(page)).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Stop following" }).first()).toBeVisible();
+  // The follow camera is top-down and north up. On a phone the orientation control
+  // only appears once the map is tilted or turned, so it must stay away while following.
+  const orientation = page.getByRole("group", { name: "Map orientation" });
+  for (let i = 0; i < 6; i++) {
+    await page.waitForTimeout(500);
+    await expect(orientation).toHaveCount(0);
+  }
 });
 
 test("minimize turns the sheet into a labelled peek chip that restores", async ({ page }) => {

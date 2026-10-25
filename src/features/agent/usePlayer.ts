@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { ZoomKeeper } from "@/lib/transit/follow";
+import type { Map as MapLibreMap } from "maplibre-gl";
 import { getMapInstance } from "@/lib/map/mapInstance";
+import { keepInView } from "@/lib/map/keepInView";
+import { framePadding } from "@/lib/map/mapCover";
 import { bindPreviewRelease } from "@/lib/transit/follow";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 import { readMap } from "@/lib/map/mapRead";
@@ -27,6 +29,16 @@ const TILES_MS = 2500;
  * The rules (load, play, select another option, speed) live in ./playback;
  * this hook only draws, and owns exactly one animation frame at a time.
  */
+/** Fit one leg of the trip in the clear map area, flat and north up. */
+function frameLeg(map: MapLibreMap, coords: Array<[number, number]>, reduced: boolean) {
+  if (!coords.length) return;
+  const xs = coords.map((c) => c[0]), ys = coords.map((c) => c[1]);
+  map.fitBounds([[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]], {
+    padding: framePadding(map, { top: 60, bottom: 60, left: 48, right: 48 }),
+    maxZoom: 17, pitch: 0, bearing: 0, duration: reduced ? 0 : 800,
+  });
+}
+
 export function usePlayer(onCallout?: (text: string) => void) {
   const reduced = usePrefersReducedMotion();
   const [pb, dispatch] = useReducer(playback, initialPlayback);
@@ -47,7 +59,6 @@ export function usePlayer(onCallout?: (text: string) => void) {
   /** Which restart and leg `elapsed` belongs to; a new one starts the leg at 0. */
   const counted = useRef({ restart: -1, seg: -1 });
   const lastCallout = useRef("");
-  const zoomKeeper = useRef(new ZoomKeeper());
   const styledSeg = useRef(-1);
   const say = useRef(onCallout);
   say.current = onCallout;
@@ -65,7 +76,6 @@ export function usePlayer(onCallout?: (text: string) => void) {
   const load = useCallback((trip: Trip, speed?: Speed) => {
     const t = buildTimeline(trip);
     dest.current = trip.destination.label.split(",")[0].trim();
-    zoomKeeper.current.reset();
     setSegs(t);
     setCallout(t[0]?.label ?? "");
     setWhere(null);
@@ -144,15 +154,19 @@ export function usePlayer(onCallout?: (text: string) => void) {
       const total = reduced ? 3 : wallSeconds(seg, s.speed);
       const f = reduced ? 1 : Math.min(1, elapsed.current / total);
       const pose = poseAt(seg, f);
+      const mark = seg.kind === "ride" ? along(seg.coords, f) : pose.center;
       if (styledSeg.current !== s.seg) {
         // getStyle() serialises the whole style: once per leg, never per frame.
         styledSeg.current = s.seg;
         setPreviewDim(map, true);
         setXray(map, seg.underground && seg.kind !== "walk");
+        // Each leg is framed once, top-down and north up, clear of the open panels.
+        frameLeg(map, seg.coords, reduced);
+      } else {
+        // Then the map stays still while the marker moves, and glides only when it nears the edge.
+        keepInView(map, mark);
       }
-      // Your own zoom (wheel, pinch, +/-) stays on top of the preview camera.
-      map.jumpTo({ center: pose.center, bearing: pose.bearing, pitch: pose.pitch, zoom: zoomKeeper.current.next(pose.zoom, map.getZoom()) });
-      setMarker(map, seg.kind === "ride" ? along(seg.coords, f) : pose.center, seg.route);
+      setMarker(map, mark, seg.route);
       if (seg.kind === "walk" && !seg.underground && now - place.current.at >= PLACE_MS) {
         place.current.at = now;
         if (!place.current.read || now - place.current.readAt >= TILES_MS) place.current = { read: readMap(map, { pois: true }), readAt: now, at: now };
