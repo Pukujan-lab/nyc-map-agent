@@ -23,15 +23,12 @@ GitHub Issues own task scope and progress; this file is a projection of them, no
 
 | Pull request | What it is | State |
 |---|---|---|
-| #408 | Street, nearby places and an arrival message in the trip preview | Auto-merge on; overlay size budget raised to 22.2 kB for it |
-| #394 | Every agent gets the stack's boot steps; stale dev servers stop at session start | Auto-merge on |
-| #349 | vite 6 and vitest 3, clearing audit advisories | Auto-merge on |
+| #415 | Held trains and feed-skipped stops from live MTA data, on the map and in the line panel; replaces #198 | Auto-merge on |
 | #359 | Live View camera and compass scaffold, behind a flag (groundwork for fixing which way you face after the subway) | Auto-merge on |
-| #348 | Test for the shop and café toilet sheet | Auto-merge on |
-| #209 | Every feature flag has an owner and an expiry date; a test fails on expired flags | Auto-merge on |
-| #198 | Held trains and skipped stops from live MTA data | Being ported to current main as a new pull request; #198 closes when it opens |
-| #378 | Docs: realign the project around the chat agent | Everything in it is on main. The main checkout has uncommitted edits on this branch (`PROJECT.md`, a new `docs/HACKATHON_WRITEUP.md`); save those in their own pull request, then close #378 |
+| #378 | Docs: realign the project, hackathon writeup and research sources | Open for review |
 | #232 | The release bot's release pull request | Left to the bot |
+
+Merged from the sort: #209, #348, #349, #394, #408, #414.
 
 After pulling main, run `pnpm install`: main now needs `xstate`, and #349 changes vite and vitest.
 

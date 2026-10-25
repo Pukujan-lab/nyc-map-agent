@@ -46,3 +46,24 @@ describe("lineNotices", () => {
     expect(lineNotices("A", [alert({})], [], undefined)).toEqual([]);
   });
 });
+
+import { readFileSync } from "node:fs";
+import { heldNotices } from "./lineNotices";
+describe("heldNotices", () => {
+  const real = JSON.parse(readFileSync(new URL("../../../public/transit/subway.json", import.meta.url), "utf8")) as StaticSystem;
+  // Real ids from the MTA BDFM feed captured 2026-10-21: F 094550 STOPPED_AT Bay Pkwy (F32S), bound for Coney Island (D43S).
+  const NOW = 1792616621;
+  const f = { tripId: "094550_F..S", route: "F", kind: "Holding" as const, stop: "F32S", stopped: true, since: NOW - 300, toward: "D43S" };
+  it("says which train is held, where, toward where and for how long, and rings that station", () => {
+    const [n] = heldNotices("F", [f], real, NOW);
+    expect(n.title).toBe("F train held at Bay Pkwy");
+    expect(n.meta).toBe("To Coney Island-Stillwell Av · 5 min");
+    expect(n.tone).toBe("delay");
+    expect(n.stations).toEqual([expect.objectContaining({ id: "F32", name: "Bay Pkwy", label: "Held" })]);
+  });
+  it("keeps only this line's trains, longest hold first, and says 'before' a stop not yet reached", () => {
+    const out = heldNotices("F", [f, { ...f, tripId: "a", route: "A", stop: "A41S" }, { ...f, tripId: "older", stop: "F33S", stopped: false, since: NOW - 900 }], real, NOW);
+    expect(out.map((n) => n.id)).toEqual(["held:older", "held:094550_F..S"]);
+    expect(out[0].title).toMatch(/^F train held before /);
+  });
+});

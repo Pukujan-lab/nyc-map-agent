@@ -26,7 +26,8 @@ export type StaticSystem = {
   entrances?: GeoJSON.FeatureCollection<GeoJSON.Point, { id: string; name: string; kind: string }>;
 };
 /** stops: [stop id, arrival time, realtime departure when later]; origin: first stop is the trip's origin. */
-export type LiveTrip = { id: string; route: string; dir: number | null; stops: Array<[string, number] | [string, number, number]>; at?: string; origin?: boolean };
+/** at: the stop the vehicle reports; st: its current_status (0 INCOMING_AT, 1 STOPPED_AT, 2 IN_TRANSIT_TO); vt: position time; skipped: SKIPPED stops (not in `stops`). */
+export type LiveTrip = { id: string; route: string; dir: number | null; stops: Array<[string, number] | [string, number, number]>; at?: string; st?: number; vt?: number; skipped?: string[]; origin?: boolean };
 export type LiveSystem = { at: number; trips: LiveTrip[] };
 export type Bus = { id: string; route: string; dir: number | null; lon: number; lat: number; bearing: number | null; next: string | null; t: number };
 
@@ -49,6 +50,8 @@ export type Vehicle = {
   eta?: number;
   /** Stopped at a station: dwelling, waiting at the origin, or arrived at the terminal. */
   stopped?: { kind: "at" | "departs" | "arrived"; stop: string; t: number };
+  /** Held per the live feed (src/lib/transit/holds.ts): since when, and at or before which stop. */
+  held?: { since: number; stop: string; stopped: boolean };
 };
 
 /** Subway platform ids are the station id plus N/S. */
@@ -100,11 +103,18 @@ export function estimateTrain(sys: StaticSystem, trip: LiveTrip, now: number, tr
   if (!pts.length) return null;
   if (pts[0].arr - now > 30 * 60) return null; // not running yet
   const names = stationNames(sys);
-  const mo = motionAt(pts, now, (p) => {
+  let mo = motionAt(pts, now, (p) => {
     const st = stationOf(sys.system, p.id);
     return sys.system === "subway" ? defaultDwell(st, names.get(st)) : 45;
   }, { origin: trip.origin });
   if (!mo) return null; // finished
+  // The feed has not cleared the stop the vehicle reports: never draw the train past it.
+  const atI = trip.at ? pts.findIndex((p) => p.id === trip.at) : -1;
+  if (atI >= 0 && mo.phase !== "origin" && (mo.phase === "moving" ? mo.i >= atI : mo.i > atI)) {
+    mo = trip.st === 1 || atI === 0
+      ? { phase: "dwell", i: atI, m: pts[atI].m, departs: Math.max(now, pts[atI].dep ?? pts[atI].arr) }
+      : { phase: "moving", i: atI - 1, m: pts[atI].m, f: 1 };
+  }
   let m = mo.m;
   const nextI = mo.phase === "moving" ? (mo.f === 0 && mo.i === 0 && now < pts[0].arr ? 0 : mo.i + 1) : mo.i;
   const next = pts[Math.min(nextI, pts.length - 1)];

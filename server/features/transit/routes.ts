@@ -61,40 +61,66 @@ export type TransitTrip = {
   origin?: boolean;
   /** Vehicle-reported current stop, if any. */
   at?: string;
+  /** Vehicle current_status: 0 INCOMING_AT, 1 STOPPED_AT, 2 IN_TRANSIT_TO. */
+  st?: number;
+  /** Vehicle position timestamp (unix seconds). */
+  vt?: number;
+  /** Stops the feed marks SKIPPED, in trip order; they are not in `stops`. */
+  skipped?: string[];
 };
+
+const { TripDescriptor, TripUpdate } = GtfsRealtimeBindings.transit_realtime;
+const TRIP_CANCELED = TripDescriptor.ScheduleRelationship.CANCELED;
+const STOP_SKIPPED = TripUpdate.StopTimeUpdate.ScheduleRelationship.SKIPPED;
 
 export async function loadTrips(system: string) {
   const feeds = await Promise.allSettled(FEEDS[system].map(decode));
+  if (feeds.every((f) => f.status === "rejected")) throw new Error(`all ${system} feeds failed`);
+  return slimTrips(feeds.flatMap((f) => (f.status === "fulfilled" ? [f.value] : [])), Date.now() / 1000);
+}
+
+/**
+ * Decoded GTFS-rt feeds to slim trips. Cancelled trips leave the map; stops the
+ * feed marks SKIPPED are dropped from the path (a train never dwells there) and
+ * listed in trip order; the vehicle's current_status and timestamp are kept so
+ * the map can tell a held train from a moving one. Pure, for fixture tests.
+ */
+export function slimTrips(feeds: Array<ReturnType<typeof FeedMessage.decode>>, now: number) {
   const trips: TransitTrip[] = [];
-  const now = Date.now() / 1000;
-  for (const f of feeds) {
-    if (f.status !== "fulfilled") continue;
-    const at = new Map<string, string>();
-    for (const e of f.value.entity) {
+  for (const feed of feeds) {
+    const at = new Map<string, { stop: string; st?: number; vt: number }>();
+    for (const e of feed.entity) {
       const v = e.vehicle;
-      if (v?.trip?.tripId && v.stopId) at.set(v.trip.tripId, v.stopId);
+      if (v?.trip?.tripId && v.stopId) at.set(v.trip.tripId, { stop: v.stopId, st: v.currentStatus ?? undefined, vt: num(v.timestamp) });
     }
-    for (const e of f.value.entity) {
+    for (const e of feed.entity) {
       const tu = e.tripUpdate;
-      if (!tu?.trip) continue;
+      if (!tu?.trip || tu.trip.scheduleRelationship === TRIP_CANCELED) continue;
       const stops: TransitTrip["stops"] = [];
+      const skipped: string[] = [];
       const updates = tu.stopTimeUpdate ?? [];
       for (const s of updates) {
+        if (s.scheduleRelationship === STOP_SKIPPED) { if (s.stopId) skipped.push(s.stopId); continue; }
         const a = num(s.arrival?.time), d = num(s.departure?.time);
         const t = a || d;
         if (!s.stopId || !t || t <= now - 600) continue;
         stops.push(a && d && d > a ? [s.stopId, a, d] : [s.stopId, t]);
       }
-      const origin = !!updates[0] && !num(updates[0].arrival?.time) && !!num(updates[0].departure?.time);
+      const first = updates.find((s) => s.scheduleRelationship !== STOP_SKIPPED);
+      const origin = !!first && !num(first.arrival?.time) && !!num(first.departure?.time);
       if (!stops.length) continue;
       const tripId = tu.trip.tripId ?? e.id;
       // NYCT trip ids carry the direction (..N / ..S); rail uses direction_id.
       const m = /\.\.?([NS])/.exec(tripId);
       const dir = tu.trip.directionId ?? (m ? (m[1] === "N" ? 0 : 1) : null);
-      trips.push({ id: tripId, route: tu.trip.routeId ?? "", dir, stops, at: at.get(tripId), ...(origin ? { origin } : {}) });
+      const v = at.get(tripId);
+      trips.push({
+        id: tripId, route: tu.trip.routeId ?? "", dir, stops, at: v?.stop,
+        ...(v?.st != null ? { st: v.st } : {}), ...(v?.vt ? { vt: v.vt } : {}),
+        ...(skipped.length ? { skipped } : {}), ...(origin ? { origin } : {}),
+      });
     }
   }
-  if (feeds.every((f) => f.status === "rejected")) throw new Error(`all ${system} feeds failed`);
   return { at: Math.round(now), trips };
 }
 

@@ -6,10 +6,11 @@ import { setSelectedLine, useSelectedLine } from "@/lib/transit/selectedLine";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { framePadding } from "@/lib/map/mapCover";
 import { sendScreen, useScreen } from "@/lib/screen/screenSpace";
+import { heldTrains } from "@/lib/transit/holds";
 import { setAlertFocus } from "./alertFocus";
 import { useAlerts, useNow, useTransitData } from "./hooks";
 import { boardingArrivals, minutesUntil } from "./model";
-import { TONE, lineNotices, type LineNotice } from "./lineNotices";
+import { TONE, heldNotices, lineNotices, type LineNotice } from "./lineNotices";
 import { NoticeIcon, noticeKind } from "./noticeKind";
 
 const GLASS = "border border-[rgba(148,163,184,0.18)] bg-[rgba(15,23,42,0.6)] backdrop-blur-[10px]";
@@ -55,7 +56,9 @@ export function LinePanel({ map, route, onFollow }: { map: MaplibreMap | undefin
   const data = useTransitData(["subway"]);
   const alerts = useAlerts(true).data;
   const sys = data.subway?.stat;
-  const notices = useMemo(() => lineNotices(route, alerts?.alerts ?? [], alerts?.outages ?? [], sys), [route, alerts, sys]);
+  const live = data.subway?.live;
+  // Held trains first: they are happening now, on this line (src/lib/transit/holds.ts).
+  const notices = useMemo(() => [...heldNotices(route, heldTrains(live).values(), sys), ...lineNotices(route, alerts?.alerts ?? [], alerts?.outages ?? [], sys)], [route, alerts, sys, live]);
   const [picked, setPicked] = useState<string | null>(null);
   // A new line starts with every notice closed.
   useEffect(() => setPicked(null), [route]);
@@ -146,7 +149,7 @@ export function LinePanel({ map, route, onFollow }: { map: MaplibreMap | undefin
                   <button type="button" aria-expanded={open} data-notice={n.id} onClick={() => setPicked(open ? null : n.id)}
                     className="flex w-full items-start gap-2.5 rounded-[14px] border px-3 py-2.5 text-left text-[14px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]"
                     style={{ borderColor: open ? "rgba(96,165,250,0.6)" : "rgba(148,163,184,0.16)", background: open ? "rgba(37,99,235,0.22)" : "rgba(15,23,42,0.35)" }}>
-                    <NoticeIcon kind={noticeKind(`${n.title} ${n.body}`, { kind: n.alert?.kind, reroute: n.alert?.reroute })} color={tone.dot} className="mt-[2px] h-4 w-4 shrink-0" />
+                    <NoticeIcon kind={noticeKind(`${n.title} ${n.body}`, { kind: n.alert?.kind ?? (n.tone === "delay" ? "delay" : undefined), reroute: n.alert?.reroute })} color={tone.dot} className="mt-[2px] h-4 w-4 shrink-0" />
                     <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
                       {/* Closed: one line each; the full text opens on tap. */}
                       <span className={`font-semibold ${open ? "" : "truncate"}`}>{n.title}</span>
