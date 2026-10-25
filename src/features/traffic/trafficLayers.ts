@@ -43,7 +43,7 @@ export function mount(map: MapLibreMap): () => void {
   const load = async () => {
     try {
       const res = await fetch("/api/traffic");
-      if (res.ok) map.getSource<GeoJSONSource>(SRC)?.setData((await res.json()) as Parameters<GeoJSONSource["setData"]>[0]);
+      if (res.ok) void map.getSource<GeoJSONSource>(SRC)?.setData((await res.json()) as Parameters<GeoJSONSource["setData"]>[0]);
     } catch {
       /* keep the last snapshot */
     }

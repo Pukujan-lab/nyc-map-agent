@@ -64,9 +64,9 @@ export function applyReadable(map: MapLibreMap, look: StreetLook, colors: Readab
     if (!change) {
       const orig = store.get(l.id);
       if (!orig) continue;
-      map.setLayoutProperty(l.id, "visibility", orig.visibility ?? "visible");
-      if (l.type === "line" && orig.color !== undefined) map.setPaintProperty(l.id, "line-color", orig.color);
-      if (l.type === "symbol" && orig.textColor !== undefined) map.setPaintProperty(l.id, "text-color", orig.textColor);
+      map.setLayoutProperty(l.id, "visibility", (orig.visibility ?? "visible") as never);
+      if (l.type === "line" && orig.color !== undefined) map.setPaintProperty(l.id, "line-color", orig.color as never);
+      if (l.type === "symbol" && orig.textColor !== undefined) map.setPaintProperty(l.id, "text-color", orig.textColor as never);
       store.delete(l.id);
       continue;
     }
@@ -78,14 +78,14 @@ export function applyReadable(map: MapLibreMap, look: StreetLook, colors: Readab
       });
     }
     const orig = store.get(l.id);
-    map.setLayoutProperty(l.id, "visibility", change.visibility ?? orig?.visibility ?? "visible");
+    map.setLayoutProperty(l.id, "visibility", (change.visibility ?? orig?.visibility ?? "visible") as never);
     if (l.type === "line") {
       const color = change.color ? (change.color === PALE_MAJOR ? colors.major : colors.street) : orig?.color;
-      if (color !== undefined) map.setPaintProperty(l.id, "line-color", color);
+      if (color !== undefined) map.setPaintProperty(l.id, "line-color", color as never);
     }
     if (l.type === "symbol") {
       const textColor = change.textColor ? colors.label : orig?.textColor;
-      if (textColor !== undefined) map.setPaintProperty(l.id, "text-color", textColor);
+      if (textColor !== undefined) map.setPaintProperty(l.id, "text-color", textColor as never);
     }
   }
 }

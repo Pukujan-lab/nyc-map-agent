@@ -53,7 +53,7 @@ export function tripToGeoJson(trip: Trip): GeoJSON.FeatureCollection {
 /** Draw the trip and fit the camera to it; `fit: false` only redraws (a preview owns the camera). */
 export function showTrip(map: MapLibreMap, trip: Trip, { fit = true }: { fit?: boolean } = {}): void {
   ensure(map);
-  (map.getSource(SRC) as GeoJSONSource).setData(tripToGeoJson(trip));
+  void (map.getSource(SRC) as GeoJSONSource).setData(tripToGeoJson(trip));
   if (!fit) return;
   const all = trip.legs.flatMap((l) => ("coords" in l ? l.coords : [[l.portal.lon, l.portal.lat] as LngLatTuple]));
   const lons = all.map((c) => c[0]);
@@ -63,7 +63,7 @@ export function showTrip(map: MapLibreMap, trip: Trip, { fit = true }: { fit?: b
 
 export function setMarker(map: MapLibreMap, at: LngLatTuple | null, route?: string): void {
   ensure(map);
-  (map.getSource(MARKER) as GeoJSONSource).setData({
+  void (map.getSource(MARKER) as GeoJSONSource).setData({
     type: "FeatureCollection",
     features: at ? [{ type: "Feature", properties: { color: route ? ROUTE_COLOR[route] ?? null : null }, geometry: { type: "Point", coordinates: at } }] : [],
   });
@@ -83,7 +83,7 @@ export function showPoints(map: MapLibreMap, points: MapPoint[], color: string):
     map.addLayer({ id: `${POINTS}-dot`, type: "circle", source: POINTS, paint: { "circle-radius": 7, "circle-color": ["get", "color"], "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 } });
     map.addLayer({ id: `${POINTS}-label`, type: "symbol", source: POINTS, layout: { "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-anchor": "left", "text-offset": [1, 0], "text-optional": true, "text-max-width": 14 }, paint: { "text-color": "#111827", "text-halo-color": "#ffffff", "text-halo-width": 1.5 } });
   }
-  (map.getSource(POINTS) as GeoJSONSource).setData(pointsToGeoJson(points, color));
+  void (map.getSource(POINTS) as GeoJSONSource).setData(pointsToGeoJson(points, color));
   if (points.length === 1) { map.flyTo({ center: points[0].at, zoom: Math.max(map.getZoom(), 15), duration: 800 }); return; }
   const lons = points.map((p) => p.at[0]);
   const lats = points.map((p) => p.at[1]);
@@ -93,7 +93,7 @@ export function showPoints(map: MapLibreMap, points: MapPoint[], color: string):
 /** Drop the marks of the previous answer, so a new question starts on a clean map. */
 export function clearPoints(map: MapLibreMap): void {
   const source = map.getSource(POINTS);
-  if (source) (source as GeoJSONSource).setData({ type: "FeatureCollection", features: [] });
+  if (source) void (source as GeoJSONSource).setData({ type: "FeatureCollection", features: [] });
 }
 
 const saved = new Map<string, unknown>();

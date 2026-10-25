@@ -4,6 +4,7 @@
  * click handlers can stay in the main chunk and in the feature modules.
  */
 import type { Map as MapLibreMap } from "maplibre-gl";
+import { cameraTransform } from "./cameraTransform";
 
 export interface PickTarget {
   kind: "restroom" | "place";
@@ -24,8 +25,7 @@ const EYE_M = 1.7;
  */
 export function eyeOrCenter(map: MapLibreMap): { lng: number; lat: number } {
   try {
-    const t = (map as unknown as { transform?: { getCameraLngLat?: () => { lng: number; lat: number } } }).transform;
-    const p = t?.getCameraLngLat?.();
+    const p = cameraTransform(map)?.getCameraLngLat();
     if (p && Number.isFinite(p.lng) && Number.isFinite(p.lat)) return { lng: p.lng, lat: p.lat };
   } catch {
     /* fall through */

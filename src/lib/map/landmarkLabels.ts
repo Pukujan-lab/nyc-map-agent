@@ -118,7 +118,7 @@ export function focusLandmarks(map: MapLibreMap, at: LonLat | null): void {
   const src = map.getSource(LANDMARK_LABELS_SOURCE);
   if (!src || !("setData" in src)) return;
   const list = at ? landmarksNear(at, STREET_LEVEL_RANGE_M) : guideLandmarks();
-  (src as GeoJSONSource).setData(landmarkLabelsGeoJson(list));
+  void (src as GeoJSONSource).setData(landmarkLabelsGeoJson(list));
 }
 
 /** Adds the source and layer once per style; safe to call again (it also re-raises the layer above later symbols). */
@@ -133,7 +133,7 @@ export function installLandmarkLabels(map: MapLibreMap, color: string, halo: str
       void loadGuideLandmarks()
         .then((all) => {
           const src = map.getSource(LANDMARK_LABELS_SOURCE);
-          if (src && "setData" in src) (src as GeoJSONSource).setData(landmarkLabelsGeoJson(all));
+          if (src && "setData" in src) void (src as GeoJSONSource).setData(landmarkLabelsGeoJson(all));
           skipPlaceNames(map, all.map((l) => l.name));
         })
         .catch(() => {});

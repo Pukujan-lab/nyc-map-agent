@@ -36,9 +36,9 @@ export function mount(map: MapLibreMap): () => void {
       const res = await fetch("/api/ferry");
       if (!res.ok) return;
       const d = data.parse(await res.json());
-      map.getSource<GeoJSONSource>(SRC_ROUTES)?.setData(d.routes as GeoJSON.FeatureCollection);
-      map.getSource<GeoJSONSource>(SRC_TERMS)?.setData(d.terminals as GeoJSON.FeatureCollection);
-      map.getSource<GeoJSONSource>(SRC_VESSELS)?.setData(vesselsGeo(d.vessels));
+      void map.getSource<GeoJSONSource>(SRC_ROUTES)?.setData(d.routes as GeoJSON.FeatureCollection);
+      void map.getSource<GeoJSONSource>(SRC_TERMS)?.setData(d.terminals as GeoJSON.FeatureCollection);
+      void map.getSource<GeoJSONSource>(SRC_VESSELS)?.setData(vesselsGeo(d.vessels));
     } catch {
       /* best-effort layer */
     }

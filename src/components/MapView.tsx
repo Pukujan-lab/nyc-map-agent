@@ -35,6 +35,8 @@ import MapLibreMap, {
 } from "react-map-gl/maplibre";
 import { LngLat, type GeoJSONSource } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import "@/lib/map/maplibreWorker";
+import { cameraTransform } from "@/lib/map/cameraTransform";
 import type { NtaBoundary } from "@/lib/api/nta";
 import { formatCount, formatPercent } from "@/lib/format";
 import { blockContaining, blockKey } from "@/lib/geo/blocks";
@@ -825,10 +827,10 @@ export function MapView({
     if (!map) return;
     const showBlocks = scale === "blocks";
 
-    (map.getSource(SOURCE_IDS.neighborhoods) as GeoJSONSource | undefined)
+    void (map.getSource(SOURCE_IDS.neighborhoods) as GeoJSONSource | undefined)
       ?.setData(neighborhoodGeoJson);
     pushBlocks(map, model.blocks, blockGeoJson);
-    (map.getSource(SOURCE_IDS.boroughs) as GeoJSONSource | undefined)?.setData(
+    void (map.getSource(SOURCE_IDS.boroughs) as GeoJSONSource | undefined)?.setData(
       boroughGeoJson,
     );
 
@@ -914,8 +916,8 @@ export function MapView({
     // Unit + style: the classic glass columns cover blocks and neighborhoods;
     // everything else (filled areas, district/borough columns, heatmap) reads
     // from the areas / block-points sources.
-    (map.getSource(SOURCE_IDS.areas) as GeoJSONSource | undefined)?.setData(areaGeoJson);
-    (map.getSource(SOURCE_IDS.blockPoints) as GeoJSONSource | undefined)?.setData(blockPointGeoJson);
+    void (map.getSource(SOURCE_IDS.areas) as GeoJSONSource | undefined)?.setData(areaGeoJson);
+    void (map.getSource(SOURCE_IDS.blockPoints) as GeoJSONSource | undefined)?.setData(blockPointGeoJson);
     const coarse = scale === "districts" || scale === "boroughs";
     const classic = walking || (mapStyle === "columns" && !coarse);
     const vis = (on: boolean) => (on ? "visible" : "none");
@@ -1086,10 +1088,10 @@ export function MapView({
     if (!ready) return;
     const map = mapRef.current?.getMap();
     if (!map) return;
-    (map.getSource(SOURCE_IDS.emphasis) as GeoJSONSource | undefined)?.setData(
+    void (map.getSource(SOURCE_IDS.emphasis) as GeoJSONSource | undefined)?.setData(
       emphasisGeoJson,
     );
-    (
+    void (
       map.getSource(SOURCE_IDS.blockSelection) as GeoJSONSource | undefined
     )?.setData(selectionGeoJson);
   }, [ready, styleEpoch, emphasisGeoJson, selectionGeoJson]);
@@ -1505,7 +1507,7 @@ export function MapView({
         geometry: { type: "Point", coordinates: [routeEnd.lon, routeEnd.lat] },
       });
     }
-    source.setData({ type: "FeatureCollection", features });
+    void source.setData({ type: "FeatureCollection", features });
   }, [ready, styleEpoch, route, routeStart, routeEnd]);
 
   // A crosshair cursor says "the next click drops a route point".
@@ -1586,7 +1588,10 @@ export function MapView({
     if (!ready) return;
     const map = mapRef.current?.getMap();
     if (!map) return;
-    const report = () => reportCameraHeight(map.transform.getCameraAltitude());
+    const report = () => {
+      const t = cameraTransform(map);
+      if (t) reportCameraHeight(t.getCameraAltitude());
+    };
     report();
     map.on("moveend", report);
     return () => {

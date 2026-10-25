@@ -315,7 +315,7 @@ function wireNearest(map: MapLibreMap): void {
       const key = next.features.map(restroomKey).join("|");
       if (key === shown) return;
       shown = key;
-      src.setData(next);
+      void src.setData(next);
     });
   };
   const lift = () => {
@@ -390,7 +390,7 @@ export function mountMiniRestrooms(map: MapLibreMap): void {
 
 export function setMiniRestrooms(map: MapLibreMap, data: GeoJSON.FeatureCollection): void {
   const src = map.getSource<GeoJSONSource>(MINI_SOURCE);
-  src?.setData(data);
+  void src?.setData(data);
 }
 
 /** The restroom under a click, if the layer is showing. */

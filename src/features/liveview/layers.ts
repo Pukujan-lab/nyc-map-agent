@@ -243,11 +243,11 @@ export function updateNavLayers(map: MapLibreMap, f: NavFrame): void {
     properties: { part },
     geometry: { type: "LineString", coordinates },
   });
-  map.getSource<GeoJSONSource>(SRC.route)?.setData({
+  void map.getSource<GeoJSONSource>(SRC.route)?.setData({
     type: "FeatureCollection",
     features: [line("walked", walked), line("ahead", ahead)],
   });
-  map.getSource<GeoJSONSource>(SRC.turn)?.setData(
+  void map.getSource<GeoJSONSource>(SRC.turn)?.setData(
     f.next && f.next.type !== "arrive"
       ? {
           type: "FeatureCollection",
@@ -258,7 +258,7 @@ export function updateNavLayers(map: MapLibreMap, f: NavFrame): void {
       : empty(),
   );
   const p = f.puck;
-  map.getSource<GeoJSONSource>(SRC.puck)?.setData(
+  void map.getSource<GeoJSONSource>(SRC.puck)?.setData(
     p
       ? {
           type: "FeatureCollection",

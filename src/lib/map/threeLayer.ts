@@ -13,9 +13,8 @@ import { busStopsShown, eyeOrCenter, kioskSources, setPickTargets, subscribeBusS
 import { LANDMARKS } from "./landmarks";
 import { drawRestroomPictogram } from "./restroomPictogram";
 import { atlasCell, facadeCategory } from "./storefrontCategory";
-import maplibregl, { type CustomLayerInterface, type CustomRenderMethodInput, type Map as MaplibreMap } from "maplibre-gl";
+import { MercatorCoordinate, type CustomLayerInterface, type CustomRenderMethodInput, type Map as MaplibreMap } from "maplibre-gl";
 // Default import: also loads under Node (CJS) for scripts/make-landmarks.ts.
-const { MercatorCoordinate } = maplibregl;
 type MapLibreMap = MaplibreMap;
 
 /** Rebuild a street layer after the camera has moved about this far. Looking around stays under it. */

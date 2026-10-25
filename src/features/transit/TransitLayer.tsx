@@ -594,9 +594,9 @@ export default function TransitLayer() {
     if (!f || !m) return;
     const src = m.getSource<GeoJSONSource>("transit-vehicles");
     const fc = vehicleCollection(list, f.alerted, f.theme, f.followedKey);
-    src?.setData(f.hide ? EMPTY : fc);
+    void src?.setData(f.hide ? EMPTY : fc);
     // Street level empties the vehicle source; the followed bus keeps its badge in its own source.
-    m.getSource<GeoJSONSource>("transit-followed-bus")?.setData({ type: "FeatureCollection", features: fc.features.filter((x) => x.properties?.followed === 1 && x.properties?.system === "bus") });
+    void m.getSource<GeoJSONSource>("transit-followed-bus")?.setData({ type: "FeatureCollection", features: fc.features.filter((x) => x.properties?.followed === 1 && x.properties?.system === "bus") });
     if (f.three) {
       v3d.current?.update(
         list
@@ -679,8 +679,8 @@ export default function TransitLayer() {
   useEffect(() => {
     if (!map || !three) return;
     const hits = () => map.getSource<GeoJSONSource>("transit-vehicle-hits");
-    const id = window.setInterval(() => hits()?.setData({ type: "FeatureCollection", features: [...display.current.values()].map((v) => ({ type: "Feature", properties: { key: v.key, label: v.label, grade: v.grade, atStop: v.stopped ? 1 : 0 }, geometry: { type: "Point", coordinates: [v.lon, v.lat] } })) }), 1000);
-    return () => { window.clearInterval(id); hits()?.setData(EMPTY); };
+    const id = window.setInterval(() => { void hits()?.setData({ type: "FeatureCollection", features: [...display.current.values()].map((v) => ({ type: "Feature", properties: { key: v.key, label: v.label, grade: v.grade, atStop: v.stopped ? 1 : 0 }, geometry: { type: "Point", coordinates: [v.lon, v.lat] } })) }); }, 1000);
+    return () => { window.clearInterval(id); void hits()?.setData(EMPTY); };
   }, [map, three]);
   const theme = usePalette();
   // Street level: publish the drawn vehicles once a second for the mini map.
