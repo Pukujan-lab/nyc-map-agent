@@ -10,7 +10,9 @@ import type { makeTools } from "./tools";
 type Tools = ReturnType<typeof makeTools>;
 type Question = { text: string; hasLocation: boolean };
 
-const RESTROOM = /\b(rest ?rooms?|bathrooms?|toilets?|washrooms?|loos?|wc|baños?|banos?|servicios|sanitarios?|aseos?)\b/i;
+// Also the words the Restroom button asks with in the app's other languages (French, Haitian Creole,
+// Russian, Chinese, Korean, Bengali); \b does not work next to those scripts, so they match on their own.
+const RESTROOM = /\b(rest ?rooms?|bathrooms?|toilets?|toilettes?|washrooms?|loos?|wc|baños?|banos?|servicios|sanitarios?|aseos?|twal[eè]t)\b|туалет|厕所|洗手间|화장실|টয়লেট/i;
 // "is the N running", "Q train delays", "the 7 line": the subway's own letters and numbers.
 // Letters are matched in capitals only, so "take a train" is not the A.
 const LINE = /\b(?:[Tt]he\s+)?([1-7]|[ABCDEFGJLMNQRWZ]|SIR)\s*(?:[Tt]rains?|[Ll]ines?|[Ss]ubway)\b|\b(?:[Ii]s|[Aa]re)\s+the\s+([1-7]|[ABCDEFGJLMNQRWZ])\b/;

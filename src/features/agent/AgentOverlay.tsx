@@ -762,14 +762,14 @@ export default function AgentOverlay() {
 
     const trainRoute = trip?.legs.find((l) => l.kind === "ride")?.route;
     const tasks = {
-      restroom: () => void send("Where's the nearest public restroom that's open now?"),
+      restroom: () => void send(tr(appLang, "askRestroom")),
       train: () => {
-        if (trainRoute) void send(`How is the ${trainRoute} train running right now?`);
+        if (trainRoute) void send(tr(appLang, "askLine").replace("{r}", trainRoute));
         else if (openLines) openLines();
-        else void send("How are the subway lines running right now?");
+        else void send(tr(appLang, "askLines"));
       },
       plan: () => {
-        setInput("Plan a trip to ");
+        setInput(tr(appLang, "planPrefix"));
         window.requestAnimationFrame(() => {
           const el = homeInput.current;
           el?.focus();
@@ -778,7 +778,7 @@ export default function AgentOverlay() {
       },
       exit: () => {
         if (undergroundOn && stationHelp) stationHelp();
-        else void send("Which exit should I take at the nearest subway station?");
+        else void send(tr(appLang, "askExit"));
       },
     };
     const panelUp = panelContent !== null && !panelMinimized;
