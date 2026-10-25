@@ -11,6 +11,11 @@ export function shellText(doc: Doc = document): string {
   return typeof el?.value === "string" && el.value.trim() ? el.value : "";
 }
 
+/** True while the static bar holds the cursor, so the real bar can take it over too. */
+export function shellFocused(doc: Pick<Document, "activeElement"> = document): boolean {
+  return doc.activeElement?.id === "shell-ask";
+}
+
 export function removeShell(doc: Doc = document): void {
   doc.getElementById("shell-bar")?.remove();
 }
