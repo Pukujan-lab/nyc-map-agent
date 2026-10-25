@@ -74,6 +74,30 @@ export function AlertRow({ alert }: { alert: TransitAlert }) {
   );
 }
 
+/**
+ * A notice that touches this station, at the top of the station panel (#419). A suspension or skip reads in
+ * red so a skipped station says so when you tap it, not only when you open the line's notice. Tapping it
+ * opens the same alert view as the line panel.
+ */
+export function StationNotice({ alert }: { alert: TransitAlert }) {
+  const open = useOpenAlert();
+  const data = useTransitData(["subway"]);
+  const stops = /\bno\b|skip|suspend|bypass|not stop/i.test(`${alert.text} ${alert.type ?? ""}`);
+  const period = alert.period || [when(alert.start), alert.end ? when(alert.end) : ""].filter(Boolean).join(" – ");
+  return (
+    <button type="button" onClick={() => open(alert)} data-alert={alert.id} data-testid="station-notice"
+      className={`block w-full rounded-md border-2 px-2.5 py-2 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${stops ? "border-[#d4183d] bg-[#d4183d]/10" : "border-amber-500 bg-amber-500/10"}`}>
+      <span className="flex flex-wrap items-center gap-1.5">
+        {alert.routes.map((r) => <RouteBullet key={r} system="subway" route={r} data={data} />)}
+        <span className="text-xs font-semibold uppercase tracking-wide">{stops ? "Not stopping here" : alertLabel(alert)}</span>
+      </span>
+      <span className="mt-1 block font-medium leading-snug">{plain(alert.text)}</span>
+      {period ? <span className="mt-0.5 block text-xs text-muted-foreground">{period}</span> : null}
+      <span className="mt-1 block text-xs font-semibold underline underline-offset-2">Show on map</span>
+    </button>
+  );
+}
+
 /** The slim alert card: full text, active period, direction and affected stops. */
 function AlertCard({ alert: a, onBack }: { alert: TransitAlert; onBack: () => void }) {
   const data = useTransitData(["subway"]);
