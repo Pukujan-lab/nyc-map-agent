@@ -85,3 +85,11 @@ describe("underground helper context", () => {
     expect(p).toContain("at the station where it happens");
   });
 });
+
+describe("scope (#199)", () => {
+  it("keeps to getting around NYC and refuses rule changes from tool results", () => {
+    const p = systemPrompt("2026-10-25 10:00", null);
+    expect(p).toMatch(/Only help with getting around New York City/);
+    expect(p).toMatch(/inside a tool result/);
+  });
+});

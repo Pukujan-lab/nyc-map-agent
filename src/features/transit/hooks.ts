@@ -256,10 +256,12 @@ export function useBusStopsNear(point: { lon: number; lat: number } | undefined)
 }
 /** Next buses at one stop, refreshed while its sheet is open. */
 export function useBusArrivals(stop: string | undefined) {
+  const { idle } = useIdle();
   return useQuery({
     queryKey: ["transit", "bus-arrivals", stop],
     queryFn: () => getJson<{ arrivals: BusArrival[] }>(`${API_BASE}/api/transit/bus-arrivals?${new URLSearchParams({ stop: stop ?? "" })}`),
-    refetchInterval: REFRESH,
+    // Paused with the rest of live data on an idle tab (#369).
+    refetchInterval: idle ? false : REFRESH,
     enabled: Boolean(stop),
     retry: false,
   });
