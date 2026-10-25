@@ -346,6 +346,32 @@ window.__bench = function (opts) {
 
 </details>
 
+## Check against the baseline (2026-10-25)
+
+**The first load asks for fewer things and uses far less memory, but the crime and noise
+summaries still download in the simple view.** This was one warm-cache load of the deployed
+site (main at `855d675`) in the desktop app's browser pane, 1024 × 768, on the same
+development Mac, with a load average near 5 (the baseline ran at 20–127). It is a spot check, not a new baseline: one run.
+
+| | Baseline (2026-10-23, warm, 1440 × 900) | Now (2026-10-25, warm, 1024 × 768) |
+|---|---|---|
+| Requests on first load | 63 | 45 |
+| Calls to our API in the first 20 s | not counted | 11, then 13 after 30 s |
+| Main script | 1,869 KB (540 KB compressed) | 1,984 KB (582 KB compressed) |
+| JavaScript heap after load | 199 MB | 71 MB |
+
+The 11 API calls were 4 to `/api/aggregate` (the crime and noise summaries), 2 to
+`/api/transit`, and one each to `/api/areas`, `/api/blocks`, `/api/transit-live`,
+`/api/transit-segments/all` and `/api/transit/alerts`. Pull request #434 stops the
+`/api/aggregate` calls unless an analytics layer is on, which removes the biggest download.
+Measure again once it is live.
+
+The main script grew by about 115 KB as the assistant gained features. Its size check in CI
+caps the assistant's own chunk at 24 KB, not the main script.
+
+Still not measured: the owner's phone and work computer, and a cold load on a phone network.
+Those are the open part of #362.
+
 ## Fastest wins, in order (proposal)
 1. **Stop the transit re-render loop.** `TransitLayer` calls `setVehicles` about 15 times a second to animate trains, re-rendering the whole layer each time, and the console showed many "Maximum update depth exceeded" warnings. Move the animation out of React state.
 2. **Top view is flat 2D (decided).** Do not load the three.js layer or 3D buildings in Top.
