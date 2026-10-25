@@ -29,6 +29,8 @@ import { useMapState } from "@/lib/store/MapStateContext";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { windowBounds } from "@/lib/windows";
 
+const NO_SOURCES: string[] = [];
+
 export default function Index() {
   const {
     layer,
@@ -44,7 +46,8 @@ export default function Index() {
   const { enabledSources, viewMode, routeStart, routeEnd } = useDataView();
   const isDesktop = useMediaQuery("(min-width: 1024px)");
   const flags = useFlags();
-  const data = useMapData(windowId, flags.noise || flags.crashes || flags.combined || flags.dataLayers);
+  const analytics = flags.noise || flags.crashes || flags.combined || flags.dataLayers;
+  const data = useMapData(windowId, analytics);
   const { label: windowLabel } = windowBounds(windowId);
   const crashWindowLabel = data.crashes
     ? windowBounds(data.crashes.windowId).label
@@ -52,7 +55,8 @@ export default function Index() {
 
   const { filters } = useFilters();
   const sourceState = useSourceCounts({
-    enabled: enabledSources,
+    // Per-source block counts only feed the analytics views; the simple map never draws them.
+    enabled: analytics ? enabledSources : NO_SOURCES,
     windowId,
     boundaries: data.boundaries,
     noise: data.noise,
