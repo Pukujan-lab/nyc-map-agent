@@ -10,6 +10,7 @@ import type { Map as MapLibreMap } from "maplibre-gl";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { onMapInstance } from "@/lib/map/mapInstance";
+import { keepInView } from "@/lib/map/keepInView";
 import { LOOK_CENTER_DISTANCE_M, poseAlongRoute } from "@/lib/map/walk";
 import { useDataView } from "@/lib/store/DataViewContext";
 import { appGeo } from "@/lib/geo/devGeo";
@@ -43,8 +44,8 @@ interface Fix {
 /**
  * Navigation guidance for the walking route: glowing route with chevrons and a
  * turn arrow, a compact next-turn card, and a street-name pill. In street
- * view it follows the camera; in 2D, "Navigate" follows your location
- * heading-up and tilted. Location is asked for only when you tap Navigate,
+ * view it follows the camera; in 2D, "Navigate" follows your location on a
+ * still, top-down, north-up map. Location is asked for only when you tap Navigate,
  * stays in this tab, and is never sent to our API.
  */
 export default function RouteGuide() {
@@ -188,7 +189,7 @@ export default function RouteGuide() {
     });
   });
 
-  // Heading-up, tilted camera that follows the fix until you pan away.
+  // The camera follows the fix until you pan away.
   useEffect(() => {
     if (!map || !navigating || walking) return;
     const off = () => sendCamera({ type: "pan" });
@@ -197,12 +198,25 @@ export default function RouteGuide() {
       map.off("dragstart", off);
     };
   }, [map, navigating, walking]);
-  // Heading-up and tilted until you pick a view (Top, Aerial); after that only keep you centred.
+  // Top-down and north up. The first fix frames you close (until you pick a view yourself);
+  // after that the map stays still and re-centres only when you near the edge, not on every fix.
+  const framed = useRef(false);
   useEffect(() => {
-    if (!map || camera.kind !== "guide" || !fix || !centered) return;
-    if (!tilt) { map.easeTo({ center: [fix.lon, fix.lat], duration: 600 }); return; }
-    map.easeTo({ center: [fix.lon, fix.lat], bearing: heading, pitch: 55, zoom: Math.max(map.getZoom(), 17), duration: 600 });
-  }, [map, camera.kind, fix, centered, tilt, heading]);
+    if (!map || camera.kind !== "guide" || !centered) { framed.current = false; return; }
+    if (!fix) return;
+    if (!framed.current) {
+      framed.current = true;
+      map.easeTo({ center: [fix.lon, fix.lat], pitch: 0, bearing: 0, ...(tilt ? { zoom: Math.max(map.getZoom(), 17) } : {}), duration: 600 });
+      return;
+    }
+    keepInView(map, [fix.lon, fix.lat]);
+  }, [map, camera.kind, fix, centered, tilt]);
+  // Walking guidance from the answer: your shared dot stays on screen the same way.
+  const homeWalk = home && followingRoute && !walking && !navigating && here !== null;
+  useEffect(() => {
+    if (!map || !homeWalk || !here) return;
+    keepInView(map, [here.lon, here.lat]);
+  }, [map, homeWalk, here?.lon, here?.lat]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!route) return null;
 

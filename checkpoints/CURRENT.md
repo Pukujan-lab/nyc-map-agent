@@ -12,6 +12,7 @@ GitHub Issues own task scope and progress; this file is a projection of them, no
 
 ## Completed recently
 
+- **The map holds still while following (2026-10-25, #418):** the follow camera used to chase the dot from behind and turn on every update. Now it stays flat and north-up and glides only when the dot nears the screen's edge.
 - **Focused lines and stations read properly (2026-10-25, #419):** a focused line used to break into gaps where it shared track with another line, and a skipped station said nothing when tapped. Now a focused line is drawn solid end to end, underground too, with only its own repairs and skips; a station panel opens with the notices that name it, sits below the menu row, and lets you tap one line's bullet to see only that line. Repeated taps on one spot step through each train and then the station. The exit card is a short strip so the map stays in view.
 - **Live map fixes for judging (2026-10-25, #419):** trains on the way to their first remaining stop glide again instead of parking at it; restrooms closed by their listed hours are skipped; More scrolls what it opens into view; the locate button uses the crosshair people know from Google Maps. Every visitor now gets one question per 5 seconds, and the 20-per-3-hours window is off until the end of 26 Oct in New York, then comes back on its own.
 - **The agent-first home landed:** chat bar at the bottom, menus top-left, task screens, memory on the phone (#395), followed by fixes to the map, panels, buses, answers and voice (#396 to #407).
