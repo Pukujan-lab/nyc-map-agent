@@ -1779,22 +1779,6 @@
     "/api/v1/vehicle-models/{mode}": {
       "get": {
         "summary": "Live-vehicle glTF model (subway, bus, rail)",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "enum": [
-                "subway",
-                "bus",
-                "rail"
-              ],
-              "example": "subway"
-            },
-            "required": true,
-            "name": "mode",
-            "in": "path"
-          }
-        ],
         "responses": {
           "200": {
             "description": "Whole file",
@@ -1857,22 +1841,6 @@
       "get": {
         "summary": "Live-vehicle glTF model (subway, bus, rail) (alias of /api/v1/vehicle-models/{mode})",
         "deprecated": true,
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "enum": [
-                "subway",
-                "bus",
-                "rail"
-              ],
-              "example": "subway"
-            },
-            "required": true,
-            "name": "mode",
-            "in": "path"
-          }
-        ],
         "responses": {
           "200": {
             "description": "Whole file",

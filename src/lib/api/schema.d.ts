@@ -3476,9 +3476,7 @@ export interface paths {
             parameters: {
                 query?: never;
                 header?: never;
-                path: {
-                    mode: "subway" | "bus" | "rail";
-                };
+                path?: never;
                 cookie?: never;
             };
             requestBody?: never;
@@ -3661,9 +3659,7 @@ export interface paths {
             parameters: {
                 query?: never;
                 header?: never;
-                path: {
-                    mode: "subway" | "bus" | "rail";
-                };
+                path?: never;
                 cookie?: never;
             };
             requestBody?: never;

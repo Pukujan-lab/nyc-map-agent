@@ -241,7 +241,8 @@ jobs:
     # The freshly deployed server against the openapi.json it was built from:
     # every read-only /api/v1 route, a couple of generated requests each,
     # checked for server errors, response shape and content type (#205).
-    # POST routes (agent, speech) are left out because each call costs money.
+    # POST routes (agent, speech) are left out because each call costs money;
+    # vehicle models because the spec cannot name {mode} without an API major bump.
     needs: [deploy]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, linux, x64, gravebuster]
@@ -255,7 +256,7 @@ jobs:
         run: >
           "$RUNNER_TEMP/uv/uvx" schemathesis@4.0.0 run openapi.json
           --url https://nyc.design-bakery.com
-          --exclude-method POST --exclude-path-regex '^/api/(?!v1/)'
+          --exclude-method POST --exclude-path-regex '^/api/(?!v1/)|/vehicle-models/'
           --max-examples 2 --phases examples,fuzzing
           --checks not_a_server_error,response_schema_conformance,content_type_conformance
           --rate-limit 3/s --request-timeout 20

@@ -22,7 +22,8 @@ describe("typed API client (#205)", () => {
 
   it("fills path parameters", async () => {
     const { seen, c } = client();
-    await c.GET("/api/v1/vehicle-models/{mode}", { params: { path: { mode: "bus" } }, parseAs: "blob" });
-    expect(seen).toEqual(["https://example.test/api/v1/vehicle-models/bus"]);
+    await c.GET("/api/v1/area/{block}", { params: { path: { block: "120:340" } } });
+    // Encoded on the way out; the server decodes path parameters.
+    expect(seen).toEqual(["https://example.test/api/v1/area/120%3A340"]);
   });
 });

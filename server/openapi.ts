@@ -9,7 +9,6 @@ import { Query as AggregateQuery } from "../api/aggregate";
 import { Query as AreasQuery } from "../api/areas";
 import { Query as BlocksQuery } from "../api/blocks";
 import { Query as StreetQuery } from "../api/street";
-import { VEHICLE_MODES } from "../api/vehicle-models/[mode]";
 import { Query as HazardsQuery } from "./features/hazards/routes";
 import { NearQuery as ParkingNearQuery } from "./features/parking/routes";
 import { BrandsBox as StorefrontBrandsQuery, LogoQuery as StorefrontLogoQuery } from "./features/storefronts/routes";
@@ -42,13 +41,12 @@ const jsonRoute = (path: string, summary: string, query?: z.ZodObject, params?: 
 const binary = z.string().openapi({ format: "binary" });
 
 /** octet-stream stays listed beside the real type so older clients keep matching. */
-const binaryRoute = (path: string, summary: string, contentType: string, params?: z.ZodObject) => {
+const binaryRoute = (path: string, summary: string, contentType: string) => {
   const content = { "application/octet-stream": { schema: binary }, [contentType]: { schema: binary } };
   return createRoute({
     method: "get",
     path,
     summary,
-    ...(params ? { request: { params } } : {}),
     responses: {
       200: { description: "Whole file", content },
       206: { description: "Byte range (Range header)", content },
@@ -141,12 +139,7 @@ export const ROUTES = {
   "/api/block-tiles": binaryRoute("/api/block-tiles", "Real NYC tax-block PMTiles", "application/vnd.pmtiles"),
   "/api/blocks": jsonRoute("/api/blocks", "One row per area for a source", BlocksQuery),
   "/api/city-tiles": binaryRoute("/api/city-tiles", "Citywide 3D-city PMTiles", "application/vnd.pmtiles"),
-  "/api/vehicle-models/:mode": binaryRoute(
-    "/api/vehicle-models/{mode}",
-    "Live-vehicle glTF model (subway, bus, rail)",
-    "model/gltf-binary",
-    z.object({ mode: z.enum(VEHICLE_MODES).openapi({ param: { name: "mode", in: "path" }, example: "subway" }) }),
-  ),
+  "/api/vehicle-models/:mode": binaryRoute("/api/vehicle-models/{mode}", "Live-vehicle glTF model (subway, bus, rail)", "model/gltf-binary"),
   "/api/restrooms": createRoute({
     method: "get",
     path: "/api/restrooms",
