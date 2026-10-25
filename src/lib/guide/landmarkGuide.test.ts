@@ -122,10 +122,11 @@ describe("pickGuideLandmarks", () => {
 });
 
 describe("density by zoom", () => {
-  it("shows a few citywide and more as you zoom in", () => {
-    const city = landmarksAtZoom(10).length;
-    const mid = landmarksAtZoom(12.5).length;
-    const near = landmarksAtZoom(15).length;
+  it("shows none zoomed out, a few once zoomed in and more closer still", () => {
+    expect(landmarksAtZoom(13).length).toBe(0);
+    const city = landmarksAtZoom(14).length;
+    const mid = landmarksAtZoom(15).length;
+    const near = landmarksAtZoom(16).length;
     expect(city).toBeGreaterThanOrEqual(10);
     expect(city).toBeLessThanOrEqual(45);
     expect(mid).toBeGreaterThan(city);
@@ -155,14 +156,14 @@ describe("generated data", () => {
     }
   });
 
-  it("keeps the hand-picked bridges and ferry terminal, from mid zoom", () => {
+  it("keeps the hand-picked bridges and ferry terminal, from zoom 15", () => {
     const byId = new Map(GUIDE_LANDMARKS.map((l) => [l.id, l]));
     expect(byId.get("Q1035131")).toMatchObject({ name: "Hell Gate Bridge", borough: "Queens", category: "bridge", tier: 2 });
     expect(byId.get("Q125450")).toMatchObject({ name: "Robert F. Kennedy (Triborough) Bridge", borough: "Queens", tier: 2 });
     expect(byId.get("Q5927015")).toMatchObject({ name: "St. George Ferry Terminal", borough: "Staten Island", category: "station", tier: 2 });
-    const at12 = new Set(landmarksAtZoom(12).map((l) => l.id));
-    expect(["Q1035131", "Q125450", "Q5927015"].every((id) => at12.has(id))).toBe(true);
-    expect(landmarksAtZoom(11.9).some((l) => l.id === "Q5927015")).toBe(false);
+    const at15 = new Set(landmarksAtZoom(15).map((l) => l.id));
+    expect(["Q1035131", "Q125450", "Q5927015"].every((id) => at15.has(id))).toBe(true);
+    expect(landmarksAtZoom(14.9).some((l) => l.id === "Q5927015")).toBe(false);
   });
 });
 });

@@ -77,7 +77,7 @@ function ViewMenu({ pitch, onPick }: { pitch: number; onPick: () => void }) {
     items[(i + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length]?.focus();
   };
   return (
-    <div ref={ref} role="menu" tabIndex={-1} aria-label="Change view" data-testid="view-menu" onKeyDown={onKey} className={`flex w-[220px] flex-col gap-0.5 ${FLOAT}`}>
+    <div ref={ref} role="menu" tabIndex={-1} aria-label="Change view" data-testid="view-menu" data-map-cover onKeyDown={onKey} className={`flex w-[220px] flex-col gap-0.5 ${FLOAT}`}>
       {VIEWS.filter((v) => street || v.id !== "street").map((v) => {
         const on = level === v.id;
         return (
@@ -105,7 +105,7 @@ const FOLLOW_VIEWS: Array<{ id: FollowMode; label: string; note: string }> = [
 function FollowViewMenu({ onPick }: { onPick: () => void }) {
   const mode = useFollowMode();
   return (
-    <div role="menu" aria-label="Change view" data-testid="follow-view-menu" className={`flex w-[220px] flex-col gap-0.5 ${FLOAT}`}>
+    <div role="menu" aria-label="Change view" data-testid="follow-view-menu" data-map-cover className={`flex w-[220px] flex-col gap-0.5 ${FLOAT}`}>
       {FOLLOW_VIEWS.map((v) => {
         const on = mode === v.id;
         return (

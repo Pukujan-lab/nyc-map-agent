@@ -303,3 +303,16 @@
 @media (min-width: 1024px) {
   :root { --edge: var(--sp-4); }
 }
+
+/* The line panel's notices show about one and a half at a time, so keep a scroll bar in view to say there are more. */
+.line-notices::-webkit-scrollbar {
+  width: 4px;
+}
+.line-notices::-webkit-scrollbar-thumb {
+  border-radius: 2px;
+  background: rgba(148, 163, 184, 0.55);
+}
+.line-notices::-webkit-scrollbar-track {
+  background: rgba(148, 163, 184, 0.12);
+  border-radius: 2px;
+}

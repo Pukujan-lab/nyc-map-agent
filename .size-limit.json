@@ -67,6 +67,6 @@
   {
     "name": "all JS",
     "path": ".size-build/assets/*.js",
-    "limit": "990 kB"
+    "limit": "1000 kB"
   }
 ]

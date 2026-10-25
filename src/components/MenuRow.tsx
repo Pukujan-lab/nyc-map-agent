@@ -332,7 +332,7 @@ export function MenuRow({ onOpenDashboard, onOpenSources }: { onOpenDashboard: (
         </div>
       </nav>
       {open ? (
-        <div role="region" aria-label={ITEMS.find((x) => x.id === open)!.label} data-testid="menu-dropdown"
+        <div role="region" aria-label={ITEMS.find((x) => x.id === open)!.label} data-testid="menu-dropdown" data-map-cover
           className={`pointer-events-auto w-[min(320px,calc(100vw-92px))] overflow-y-auto overscroll-contain ${FLOAT}`}
           style={{ maxHeight: "calc(100dvh - env(safe-area-inset-top) - 84px - var(--chat-bar-h, 0px) - 12px)" }}>
           {open === "myDay" ? (MyDayBody ? <Suspense fallback={null}><MyDayBody onClose={close} /></Suspense> : null)

@@ -40,8 +40,8 @@ export function guideLandmarks(): readonly GuideLandmark[] {
   return loaded ?? [];
 }
 
-/** Zoom from which each tier is drawn: a few citywide, more as you zoom in. */
-export const TIER_MIN_ZOOM: Record<GuideLandmark["tier"], number> = { 1: 9, 2: 12, 3: 14 };
+/** Zoom from which each tier is drawn: none until you are zoomed well in, so the train lines lead (owner canvas note, 2026-10-24). */
+export const TIER_MIN_ZOOM: Record<GuideLandmark["tier"], number> = { 1: 14, 2: 15, 3: 16 };
 
 /** The landmarks drawn at `zoom`, same rule as the map layer's per-feature filter. */
 export function landmarksAtZoom(zoom: number, list: readonly GuideLandmark[] = guideLandmarks()): GuideLandmark[] {
