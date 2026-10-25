@@ -238,10 +238,11 @@ export default function RouteGuide() {
 
   const checkpoint = here ? nextCheckpoint(here, heading, landmarks, confirmed) : null;
   if (home && active) return chatOpen ? null : <>
-    <section className="task-panel task-top flex items-center gap-3.5 px-4 py-3.5" aria-label="Walking guidance">
+    <section className="task-panel task-top flex items-center gap-3 px-3.5 py-3 min-[380px]:gap-3.5 min-[380px]:px-4 min-[380px]:py-3.5" aria-label="Walking guidance">
       <TurnIcon step={progress?.next ?? null} />
-      <div className="min-w-0 flex-1"><h2 className="text-xl font-bold leading-tight">{checkpoint ? `Walk toward ${checkpoint.landmark.name}` : progress?.instruction ?? "Follow the walking route"}</h2>
-        <p className="mt-0.5 text-sm text-slate-300">{[progress && !checkpoint ? `In ${formatMetres(progress.metresToNext)}` : progress?.instruction, street, `${Math.max(1, Math.round(left / 80))} min left`].filter(Boolean).join(" · ")}</p></div>
+      {/* A few short lines at most, so on a small phone the walk still shows between this and the checkpoint card. */}
+      <div className="min-w-0 flex-1"><h2 className="text-base font-bold leading-tight min-[380px]:text-xl">{checkpoint ? <span className="block text-xs font-semibold text-slate-300">Walk toward</span> : null}<span className="line-clamp-3 min-[380px]:line-clamp-2">{checkpoint ? checkpoint.landmark.name : progress?.instruction ?? "Follow the walking route"}</span></h2>
+        <p className="mt-0.5 truncate text-sm text-slate-300">{[progress && !checkpoint ? `In ${formatMetres(progress.metresToNext)}` : progress?.instruction, street, `${Math.max(1, Math.round(left / 80))} min left`].filter(Boolean).join(" · ")}</p></div>
       {arFlag && progress ? (
         <Suspense fallback={null}>
           <LiveViewBeta
@@ -261,15 +262,15 @@ export default function RouteGuide() {
     {checkpoint?.landmark.picture ? <section className="task-panel task-bottom flex flex-col gap-2.5 p-3.5" aria-label="Landmark checkpoint">
       <div className="flex items-center gap-2.5">
         <img src={checkpoint.landmark.picture.url} alt={checkpoint.landmark.name} className="h-11 w-11 shrink-0 rounded-xl border border-slate-400/25 object-cover" />
-        <h3 className="text-base font-semibold">See {checkpoint.landmark.name} {checkpoint.direction}?</h3>
+        <h3 className="line-clamp-2 text-[15px] font-semibold leading-snug min-[380px]:text-base">See {checkpoint.landmark.name} {checkpoint.direction}?</h3>
       </div>
       {showPhoto ? <figure><img src={checkpoint.landmark.picture.url} alt={`Look for ${checkpoint.landmark.name}`} className="max-h-40 w-full rounded-xl object-contain" /><figcaption className="mt-1 text-xs text-slate-300">About {checkpoint.distanceM} m · {checkpoint.direction}</figcaption></figure> : null}
-      <div className="grid grid-cols-3 gap-2">
-        <button type="button" className="task-action min-h-12" onClick={() => { setConfirmed([...confirmed, checkpoint.landmark.id]); setShowPhoto(false); }}>Yes, I see it</button>
-        <button type="button" className="task-action task-secondary min-h-12" aria-expanded={showPhoto} onClick={() => setShowPhoto(!showPhoto)}>Not yet</button>
-        <button type="button" className="task-action task-secondary min-h-12" onClick={() => { seedChat(`I'm lost on my walk. Help me find ${checkpoint.landmark.name} using visible landmarks.`); setChatOpen(true); }}>I'm lost</button>
+      <div className="grid grid-cols-3 gap-2 text-[13px] min-[380px]:text-sm">
+        <button type="button" className="task-action min-h-11 !text-[length:inherit]" onClick={() => { setConfirmed([...confirmed, checkpoint.landmark.id]); setShowPhoto(false); }}>Yes, I see it</button>
+        <button type="button" className="task-action task-secondary min-h-11 !text-[length:inherit]" aria-expanded={showPhoto} onClick={() => setShowPhoto(!showPhoto)}>Not yet</button>
+        <button type="button" className="task-action task-secondary min-h-11 !text-[length:inherit]" onClick={() => { seedChat(`I'm lost on my walk. Help me find ${checkpoint.landmark.name} using visible landmarks.`); setChatOpen(true); }}>I'm lost</button>
       </div>
-      <a href={checkpoint.landmark.picture.page} target="_blank" rel="noreferrer" className="text-xs text-slate-300">Photo: {checkpoint.landmark.picture.artist} · {checkpoint.landmark.picture.license}</a>
+      <a href={checkpoint.landmark.picture.page} target="_blank" rel="noreferrer" className="block truncate text-xs text-slate-300">Photo: {checkpoint.landmark.picture.artist} · {checkpoint.landmark.picture.license}</a>
     </section> : <div className="task-panel task-bottom"><button type="button" className="task-action task-secondary w-full" onClick={() => { seedChat("I'm lost on my walking route. Help me find a visible landmark."); setChatOpen(true); }}>I'm lost</button></div>}
   </>;
 
