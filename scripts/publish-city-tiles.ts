@@ -13,7 +13,9 @@
  * After upload the new parts are verified (each part fetchable, total bytes and
  * sha256 etag match) and swapped in; the old current version becomes
  * previous_parts (kept for rollback) and the Octo files of the version that was
- * previous before are deleted. If verification fails nothing is deleted and the
+ * previous before are deleted. Every version is also recorded in
+ * core.published_asset_versions with when it was current and when its files
+ * were pruned, so any deploy can be tied to the tile set it served. If verification fails nothing is deleted and the
  * old pointer stays. Deleting needs an OCTO_API_KEY with the `delete` scope and
  * an owner/admin workspace role; on 403 the prune is skipped with a warning.
  */
@@ -51,17 +53,19 @@ async function deleteFile(fileId: string, workspaceId: string): Promise<number> 
   return res.status;
 }
 
-async function prune(fileIds: string[], workspaceId: string) {
+/** Deletes the files; false when the key may not delete, so nothing is marked pruned. */
+async function prune(fileIds: string[], workspaceId: string): Promise<boolean> {
   for (const fileId of fileIds) {
     const status = await deleteFile(fileId, workspaceId);
     if (status === 403) {
       console.warn("prune skipped: key lacks delete scope");
-      return;
+      return false;
     }
     if (status >= 200 && status < 300) console.log(`pruned ${fileId}`);
     else if (status === 404) console.log(`already gone ${fileId}`);
     else console.warn(`prune of ${fileId} failed (${status}); continuing`);
   }
+  return true;
 }
 
 async function main() {
@@ -70,8 +74,8 @@ async function main() {
   const bytes = readFileSync(FILE);
   const etag = assetEtag(bytes);
   const existing = (
-    await octoQuery<{ parts: AssetPart[] | null; previous_parts: AssetPart[] | null }>(
-      "SELECT parts, previous_parts FROM core.published_assets WHERE name = $1",
+    await octoQuery<{ parts: AssetPart[] | null; previous_parts: AssetPart[] | null; previous_etag: string | null }>(
+      "SELECT parts, previous_parts, previous_etag FROM core.published_assets WHERE name = $1",
       [NAME],
     )
   ).rows[0];
@@ -102,6 +106,15 @@ async function main() {
   if (problem) {
     throw new Error(`verification failed, kept old pointer and deleted nothing: ${problem}`);
   }
+  // History first: the pointer below may only name a recorded version.
+  await octoQuery(
+    `INSERT INTO core.published_asset_versions (name, etag, total_bytes, parts, published_at)
+     VALUES ($1, $2, $3, $4::jsonb, now())
+     ON CONFLICT (name, etag) DO UPDATE SET
+       total_bytes = excluded.total_bytes, parts = excluded.parts,
+       published_at = now(), retired_at = NULL, pruned_at = NULL`,
+    [NAME, etag, bytes.length, JSON.stringify(parts)],
+  );
   // Swap: the old current version becomes the rollback version.
   await octoQuery(
     `INSERT INTO core.published_assets (name, total_bytes, etag, parts, published_at)
@@ -114,8 +127,18 @@ async function main() {
        parts = excluded.parts, published_at = now()`,
     [NAME, bytes.length, etag, JSON.stringify(parts)],
   );
+  await octoQuery(
+    "UPDATE core.published_asset_versions SET retired_at = now() WHERE name = $1 AND etag <> $2 AND retired_at IS NULL",
+    [NAME, etag],
+  );
   console.log(`${NAME}: ${(bytes.length / 1e6).toFixed(1)} MB in ${parts.length} parts, etag ${etag}`);
-  await prune(selectPrunable(existing?.previous_parts, existing?.parts, parts), workspaceId);
+  const pruned = await prune(selectPrunable(existing?.previous_parts, existing?.parts, parts), workspaceId);
+  if (pruned && existing?.previous_etag && existing.previous_etag !== etag) {
+    await octoQuery("UPDATE core.published_asset_versions SET pruned_at = now() WHERE name = $1 AND etag = $2 AND pruned_at IS NULL", [
+      NAME,
+      existing.previous_etag,
+    ]);
+  }
 }
 
 main().catch((err) => {

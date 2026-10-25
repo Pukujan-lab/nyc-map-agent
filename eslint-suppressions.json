@@ -14,11 +14,6 @@
       "count": 1
     }
   },
-  "scripts/block-join.ts": {
-    "@typescript-eslint/no-base-to-string": {
-      "count": 3
-    }
-  },
   "scripts/build-aggregates.ts": {
     "@typescript-eslint/no-unsafe-assignment": {
       "count": 2

@@ -186,7 +186,7 @@ export async function startDeploy(deps: PipelineDeps, config: PipelineConfig, re
 
       // build
       step("build", "running");
-      const buildArgs = Object.entries(config.buildArgs).flatMap(([k, v]) => ["--build-arg", `${k}=${v}`]);
+      const buildArgs = Object.entries({ ...config.buildArgs, GIT_SHA: run.sha }).flatMap(([k, v]) => ["--build-arg", `${k}=${v}`]);
       const built = await runner.run("docker", ["build", "-t", targetImage, ...buildArgs, "."], {
         cwd: config.repoDir,
         onLine: log,

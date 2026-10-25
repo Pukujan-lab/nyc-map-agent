@@ -72,7 +72,7 @@ Dependency notes:
 - Dataset registry: every Socrata map source is one entry in `src/lib/datasets/registry.ts`. Add a source there; do not write a per-dataset module.
 
 - **Architecture**: the app is a modular monolith; read `docs/ARCHITECTURE.md` first. Features live in `src/features/<name>/` and never import each other.
-- **three.js (approved)**: only for 3D models, only through the one shared MapLibre custom layer module (`src/lib/map/threeLayer.ts` / `streetSigns.ts`), same canvas. deck.gl stays banned. Enforced by dependency-cruiser.
+- **three.js (approved)**: only for 3D models, only through the one shared MapLibre custom layer (`src/lib/map/three/`, entry `threeLayer.ts`, plus `streetSigns.ts`), same canvas. deck.gl stays banned. Enforced by dependency-cruiser.
 
 ## Data and correctness rules
 

@@ -1168,6 +1168,7 @@
               "type": "string",
               "enum": [
                 "block",
+                "taxblock",
                 "nta",
                 "cd",
                 "borough"
@@ -1287,6 +1288,7 @@
               "type": "string",
               "enum": [
                 "block",
+                "taxblock",
                 "nta",
                 "cd",
                 "borough"

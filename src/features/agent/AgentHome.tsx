@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefO
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/appLang";
+import { removeShell, shellText } from "@/lib/shellDraft";
 import { stepLabel, type AgentStep } from "./agentSteps";
 
 /**
@@ -227,6 +228,14 @@ export function AgentHome(p: AgentHomeProps) {
     if (!hidden && el) document.documentElement.style.setProperty("--chat-bar-h", `${Math.max(0, Math.ceil(window.innerHeight - el.getBoundingClientRect().top))}px`);
   });
   useEffect(() => () => { document.documentElement.style.removeProperty("--chat-bar-h"); }, []);
+  // The static chat bar from index.html (#368) gives way once this one shows, keeping what was typed.
+  const { setInput } = p;
+  useLayoutEffect(() => {
+    if (hidden) return;
+    const typed = shellText();
+    if (typed) setInput(typed);
+    removeShell();
+  }, [hidden, setInput]);
 
   if (p.hidden) return null;
 

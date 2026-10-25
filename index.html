@@ -12,9 +12,20 @@
     />
     <title>NYC Map Agent</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <style>
+      /* The first screen before the app's script has run (#368): map ground and the chat bar.
+         The real chat bar removes this one when it mounts and keeps anything typed into it. */
+      html, body { margin: 0; height: 100%; background: hsl(48 16% 94%); }
+      #shell-bar { position: fixed; z-index: 45; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom) + 1.5rem); display: flex; align-items: center; gap: 8px; padding: 6px; border-radius: 30px; background: #f8fafc; box-shadow: 0 8px 24px rgba(0, 0, 0, .45); }
+      #shell-ask { flex: 1; min-width: 0; height: 44px; padding: 0 0 0 12px; border: 0; background: transparent; font: 16px system-ui, -apple-system, sans-serif; color: #0f172a; outline: none; }
+      #shell-ask::placeholder { color: #64748b; }
+      #shell-orb { width: 52px; height: 52px; flex: none; border-radius: 50%; background: #2563eb; }
+      @media (min-width: 640px) { #shell-bar { left: 50%; right: auto; width: 468px; transform: translateX(-50%); bottom: 1rem; } }
+    </style>
   </head>
   <body>
     <div id="root"></div>
+    <div id="shell-bar"><input id="shell-ask" placeholder="Ask anything…" aria-label="Ask the assistant" enterkeyhint="send" autocomplete="off" /><span id="shell-orb" aria-hidden="true"></span></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

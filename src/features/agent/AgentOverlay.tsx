@@ -1,6 +1,6 @@
 import { Bus, Car, ChevronUp, Footprints, Headphones, LocateFixed, Mic, MicOff, MoreVertical, Pause, Play, Send, SkipForward, X } from "lucide-react";
 import { legFocus } from "./legFocus";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -70,6 +70,7 @@ import { framePadding } from "@/lib/map/mapCover";
 import { useOpenMenu } from "@/lib/store/openMenu";
 import { sendScreen, useScreen } from "@/lib/screen/screenSpace";
 import { getUndergroundNow, useUndergroundNow } from "@/lib/underground/whereNow";
+import { removeShell } from "@/lib/shellDraft";
 
 interface Msg { id: string; role: "user" | "assistant"; content: string; offerLocation?: boolean; actions?: MapAction[]; sources?: AnswerSourcesLine }
 
@@ -95,6 +96,10 @@ export default function AgentOverlay() {
   const { showPanel, closeAll, content: panelContent, minimized: panelMinimized, drawerOpen } = usePanel();
   // Agent-first home (#370): bottom chat bar, voice waveform, visible steps.
   const home = useFlag("agentHome");
+  // The classic Ask sheet has its own input; the early chat bar from index.html would be a second one (#368).
+  useLayoutEffect(() => {
+    if (!home) removeShell();
+  }, [home]);
   const undergroundOn = useFlag("underground");
   const places = useHomeWork();
   const followed = useFollowed();

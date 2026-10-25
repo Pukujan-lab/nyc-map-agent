@@ -23,8 +23,32 @@ export interface BlockPoint {
   cyclists: number;
 }
 
+/** A registry source's fine-grid cell centre, for the per-block counts (#120). */
+export interface TaxPoint {
+  lat: number;
+  lon: number;
+  /** First day of the month, YYYY-MM-DD; null for an inventory snapshot. */
+  month: string | null;
+  category: string;
+  /** How many records the cell holds. */
+  n: number;
+}
+
+/** Weighted events per tax block, month, category and severity. */
+export interface TaxBlockCount {
+  blockId: number;
+  nta2020: string | null;
+  /** South-west corner of the block, like BlockCell. */
+  lon: number;
+  lat: number;
+  month: string | null;
+  category: string;
+  n: number;
+}
+
 export interface BlockJoin {
   join(dataset: DatasetId, points: BlockPoint[]): Promise<BlockCell[]>;
+  count(name: string, points: TaxPoint[]): Promise<TaxBlockCount[]>;
 }
 
 /** Same as aggregateCore: per block, the top three addresses / streets. */
@@ -33,6 +57,36 @@ const TOP = 3;
 const NEAR_DEG = 0.0004;
 /** A second block within 1.5x the nearest distance plus this (~8 m) faces the same street. */
 const FACING_SLACK_DEG = 0.00008;
+
+/** DuckDB JSON cells hold strings, numbers or null here. */
+const str = (v: unknown): string => (typeof v === "string" ? v : v == null ? "" : JSON.stringify(v));
+
+/**
+ * CTEs that give every row of a `pts` CTE (rid, pt) its blocks and weights as
+ * `assigned` (rid, id, w): a point inside a block counts 1 there; a street-bed
+ * point is split across the block faces it sits between.
+ */
+const ASSIGN = `inside AS (
+          -- Strictly inside counts for every block, parks included (transverse
+          -- road crashes, noise in the park).
+          SELECT p.rid, b.id, 1.0 AS w FROM pts p JOIN blocks b ON ST_Contains(b.geom, p.pt)
+        ), cand AS (
+          -- Street-bed points: the eligible blocks (no open space, no giant
+          -- blocks) within ${NEAR_DEG}° (~40 m), nearest first.
+          SELECT rid, id, d,
+                 row_number() OVER (PARTITION BY rid ORDER BY d, id) AS k,
+                 min(d) OVER (PARTITION BY rid) AS d1
+          FROM (SELECT p.rid, b.id, ST_Distance(b.geom, p.pt) AS d
+                FROM (SELECT * FROM pts p0 WHERE NOT EXISTS (SELECT 1 FROM inside i WHERE i.rid = p0.rid)) p
+                JOIN blocks b ON ST_DWithin(b.geom, p.pt, ${NEAR_DEG}) WHERE b.no_snap = 0)
+        ), street AS (
+          -- Split across the facing blocks: the nearest plus the next one when it
+          -- is about as close (the block across the street), half each.
+          SELECT rid, id, 1.0 / count(*) OVER (PARTITION BY rid) AS w
+          FROM cand WHERE k = 1 OR (k = 2 AND d <= d1 * 1.5 + ${FACING_SLACK_DEG})
+        ), assigned AS (
+          SELECT * FROM inside UNION ALL SELECT * FROM street
+        )`;
 
 /**
  * @param blocksGeoJson path of nyc-blocks.geojson (id, boro, block, label)
@@ -67,27 +121,9 @@ export async function blockJoin(blocksGeoJson: string, ntaGeoJson: string): Prom
           SELECT row_number() OVER () AS rid, *, ST_Point(lon, lat) AS pt FROM read_csv(${sqlString(csv)}, header = true, quote = '"', escape = '"',
             columns = {'lat': 'DOUBLE', 'lon': 'DOUBLE', 'hour': 'INT', 'place': 'VARCHAR',
                        'injured': 'INT', 'killed': 'INT', 'cyclists': 'INT'})
-        ), inside AS (
-          -- Strictly inside counts for every block, parks included (transverse
-          -- road crashes, noise in the park).
-          SELECT p.rid, b.id, 1.0 AS w FROM pts p JOIN blocks b ON ST_Contains(b.geom, p.pt)
-        ), cand AS (
-          -- Street-bed points: the eligible blocks (no open space, no giant
-          -- blocks) within ${NEAR_DEG}° (~40 m), nearest first.
-          SELECT rid, id, d,
-                 row_number() OVER (PARTITION BY rid ORDER BY d, id) AS k,
-                 min(d) OVER (PARTITION BY rid) AS d1
-          FROM (SELECT p.rid, b.id, ST_Distance(b.geom, p.pt) AS d
-                FROM (SELECT * FROM pts p0 WHERE NOT EXISTS (SELECT 1 FROM inside i WHERE i.rid = p0.rid)) p
-                JOIN blocks b ON ST_DWithin(b.geom, p.pt, ${NEAR_DEG}) WHERE b.no_snap = 0)
-        ), street AS (
-          -- Split across the facing blocks: the nearest plus the next one when it
-          -- is about as close (the block across the street), half each.
-          SELECT rid, id, 1.0 / count(*) OVER (PARTITION BY rid) AS w
-          FROM cand WHERE k = 1 OR (k = 2 AND d <= d1 * 1.5 + ${FACING_SLACK_DEG})
-        ), j AS (
+        ), ${ASSIGN}, j AS (
           SELECT a.id, a.w, p.hour, p.place, p.injured, p.killed, p.cyclists
-          FROM (SELECT * FROM inside UNION ALL SELECT * FROM street) a JOIN pts p USING (rid)
+          FROM assigned a JOIN pts p USING (rid)
         ), places AS (
           SELECT id, list([place, n::VARCHAR] ORDER BY n DESC, place) AS top
           FROM (SELECT id, place, round(sum(w), 1) AS n,
@@ -105,12 +141,12 @@ export async function blockJoin(blocksGeoJson: string, ntaGeoJson: string): Prom
         const top = ((r.top as string[][] | null) ?? []).map(([k, v]): CountPair => [k, Number(v)]);
         const bbox: [number, number, number, number] = [Number(r.w), Number(r.s), Number(r.e), Number(r.north)];
         return {
-          key: String(r.id),
+          key: str(r.id),
           lon: bbox[0],
           lat: bbox[1],
           bbox,
-          label: String(r.label),
-          ntaCode: String(r.nta2020),
+          label: str(r.label),
+          ntaCode: str(r.nta2020),
           count: Number(r.count),
           nightCount: Number(r.night ?? 0),
           areaM2: Number(r.area_m2),
@@ -120,6 +156,33 @@ export async function blockJoin(blocksGeoJson: string, ntaGeoJson: string): Prom
           ...(top.length ? (dataset === "noise" ? { addresses: top } : { streets: top }) : {}),
         };
       });
+    },
+
+    async count(name, points) {
+      const csv = join(dir, `${name.replace(/[^a-z0-9-]/gi, "_")}.tax.csv`);
+      const q = (v: string) => `"${v.replace(/"/g, '""')}"`;
+      writeFileSync(
+        csv,
+        "lat,lon,month,category,n\n" + points.map((p) => [p.lat, p.lon, p.month ?? "", q(p.category), p.n].join(",")).join("\n"),
+      );
+      const reader = await con.runAndReadAll(`
+        WITH pts AS (
+          SELECT row_number() OVER () AS rid, *, ST_Point(lon, lat) AS pt FROM read_csv(${sqlString(csv)}, header = true, quote = '"', escape = '"',
+            columns = {'lat': 'DOUBLE', 'lon': 'DOUBLE', 'month': 'DATE', 'category': 'VARCHAR', 'n': 'DOUBLE'})
+        ), ${ASSIGN}
+        SELECT a.id, m.nta2020, m.w, m.s, strftime(p.month, '%Y-%m-%d') AS month,
+               coalesce(p.category, '') AS category, round(sum(a.w * p.n), 2) AS n
+        FROM assigned a JOIN pts p USING (rid) JOIN block_meta m USING (id)
+        GROUP BY ALL`);
+      return reader.getRowObjectsJson().map((r) => ({
+        blockId: Number(r.id),
+        nta2020: r.nta2020 ? str(r.nta2020) : null,
+        lon: Number(r.w),
+        lat: Number(r.s),
+        month: r.month ? str(r.month) : null,
+        category: str(r.category),
+        n: Number(r.n),
+      }));
     },
   };
 }
