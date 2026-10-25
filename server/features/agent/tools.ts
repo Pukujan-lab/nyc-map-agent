@@ -6,8 +6,9 @@ import { elevatorStatus, geocode, hazardsAt, nearestRestrooms, publicRestrooms, 
 import { placeActions, restroomActions, troubleActions, tripActions } from "./mapActions";
 import { buildDriveTrip } from "./drive/trip";
 import type { DriveRouter } from "./drive/router";
-import { safe, toNyLocal, tripBrief } from "./trip";
-import { openDataEntrances, type Station } from "./transit";
+import { portalFor, safe, toNyLocal, tripBrief } from "./trip";
+import { distM, openDataEntrances, type Station } from "./transit";
+import { sameStation } from "../../../src/lib/transit/serviceChanges";
 import { lineTroubles, otherLinesAt, stuckTrains, troubleSummary, type FeedAlert, type LiveVehicle } from "../../../src/lib/transit/trouble";
 import { planTrip, type PlanDeps } from "./plan";
 import { withSources, type SourceLedger } from "./freshness";
@@ -56,6 +57,10 @@ export const args = {
   find_event: z.object({ query: z.string().min(3).max(160).describe("The event's name and anything known: organiser, date, \"Luma\" or \"Eventbrite\" (e.g. \"3 Percent Club event New York October 24 2026\")") }),
   read_page: z.object({ url: z.string().url().describe("An event page from find_event results") }),
   nearest_restroom: z.object({ place: z.string().default("here") }),
+  station_exit: z.object({
+    station: z.string().min(2).default("here").describe("The subway station as the user names it (\"Herald Sq\", \"34 St-Herald Sq\"), or \"here\" for the one they are at"),
+    to: z.string().min(2).describe("Where they are going once out: a landmark or address"),
+  }),
   elevator_status: z.object({ station: z.string().min(2) }),
   line_status: z.object({ lines: z.array(z.string().regex(/^[A-Za-z0-9]{1,3}$/)).min(1).max(6).describe("Subway lines as the MTA names them, e.g. [\"L\"] or [\"4\",\"5\",\"6\"]") }),
   flyTo: z.object({ place: z.string(), zoom: z.number().min(9).max(20).optional() }),
@@ -69,6 +74,13 @@ export const args = {
   }),
   setTime: z.object({ iso: z.string().regex(/^\d{4}-\d\d-\d\dT\d\d:\d\d/) }),
 };
+
+const nearestTo = (all: Station[], p: LngLatTuple): Station | undefined => [...all].sort((a, b) => distM(a.at, p) - distM(b.at, p))[0];
+
+/** The station a rider names. Several share a name ("Times Sq", "86 St"), so the one nearest where they are going wins. */
+export function pickStation(all: Station[], name: string, toward: LngLatTuple): Station | null {
+  return nearestTo(all.filter((x) => sameStation(name, x.name)), toward) ?? null;
+}
 
 export function makeTools(ctx: ToolContext) {
   const trips = new Map<string, Trip>();
@@ -120,9 +132,10 @@ export function makeTools(ctx: ToolContext) {
     trips.set(t.id, t);
     return t;
   };
+  // A turn onto an unnamed footpath ("Turn right onto the path") tells a walker nothing, so the model never gets one.
   const walkBrief = (t: Trip) => {
     const l = t.legs[0];
-    return l.kind === "walk" ? { tripId: t.id, minutes: Math.max(1, Math.round(l.durationS / 60)), meters: Math.round(l.distanceM), turns: l.turns.slice(0, 8).map((x) => x.text) } : null;
+    return l.kind === "walk" ? { tripId: t.id, minutes: Math.max(1, Math.round(l.durationS / 60)), meters: Math.round(l.distanceM), turns: l.turns.map((x) => x.text).filter((x) => !/onto the path$/i.test(x)).slice(0, 8) } : null;
   };
 
   return {
@@ -176,6 +189,25 @@ export function makeTools(ctx: ToolContext) {
         const walk = first && w ? walkBrief(walkTrip(from, { label: first.name, at: [first.lon, first.lat] }, w)) : null;
         // Coordinates stay out of the model's view; the button carries them.
         return { restrooms: spots.map((r) => ({ name: r.name, distanceM: r.distanceM, status: r.status, hours: r.hours, openNow: r.openNow, accessibility: r.accessibility, operator: r.operator })), walkToNearest: walk };
+      }),
+    }),
+    station_exit: tool({
+      description: "Which exit to take at a subway station for a place: the exit by its corner and street, elevator notes, and the walk from that exit (minutes, turns, tripId for showRoute and openPanel). Use for \"which way out\" and \"which exit for X\".",
+      inputSchema: args.station_exit,
+      execute: sourced(async ({ station, to }: z.infer<typeof args.station_exit>) => {
+        const src = ctx.deps?.entrances ?? openDataEntrances;
+        const [all, dest] = await Promise.all([src.stations(), resolve(to)]);
+        const here = /^(here|my station|this station)$/i.test(station.trim());
+        const st = (here ? null : pickStation(all, station, at(dest))) ?? nearestTo(all, at(await resolve(here ? "here" : station)));
+        if (!st) throw new Error(`Could not find the station "${station}".`);
+        const outages = await safe(elevatorStatus(st.name), [] as string[]);
+        const exit = await portalFor(st, await safe(src.entrances(st.complexId), []), at(dest), "exit", outages);
+        const from: Place = { label: `${st.name}, ${exit.label}`, at: [exit.lon, exit.lat] };
+        const w = await safe((ctx.deps?.walk ?? routeWalk)(at(from), at(dest)), null);
+        const t = w ? walkTrip(from, { label: dest.label, at: at(dest) }, w) : null;
+        offer([{ kind: "flyTo", id: `fly:exit:${exit.lon.toFixed(5)},${exit.lat.toFixed(5)}`, label: "Show the exit", lon: exit.lon, lat: exit.lat, zoom: 18 }]);
+        if (t) offer(tripActions(t));
+        return { station: st.name, exit: exit.label, elevatorOnly: exit.elevatorOnly, outage: exit.outage, elevatorOutages: outages.slice(0, 3), walkFromExit: t ? walkBrief(t) : null };
       }),
     }),
     line_status: tool({

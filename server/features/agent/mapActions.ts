@@ -10,11 +10,18 @@ import type { LineTrouble, StuckTrain } from "../../../src/lib/transit/trouble";
 const key = (at: readonly [number, number]) => `${at[0].toFixed(5)},${at[1].toFixed(5)}`;
 const clip = (s: string, n = 40) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
 
+/** The name before the address: "Bryant Park, Manhattan Community Board 5, …" → "Bryant Park"; a bare house number keeps its street. */
+export function placeName(label: string): string {
+  const parts = label.split(",").map((p) => p.trim()).filter(Boolean);
+  if (!parts.length) return label;
+  return /^\d+[a-z]?$/i.test(parts[0]) && parts[1] ? `${parts[0]} ${parts[1]}` : parts[0];
+}
+
 /** "Show Grand Central" for a place the agent looked up. The user's own spot gets no button. */
 export function placeActions(place: { label: string; at: readonly [number, number] }): MapAction[] {
   if (/^your location$/i.test(place.label)) return [];
   const [lon, lat] = place.at;
-  return [{ kind: "flyTo", id: `fly:${key(place.at)}`, label: `Show ${clip(formatStreetText(place.label))}`, lon, lat, zoom: 16 }];
+  return [{ kind: "flyTo", id: `fly:${key(place.at)}`, label: `Show ${clip(formatStreetText(placeName(place.label)))}`, lon, lat, zoom: 16 }];
 }
 
 /** The nearest restroom (and the next one, if any) with its card. */
