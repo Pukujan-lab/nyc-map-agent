@@ -62,7 +62,7 @@ import { TapCycle } from "./tapCycle";
 /** Layers a click on the map should hand to transit instead of the area pick. */
 /** CC BY 4.0 credit for the 3D bus model (public/models/LICENSE.md), shown while it can be on screen. Trains are plain boxes (#366). */
 const VEHICLE_CREDITS = "3D buses: XD40 by kieranfarr (Sketchfab, CC BY 4.0)";
-const TRANSIT_CLICK_LAYERS = ["transit-skip", "transit-alert-skipped", "transit-bus-badge-follow", "transit-bullet", "transit-bus-badge", "transit-bus-badge-full", "transit-bus-badge-selected", "transit-vehicle-2d", "transit-vehicle-hit", "transit-vehicle-hit-stop", "transit-vehicle-hit-raised", "transit-access", "transit-entrance", "transit-station-label", "transit-station-raised", "transit-station"];
+const TRANSIT_CLICK_LAYERS = ["transit-skip", "transit-alert-skipped", "transit-bus-badge-follow", "transit-bullet", "transit-bus-badge", "transit-bus-badge-full", "transit-bus-badge-selected", "transit-vehicle-2d", "transit-vehicle-hit", "transit-vehicle-hit-stop", "transit-vehicle-hit-raised", "transit-access", "transit-entrance", "transit-line-stop", "transit-line-stop-name", "transit-station-label", "transit-station-raised", "transit-station"];
 
 const MAX_VEHICLES = 400;
 const RAISED_LIFT_EM = 2.8;
