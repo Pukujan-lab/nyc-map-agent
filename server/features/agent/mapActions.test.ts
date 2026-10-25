@@ -2,7 +2,7 @@ import { MockLanguageModelV4, convertArrayToReadableStream } from "ai/test";
 import { describe, expect, it } from "vitest";
 import { streamEvent, trip as tripSchema, type MapAction, type StreamEvent } from "../../../src/features/agent/schema";
 import type { ServiceChange } from "../../../src/lib/transit/serviceChanges";
-import { ActionCollector, placeActions, placeName, restroomActions, tripActions } from "./mapActions";
+import { ActionCollector, layerAction, placeActions, placeName, restroomActions, tripActions } from "./mapActions";
 import { POST } from "./routes";
 import { nearestRestrooms, type RestroomRow } from "./services";
 import { skippedStops } from "./trip";
@@ -188,5 +188,16 @@ describe("buttons only for places the answer stands behind", () => {
     expect(placeName("Bryant Park, Manhattan Community Board 5, New York, NY")).toBe("Bryant Park");
     expect(placeName("120, Park Avenue, New York")).toBe("120 Park Avenue");
     expect(placeActions({ label: "Bryant Park, Manhattan, New York", at: [-73.98, 40.75] })[0].label).toBe("Show Bryant Park");
+  });
+});
+
+describe("layerAction (#313)", () => {
+  it("offers one switch as a button the person taps", () => {
+    expect(layerAction("citibike")).toEqual({ kind: "showLayer", id: "layer:citibike", label: "Turn on Citi Bike docks", layer: "citibike" });
+  });
+  it("sits with the route, ahead of stop lists", () => {
+    const c = new ActionCollector();
+    c.add([{ kind: "flyTo", id: "fly:x", label: "Show X", lon: -73.98, lat: 40.75 }, layerAction("health")]);
+    expect(c.list()[0].kind).toBe("showLayer");
   });
 });

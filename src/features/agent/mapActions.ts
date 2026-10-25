@@ -1,4 +1,4 @@
-import { mapAction, type MapAction, type MapPoint, type RestroomSpot, type Trip } from "./schema";
+import { mapAction, type LayerHelpId, type MapAction, type MapPoint, type RestroomSpot, type Trip } from "./schema";
 
 /** What a tapped answer button can do to the map. Injected, so the runner is pure. */
 export interface MapActionContext {
@@ -10,6 +10,8 @@ export interface MapActionContext {
   showPoints: (points: MapPoint[], style: { color: string; title: string }) => void;
   /** Hand the trip to the phone's calendar with an alert before it leaves. */
   remind: (trip: Trip) => void;
+  /** Turn one Layers-menu switch on (#313). */
+  showLayer: (layer: LayerHelpId) => void;
 }
 
 /** Skipped stations and crash hotspots read as trouble; a plain stop list uses the line's colour. */
@@ -34,6 +36,7 @@ export function runMapAction(raw: unknown, ctx: MapActionContext, routeColor: (r
       case "showCrashes": ctx.showPoints(a.points, { color: CRASH_COLOR, title: a.label }); break;
       case "showTrouble": ctx.showPoints(a.points, { color: TROUBLE_COLOR[a.style], title: a.label }); break;
       case "remindTrip": ctx.remind(a.trip); break;
+      case "showLayer": ctx.showLayer(a.layer); break;
     }
     return { ok: true, kind: a.kind };
   } catch (e) {
