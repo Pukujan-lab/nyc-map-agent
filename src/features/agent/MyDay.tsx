@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Search, TrainFront, TriangleAlert } from "lucide-react";
+import { Briefcase, ChevronRight, House, Search, TrainFront, TriangleAlert } from "lucide-react";
 import { useMenuT } from "@/lib/i18n/menuText";
 import { useState, type ReactNode } from "react";
 import { useLookedUp, useMemoryPrefs, type LookedUp } from "@/lib/memory/memory";
@@ -45,7 +45,7 @@ export default function MyDay({ onClose }: { onClose: () => void }) {
   const memory = useMemoryPrefs();
   const places = useHomeWork();
   const looked = useLookedUp();
-  const { seedChat } = useMapState();
+  const { seedChat, flyTo } = useMapState();
   const usual: Array<[CommuteTo, UsualTrip]> = (["work", "home"] as const).flatMap((to) => {
     const u = readUsual(to);
     return u ? [[to, u] as [CommuteTo, UsualTrip]] : [];
@@ -82,6 +82,17 @@ export default function MyDay({ onClose }: { onClose: () => void }) {
       </Section>
       <div className={RULE} />
       <Section id="rides" icon={<TrainFront className="h-5 w-5 text-[#93c5fd]" aria-hidden />} label={t("yourRides")} open={open === "rides"} onToggle={toggle}>
+        {places.home || places.work ? (
+          // Saved places (#313): one tap flies the map back to them.
+          <div className="flex flex-wrap gap-1.5 px-2 pb-1">
+            {([["home", places.home, House], ["work", places.work, Briefcase]] as const).map(([k, spot, Icon]) => spot ? (
+              <button key={k} type="button" data-testid={`saved-${k}`} onClick={() => { flyTo({ lon: spot.lon, lat: spot.lat, zoom: 16 }); onClose(); }}
+                className="flex h-9 max-w-full items-center gap-1.5 rounded-full border border-[rgba(148,163,184,0.25)] px-3 text-[13px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]">
+                <Icon className="h-4 w-4 shrink-0" aria-hidden /><span className="truncate">{t(k)} · {spot.label}</span>
+              </button>
+            ) : null)}
+          </div>
+        ) : null}
         {chips.length && places.home && places.work ? (
           <div className="flex flex-wrap gap-1.5 px-2 pb-1">
             {chips.map((c) => (

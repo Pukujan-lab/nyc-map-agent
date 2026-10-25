@@ -36,6 +36,8 @@ export interface PanelContent {
   /** Label for the minimized peek chip, e.g. "Q · 2 min". Defaults to title. */
   peek?: string;
   onBack?: () => void;
+  /** How high a phone sheet opens. A list worth reading (Lines) opens at half; most panels start at the peek. */
+  snap?: SheetSnap;
 }
 
 /** A quick-filter chip under the search bar. Features register their own. */
@@ -131,7 +133,7 @@ export function PanelProvider({ children }: { children: ReactNode }) {
       selectNta(null);
       setContent(next);
       setCollapsed(false);
-      setSnap("peek");
+      setSnap(next.snap ?? "peek");
       dispatch({ type: "showSheet" });
     },
     [selectNta],

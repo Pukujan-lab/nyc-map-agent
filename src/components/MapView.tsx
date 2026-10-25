@@ -18,7 +18,8 @@ import { applyPlaces, classesFor, placesStale, usePlaces, withQuickPlaces } from
 import { insetFilters } from "@/lib/map/miniStyle";
 import { useMapOptions } from "@/lib/map/mapOptions";
 import { applyBuildings, cityDetail, mapLevel, wantsFlatBuildings } from "@/lib/map/buildings";
-import { focusLandmarks, installLandmarkLabels, isLandmarkLayer } from "@/lib/map/landmarkLabels";
+import { focusLandmarks, guideLandmarkNamed, installLandmarkLabels, isLandmarkLayer, landmarkAt } from "@/lib/map/landmarkLabels";
+import { LandmarkDetails } from "@/components/LandmarkDetails";
 import { STREET_LEVEL_RANGE_M, describeGuide, pickGuideLandmarks } from "@/lib/guide/landmarkGuide";
 import { setWalkEye } from "@/lib/map/walkEye";
 import { applyMapTheme, buildingEdge, setThemeCoords, usePalette } from "@/lib/theme";
@@ -700,6 +701,12 @@ export function MapView({
         });
         return;
       }
+      // A landmark badge or name (#325): its picture, so someone can tell where they are.
+      const mark = clicked ? landmarkAt(clicked, event.point) : null;
+      if (mark) {
+        showPanel({ id: `landmark:${mark.id}`, title: mark.name, subtitle: `Landmark · ${mark.borough}`, details: <LandmarkDetails landmark={mark} /> });
+        return;
+      }
       const dir = city3d ? signsMod.current?.directoryAt(event.target, event.lngLat.lng, event.lngLat.lat) : null;
       if (dir) {
         const shops = (dir.dir ?? "").split("|").filter(Boolean);
@@ -712,7 +719,7 @@ export function MapView({
               <ul className="space-y-1 text-sm">
                 {shops.map((name) => <li key={name}>{name}</li>)}
               </ul>
-              <DirectionsFromHere lon={dir.lng} lat={dir.lat} />
+              <DirectionsFromHere lon={dir.lng} lat={dir.lat} label={dir.name} />
             </div>
           ),
         });
@@ -725,11 +732,12 @@ export function MapView({
       if (walking) {
         const hit = eyePick(event.target, event.point.x, event.point.y);
         if (hit?.kind === "landmark") {
+          const guide = guideLandmarkNamed(hit.landmark.name);
           showPanel({
             id: `landmark:${hit.landmark.id}`,
             title: hit.landmark.name,
             subtitle: "Landmark",
-            details: <DirectionsFromHere lon={hit.landmark.lon} lat={hit.landmark.lat} />,
+            details: guide ? <LandmarkDetails landmark={guide} /> : <DirectionsFromHere lon={hit.landmark.lon} lat={hit.landmark.lat} label={hit.landmark.name} />,
           });
           return;
         }
@@ -739,7 +747,7 @@ export function MapView({
               id: `school:${hit.props.school}`,
               title: hit.props.school,
               subtitle: "School · NYC DOE (LCGMS)",
-              details: <DirectionsFromHere lon={hit.lng} lat={hit.lat} />,
+              details: <DirectionsFromHere lon={hit.lng} lat={hit.lat} label={hit.props.school} />,
             });
             return;
           }
@@ -753,7 +761,7 @@ export function MapView({
               details: (
                 <div className="space-y-2">
                   {shops.length ? <ul className="space-y-1 text-sm">{shops.map((name) => <li key={name}>{name}</li>)}</ul> : null}
-                  <DirectionsFromHere lon={shop.lng} lat={shop.lat} />
+                  <DirectionsFromHere lon={shop.lng} lat={shop.lat} label={shop.name} />
                 </div>
               ),
             });

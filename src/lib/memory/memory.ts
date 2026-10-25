@@ -143,6 +143,28 @@ function writeLookedUp(list: LookedUp[], storage: Store | undefined): void {
   }
 }
 
+/**
+ * Save a place as Home or Work (#313), in the shape the daily card reads. Returns false when
+ * Home & Work is switched off in What we remember, so nothing is kept.
+ */
+export function saveHomeWork(which: "home" | "work", spot: { label: string; lon: number; lat: number }, storage: Store | undefined = local()): boolean {
+  if (!remembers("homeWork") || !storage) return false;
+  let saved: Record<string, unknown> = {};
+  try {
+    const v = JSON.parse(storage.getItem(HOME_WORK_KEY) ?? "{}") as unknown;
+    if (v && typeof v === "object") saved = v as Record<string, unknown>;
+  } catch {
+    /* unreadable: start fresh */
+  }
+  try {
+    storage.setItem(HOME_WORK_KEY, JSON.stringify({ ...saved, [which]: { label: spot.label.trim().slice(0, 80), lon: spot.lon, lat: spot.lat } }));
+  } catch {
+    return false;
+  }
+  notify();
+  return true;
+}
+
 /** Keep a planned trip, newest first, at most five; the same trip again moves to the top. */
 export function rememberLookup(trip: Omit<LookedUp, "t">, now = Date.now(), storage: Store | undefined = local()): void {
   if (!remembers("trips")) return;
