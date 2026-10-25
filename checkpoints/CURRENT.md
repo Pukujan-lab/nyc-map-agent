@@ -12,6 +12,7 @@ GitHub Issues own task scope and progress; this file is a projection of them, no
 
 ## Completed recently
 
+- **A long chat keeps working (2026-10-25):** after about 15 exchanges every new question failed, because the app sent the whole conversation and the server refuses more than 30 messages. The app now sends only the latest 30, starting on a question (#444).
 - **A repeat visit draws the lines at once (2026-10-25):** on every visit the map waited for the network before it could draw subway lines and stations, even though they had not changed since the last visit. Line shapes and stations, the bus line list, the X-ray station data and district outlines are now saved in the browser's IndexedDB after they load and put back at the next start (up to 3 days old). They are marked stale, so fresh data replaces them in the background. Live trains and alerts are never kept (#368).
 - **Restrooms and line status answer without the model (2026-10-25):** when the daily budget ran out or the model failed, every question got the same "resting" or "failed" message, even the two people ask most in a hurry. Now "nearest restroom" and "is the N train running" are answered straight from the restroom list and the live MTA feed, with the same buttons as a model answer. Other questions keep the usual message (#199).
 - **Restroom kiosks stand on the pavement (2026-10-25):** in street view, many restroom kiosks were drawn inside a library or park house, because the city records the restroom at a point inside the building. A kiosk recorded more than 9 metres from the nearest street now moves straight toward that street until it is 7 metres from the centre line, on the same side. Points already on the pavement, and those with no street within 45 metres, stay where the city put them. This was one of the rough items in the stability list (#295).
@@ -58,8 +59,7 @@ After pulling main, run `pnpm install`: main now needs `xstate`, and #349 change
 
 1. **Finish the remaining-work list in `docs/PDD.md`** (items 1 to 9: menu row, the dropdowns, quick bar, memory summary, task-screen restyle, dead ends). Item 10, the screen-space rules, is done.
 2. **Underground help that never lets you miss your exit or get lost inside a station:** count stops from the saved trip and timetable when there is no signal, and keep exit guidance ready before going down (#373).
-3. **Fix the conversation length limit:** the server caps chat history at 30 messages, so a question fails with an error after about 15 exchanges.
-4. **Refresh the document index:** `docs/CONTINUITY_INDEX.md` marks `AGENTS.md` and `docs/ARCHITECTURE.md` as changed since their last review. Review them, then regenerate the index with the `continuity docs render` command once the tool is installed; the index is generated, so don't edit it by hand.
+3. **Refresh the document index:** `docs/CONTINUITY_INDEX.md` marks `AGENTS.md` and `docs/ARCHITECTURE.md` as changed since their last review. Review them, then regenerate the index with the `continuity docs render` command once the tool is installed; the index is generated, so don't edit it by hand.
 
 ## Workspace
 
