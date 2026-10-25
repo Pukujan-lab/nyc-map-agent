@@ -4,7 +4,8 @@
  * browser records one short turn and posts it here; we pass it to Whisper on
  * Groq and return the text. The audio is not stored or logged. GROQ_API_KEY is
  * read here only and never sent to the client; without it this answers 503
- * and the app says voice isn't available.
+ * and the app says voice isn't available. With `lang=auto` (phones, no language
+ * picked) Whisper detects the spoken language and we return it with the text.
  */
 import { clientIp } from "../../lib/clientIp";
 import { createLimiter } from "./fair-use";
@@ -28,6 +29,18 @@ export function whisperLang(tag: string | null): string | null {
   return /^[a-z]{2}$/.test(two) ? two : null;
 }
 
+/** Whisper's detected language ("spanish", "es") as a two-letter code, or null. Pure, for tests. */
+const WHISPER_NAMES: Record<string, string> = {
+  english: "en", spanish: "es", chinese: "zh", mandarin: "zh", cantonese: "zh", russian: "ru", bengali: "bn",
+  "haitian creole": "ht", haitian: "ht", french: "fr", korean: "ko", arabic: "ar", urdu: "ur", hindi: "hi",
+  polish: "pl", portuguese: "pt", italian: "it", japanese: "ja", ukrainian: "uk", yiddish: "yi", vietnamese: "vi",
+};
+export function detectedLang(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const v = raw.trim().toLowerCase();
+  return /^[a-z]{2}$/.test(v) ? v : WHISPER_NAMES[v] ?? null;
+}
+
 export async function transcribe(form: FormData, headers: Headers, fetchImpl: typeof fetch = fetch): Promise<Response> {
   const { key, url, model } = sttConfig();
   if (!key) return json({ error: "stt_unavailable" }, 503);
@@ -39,14 +52,18 @@ export async function transcribe(form: FormData, headers: Headers, fetchImpl: ty
   const out = new FormData();
   out.set("file", audio, typeof (audio).name === "string" ? (audio).name : "speech.webm");
   out.set("model", model);
-  out.set("response_format", "json");
-  const lang = whisperLang(typeof form.get("lang") === "string" ? (form.get("lang") as string) : null);
+  const raw = typeof form.get("lang") === "string" ? (form.get("lang") as string) : null;
+  const auto = raw === "auto";
+  // verbose_json carries the language Whisper heard; plain json is enough when we told it.
+  out.set("response_format", auto ? "verbose_json" : "json");
+  const lang = auto ? null : whisperLang(raw);
   if (lang) out.set("language", lang);
   try {
     const r = await fetchImpl(url, { method: "POST", headers: { authorization: `Bearer ${key}` }, body: out, signal: AbortSignal.timeout(20_000) });
     if (!r.ok) return json({ error: "stt_failed" }, 502);
-    const d = (await r.json()) as { text?: string };
-    return json({ text: (d.text ?? "").trim() });
+    const d = (await r.json()) as { text?: string; language?: string };
+    const heard = auto ? detectedLang(d.language) : null;
+    return json({ text: (d.text ?? "").trim(), ...(heard ? { lang: heard } : {}) });
   } catch {
     return json({ error: "stt_failed" }, 502);
   }
