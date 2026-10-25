@@ -55,6 +55,7 @@ import { AgentHome, AnswerCard, WorkingPanel } from "./AgentHome";
 import { DailyCard, TaskButtons } from "./HomeTasks";
 import { rememberCommute, useHomeWork } from "./commute";
 import { memorySummary } from "./memorySummary";
+import { recentTurns } from "./chatWindow";
 import { rememberChat, rememberLookup } from "@/lib/memory/memory";
 import { useLangPref } from "@/lib/voice/langPref";
 import { useVoicePrefs } from "@/lib/voice/voicePrefs";
@@ -336,7 +337,7 @@ export default function AgentOverlay() {
     try {
       const memory = home ? memorySummary() : null;
       const underNow = getUndergroundNow();
-      for await (const ev of askAgent({ messages: history.map(({ role, content }) => ({ role, content })), location, mode, now: new Date().toISOString(), ...(askReq ? { context: askReq.context } : {}), ...(home && lang ? { lang } : {}), ...(memory ? { memory } : {}), ...(underNow ? { underground: underNow } : {}) }, abort.current.signal)) {
+      for await (const ev of askAgent({ messages: recentTurns(history), location, mode, now: new Date().toISOString(), ...(askReq ? { context: askReq.context } : {}), ...(home && lang ? { lang } : {}), ...(memory ? { memory } : {}), ...(underNow ? { underground: underNow } : {}) }, abort.current.signal)) {
         setSteps((s) => applyStep(s, ev));
         if (ev.type === "text") {
           spoken += ev.text;

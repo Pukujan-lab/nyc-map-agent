@@ -243,11 +243,14 @@ export type AskContext = z.infer<typeof askContext>;
 /** A BCP 47 language tag as browsers report it ("en-US", "zh-Hans-CN"). */
 export const langTag = z.string().max(35).regex(/^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8}){0,3}$/);
 
+/** Most chat messages one question may carry; the app sends only the latest ones. */
+export const MAX_MESSAGES = 30;
+
 export const requestBody = z.object({
   messages: z
     .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().max(4000) }))
     .min(1)
-    .max(30),
+    .max(MAX_MESSAGES),
   /** Browser geolocation, only when the user granted it. */
   location: z.object({ lon: z.number(), lat: z.number() }).nullable().default(null),
   /** The mode chip (Walk / Transit / Drive); the model treats it as a preference. */
