@@ -12,7 +12,9 @@ for (const [width, height] of [[375, 667], [320, 568]]) {
       { type: "text", text: "最近的厕所在中央公园的 Heckscher 运动场。" }, { type: "done" },
     ]) }));
     await page.goto("/");
-    await expect(page.getByRole("button", { name: "Restroom" })).toBeVisible();
+    // The agent overlay loads lazily; a busy machine can take a few seconds.
+    await expect(page.getByRole("button", { name: "Restroom" })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("menu-pill")).toHaveText("My day");
     await page.getByLabel("Ask the assistant").fill("我要上厕所");
     await page.getByRole("button", { name: "Send", exact: true }).click();
     const ask = page.getByLabel("问助手");
@@ -24,5 +26,14 @@ for (const [width, height] of [[375, 667], [320, 568]]) {
     const box = await restroom.boundingBox();
     expect(box!.x + box!.width).toBeLessThanOrEqual(width);
     if (SHOTS) await page.screenshot({ path: `${SHOTS}/zh-home-${width}.png` });
+
+    // The top menu row follows too: the pill, and the Settings dropdown.
+    await expect(page.getByTestId("menu-pill")).toHaveText("我的一天");
+    await page.getByTestId("menu-settings").click();
+    const dropdown = page.getByRole("region", { name: "设置" });
+    await expect(dropdown.getByLabel("语言")).toBeVisible();
+    const menu = await dropdown.boundingBox();
+    expect(menu!.x + menu!.width).toBeLessThanOrEqual(width);
+    if (SHOTS) await page.screenshot({ path: `${SHOTS}/zh-settings-${width}.png` });
   });
 }

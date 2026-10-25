@@ -25,9 +25,11 @@ GitHub Issues own task scope and progress; this file is a projection of them, no
 |---|---|---|
 | #415 | Held trains and feed-skipped stops from live MTA data, on the map and in the line panel; replaces #198 | Auto-merge on |
 | #359 | Live View camera and compass scaffold, behind a flag (groundwork for fixing which way you face after the subway) | Auto-merge on |
-| #416 | The app's own buttons, ask bar and station prompt follow the language you ask in (eight languages) | Auto-merge on |
+| #417 | The top menu row and its dropdowns, including My day, follow the app language too | Auto-merge on |
 | #378 | Docs: realign the project, hackathon writeup and research sources | Open for review |
 | #232 | The release bot's release pull request | Left to the bot |
+
+#416 (app text follows the asked language) merged on 2026-10-25.
 
 Merged from the sort: #209, #348, #349, #394, #408, #414.
 
