@@ -12,6 +12,13 @@ GitHub Issues own task scope and progress; this file is a projection of them, no
 
 ## Completed recently
 
+- **A repeat visit draws the lines at once (2026-10-25):** on every visit the map waited for the network before it could draw subway lines and stations, even though they had not changed since the last visit. Line shapes and stations, the bus line list, the X-ray station data and district outlines are now saved in the browser's IndexedDB after they load and put back at the next start (up to 3 days old). They are marked stale, so fresh data replaces them in the background. Live trains and alerts are never kept (#368).
+- **Restrooms and line status answer without the model (2026-10-25):** when the daily budget ran out or the model failed, every question got the same "resting" or "failed" message, even the two people ask most in a hurry. Now "nearest restroom" and "is the N train running" are answered straight from the restroom list and the live MTA feed, with the same buttons as a model answer. Other questions keep the usual message (#199).
+- **Restroom kiosks stand on the pavement (2026-10-25):** in street view, many restroom kiosks were drawn inside a library or park house, because the city records the restroom at a point inside the building. A kiosk recorded more than 9 metres from the nearest street now moves straight toward that street until it is 7 metres from the centre line, on the same side. Points already on the pavement, and those with no street within 45 metres, stay where the city put them. This was one of the rough items in the stability list (#295).
+- **A speed check against the baseline (2026-10-25):** nobody had compared the map with the 2026-10-23 baseline since the speed work landed. A warm load of the live site now makes 45 requests instead of about 63, and the page uses 71 MB of script memory instead of about 200 MB. The crime and noise summaries still download in the simple view until #434 is live. The owner's phone and work computer are still unmeasured (#362).
+- **postcss is past its two known advisories (2026-10-25):** the security check had been told to ignore two postcss advisories, because the app pinned postcss 8.4.47. postcss 8.5.31 fixes both, so the pin is raised and the two ignore lines are gone. The vitest and maplibre majors in #93 are still open.
+- **The location policy matches the app again (2026-10-25):** the draft policy in `docs/PRIVACY.md` still described saved home and work as an unmerged pull request, and the assistant told people their location was sent "only for that question" when it goes with every question until they stop sharing. The draft now describes what ships: what the phone remembers and Delete everything, the internet address held in memory for up to 3 hours to share the free allowance, and the 30-day timing rows that carry no question or location. The on-screen sentence now says what the code does. The policy is still a draft until the owner approves it (#374).
+- **The assistant helps pick map layers (2026-10-25, #313):** there was no help choosing what the map shows. Asked where to find Citi Bike docks, clinics, parks, bus stops or street art, the agent now answers with a "Turn on …" button for the one layer that shows it. The person taps it; the agent never switches a layer itself, and the switch is the same one in the Layers menu. Saving Home and Work, the issue's other ask, shipped in #427.
 - **A limit on every API call from one address (2026-10-25):** only the assistant had a per-address limit, so refresh spam or a script could hit the rest of `/api/*` as hard as it liked. The server now answers 429 with a wait time once one address passes 1,200 requests in a minute (`API_RATE_PER_MINUTE`, 0 turns it off). Map tiles and vehicle models are left out, and so is local development. The Cloudflare edge rule is still the owner's to set (#369).
 - **Small fixes across open issues (2026-10-25):** several open issues each had one piece left. Pressing the train you follow again lets go of it (#297). Tapping a landmark building from above opens its photo (#311). Stations with four or more lines are named from zoom 14 (#186). The 2.6 MB of noise and crash data loads only when those layers can show (#368). Bus arrivals pause on an idle tab (#369). The agent keeps to getting around NYC, ignores rule changes inside tool results and caps reply length (#199). A question saved underground goes out once when the connection returns, not once per clock tick.
 - **Remind me on the trip preview, and neighbourhoods by name (2026-10-25):** after a trip planned for later, the answer closes and the trip preview card stays, but that card had no Remind me button, so "tap Remind me" pointed at nothing. The preview card now has the button. Separately, a bare "Flushing" went to Flushing Bay at LaGuardia, because the address search treats a neighbourhood name as a venue. Twenty neighbourhoods newcomers ask about (Flushing, Jackson Heights, Chinatown, Sunset Park and others) now resolve to their main corner and station.
@@ -38,13 +45,10 @@ GitHub Issues own task scope and progress; this file is a projection of them, no
 
 | Pull request | What it is | State |
 |---|---|---|
-| #415 | Held trains and feed-skipped stops from live MTA data, on the map and in the line panel; replaces #198 | Auto-merge on |
-| #359 | Live View camera and compass scaffold, behind a flag (groundwork for fixing which way you face after the subway) | Auto-merge on |
-| #417 | The top menu row and its dropdowns, including My day, follow the app language too | Auto-merge on |
 | #378 | Docs: realign the project, hackathon writeup and research sources | Open for review |
 | #232 | The release bot's release pull request | Left to the bot |
 
-#416 (app text follows the asked language) merged on 2026-10-25.
+#416 (app text follows the asked language), #415 (held trains and feed-skipped stops), #359 (Live View camera scaffold) and #417 (menu row language) merged on 2026-10-25.
 
 Merged from the sort: #209, #348, #349, #394, #408, #414.
 
@@ -55,8 +59,7 @@ After pulling main, run `pnpm install`: main now needs `xstate`, and #349 change
 1. **Finish the remaining-work list in `docs/PDD.md`** (items 1 to 9: menu row, the dropdowns, quick bar, memory summary, task-screen restyle, dead ends). Item 10, the screen-space rules, is done.
 2. **Underground help that never lets you miss your exit or get lost inside a station:** count stops from the saved trip and timetable when there is no signal, and keep exit guidance ready before going down (#373).
 3. **Fix the conversation length limit:** the server caps chat history at 30 messages, so a question fails with an error after about 15 exchanges.
-4. **Save home and work** in My day for the daily explorer. The idea came from #327, which was closed because its code targets the old home screen.
-5. **Refresh the document index:** `docs/CONTINUITY_INDEX.md` marks `AGENTS.md` and `docs/ARCHITECTURE.md` as changed since their last review. Review them, then regenerate the index with the `continuity docs render` command once the tool is installed; the index is generated, so don't edit it by hand.
+4. **Refresh the document index:** `docs/CONTINUITY_INDEX.md` marks `AGENTS.md` and `docs/ARCHITECTURE.md` as changed since their last review. Review them, then regenerate the index with the `continuity docs render` command once the tool is installed; the index is generated, so don't edit it by hand.
 
 ## Workspace
 
