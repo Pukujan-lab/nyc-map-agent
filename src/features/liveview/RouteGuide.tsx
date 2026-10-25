@@ -9,7 +9,6 @@ import { ArrowUp, CornerUpLeft, CornerUpRight, Flag, LocateFixed, Navigation, Sq
 import type { Map as MapLibreMap } from "maplibre-gl";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useFlag } from "@/lib/flags";
 import { onMapInstance } from "@/lib/map/mapInstance";
 import { LOOK_CENTER_DISTANCE_M, poseAlongRoute } from "@/lib/map/walk";
 import { useDataView } from "@/lib/store/DataViewContext";
