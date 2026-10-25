@@ -7,6 +7,8 @@ import type { PolygonRings } from "@/lib/api/nta";
  * year of 311 data stays a few thousand squares.
  */
 export const BLOCK_GRID_DEG = 0.003;
+/** The ingest's fine grid behind the tax-block counts (#120): ~22 m, inside the join's ~40 m street snap. */
+export const FINE_GRID_DEG = 0.0002;
 
 export interface BlockKey {
   /** `${row}:${col}` — stable across datasets, so noise and crashes line up. */

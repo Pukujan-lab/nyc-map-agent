@@ -105,6 +105,21 @@ export function addCell(
   out.total += count;
 }
 
+/** One real tax block (Octo, #120): keyed by its tile feature id so the block tiles shade it. */
+export function addTaxBlock(
+  out: SourceCounts,
+  blockId: string,
+  lat: number,
+  lon: number,
+  ntaCode: string | null,
+  count: number,
+): void {
+  if (!(count > 0)) return;
+  out.blocks[blockId] = { lat, lon, ntaCode: ntaCode ?? "", count };
+  if (ntaCode) out.byNta[ntaCode] = (out.byNta[ntaCode] ?? 0) + count;
+  out.total += count;
+}
+
 async function fetchGrid(
   source: GridSource,
   bounds: WindowBounds | null,
