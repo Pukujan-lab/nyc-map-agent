@@ -8,6 +8,13 @@ describe("noModelIntent", () => {
     expect(noModelIntent("¿Dónde hay un baño cerca?")).toEqual({ kind: "restroom" });
   });
 
+  it("knows the Restroom button's question in every app language", async () => {
+    const { tr } = await import("../../../src/lib/i18n/appLang");
+    for (const lang of ["en", "es", "zh", "ru", "bn", "ht", "fr", "ko"] as const) {
+      expect(noModelIntent(tr(lang, "askRestroom")), lang).toEqual({ kind: "restroom" });
+    }
+  });
+
   it("reads a subway line by its capital letter or number", () => {
     expect(noModelIntent("is the N train running?")).toEqual({ kind: "line", route: "N" });
     expect(noModelIntent("any delays on the 7 line")).toEqual({ kind: "line", route: "7" });
