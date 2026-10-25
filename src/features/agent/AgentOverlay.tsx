@@ -39,7 +39,7 @@ import { TripPreview } from "./TripPreview";
 import { TripSummary, selectAlternative } from "./TripSummary";
 import { nameRemindButton, remindAt, saveReminder } from "./reminder";
 import { toast } from "sonner";
-import { clearPoints, routeColor, showPoints, showTrip } from "./tripLayer";
+import { clearPoints, clearTrip, routeColor, showPoints, showTrip } from "./tripLayer";
 import { runMapAction, TROUBLE_COLOR, type MapActionContext } from "./mapActions";
 import { setQuickLayer } from "@/lib/quickLayers";
 import { setOptions } from "@/lib/map/mapOptions";
@@ -437,6 +437,12 @@ export default function AgentOverlay() {
   useEffect(() => () => abort.current?.abort(), []);
   // Other features (underground help) prepare for the trip on screen through core.
   useEffect(() => publishActiveTrip(trip), [trip]);
+  // No trip, no trip line: closing the card or stopping a walk used to leave the dotted route on the map.
+  useEffect(() => {
+    if (trip) return;
+    const m = getMapInstance();
+    if (m) clearTrip(m);
+  }, [trip]);
   // A restroom answer shows the restroom on the map at once, framed with you when your
   // location is shared, instead of leaving the whole city in view (owner report, 2026-10-24).
   const lastActions = messages.at(-1)?.role === "assistant" ? messages.at(-1)?.actions : undefined;
@@ -829,6 +835,8 @@ export default function AgentOverlay() {
               setRoutePoint("start", { lon: trip.origin.at[0], lat: trip.origin.at[1] });
               setRoutePoint("end", { lon: trip.destination.at[0], lat: trip.destination.at[1] });
               setFollowingRoute(true);
+              // Walking guidance draws its own route, so the trip line goes; it would stay after Stop.
+              setTrip(null);
               flyTo({ lon: trip.origin.at[0], lat: trip.origin.at[1], zoom: 16 });
               return;
             }
