@@ -24,6 +24,12 @@ function movedM(a: { lng: number; lat: number }, b: { lng: number; lat: number }
 }
 
 
+// three 0.152+ converts hex colours to linear and 0.165+ dropped the legacy light
+// scale. The scenes were tuned on 0.134, so keep its colour handling and
+// multiply each light by π, which is what the legacy mode did inside.
+THREE.ColorManagement.enabled = false;
+const LEGACY_LIGHT = Math.PI;
+
 const renderers = new WeakMap<WebGLRenderingContext | WebGL2RenderingContext, THREE.WebGLRenderer>();
 
 /** One three.js renderer per MapLibre GL context, shared by every custom layer. */
@@ -32,7 +38,7 @@ export function sharedRenderer(map: MaplibreMap, gl: WebGLRenderingContext | Web
   if (!r) {
     r = new THREE.WebGLRenderer({ canvas: map.getCanvas(), context: gl, antialias: true });
     r.autoClear = false;
-    r.outputEncoding = THREE.sRGBEncoding;
+    r.outputColorSpace = THREE.SRGBColorSpace;
     renderers.set(gl, r);
   }
   return r;
@@ -268,8 +274,8 @@ export function createVehicleLayer() {
   let renderer: THREE.WebGLRenderer | null = null;
   const scene = new THREE.Scene();
   const camera = new THREE.Camera();
-  scene.add(new THREE.AmbientLight(0xffffff, 1.6));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.4);
+  scene.add(new THREE.AmbientLight(0xffffff, 1.6 * LEGACY_LIGHT));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.4 * LEGACY_LIGHT);
   sun.position.set(0.4, -0.6, 1);
   scene.add(sun);
   const origin = MercatorCoordinate.fromLngLat([-73.97, 40.73], 0);
@@ -648,8 +654,8 @@ export function createHydrantLayer(): CustomLayerInterface {
   let renderer: THREE.WebGLRenderer | null = null;
   const scene = new THREE.Scene();
   const camera = new THREE.Camera();
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x6b6b6b, 1.2));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.1);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x6b6b6b, 1.2 * LEGACY_LIGHT));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.1 * LEGACY_LIGHT);
   sun.position.set(0.4, -0.6, 1);
   scene.add(sun);
   const origin = MercatorCoordinate.fromLngLat([-73.97, 40.73], 0);
@@ -862,7 +868,7 @@ function slotMaterial(atlas: THREE.Texture, road: boolean): THREE.MeshBasicMater
       .replace("#include <common>", "#include <common>\nattribute vec2 slot;")
       .replace(
         "#include <uv_vertex>",
-        `#include <uv_vertex>\nvUv = vec2((slot.x + ${road ? "1.0 - uv.x" : "uv.x"}) / ${COLS.toFixed(1)}, 1.0 - (slot.y + 1.0 - uv.y) * ${(SLOT_H / ATLAS).toFixed(6)});`,
+        `#include <uv_vertex>\nvMapUv = vec2((slot.x + ${road ? "1.0 - uv.x" : "uv.x"}) / ${COLS.toFixed(1)}, 1.0 - (slot.y + 1.0 - uv.y) * ${(SLOT_H / ATLAS).toFixed(6)});`,
       );
   };
   // Road letters flip u: the layer matrix mirrors handedness, which read them backwards.
@@ -880,7 +886,7 @@ export function createStreetSignsLayer(): CustomLayerInterface {
   canvas.height = ATLAS;
   const g = canvas.getContext("2d")!;
   const atlas = new THREE.CanvasTexture(canvas);
-  atlas.encoding = THREE.sRGBEncoding;
+  atlas.colorSpace = THREE.SRGBColorSpace;
   atlas.anisotropy = 8;
   // Road letters: same slot grid at half resolution, white on clear.
   const roadCanvas = document.createElement("canvas");
@@ -888,7 +894,7 @@ export function createStreetSignsLayer(): CustomLayerInterface {
   roadCanvas.height = ATLAS / 2;
   const rg = roadCanvas.getContext("2d")!;
   const roadAtlas = new THREE.CanvasTexture(roadCanvas);
-  roadAtlas.encoding = THREE.sRGBEncoding;
+  roadAtlas.colorSpace = THREE.SRGBColorSpace;
   roadAtlas.anisotropy = 8;
 
   // One draw call per part, for every sign in view.
@@ -911,8 +917,8 @@ export function createStreetSignsLayer(): CustomLayerInterface {
     m.castShadow = m !== roads && m !== faces;
     scene.add(m);
   }
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a8a, 1.1));
-  const sun = new THREE.DirectionalLight(0xffffff, 0.6);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a8a, 1.1 * LEGACY_LIGHT));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.6 * LEGACY_LIGHT);
   sun.position.set(0.4, -0.6, 1);
   scene.add(sun);
 
@@ -1072,7 +1078,7 @@ function gridMaterial(tex: THREE.Texture, cols: number, rows: number, opts: THRE
   m.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", "#include <common>\nattribute vec2 slot;")
-      .replace("#include <uv_vertex>", `#include <uv_vertex>\nvUv = vec2((slot.x + uv.x) / ${cols.toFixed(1)}, 1.0 - (slot.y + 1.0 - uv.y) / ${rows.toFixed(1)});`);
+      .replace("#include <uv_vertex>", `#include <uv_vertex>\nvMapUv = vec2((slot.x + uv.x) / ${cols.toFixed(1)}, 1.0 - (slot.y + 1.0 - uv.y) / ${rows.toFixed(1)});`);
   };
   m.customProgramCacheKey = () => `grid-${cols}x${rows}`;
   return m;
@@ -1167,14 +1173,14 @@ export function createFurnitureLayer(): CustomLayerInterface {
   busCanvas.height = 512 * BUS_ROWS;
   const bg = busCanvas.getContext("2d")!;
   const busTex = new THREE.CanvasTexture(busCanvas);
-  busTex.encoding = THREE.sRGBEncoding;
+  busTex.colorSpace = THREE.SRGBColorSpace;
   busTex.anisotropy = 8;
   const kioskCanvas = document.createElement("canvas");
   kioskCanvas.width = 2048;
   kioskCanvas.height = 512;
   drawKioskPanels(kioskCanvas.getContext("2d")!);
   const kioskTex = new THREE.CanvasTexture(kioskCanvas);
-  kioskTex.encoding = THREE.sRGBEncoding;
+  kioskTex.colorSpace = THREE.SRGBColorSpace;
   kioskTex.anisotropy = 8;
 
   const busPoles = new THREE.InstancedMesh(
@@ -1203,8 +1209,8 @@ export function createFurnitureLayer(): CustomLayerInterface {
     m.castShadow = m !== busFaces && m !== kioskFaces;
     scene.add(m);
   }
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a8a, 1.1));
-  const sun = new THREE.DirectionalLight(0xffffff, 0.6);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a8a, 1.1 * LEGACY_LIGHT));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.6 * LEGACY_LIGHT);
   sun.position.set(0.4, -0.6, 1);
   scene.add(sun);
 
@@ -1570,7 +1576,7 @@ export function createStorefrontLayer(): CustomLayerInterface {
   canvas.height = 1024;
   const g = canvas.getContext("2d")!;
   const atlas = new THREE.CanvasTexture(canvas);
-  atlas.encoding = THREE.sRGBEncoding;
+  atlas.colorSpace = THREE.SRGBColorSpace;
   // One upload per changed sign set; no mipmap chain to rebuild.
   atlas.generateMipmaps = false;
   atlas.minFilter = THREE.LinearFilter;
@@ -1582,7 +1588,7 @@ export function createStorefrontLayer(): CustomLayerInterface {
   material.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", "#include <common>\nattribute vec2 slot;")
-      .replace("#include <uv_vertex>", "#include <uv_vertex>\nvUv = vec2((slot.x + uv.x) * 0.5, 1.0 - (slot.y + 1.0 - uv.y) / 32.0);");
+      .replace("#include <uv_vertex>", "#include <uv_vertex>\nvMapUv = vec2((slot.x + uv.x) * 0.5, 1.0 - (slot.y + 1.0 - uv.y) / 32.0);");
   };
   const mesh = new THREE.InstancedMesh(geometry, material, MAX);
   mesh.frustumCulled = false;
@@ -1591,7 +1597,7 @@ export function createStorefrontLayer(): CustomLayerInterface {
   // Ground-floor shop fronts behind the bands: one atlas (5 x 2 categories),
   // one instanced draw, a per-shop tint so a block never looks cloned.
   const facadeTex = new THREE.TextureLoader().load("/textures/storefront-atlas.png", () => map?.triggerRepaint());
-  facadeTex.encoding = THREE.sRGBEncoding;
+  facadeTex.colorSpace = THREE.SRGBColorSpace;
   const cell = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 2), 2);
   const facadeGeo = new THREE.PlaneGeometry(1, 1);
   facadeGeo.setAttribute("cell", cell);
@@ -1599,7 +1605,7 @@ export function createStorefrontLayer(): CustomLayerInterface {
   facadeMat.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", "#include <common>\nattribute vec2 cell;")
-      .replace("#include <uv_vertex>", "#include <uv_vertex>\nvUv = vec2((cell.x + uv.x) / 5.0, 1.0 - (cell.y + 1.0 - uv.y) / 2.0);");
+      .replace("#include <uv_vertex>", "#include <uv_vertex>\nvMapUv = vec2((cell.x + uv.x) / 5.0, 1.0 - (cell.y + 1.0 - uv.y) / 2.0);");
   };
   const facades = new THREE.InstancedMesh(facadeGeo, facadeMat, MAX);
   facades.frustumCulled = false;
@@ -1749,8 +1755,8 @@ export function createLandmarksLayer(): CustomLayerInterface {
   let renderer: THREE.WebGLRenderer | null = null;
   const scene = new THREE.Scene();
   const camera = new THREE.Camera();
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x7a7a7a, 1.15));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x7a7a7a, 1.15 * LEGACY_LIGHT));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.2 * LEGACY_LIGHT);
   sun.position.set(0.4, -0.6, 1);
   scene.add(sun);
   const origin = MercatorCoordinate.fromLngLat([-73.99, 40.73], 0);
@@ -1879,7 +1885,7 @@ export async function landmarkGlbs(): Promise<Record<string, ArrayBuffer>> {
   for (const [id, make] of Object.entries(LANDMARK_MODELS)) {
     const scene = new THREE.Scene();
     scene.add(make());
-    out[id] = await new Promise<ArrayBuffer>((res) => exporter.parse(scene, (r) => res(r as ArrayBuffer), { binary: true }));
+    out[id] = await new Promise<ArrayBuffer>((res, rej) => exporter.parse(scene, (r) => res(r as ArrayBuffer), (e) => rej(new Error(e.message)), { binary: true }));
   }
   return out;
 }
