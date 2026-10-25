@@ -78,10 +78,10 @@ function browserLang(): string | undefined {
   return l && langTag.safeParse(l).success ? l : undefined;
 }
 
-const MODES: Array<{ id: TripMode; label: string; Icon: typeof Bus }> = [
-  { id: "walk", label: "Walk", Icon: Footprints },
-  { id: "transit", label: "Transit", Icon: Bus },
-  { id: "drive", label: "Drive", Icon: Car },
+const MODES: Array<{ id: TripMode; Icon: typeof Bus }> = [
+  { id: "walk", Icon: Footprints },
+  { id: "transit", Icon: Bus },
+  { id: "drive", Icon: Car },
 ];
 
 export default function AgentOverlay() {
@@ -460,13 +460,13 @@ export default function AgentOverlay() {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="secondary" size="sm" className={chip} aria-label={`Trip mode: ${mode}`}>
-              <ModeIcon className="h-3.5 w-3.5" /> {MODES.find((m) => m.id === mode)!.label}
+              <ModeIcon className="h-3.5 w-3.5" /> {tr(appLang, mode)}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuRadioGroup value={mode} onValueChange={(v) => setMode(v as TripMode)}>
-              {modes.map(({ id, label, Icon }) => (
-                <DropdownMenuRadioItem key={id} value={id}><Icon className="mr-2 h-4 w-4" />{label}</DropdownMenuRadioItem>
+              {modes.map(({ id, Icon }) => (
+                <DropdownMenuRadioItem key={id} value={id}><Icon className="mr-2 h-4 w-4" />{tr(appLang, id)}</DropdownMenuRadioItem>
               ))}
             </DropdownMenuRadioGroup>
           </DropdownMenuContent>
