@@ -13,6 +13,7 @@ import { bestCandidate, matchLandmark, matchStation, type GeoCandidate } from ".
 import { distM, openDataEntrances, type Station } from "./transit";
 import { noteSource } from "./freshness";
 import { cached } from "../../lib/ttlCache";
+import { openAt } from "./hours";
 
 const UA = { "User-Agent": "nyc-map-agent (github.com/Pukujan/nyc-map-agent)" };
 export const OSRM_FOOT_URL = (process.env.VITE_OSRM_URL ?? "https://routing.openstreetmap.de/routed-foot").replace(/\/$/, "");
@@ -202,8 +203,11 @@ export async function publicRestrooms(): Promise<RestroomRow[]> {
   noteSource("restrooms", restroomCache.modified);
   return restroomCache.rows;
 }
-/** The `n` closest restrooms to `at`, open ones first (a closed one is listed only when nothing open is nearer than 1.5 km). */
-export function nearestRestrooms(rows: RestroomRow[], at: LngLatTuple, n = 3): RestroomSpot[] {
+/**
+ * The `n` closest restrooms to `at` that are operational and not closed at `now` by their listed hours
+ * (unknown hours count as possibly open). Closed ones are listed only when nothing else is nearer than 1.5 km.
+ */
+export function nearestRestrooms(rows: RestroomRow[], at: LngLatTuple, n = 3, now = new Date()): RestroomSpot[] {
   const spots = rows
     .map((r) => ({ r, lon: Number(r.longitude), lat: Number(r.latitude) }))
     .filter((x) => Number.isFinite(x.lon) && Number.isFinite(x.lat))
@@ -216,9 +220,10 @@ export function nearestRestrooms(rows: RestroomRow[], at: LngLatTuple, n = 3): R
       hours: r.hours_of_operation ?? null,
       accessibility: r.accessibility ?? null,
       operator: r.operator ?? null,
+      openNow: openAt(r.hours_of_operation, now),
     }))
     .sort((a, b) => a.distanceM - b.distanceM);
-  const open = spots.filter((s) => !s.status || /^operational$/i.test(s.status));
+  const open = spots.filter((s) => (!s.status || /^operational$/i.test(s.status)) && s.openNow !== false);
   return (open.length && open[0].distanceM <= 1500 ? open : spots).slice(0, n);
 }
 

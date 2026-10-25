@@ -64,11 +64,19 @@ describe("map actions from tool results", () => {
 
   it("the nearest open restroom comes first and carries its card details", () => {
     const here: [number, number] = [-73.99, 40.735];
-    const spots = nearestRestrooms([row("Far Park", -73.95, 40.78), row("Closed Kiosk", -73.9901, 40.7351, "Not Operational"), row("Union Square Park", -73.9905, 40.7362)], here);
+    const spots = nearestRestrooms([row("Far Park", -73.95, 40.78), row("Closed Kiosk", -73.9901, 40.7351, "Not Operational"), row("Union Square Park", -73.9905, 40.7362)], here, 3, new Date("2026-10-25T12:00:00-04:00"));
     expect(spots.map((s) => s.name)).toEqual(["Union Square Park", "Far Park"]);
     const [first, second] = restroomActions(spots);
     expect(first).toMatchObject({ kind: "showRestroom", label: "Show the nearest restroom", restroom: { name: "Union Square Park", hours: "8am-8pm", accessibility: "Fully Accessible" } });
     expect(second.label).toBe("Show the next closest restroom");
+  });
+
+  it("skips a restroom that is closed right now by its listed hours (#419: 8am-4pm at 1:36 am)", () => {
+    const night = new Date("2026-10-25T01:36:00-04:00");
+    const playground = { ...row("Moore Homestead Playground", -73.8803, 40.7365), hours_of_operation: "8am-4pm, Open later seasonally" };
+    const allNight = { ...row("Elmhurst Hospital", -73.8857, 40.7448), hours_of_operation: "24 Hours" };
+    const spots = nearestRestrooms([playground, allNight], [-73.8806, 40.7366], 3, night);
+    expect(spots.map((s) => [s.name, s.openNow])).toEqual([["Elmhurst Hospital", true]]);
   });
 
   it("falls back to closed restrooms when nothing open is within 1.5 km", () => {

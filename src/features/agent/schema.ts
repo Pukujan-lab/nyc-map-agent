@@ -146,6 +146,8 @@ export const restroomSpot = z.object({
   hours: z.string().nullable().default(null),
   accessibility: z.string().nullable().default(null),
   operator: z.string().nullable().default(null),
+  /** Open at the time asked, from the listed hours; null when the hours can't be read. */
+  openNow: z.boolean().nullable().default(null),
 });
 export type RestroomSpot = z.infer<typeof restroomSpot>;
 
