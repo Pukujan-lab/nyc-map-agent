@@ -38,6 +38,7 @@ import { askAgent } from "./stream";
 import { TripPreview } from "./TripPreview";
 import { TripSummary, selectAlternative } from "./TripSummary";
 import { nameRemindButton, remindAt, saveReminder } from "./reminder";
+import { joinSegments, nameLocationButton } from "./answerText";
 import { toast } from "sonner";
 import { clearPoints, clearTrip, routeColor, showPoints, showTrip } from "./tripLayer";
 import { runMapAction, TROUBLE_COLOR, type MapActionContext } from "./mapActions";
@@ -342,6 +343,8 @@ export default function AgentOverlay() {
     abort.current?.abort();
     abort.current = new AbortController();
     let spoken = "";
+    // The text written between tool calls, piece by piece (see joinSegments).
+    const segments: string[] = [""];
     let replyActions: MapAction[] | undefined;
     // A voice question still working after ~2.5 s gets one short spoken status line.
     const sayIn = heard ?? statusLang(q, lang);
@@ -355,8 +358,12 @@ export default function AgentOverlay() {
       for await (const ev of askAgent({ messages: recentTurns(history), location, mode, now: new Date().toISOString(), ...(askReq ? { context: askReq.context } : {}), ...(home && askLang ? { lang: askLang } : {}), ...(memory ? { memory } : {}), ...(underNow ? { underground: underNow } : {}) }, abort.current.signal)) {
         setSteps((s) => applyStep(s, ev));
         if (ev.type === "text") {
-          spoken += ev.text;
-          setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, content: x.content + ev.text } : x)));
+          segments[segments.length - 1] += ev.text;
+          spoken = joinSegments(segments);
+          const content = spoken;
+          setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, content } : x)));
+        } else if (ev.type === "step" && ev.status === "start") {
+          if (segments[segments.length - 1].trim()) segments.push("");
         } else if (ev.type === "command") {
           executeCommand(ev.command, ctxRef.current);
         } else if (ev.type === "actions") {
@@ -374,13 +381,14 @@ export default function AgentOverlay() {
       window.clearTimeout(statusTimer);
       setBusy(false);
       // The model still asked for a start: put the same button on its reply.
-      if (!askReq && spoken && !sharedCoords() && replyAsksForOrigin(spoken)) {
+      const offersLocation = !askReq && !!spoken && !sharedCoords() && replyAsksForOrigin(spoken);
+      if (offersLocation) {
         pendingQuestion.current = q;
         setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, offerLocation: true } : x)));
       }
       // Short spoken answer; the full detail stays on screen. In hands-free the
       // person can talk over it to interrupt.
-      if (spoken) speech.speak(spokenSummary(nameRemindButton(spoken, replyActions, tr(getAppLang(), "remindMe"))), { bargeIn: handsFree, ...(heard ? { lang: heard } : {}) });
+      if (spoken) speech.speak(spokenSummary(nameLocationButton(nameRemindButton(spoken, replyActions, tr(getAppLang(), "remindMe")), offersLocation, tr(getAppLang(), "useMyLocation"))), { bargeIn: handsFree, ...(heard ? { lang: heard } : {}) });
     }
   }, [busy, mode, setChatOpen, speech, askReq, handsFree, closeAll, home, lang, stopPlayer]);
 
@@ -543,7 +551,7 @@ export default function AgentOverlay() {
             // In the home sheet the working panel stands in for the empty reply bubble.
             home && !compact && m.role === "assistant" && !m.content && !m.actions?.length && !m.offerLocation ? null : (
             <div key={m.id} className={cn("max-w-[90%] rounded-lg px-3 py-2 text-sm", m.role === "user" ? "ml-auto bg-primary text-primary-foreground" : "bg-muted")}>
-              {nameRemindButton(m.content, m.actions, tr(appLang, "remindMe")) || (busy ? "…" : "")}
+              {nameLocationButton(nameRemindButton(m.content, m.actions, tr(appLang, "remindMe")), m.offerLocation, tr(appLang, "useMyLocation")) || (busy ? "…" : "")}
               {m.actions?.length ? <AnswerActions actions={m.actions} onRun={runAction} /> : null}
               {m.sources ? <AnswerSources line={m.sources} /> : null}
               {m.offerLocation && shared.status !== "on" ? (
@@ -728,7 +736,7 @@ export default function AgentOverlay() {
     const homeAnswer = (
       <AnswerCard
         question={lastUser?.content ?? null}
-        text={nameRemindButton(reply?.content ?? "", reply?.actions, tr(appLang, "remindMe"))}
+        text={nameLocationButton(nameRemindButton(reply?.content ?? "", reply?.actions, tr(appLang, "remindMe")), reply?.offerLocation, tr(appLang, "useMyLocation"))}
         busy={busy}
         working={<WorkingPanel steps={steps} />}
         sources={reply?.sources && (reply.sources.sources.length || reply.sources.unverified.length) ? <AnswerSources line={reply.sources} /> : null}

@@ -327,7 +327,8 @@ export function AgentHome(p: AgentHomeProps) {
               type="button"
               variant="ghost"
               aria-label={t("closeAnswer")}
-              className="-ml-2 -mt-2 h-11 w-11 self-start rounded-full p-0 text-slate-300 hover:bg-slate-800 hover:text-white"
+              // Solid, like the task screens' close, so it never reads as part of the text behind it.
+              className="-ml-2 -mt-2 h-11 w-11 self-start rounded-full border border-slate-400/45 bg-[#0b1220] p-0 text-slate-300 shadow-[0_4px_12px_rgba(0,0,0,.35)] hover:bg-slate-800 hover:text-white"
               onClick={onCloseAnswer}
             >
               <X className="!h-5 !w-5" aria-hidden="true" />
