@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { z } from "zod";
 import { Skeleton } from "@/components/ui/skeleton";
+import { api } from "@/lib/api/client";
 
 const Rules = z.object({ rules: z.array(z.string()), meters: z.array(z.string()), signCount: z.number() });
 
@@ -9,10 +10,9 @@ export function StreetRules({ lon, lat }: { lon: number; lat: number }) {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["parking-rules", lon.toFixed(4), lat.toFixed(4)],
     queryFn: async () => {
-      const q = new URLSearchParams({ lon: lon.toFixed(5), lat: lat.toFixed(5) });
-      const res = await fetch(`/api/parking/rules?${q}`);
-      if (!res.ok) throw new Error(`Parking rules returned ${res.status}.`);
-      return Rules.parse(await res.json());
+      const { data, response } = await api.GET("/api/parking/rules", { params: { query: { lon: Number(lon.toFixed(5)), lat: Number(lat.toFixed(5)) } } });
+      if (!data) throw new Error(`Parking rules returned ${response.status}.`);
+      return Rules.parse(data);
     },
     staleTime: 3600_000,
   });
