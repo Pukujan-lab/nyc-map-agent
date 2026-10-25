@@ -14,6 +14,11 @@ export function createRoot(): Hono {
   // Before the SPA fallback, so a health check never receives index.html.
   root.get("/healthz", (c) => c.json({ ok: true }));
   root.route("/", api);
+  // Build files carry a content hash in their name, so a phone can keep them until the name changes.
+  root.use("/assets/*", async (c, next) => {
+    await next();
+    if (c.res.status === 200) c.res.headers.set("cache-control", "public, max-age=31536000, immutable");
+  });
   root.use("/*", serveStatic({ root: "./dist" }));
   // A build file that is not there (an older build's chunk) is a 404, not the SPA shell served as script.
   root.get("/assets/*", (c) => c.notFound());

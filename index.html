@@ -19,13 +19,14 @@
       #shell-bar { position: fixed; z-index: 45; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom) + 1.5rem); display: flex; align-items: center; gap: 8px; padding: 6px; border-radius: 30px; background: #f8fafc; box-shadow: 0 8px 24px rgba(0, 0, 0, .45); }
       #shell-ask { flex: 1; min-width: 0; height: 44px; padding: 0 0 0 12px; border: 0; background: transparent; font: 16px system-ui, -apple-system, sans-serif; color: #0f172a; outline: none; }
       #shell-ask::placeholder { color: #64748b; }
-      #shell-orb { width: 52px; height: 52px; flex: none; border-radius: 50%; background: #2563eb; }
+      #shell-mic { width: 44px; height: 44px; flex: none; display: grid; place-items: center; color: #475569; }
+      #shell-orb { width: 52px; height: 52px; flex: none; display: grid; place-items: center; border-radius: 50%; background: #2563eb; color: #fff; }
       @media (min-width: 640px) { #shell-bar { left: 50%; right: auto; width: 468px; transform: translateX(-50%); bottom: 1rem; } }
     </style>
   </head>
   <body>
     <div id="root"></div>
-    <div id="shell-bar"><input id="shell-ask" placeholder="Ask anything…" aria-label="Ask the assistant" enterkeyhint="send" autocomplete="off" /><span id="shell-orb" aria-hidden="true"></span></div>
+    <div id="shell-bar"><input id="shell-ask" placeholder="Ask anything…" aria-label="Ask the assistant" enterkeyhint="send" autocomplete="off" /><span id="shell-mic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg></span><span id="shell-orb" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></svg></span></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
