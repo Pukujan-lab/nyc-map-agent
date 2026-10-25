@@ -19,6 +19,7 @@ import { insetFilters } from "@/lib/map/miniStyle";
 import { useMapOptions } from "@/lib/map/mapOptions";
 import { applyBuildings, cityDetail, mapLevel, wantsFlatBuildings } from "@/lib/map/buildings";
 import { focusLandmarks, guideLandmarkNamed, installLandmarkLabels, isLandmarkLayer, landmarkAt } from "@/lib/map/landmarkLabels";
+import { landmarkAt as landmarkModelAt } from "@/lib/map/landmarks";
 import { LandmarkDetails } from "@/components/LandmarkDetails";
 import { STREET_LEVEL_RANGE_M, describeGuide, pickGuideLandmarks } from "@/lib/guide/landmarkGuide";
 import { setWalkEye } from "@/lib/map/walkEye";
@@ -705,6 +706,13 @@ export function MapView({
       const mark = clicked ? landmarkAt(clicked, event.point) : null;
       if (mark) {
         showPanel({ id: `landmark:${mark.id}`, title: mark.name, subtitle: `Landmark · ${mark.borough}`, details: <LandmarkDetails landmark={mark} /> });
+        return;
+      }
+      // The building itself from above (#311): a tap on a landmark model's footprint opens it too.
+      const model = walking ? undefined : landmarkModelAt(event.lngLat.lng, event.lngLat.lat);
+      const modelGuide = model ? guideLandmarkNamed(model.name) : null;
+      if (model && modelGuide) {
+        showPanel({ id: `landmark:${model.id}`, title: model.name, subtitle: `Landmark · ${modelGuide.borough}`, details: <LandmarkDetails landmark={modelGuide} /> });
         return;
       }
       const dir = city3d ? signsMod.current?.directoryAt(event.target, event.lngLat.lng, event.lngLat.lat) : null;

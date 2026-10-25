@@ -116,7 +116,11 @@ export interface MapData {
   retry: () => void;
 }
 
-export function useMapData(windowId: WindowId): MapData {
+/**
+ * `analytics` is whether a noise, crash or data layer can show. When none can, the
+ * two aggregates (about 2.6 MB) are not fetched at all (#368).
+ */
+export function useMapData(windowId: WindowId, analytics = true): MapData {
   const queryClient = useQueryClient();
   const [noiseProgress, setNoiseProgress] = useState<AggregationProgress | null>(
     null,
@@ -138,7 +142,7 @@ export function useMapData(windowId: WindowId): MapData {
 
   const noiseQuery = useQuery({
     queryKey: ["aggregate", "noise", windowId],
-    enabled: boundaries !== null,
+    enabled: boundaries !== null && analytics,
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: 30 * 60 * 1000,
     retry: 1,
@@ -158,7 +162,7 @@ export function useMapData(windowId: WindowId): MapData {
 
   const crashQuery = useQuery({
     queryKey: ["aggregate", "crashes", CRASH_WINDOW],
-    enabled: boundaries !== null,
+    enabled: boundaries !== null && analytics,
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: 30 * 60 * 1000,
     retry: 1,
@@ -215,8 +219,9 @@ export function useMapData(windowId: WindowId): MapData {
     crashes,
     isLoading:
       boundariesQuery.isPending ||
-      noiseQuery.isPending ||
-      crashQuery.isPending,
+      // isLoading, not isPending: a query switched off by `analytics` is pending forever.
+      noiseQuery.isLoading ||
+      crashQuery.isLoading,
     isError:
       boundariesQuery.isError || noiseQuery.isError || crashQuery.isError,
     error: firstError instanceof Error ? firstError : null,

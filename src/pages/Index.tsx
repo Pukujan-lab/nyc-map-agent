@@ -1,4 +1,4 @@
-import { useFlag } from "@/lib/flags";
+import { useFlag, useFlags } from "@/lib/flags";
 import { useMemo, useState } from "react";
 import { CaveatsSheet } from "@/components/CaveatsSheet";
 import { DataSourcesDrawer } from "@/components/DataSourcesDrawer";
@@ -43,7 +43,8 @@ export default function Index() {
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const { enabledSources, viewMode, routeStart, routeEnd } = useDataView();
   const isDesktop = useMediaQuery("(min-width: 1024px)");
-  const data = useMapData(windowId);
+  const flags = useFlags();
+  const data = useMapData(windowId, flags.noise || flags.crashes || flags.combined || flags.dataLayers);
   const { label: windowLabel } = windowBounds(windowId);
   const crashWindowLabel = data.crashes
     ? windowBounds(data.crashes.windowId).label
@@ -150,7 +151,7 @@ export default function Index() {
   }, [selectedBlock, layer, model.view]);
 
   const neighborhoods = useMemo(() => {
-    if (!data.boundaries || !data.noise) return [];
+    if (!data.boundaries) return [];
     return data.boundaries
       .map((boundary) => ({
         code: boundary.ntaCode,
@@ -159,7 +160,7 @@ export default function Index() {
         count: noiseByCode.get(boundary.ntaCode)?.count ?? 0,
       }))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
-  }, [data.boundaries, data.noise, noiseByCode]);
+  }, [data.boundaries, noiseByCode]);
 
   const detailSources = useMemo(() => {
     const sources = [];

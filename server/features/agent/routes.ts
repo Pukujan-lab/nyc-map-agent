@@ -88,6 +88,8 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
           messages,
           tools: makeTools({ location, now: clock, emit: (command) => send({ type: "command", command }), actions: (a) => actions.add(a), sources: audit.ledger, deps: opts.deps, followedTrain: context?.followedTrain ?? null, drive: resolveFlags({ env: process.env.VITE_FLAGS, advancedMode: false }).agentDrive }),
           stopWhen: stepCountIs(8),
+          // Spoken answers are 1-4 sentences; this bounds a runaway reply's cost (#199).
+          maxOutputTokens: 800,
           maxRetries: 1,
           // The default handler console.logs the raw provider error; keep logs to the request id only.
           onError: ({ error }) => {
@@ -110,7 +112,7 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
             send({ type: "step", id: part.toolCallId.slice(0, 100), name: part.toolName, status: "done" });
             run.stepEnd(part.toolCallId, true);
           } else if (part.type === "tool-error") { run.stepEnd(part.toolCallId, false); send({ type: "step", id: part.toolCallId.slice(0, 100), name: part.toolName, status: "error" }); }
-          else if (part.type === "error") { run.finish("error", null); finished = true; send({ type: "error", message: "The model call failed." }); }
+          else if (part.type === "error") { run.finish("error", null); finished = true; send({ type: "error", message: "I couldn't answer just now. Please try again in a moment." }); }
           else if (part.type === "finish") {
             fair.budget.record((part.totalUsage.inputTokens ?? 0) + (part.totalUsage.outputTokens ?? 0));
             flushActions();
