@@ -105,7 +105,11 @@ async function resolveLogo(qid: string): Promise<string | null> {
   const known = (await octoQuery<{ url: string | null }>("SELECT url FROM core.brand_logos WHERE qid = $1", [qid])).rows[0];
   if (known) return known.url;
   let url: string | null = null, file: string | null = null, license: string | null = null, artist: string | null = null;
-  file = logoFile(await getJson(`https://www.wikidata.org/wiki/Special:EntityData/${qid}.json`, UA, 10_000), qid);
+  // An id Wikidata does not know (deleted, or never existed) has no logo: 404, not an upstream error, and nothing stored.
+  const entity = await fetch(`https://www.wikidata.org/wiki/Special:EntityData/${qid}.json`, { headers: UA, signal: AbortSignal.timeout(10_000) });
+  if (entity.status === 404) return null;
+  if (!entity.ok) throw new Error(`www.wikidata.org returned ${entity.status}`);
+  file = logoFile(await entity.json(), qid);
   if (file) {
     const info = Info.parse(await getJson(`https://commons.wikimedia.org/w/api.php?${new URLSearchParams({ action: "query", format: "json", titles: `File:${file}`, prop: "imageinfo", iiprop: "url|extmetadata", iiurlwidth: "96" })}`, UA, 10_000));
     const ii = Object.values(info.query.pages)[0]?.imageinfo?.[0];
