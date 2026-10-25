@@ -33,6 +33,9 @@ export function registerOfflineWorker(): void {
     });
 }
 
+/** Basemap points that are not something to look for from the sidewalk. */
+const SKIP_POI = new Set(["railway", "bus", "telephone", "recycling", "bicycle_rental", "parking", "bicycle_parking", "toilets", "drinking_water", "atm", "entrance"]);
+
 const STREET_CLASSES = new Set(["minor", "service", "tertiary", "secondary", "primary", "trunk", "pedestrian", "living_street"]);
 
 /** The segment of a named street nearest `at`. */
@@ -71,9 +74,10 @@ export function meetPoint(lines: NamedLine[], a: string, b: string, at: Pt): Pt 
  * What the map knows about each exit's spot, from the tiles loaded now:
  * the two nearest street names, which corner, and nearby landmarks and
  * storefronts. Offline (no tiles) everything comes back empty except the
- * fixed landmark list.
+ * fixed landmark list. `pois` also takes the basemap's named shops and
+ * places, for the Top view where the 3D storefronts are not loaded.
  */
-export function readMap(map: MapLibreMap | null): { placeAt: (at: Pt) => ExitPlace; lines: NamedLine[] } {
+export function readMap(map: MapLibreMap | null, opts: { pois?: boolean } = {}): { placeAt: (at: Pt) => ExitPlace; lines: NamedLine[] } {
   const lines: NamedLine[] = [];
   const shops: LandmarkCandidate[] = [];
   if (map?.getSource("openmaptiles")) {
@@ -91,6 +95,13 @@ export function readMap(map: MapLibreMap | null): { placeAt: (at: Pt) => ExitPla
     for (const f of map.querySourceFeatures("city3d", { sourceLayer: "storefronts" })) {
       const name = (f.properties as { name?: string } | null)?.name;
       if (f.geometry.type === "Point" && name) shops.push({ name, at: f.geometry.coordinates as Pt, tall: false });
+    }
+  }
+  if (opts.pois && !shops.length && map?.getSource("openmaptiles")) {
+    for (const f of map.querySourceFeatures("openmaptiles", { sourceLayer: "poi" })) {
+      const p = f.properties ?? {};
+      const name = String(p["name:en"] ?? p.name ?? "");
+      if (name && f.geometry.type === "Point" && !SKIP_POI.has(String(p.class))) shops.push({ name, at: f.geometry.coordinates as Pt, tall: false });
     }
   }
   const tall: LandmarkCandidate[] = LANDMARKS.map((l) => ({ name: l.name, at: [l.lon, l.lat], tall: true }));
