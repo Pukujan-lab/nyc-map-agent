@@ -48,7 +48,7 @@ describe("POST /api/agent (mocked LLM)", () => {
 });
 
 describe("POST /api/agent: shared location privacy", () => {
-  it("sends the exact coordinates to the model and never logs them", async () => {
+  it("never sends the coordinates to the model or logs them", async () => {
     const spies = (["log", "info", "warn", "error", "debug"] as const).map((k) => vi.spyOn(console, k).mockImplementation(() => {}));
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     const m = model();
@@ -57,7 +57,9 @@ describe("POST /api/agent: shared location privacy", () => {
       { model: m },
     );
     await res.text();
-    expect(JSON.stringify(m.doStreamCalls[0]?.prompt)).toContain("longitude -73.990312, latitude 40.735901");
+    const prompt = JSON.stringify(m.doStreamCalls[0]?.prompt);
+    expect(prompt).toContain("The user shared their location");
+    expect(prompt).not.toMatch(/73\.99|40\.73/);
     expect(res.headers.get("cache-control")).toBe("no-store");
     const logged = spies.flatMap((s) => s.mock.calls).map((c) => JSON.stringify(c)).join("\n");
     expect(logged).not.toMatch(/73\.9903|40\.7359/);

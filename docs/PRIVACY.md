@@ -1,8 +1,8 @@
 # Location data policy
 
-> **DRAFT for the owner to approve.** Nothing here is a promise to users yet. It describes what the code does today (main after pull request #433, 2026-10-25), proposes the rule we should state, and lists the gaps where the code does not yet meet that rule. Tracked in issue #374, part of #361.
+> Approved by the owner on 2026-10-25 (issue #374, part of #361). It describes what the code does on main; the gaps below are what is still to do.
 
-## The rule in one paragraph (proposal)
+## The rule in one paragraph
 
 Your exact position stays on your phone unless you tap **Use my location** or ask the assistant a question that needs it. When it leaves the phone, it goes to our server for that one answer and is not written down there. Our server passes only what each outside service needs to answer: a routing service gets the two ends of the route, a weather service gets a rough area, and the language model gets words like "here" and "home" rather than numbers. Saved home and work stay on your phone until you clear them.
 
@@ -12,7 +12,7 @@ Your exact position stays on your phone unless you tap **Use my location** or as
 graph TD
   A[Phone: position, home, work] -->|map tiles, photos, address search| T[Map and search services]
   A -->|question plus location| S[Our server]
-  S -->|question, history, coordinates| M[Language model via InferHub]
+  S -->|question, history, no coordinates| M[Language model via InferHub]
   S -->|route ends, place names| R[Routing and geocoding]
   S -->|start point| W[Weather services]
   C[Cloudflare tunnel] -.->|carries all traffic| S
@@ -23,7 +23,7 @@ The same flow as a list, in case the diagram does not render:
 1. The phone keeps your shared position in memory. Home, work, usual rides, recent chats and recent trips are kept in the browser's storage, each behind its own switch in "What we remember".
 2. The phone talks directly to map tile, street photo, address search and walking route services.
 3. When you ask the assistant, the phone sends the question, the conversation so far, your shared position (if sharing is on) and, in the home screen's assistant, one line built from what the phone remembers, such as "Home is Jackson Heights" (names and a clock only, never coordinates) to our server.
-4. Our server sends the question, the conversation and, today, your exact coordinates to the language model through InferHub, a paid marketplace that forwards requests to model providers.
+4. Our server sends the question and the conversation to the language model through InferHub, a paid marketplace that forwards requests to model providers. Your position is not sent: the model says "here", and our server puts the exact point into the route or search itself.
 5. Our server looks up routes, addresses and weather with outside services, sending them coordinates.
 6. All traffic between the phone and our server passes through Cloudflare, which runs the tunnel to our machine.
 
@@ -62,10 +62,11 @@ Not checked: whether Cloudflare keeps request logs for our account, and whether 
 
 The model runs outside our machine. Our server calls InferHub with the `@ai-sdk/openai-compatible` library (`server/features/agent/routes.ts:52-57`). InferHub forwards each request to one of several model providers. Every question sends:
 
-- **The whole conversation so far**, including any addresses you typed (`server/features/agent/routes.ts:76`).
-- **Your exact shared position as numbers**, written into the instructions (`server/features/agent/prompt.ts:60-61`). The model is told not to repeat them, but it still receives them.
-- **Your street view spot and heading** when you ask from street view (`server/features/agent/routes.ts:24-31`).
-- **Tool results that contain coordinates.** The assistant's `geocode` tool hands the model the exact coordinates of whatever it looked up, including "here". Home and work reach the model only as names in the remembered line, not as points.
+- **The whole conversation so far**, including any addresses you typed (`server/features/agent/routes.ts`).
+- **Whether you shared a location or are in street view**, as words only. The instructions say "The user shared their location" and never its numbers (`server/features/agent/prompt.ts`).
+- **Tool results with your point taken out.** Before a tool's result goes back to the model, any point within about 150 metres of you is replaced with "here" (`hideHere` in `server/features/agent/tools.ts`). Other places, such as a restroom or a station exit, keep their real positions. Home and work reach the model only as names in the remembered line.
+
+The map on your phone still gets exact points, because our server sends map commands straight to the phone, not through the model.
 
 How long InferHub or the provider behind it keeps a request is not known; we have not read their terms.
 
@@ -89,16 +90,16 @@ How long InferHub or the provider behind it keeps a request is not known; we hav
 
 Calls our server makes do not reveal your internet address to the outside service. Calls the phone makes do.
 
-## Gaps found, with recommended fixes (proposal)
+## Gaps found, with recommended fixes
 
-1. **Exact coordinates go to the model.** The instructions carry your shared position as numbers, and the `geocode` tool returns exact coordinates for "here", "home" and "work". *Fix:* keep coordinates on our server in the tool context, tell the model only "location shared", and return labels and distances from tools instead of `at` numbers for "here", "home" and "work".
+1. **Exact coordinates went to the model.** Fixed: the instructions say only that you shared a location, and tool results replace your point with "here". Tests check that neither the prompt nor a `geocode` of "here" carries the numbers.
 2. **The on-screen promise was wrong.** Fixed with this update: the assistant now says your location goes with each question until you tap Stop sharing location, which is what the code does.
 3. **Saved places go with every home-screen question** as names, even when the question is not about them. *Fix:* send the remembered line only when the question names home, work or a usual ride.
 4. **One-step clear.** Done: **Delete everything** in the menu clears every kind the phone remembers (`forgetEverything`).
 5. **Model provider retention is unknown.** *Fix:* read InferHub's terms, record how long it and its providers keep requests, and pick a no-retention option if one exists.
 6. **Cloudflare and OpenTripPlanner logging not checked.** *Fix:* check the Cloudflare account's log settings and the OpenTripPlanner container's log level, then record the answer here.
 7. **More precision than needed.** Weather alerts and forecasts for a trip get the exact start; the phone sends parking lookups to about 1 metre. *Fix:* round to about 1 kilometre for weather and alerts, about 10 metres for parking.
-8. **The policy is not shown in the app.** Issue #374 asks for it. *Fix:* link this page from the assistant panel and the Layers and filters home and work section once approved.
+8. **The policy in the app.** Done: **Your data → Data policy** in the menu states the rule in each app language. A link to this full page is still to do.
 
 ## Caveat
 

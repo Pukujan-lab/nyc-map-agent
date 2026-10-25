@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { describeStep } from "./drive/router";
 import { MTA_TOLLS, tolls } from "./drive/context";
-import { args, makeTools, pickStation } from "./tools";
+import { args, hideHere, makeTools, pickStation } from "./tools";
 import { nyLocalToDate, toNyLocal } from "./trip";
 import { octant } from "./transit";
 
@@ -43,6 +43,26 @@ describe("transit_plan resolves the time on the server", () => {
     expect(brief.whenNote).toMatch(/Sun, Oct 25, 9:00 AM.*live delays are not known/);
     await expect(run({ from: "here", to: "here", depart: "whenever", arriveBy: false }, { toolCallId: "y", messages: [] })).rejects.toThrow(/Could not read the time/);
     fetchSpy.mockRestore();
+  });
+});
+
+describe("the model never sees the user's position as numbers (#374)", () => {
+  const me = { lon: -73.990312, lat: 40.735901 };
+  it("turns points at the user's location into here and leaves other places alone", () => {
+    expect(hideHere({ label: "your location", at: [me.lon, me.lat] }, me)).toEqual({ label: "your location", at: "here" });
+    expect(hideHere({ name: "a", lon: -73.9905, lat: 40.7358, open: true }, me)).toEqual({ name: "a", at: "here", open: true });
+    expect(hideHere({ to: { at: [-73.9772, 40.7527] } }, me)).toEqual({ to: { at: [-73.9772, 40.7527] } });
+    expect(hideHere([1, 2, "x"], me)).toEqual([1, 2, "x"]);
+  });
+  it("geocode of here hands the model no numbers, while flyTo still moves the map to the exact point", async () => {
+    const sent: unknown[] = [];
+    const tools = makeTools({ location: me, now: new Date(), emit: (c) => sent.push(c) });
+    const call = (t: { execute?: unknown }, a: unknown) => (t.execute as (a: unknown, o: unknown) => Promise<unknown>)(a, { toolCallId: "g", messages: [] });
+    const out = JSON.stringify(await call(tools.geocode, { text: "here" }));
+    expect(out).not.toMatch(/73\.99|40\.73/);
+    expect(out).toContain("here");
+    await call(tools.flyTo, { place: "here", zoom: 16 });
+    expect(JSON.stringify(sent)).toMatch(/73\.990312/);
   });
 });
 
