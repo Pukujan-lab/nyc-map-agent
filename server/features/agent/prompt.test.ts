@@ -81,5 +81,6 @@ describe("underground helper context", () => {
     const p = systemPrompt("now", null);
     expect(p).not.toContain("underground at");
     expect(p).toContain("Want to start?");
+    expect(p).toContain("what to bring");
   });
 });
