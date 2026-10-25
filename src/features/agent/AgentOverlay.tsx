@@ -57,7 +57,7 @@ import { rememberCommute, useHomeWork } from "./commute";
 import { memorySummary } from "./memorySummary";
 import { recentTurns } from "./chatWindow";
 import { rememberChat, rememberLookup } from "@/lib/memory/memory";
-import { useLangPref } from "@/lib/voice/langPref";
+import { parseLang, useLangPref, type AppLang } from "@/lib/voice/langPref";
 import { useVoicePrefs } from "@/lib/voice/voicePrefs";
 import { useFollowed } from "@/lib/transit/follow";
 import { useLinesControl } from "@/lib/transit/linesControl";
@@ -160,18 +160,23 @@ export default function AgentOverlay() {
   // The small mic dictates into the text box; the big button holds a hands-free conversation.
   const [dictating, setDictating] = useState(false);
   const dictatingRef = useRef(false);
+  // The language the server heard on the last voice turn (phones with no language picked).
+  const heardLangRef = useRef<AppLang | null>(null);
   const speech = useSpeech({
-    onFinalTranscript: (t) => {
+    onFinalTranscript: (t, heard) => {
       if (dictatingRef.current) {
         dictatingRef.current = false;
         setDictating(false);
         setInput((v) => (v.trim() ? `${v.trim()} ${t}` : t));
         return;
       }
+      heardLangRef.current = parseLang(heard);
       voiceTurn.current = true;
       void send(t);
     },
     lang: home ? lang : undefined,
+    // No language picked: detect it from the voice, so anyone can just speak (2026-10-25).
+    detectLang: home && storedLang === null,
   });
   // Dictation that ends without words (silence, an error) lets go of the mic button.
   const wasListening = useRef(false);
@@ -302,6 +307,10 @@ export default function AgentOverlay() {
     const q = text.trim();
     const byVoice = voiceTurn.current;
     voiceTurn.current = false;
+    // Spoken in another language: ask, answer and speak in that one.
+    const heard = byVoice ? heardLangRef.current : null;
+    heardLangRef.current = null;
+    const askLang = heard ?? lang;
     if (!q || busy) return;
     setNotice(null);
     setInput("");
@@ -334,15 +343,15 @@ export default function AgentOverlay() {
     let spoken = "";
     let replyActions: MapAction[] | undefined;
     // A voice question still working after ~2.5 s gets one short spoken status line.
-    const sayIn = statusLang(q, lang);
+    const sayIn = heard ?? statusLang(q, lang);
     // A question clearly in another language switches the app's own text to it (unless one is picked in the menu).
-    const asked = detectLang(q);
+    const asked = heard ?? detectLang(q);
     if (asked) setAskedLang(asked);
     const statusTimer = home && byVoice ? window.setTimeout(() => speech.speak(statusLine(stepsRef.current, sayIn), { lang: speechTag(sayIn, lang) }), STATUS_AFTER_MS) : undefined;
     try {
       const memory = home ? memorySummary() : null;
       const underNow = getUndergroundNow();
-      for await (const ev of askAgent({ messages: recentTurns(history), location, mode, now: new Date().toISOString(), ...(askReq ? { context: askReq.context } : {}), ...(home && lang ? { lang } : {}), ...(memory ? { memory } : {}), ...(underNow ? { underground: underNow } : {}) }, abort.current.signal)) {
+      for await (const ev of askAgent({ messages: recentTurns(history), location, mode, now: new Date().toISOString(), ...(askReq ? { context: askReq.context } : {}), ...(home && askLang ? { lang: askLang } : {}), ...(memory ? { memory } : {}), ...(underNow ? { underground: underNow } : {}) }, abort.current.signal)) {
         setSteps((s) => applyStep(s, ev));
         if (ev.type === "text") {
           spoken += ev.text;
@@ -370,7 +379,7 @@ export default function AgentOverlay() {
       }
       // Short spoken answer; the full detail stays on screen. In hands-free the
       // person can talk over it to interrupt.
-      if (spoken) speech.speak(spokenSummary(nameRemindButton(spoken, replyActions, tr(getAppLang(), "remindMe"))), { bargeIn: handsFree });
+      if (spoken) speech.speak(spokenSummary(nameRemindButton(spoken, replyActions, tr(getAppLang(), "remindMe"))), { bargeIn: handsFree, ...(heard ? { lang: heard } : {}) });
     }
   }, [busy, mode, setChatOpen, speech, askReq, handsFree, closeAll, home, lang, stopPlayer]);
 

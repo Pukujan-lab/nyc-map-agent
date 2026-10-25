@@ -24,6 +24,15 @@ export function shouldStop(o: { now: number; started: number; lastSpeech: number
   return o.now - o.lastSpeech >= o.endMs ? "silence" : null;
 }
 
+/**
+ * A phone (touch screen, small side under 600 px). Phones send voice to the
+ * server: older iPhone recognizers are weak and only hear one language.
+ */
+export function isPhone(): boolean {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+  return window.matchMedia("(pointer: coarse)").matches && Math.min(window.screen?.width ?? 9999, window.screen?.height ?? 9999) < 600;
+}
+
 export function serverSttAvailable(): boolean {
   return typeof window !== "undefined" && typeof MediaRecorder !== "undefined" && typeof navigator.mediaDevices?.getUserMedia === "function";
 }
@@ -77,20 +86,20 @@ export async function recordTurn(endMs: number, waitMs = 6000, maxMs = 20_000): 
   return { stop: () => finish("stopped"), done };
 }
 
-export type SttOutcome = { text: string } | { error: "unavailable" | "failed" | "busy" };
+export type SttOutcome = { text: string; lang?: string } | { error: "unavailable" | "failed" | "busy" };
 
-/** Send one recording to /api/stt. */
-export async function transcribeTurn(blob: Blob, lang: string): Promise<SttOutcome> {
+/** Send one recording to /api/stt. `lang` null: the server detects the language and returns it. */
+export async function transcribeTurn(blob: Blob, lang: string | null): Promise<SttOutcome> {
   const form = new FormData();
   form.set("audio", blob, blob.type.includes("mp4") ? "turn.m4a" : "turn.webm");
-  form.set("lang", lang);
+  form.set("lang", lang ?? "auto");
   try {
     const r = await fetch(`${API_BASE}/api/stt`, { method: "POST", body: form });
     if (r.status === 503) return { error: "unavailable" };
     if (r.status === 429) return { error: "busy" };
     if (!r.ok) return { error: "failed" };
-    const d = (await r.json()) as { text?: string };
-    return { text: (d.text ?? "").trim() };
+    const d = (await r.json()) as { text?: string; lang?: string };
+    return { text: (d.text ?? "").trim(), ...(typeof d.lang === "string" ? { lang: d.lang } : {}) };
   } catch {
     return { error: "failed" };
   }
