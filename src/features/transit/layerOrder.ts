@@ -6,7 +6,7 @@ export const RAISED_LIFT_PX = 26;
 export const STOP_LIFT_PX = 52;
 
 /** These stay above the 3D vehicle layer: the station, its train bullet, skip marks, and the followed bus badge. */
-export const ABOVE_VEHICLE_LAYERS = ["transit-bullet-notch", "transit-bullet", "transit-station", "transit-station-raised", "transit-station-label", "transit-skip", "transit-alert-skipped", "transit-bus-badge-follow"];
+export const ABOVE_VEHICLE_LAYERS = ["transit-bullet-notch", "transit-bullet", "transit-held", "transit-station", "transit-station-raised", "transit-station-label", "transit-skip", "transit-alert-skipped", "transit-bus-badge-follow"];
 
 type LayerOrderMap = Pick<MaplibreMap, "getLayer" | "getLayersOrder" | "moveLayer">;
 

@@ -1,3 +1,4 @@
+import type { HeldTrain } from "@/lib/transit/holds";
 import { lineOf } from "@/lib/transit/selectedLine";
 import { plainAlertText, stationsNamedIn, type TroubleStation } from "@/lib/transit/trouble";
 import { alertGeometry } from "./alertFocus";
@@ -112,4 +113,34 @@ export function lineNotices(route: string, alerts: TransitAlert[], outages: Outa
     if (n) out.push(n);
   }
   return out.sort((x, y) => ORDER[x.tone] - ORDER[y.tone]);
+}
+
+/**
+ * Held trains on one line as notices (PROJECT.md goal 5: "tell you when a
+ * train is stuck and exactly where"): which train, where, toward where and for
+ * how long, with its station ringed on the map. Longest hold first.
+ */
+export function heldNotices(route: string, held: Iterable<HeldTrain>, sys: StaticSystem | undefined, nowS = Date.now() / 1000): LineNotice[] {
+  if (!sys) return [];
+  const byId = new Map(sys.stations.features.map((f) => [String(f.properties.id), f]));
+  const out: Array<{ since: number; notice: LineNotice }> = [];
+  for (const h of held) {
+    if (lineOf(h.route) !== route) continue;
+    const st = byId.get(stationOf("subway", h.stop));
+    if (!st) continue;
+    const name = String(st.properties.name);
+    const toward = byId.get(stationOf("subway", h.toward))?.properties.name;
+    const min = Math.max(1, Math.floor((nowS - h.since) / 60));
+    out.push({ since: h.since, notice: {
+      id: `held:${h.tripId}`,
+      tone: "delay",
+      title: `${route} train held ${h.stopped ? "at" : "before"} ${name}`,
+      meta: [toward ? `To ${toward}` : "", `${min} min`].filter(Boolean).join(" · "),
+      body: h.stopped
+        ? `The live feed shows this train stopped at ${name} for ${min} min, past its expected time.`
+        : `The live feed shows this train has not reached ${name} for ${min} min; its arrival time keeps moving later.`,
+      stations: [{ id: String(st.properties.id), name, coord: st.geometry.coordinates as [number, number], label: "Held" }],
+    } });
+  }
+  return out.sort((a, b) => a.since - b.since).map((x) => x.notice);
 }

@@ -2,7 +2,7 @@ import { formatStreetText } from "@/lib/streetName";
 import { liveProgress } from "./monotonic";
 import { BusEstimator } from "./busEstimate";
 import { labelledStationIds } from "./stationLabels";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { Layer, Source, useMap } from "react-map-gl/maplibre";
@@ -33,10 +33,12 @@ import { followActionForMapClick } from "./followClick";
 import { publishSubway } from "@/lib/agent/streetContext";
 import { busesToShow, capPerLine, holdShuttle, registerBusToggle, setShuttleBuses, shownVehicles, useBusPins } from "@/lib/transit/busReveal";
 import { publishLiveDots } from "@/lib/transit/liveVehicles";
+import { heldTrains } from "@/lib/transit/holds";
 import { setLinesControl } from "@/lib/transit/linesControl";
 import { lineOf, setSelectedLine, useSelectedLine } from "@/lib/transit/selectedLine";
 import { useActiveTrip } from "@/lib/transit/activeTrip";
-import { LinePanel } from "./LinePanel";
+// The line panel loads on the first line picked (own chunk), keeping the transit layers chunk in budget.
+const LinePanel = lazy(() => import("./LinePanel").then((m) => ({ default: m.LinePanel })));
 import { XRAY_VEIL_M, setStreetXray, useStreetXray, xrayForFollow, xrayVeilDisc } from "@/lib/transit/streetXray";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 
@@ -179,7 +181,9 @@ function vehicleCollection(list: Vehicle[], alerted: Set<string>, theme: Palette
         badge = busBadgeId(p.text, c); // the tiny prefix badge stays plain; the "!" rides the full badge
         badgeFull = busBadgeId(v.route, c, alert);
       }
-      return { type: "Feature", properties: { key: v.key, color: v.color, bearing: v.bearing, grade: v.grade, label: v.label, system: v.system, route: v.route, bullet, badge, badgeFull, alpha: v.alpha ?? 1, atStop: v.stopped ? 1 : 0, followed: v.key === followedKey ? 1 : 0 }, geometry: { type: "Point", coordinates: [v.lon, v.lat] } };
+      // A held train says so next to its bullet, in the trouble amber (src/lib/transit/holds.ts).
+      const held = v.held ? `Held ${Math.max(1, Math.floor((Date.now() / 1000 - v.held.since) / 60))} min` : "";
+      return { type: "Feature", properties: { key: v.key, color: v.color, bearing: v.bearing, grade: v.grade, label: v.label, system: v.system, route: v.route, bullet, badge, badgeFull, alpha: v.alpha ?? 1, atStop: v.stopped ? 1 : 0, followed: v.key === followedKey ? 1 : 0, held }, geometry: { type: "Point", coordinates: [v.lon, v.lat] } };
     }),
   };
 }
@@ -532,9 +536,11 @@ export default function TransitLayer() {
       for (const s of rail) {
         const st = data[s]?.stat, lv = data[s]?.live;
         if (!st || !lv) continue;
+        const held = s === "subway" ? heldTrains(lv) : undefined;
         for (const trip of lv.trips) {
           const est = estimateTrain(st, trip, now, liveProgress, s === "subway" ? history : undefined);
-          const v = est && s !== "subway" ? { ...est, grade: "grade" as const } : est;
+          const h = held?.get(trip.id);
+          const v = est && s !== "subway" ? { ...est, grade: "grade" as const } : est && h ? { ...est, held: { since: h.since, stop: h.stop, stopped: h.stopped } } : est;
           if (v && (inView(v) || v.key === selectedKey || v.key === followedKey)) out.push(v);
         }
       }
@@ -998,7 +1004,7 @@ export default function TransitLayer() {
   return (
     <>
       {followed ? <FollowCard vehicle={followed} /> : null}
-      {lineSel && !followedKey ? <LinePanel map={map} route={lineSel} onFollow={followLine} /> : null}
+      {lineSel && !followedKey ? <Suspense fallback={null}><LinePanel map={map} route={lineSel} onFollow={followLine} /></Suspense> : null}
       <Source id="transit-lines" type="geojson" data={lines}>
         {/* X-ray on stays a solid glow. Off: a dash nearly as wide as the at-grade stroke (zoom 10 → 2.4, 16 → 5), opacity 0.75: the lines lead the map. */}
         <Layer id="transit-line-under" type="line" filter={["==", ["get", "grade"], "underground"]}
@@ -1147,6 +1153,11 @@ export default function TransitLayer() {
             // Elevated trains float above the viaduct; in 3D the tag sits above the box. A train at a station lifts clear of the name.
             "icon-offset": (three ? tagOffset(0) : trainIconOffset(false, 0)) as [number, number], "icon-size": ["interpolate", ["linear"], ["zoom"], 10, ["*", bulletScale, 0.55], 14, ["*", bulletScale, 0.75], 17, ["*", bulletScale, 0.95]] as unknown as number }}
           paint={{ "icon-opacity": fadeIn(["*", trainAlpha, ["case", ["==", ["get", "grade"], "underground"], xrayOn ? 1 : 0.7, 1]]) }} />
+        {/* A held train: "Held 4 min" beside its bullet, from the live feed alone. */}
+        <Layer id="transit-held" type="symbol" filter={["all", ["==", ["get", "system"], "subway"], ["!=", ["get", "held"], ""]]}
+          layout={{ "text-field": ["get", "held"], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-anchor": "left", "text-allow-overlap": true, "text-ignore-placement": true,
+            "text-offset": ["case", ["==", ["get", "atStop"], 1], ["literal", [1.3, -STOP_LIFT_PX / 11]], ["literal", [1.3, 0]]] as unknown as [number, number] }}
+          paint={{ "text-color": "#f59e0b", "text-halo-color": "#111827", "text-halo-width": 1.5, "text-opacity": bulletAlpha }} />
         {/* Buses: SQUARE badges, so they never read as round subway bullets. Zoomed out
             only the borough prefix (all shown, so each heading notch has its badge); from z15 or for the
             selected route the badge widens to the full route. Every bus always draws: collision detection

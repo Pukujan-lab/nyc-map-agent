@@ -191,3 +191,26 @@ describe("boardingArrivals", () => {
     expect(boardingArrivals(line, undefined, "R", [-73.95, 40.71], [-73.95, 40.7101], 0)).toBeNull();
   });
 });
+
+describe("live feed status on the real subway build", () => {
+  const real = JSON.parse(readFileSync(new URL("../../../public/transit/subway.json", import.meta.url), "utf8")) as StaticSystem;
+  // MTA BDFM feed captured 2026-10-21 (server/features/transit/__fixtures__): F 094550 STOPPED_AT Bay Pkwy (F32S).
+  const NOW = 1792616621;
+  const bay = real.stations.features.find((f) => f.properties.id === "F32")!.geometry.coordinates;
+  it("never draws a train past the stop the vehicle still reports, even after its time passes", () => {
+    const t = { id: "094550_F..S", route: "F", dir: 1, stops: [["F32S", NOW - 120], ["F33S", NOW - 10], ["F34S", NOW + 100]] as Array<[string, number]>, at: "F32S", st: 1 };
+    const v = estimateTrain(real, t, NOW)!;
+    expect(v.stopped).toMatchObject({ kind: "at", stop: "F32S" });
+    expect(v.nextStop).toBe("F33S");
+    expect(Math.hypot(v.lon - bay[0], v.lat - bay[1])).toBeLessThan(0.003);
+    // Without the vehicle report it would already be past Bay Pkwy.
+    const free = estimateTrain(real, { ...t, at: undefined, st: undefined }, NOW)!;
+    expect(free.nextStop).toBe("F34S");
+  });
+  it("a train approaching its reported stop waits short of it, not past it", () => {
+    const t = { id: "094550_F..S", route: "F", dir: 1, stops: [["F32S", NOW - 300], ["F33S", NOW - 120], ["F34S", NOW + 100]] as Array<[string, number]>, at: "F33S", st: 2 };
+    const v = estimateTrain(real, t, NOW)!;
+    expect(v.stopped).toBeUndefined();
+    expect(v.nextStop).toBe("F33S");
+  });
+});
