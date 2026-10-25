@@ -37,7 +37,7 @@ import { PLAYBACK_SPEEDS, langTag, type Leg, type MapAction, type PlaybackSpeed,
 import { askAgent } from "./stream";
 import { TripPreview } from "./TripPreview";
 import { TripSummary, selectAlternative } from "./TripSummary";
-import { remindAt, saveReminder } from "./reminder";
+import { nameRemindButton, remindAt, saveReminder } from "./reminder";
 import { toast } from "sonner";
 import { clearPoints, routeColor, showPoints, showTrip } from "./tripLayer";
 import { runMapAction, TROUBLE_COLOR, type MapActionContext } from "./mapActions";
@@ -61,7 +61,7 @@ import { useLinesControl } from "@/lib/transit/linesControl";
 import { useStationHelp, useStationHelpVisible } from "@/lib/underground/stationHelp";
 import { applyStep, statusLine, type AgentStep } from "./agentSteps";
 import { detectLang, speechTag, statusLang } from "./statusLines";
-import { setAskedLang, tr, useAppLang } from "@/lib/i18n/appLang";
+import { getAppLang, setAskedLang, tr, useAppLang } from "@/lib/i18n/appLang";
 import { needsSharedOrigin, ORIGIN_PROMPT, replyAsksForOrigin } from "./needsOrigin";
 import { framePadding } from "@/lib/map/mapCover";
 import { useOpenMenu } from "@/lib/store/openMenu";
@@ -322,6 +322,7 @@ export default function AgentOverlay() {
     abort.current?.abort();
     abort.current = new AbortController();
     let spoken = "";
+    let replyActions: MapAction[] | undefined;
     // A voice question still working after ~2.5 s gets one short spoken status line.
     const sayIn = statusLang(q, lang);
     // A question clearly in another language switches the app's own text to it (unless one is picked in the menu).
@@ -339,6 +340,7 @@ export default function AgentOverlay() {
         } else if (ev.type === "command") {
           executeCommand(ev.command, ctxRef.current);
         } else if (ev.type === "actions") {
+          replyActions = ev.actions;
           setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, actions: ev.actions } : x)));
         } else if (ev.type === "sources") {
           setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, sources: ev } : x)));
@@ -358,7 +360,7 @@ export default function AgentOverlay() {
       }
       // Short spoken answer; the full detail stays on screen. In hands-free the
       // person can talk over it to interrupt.
-      if (spoken) speech.speak(spokenSummary(spoken), { bargeIn: handsFree });
+      if (spoken) speech.speak(spokenSummary(nameRemindButton(spoken, replyActions, tr(getAppLang(), "remindMe"))), { bargeIn: handsFree });
     }
   }, [busy, mode, setChatOpen, speech, askReq, handsFree, closeAll, home, lang, stopPlayer]);
 
@@ -512,7 +514,7 @@ export default function AgentOverlay() {
             // In the home sheet the working panel stands in for the empty reply bubble.
             home && !compact && m.role === "assistant" && !m.content && !m.actions?.length && !m.offerLocation ? null : (
             <div key={m.id} className={cn("max-w-[90%] rounded-lg px-3 py-2 text-sm", m.role === "user" ? "ml-auto bg-primary text-primary-foreground" : "bg-muted")}>
-              {m.content || (busy ? "…" : "")}
+              {nameRemindButton(m.content, m.actions, tr(appLang, "remindMe")) || (busy ? "…" : "")}
               {m.actions?.length ? <AnswerActions actions={m.actions} onRun={runAction} /> : null}
               {m.sources ? <AnswerSources line={m.sources} /> : null}
               {m.offerLocation && shared.status !== "on" ? (
@@ -697,7 +699,7 @@ export default function AgentOverlay() {
     const homeAnswer = (
       <AnswerCard
         question={lastUser?.content ?? null}
-        text={reply?.content ?? ""}
+        text={nameRemindButton(reply?.content ?? "", reply?.actions, tr(appLang, "remindMe"))}
         busy={busy}
         working={<WorkingPanel steps={steps} />}
         sources={reply?.sources && (reply.sources.sources.length || reply.sources.unverified.length) ? <AnswerSources line={reply.sources} /> : null}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { remindAt, tripIcs, tripSteps } from "./reminder";
-import type { Trip } from "./schema";
+import { nameRemindButton, remindAt, tripIcs, tripSteps } from "./reminder";
+import type { MapAction, Trip } from "./schema";
 
 const trip = {
   id: "abc", mode: "transit",
@@ -34,5 +34,16 @@ describe("trip reminder", () => {
   it("says when the alert comes, across midnight too", () => {
     expect(remindAt(trip)).toBe("17:50");
     expect(remindAt({ ...trip, departIso: "2026-10-27T00:05" })).toBe("23:55");
+  });
+});
+
+describe("nameRemindButton", () => {
+  const remind = [{ kind: "remindTrip", id: "remind:t", label: "Remind me", trip: {} }] as unknown as MapAction[];
+  it("uses the button's name in the person's language", () => {
+    expect(nameRemindButton("¿Quieres un recordatorio? Toca Remind me.", remind, "Recuérdame")).toBe("¿Quieres un recordatorio? Toca Recuérdame.");
+  });
+  it("leaves English and answers without the button alone", () => {
+    expect(nameRemindButton("Tap Remind me.", remind, "Remind me")).toBe("Tap Remind me.");
+    expect(nameRemindButton("Toca Remind me.", [], "Recuérdame")).toBe("Toca Remind me.");
   });
 });
