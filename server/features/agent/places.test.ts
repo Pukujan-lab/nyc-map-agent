@@ -68,3 +68,14 @@ describe("businesses by name", () => {
     expect(geosearch).toHaveBeenCalled();
   });
 });
+
+describe("neighbourhood names", () => {
+  it("a bare neighbourhood is its centre, not a venue that shares the name", () => {
+    expect(matchLandmark("Flushing")?.label).toMatch(/^Flushing \(Main St/);
+    expect(matchLandmark("Flushing, Queens")?.label).toMatch(/^Flushing \(/);
+    expect(matchLandmark("jackson heights")?.label).toMatch(/^Jackson Heights/);
+  });
+  it("a station that carries the name still wins as a station", () => {
+    expect(matchLandmark("Flushing-Main St")).toBeNull();
+  });
+});
