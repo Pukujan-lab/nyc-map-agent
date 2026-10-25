@@ -29,6 +29,9 @@ import { accuracyWorsened, boardingStation, endedVisits, loadDeclined, saveDecli
 import { enqueue, isConnected, markFailed, markSent, nextDue, type Queued } from "./queue";
 import { CalibrationStep, ExitPointer, PlatformMap } from "./steps";
 import { useT } from "@/lib/i18n/appLang";
+import { usePanel } from "@/lib/store/PanelContext";
+import { setSelectedLine, useSelectedLine } from "@/lib/transit/selectedLine";
+import { whereYouAre } from "./where";
 
 type Mode = "idle" | "ride" | "which" | "station" | "calibrate" | "landmark" | "corner" | "walk";
 
@@ -94,9 +97,9 @@ function useMapCenter(): { at: Pt; zoom: number } | null {
 }
 
 const SRC = "underground-exits";
-const LAYERS = ["underground-walk", "underground-train", "underground-exits-dot", "underground-exits-best", "underground-exits-label"];
+const LAYERS = ["underground-you", "underground-walk", "underground-train", "underground-exits-dot", "underground-exits-best", "underground-exits-label"];
 /** Station, every exit with its corner name, the chosen one highlighted, and the train's direction. Works on cached tiles offline. */
-function drawOnMap(map: MapLibreMap, pack: ExitPack, chosen: number, walk: Pt[] | null): void {
+function drawOnMap(map: MapLibreMap, pack: ExitPack, chosen: number, walk: Pt[] | null, you: Pt | null): void {
   const [lon, lat] = pack.station.at;
   const features: GeoJSON.Feature[] = pack.exits.map((e, i) => ({
     type: "Feature",
@@ -105,6 +108,9 @@ function drawOnMap(map: MapLibreMap, pack: ExitPack, chosen: number, walk: Pt[] 
   }));
   // The walk from the chosen exit to where they are going, like the video's route to the entrance (#418).
   if (walk && walk.length >= 2) features.unshift({ type: "Feature", properties: { walk: 1 }, geometry: { type: "LineString", coordinates: walk } });
+  // From you to the chosen exit, once your shared location puts you at this station.
+  const exitAt = pack.exits[chosen]?.at;
+  if (you && exitAt) features.unshift({ type: "Feature", properties: { you: 1 }, geometry: { type: "LineString", coordinates: [you, exitAt] } });
   if (pack.trackBearing !== null) {
     // A 60 m arrow shaft through the station along the train's direction.
     const r = (pack.trackBearing * Math.PI) / 180;
@@ -117,12 +123,13 @@ function drawOnMap(map: MapLibreMap, pack: ExitPack, chosen: number, walk: Pt[] 
   const src = map.getSource<GeoJSONSource>(SRC);
   if (src) return void src.setData(data);
   map.addSource(SRC, { type: "geojson", data });
-  map.addLayer({ id: LAYERS[0], type: "line", source: SRC, filter: ["==", ["get", "walk"], 1], layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#2563eb", "line-width": 5, "line-opacity": 0.9, "line-dasharray": [0.1, 1.8] } });
-  map.addLayer({ id: LAYERS[1], type: "line", source: SRC, filter: ["==", ["get", "train"], 1], paint: { "line-color": "#0f172a", "line-width": 5, "line-opacity": 0.6 } });
-  map.addLayer({ id: LAYERS[2], type: "circle", source: SRC, filter: ["==", ["geometry-type"], "Point"], paint: { "circle-radius": 6, "circle-color": "#ffffff", "circle-stroke-color": "#0f172a", "circle-stroke-width": 2 } });
-  map.addLayer({ id: LAYERS[3], type: "circle", source: SRC, filter: ["==", ["get", "best"], 1], paint: { "circle-radius": 9, "circle-color": "#16a34a", "circle-stroke-color": "#ffffff", "circle-stroke-width": 3 } });
+  map.addLayer({ id: LAYERS[0], type: "line", source: SRC, filter: ["==", ["get", "you"], 1], layout: { "line-cap": "round" }, paint: { "line-color": "#16a34a", "line-width": 5, "line-opacity": 0.9, "line-dasharray": [0.1, 1.8] } });
+  map.addLayer({ id: LAYERS[1], type: "line", source: SRC, filter: ["==", ["get", "walk"], 1], layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#2563eb", "line-width": 5, "line-opacity": 0.9, "line-dasharray": [0.1, 1.8] } });
+  map.addLayer({ id: LAYERS[2], type: "line", source: SRC, filter: ["==", ["get", "train"], 1], paint: { "line-color": "#0f172a", "line-width": 5, "line-opacity": 0.6 } });
+  map.addLayer({ id: LAYERS[3], type: "circle", source: SRC, filter: ["==", ["geometry-type"], "Point"], paint: { "circle-radius": 6, "circle-color": "#ffffff", "circle-stroke-color": "#0f172a", "circle-stroke-width": 2 } });
+  map.addLayer({ id: LAYERS[4], type: "circle", source: SRC, filter: ["==", ["get", "best"], 1], paint: { "circle-radius": 9, "circle-color": "#16a34a", "circle-stroke-color": "#ffffff", "circle-stroke-width": 3 } });
   map.addLayer({
-    id: LAYERS[4],
+    id: LAYERS[5],
     type: "symbol",
     source: SRC,
     filter: ["==", ["geometry-type"], "Point"],
@@ -167,6 +174,10 @@ export default function Underground() {
   const [chosen, setChosen] = useState(0);
   const [now, setNow] = useState(() => Date.now());
   const [more, setMore] = useState(false);
+  // The station you said you are at ("I'm here"); your word wins over a stale fix underground.
+  const [confirmed, setConfirmed] = useState<string | null>(null);
+  const { closeAll, content: panelContent } = usePanel();
+  const line = useSelectedLine();
 
   useEffect(() => {
     setStationHelpVisible(mode !== "idle");
@@ -366,6 +377,12 @@ export default function Underground() {
 
   const pack = packFor(store, stationId);
   const exit = pack?.exits[chosen] ?? null;
+  // Before pointing at an exit, check you are at this station (your shared location, or your "I'm here").
+  const me: Pt | null = shared.status === "on" && shared.coords ? [shared.coords.lon, shared.coords.lat] : null;
+  const nearMe = useMemo(() => (sys && me ? nearestStation(sys, me, 400) : null), [sys, me?.[0], me?.[1]]); // eslint-disable-line react-hooks/exhaustive-deps
+  const where = home && pack ? whereYouAre({ station: pack.station, exitAt: exit?.at ?? null, shared, confirmed: confirmed === pack.station.id, nearest: nearMe }) : undefined;
+  const you = where?.kind === "here" ? where.from : null;
+  const youKey = you ? `${you[0].toFixed(5)},${you[1].toFixed(5)}` : "";
   // Tell the agent where the person is underground, so "which exit?" or "where am I?" has an answer.
   const exitSign = exit ? signText(exit.streets, exit.corner) ?? `Exit ${chosen + 1}` : null;
   useEffect(() => {
@@ -385,7 +402,7 @@ export default function Underground() {
       const show = !!pack && mode !== "idle" && mode !== "ride" && mode !== "which";
       const walk = show && pack.exits[chosen] ? walkFromExit(store, pack, pack.exits[chosen].at) : null;
       const draw = () => {
-        if (show) drawOnMap(map, pack, chosen, walk);
+        if (show) drawOnMap(map, pack, chosen, walk, you);
         else clearMap(map);
       };
       // The style can be mid-load or swapped by a view change; once the map settles, put the exits back if they went missing.
@@ -395,14 +412,17 @@ export default function Underground() {
       clear = () => { map.off("idle", ensure); clearMap(map); };
     });
     return () => { unsubscribe(); clear?.(); };
-  }, [pack, mode, chosen, store]);
+  }, [pack, mode, chosen, store, youKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!home || mode !== "station" || !pack) return;
     return onMapInstance((map) => {
-      map?.easeTo({ center: pack.station.at, zoom: 17, pitch: 0, bearing: 0, offset: [0, 100], duration: 600 });
+      const to = pack.exits[chosen]?.at;
+      // Once you are placed at the station, frame you and your exit; otherwise the station.
+      if (map && you && to) map.fitBounds([[Math.min(you[0], to[0]), Math.min(you[1], to[1])], [Math.max(you[0], to[0]), Math.max(you[1], to[1])]], { padding: { top: 260, bottom: 140, left: 60, right: 60 }, maxZoom: 18, pitch: 0, bearing: 0, duration: 600 });
+      else map?.easeTo({ center: pack.station.at, zoom: 17, pitch: 0, bearing: 0, offset: [0, 100], duration: 600 });
     });
-  }, [home, mode, pack?.station.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [home, mode, pack?.station.id, chosen, !!you]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The safety line stays with the pointer for its first 10 seconds.
   useEffect(() => {
@@ -572,8 +592,21 @@ export default function Underground() {
     setMotionAsk(null);
     setGetOff(riding());
     setStationId(null);
+    setConfirmed(null);
     setMode("idle");
   };
+
+  // One thing at a time (#361): opening station help closes the place and line panels under it,
+  // and tapping a place or a line afterwards closes station help.
+  const helpUp = home && mode !== "idle" && mode !== "ride";
+  useEffect(() => {
+    if (!helpUp) return;
+    closeAll();
+    setSelectedLine(null);
+  }, [helpUp]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (helpUp && (panelContent || line)) leave();
+  }, [panelContent, line]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleMotion = async () => {
     if (stopMotion.current) {
@@ -904,6 +937,11 @@ export default function Underground() {
     rotation={pointer.show ? pointer.rotation : null} distanceM={distM}
     onChoose={setChosen} onOut={surfaced} onClose={leave}
     onCalibrate={canCalibrate ? beginCalibration : undefined}
+    where={where}
+    onShare={() => void startSharing()}
+    onHere={() => setConfirmed(pack.station.id)}
+    onWalkThere={() => seedChat(`Walk me to ${pack.station.name} subway station.`)}
+    onPickStation={(id) => openStationHelp(id)}
   />;
 
   return (

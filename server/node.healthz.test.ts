@@ -17,4 +17,9 @@ describe("root app", () => {
     const res = await createRoot().fetch(new Request("http://x/some/client/route"));
     expect(res.status).toBe(built ? 200 : 404);
   });
+
+  it("answers a missing build file with 404, not the SPA shell", async () => {
+    const res = await createRoot().fetch(new Request("http://x/assets/MyDay-oldbuild.js"));
+    expect(res.status).toBe(404);
+  });
 });

@@ -1,3 +1,4 @@
+import { ErrorBoundary } from "./ErrorBoundary";
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   BarChart3, BusFront, Building2, CalendarDays, ChevronRight, CircleDot, Database, Ear, History, House, Info, Languages, Layers,
@@ -342,7 +343,7 @@ export function MenuRow({ onOpenDashboard, onOpenSources }: { onOpenDashboard: (
         <div role="region" aria-label={t(ITEMS.find((x) => x.id === open)!.label)} data-testid="menu-dropdown" data-map-cover
           className={`pointer-events-auto w-[min(320px,calc(100vw-92px))] overflow-y-auto overscroll-contain ${FLOAT}`}
           style={{ maxHeight: "calc(100dvh - env(safe-area-inset-top) - 84px - var(--chat-bar-h, 0px) - 12px)" }}>
-          {open === "myDay" ? (MyDayBody ? <Suspense fallback={null}><MyDayBody onClose={close} /></Suspense> : null)
+          {open === "myDay" ? (MyDayBody ? <ErrorBoundary name="my-day" fallback={<p className="px-3 py-2 text-sm">My day could not open. Reload the page to try again.</p>}><Suspense fallback={null}><MyDayBody onClose={close} /></Suspense></ErrorBoundary> : null)
             : open === "layers" ? <LayersBody onClose={close} />
             : open === "filters" ? <FiltersBody onClose={close} />
             : open === "data" ? <DataBody />
