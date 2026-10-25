@@ -119,11 +119,12 @@
 }
 
 /* Narrow screens: the bottom dock spans the width, so the compact attribution
-   (and its "i" toggle) sits above it instead of underneath. */
+   (and its "i" toggle) sits above it instead of underneath. The home publishes
+   its height as --chat-bar-h; without it, the old 64px still clears the dock. */
 @media (max-width: 767px) {
   .maplibregl-ctrl-bottom-right,
   .maplibregl-ctrl-bottom-left {
-    bottom: 64px;
+    bottom: calc(var(--chat-bar-h, 56px) + 8px);
   }
   .maplibregl-ctrl-attrib-button {
     min-width: 24px;
