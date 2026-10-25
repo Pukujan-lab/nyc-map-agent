@@ -8,6 +8,8 @@ import { buildDriveTrip } from "./drive/trip";
 import type { DriveRouter } from "./drive/router";
 import { portalFor, safe, toNyLocal, tripBrief } from "./trip";
 import { distM, openDataEntrances, type Station } from "./transit";
+import { loadGuideLandmarks, type GuideLandmark } from "../../../src/lib/guide/landmarkGuide";
+import { landmarkAtTurn, landmarksOnWay } from "./landmarksOnWay";
 import { sameStation } from "../../../src/lib/transit/serviceChanges";
 import { lineTroubles, otherLinesAt, stuckTrains, troubleSummary, type FeedAlert, type LiveVehicle } from "../../../src/lib/transit/trouble";
 import { planTrip, type PlanDeps } from "./plan";
@@ -26,6 +28,8 @@ export interface ToolContext {
     alertEntities?: () => Promise<FeedAlert[]>;
     vehicles?: (routes: string[]) => Promise<LiveVehicle[]>;
     now?: () => number;
+    /** The guide landmarks, injectable for tests. */
+    landmarks?: () => Promise<readonly GuideLandmark[]>;
   };
   /** The followed vehicle key from street view ("subway:<trip id>"), to say whether that train is the stuck one. */
   followedTrain?: string | null;
@@ -133,9 +137,17 @@ export function makeTools(ctx: ToolContext) {
     return t;
   };
   // A turn onto an unnamed footpath ("Turn right onto the path") tells a walker nothing, so the model never gets one.
-  const walkBrief = (t: Trip) => {
+  // Turns name the landmark beside them, and `passes` lists what you walk by on which hand,
+  // so the answer can say "on your left, next to the library" (#418 scene 4).
+  const walkBrief = async (t: Trip) => {
     const l = t.legs[0];
-    return l.kind === "walk" ? { tripId: t.id, minutes: Math.max(1, Math.round(l.durationS / 60)), meters: Math.round(l.distanceM), turns: l.turns.map((x) => x.text).filter((x) => !/onto the path$/i.test(x)).slice(0, 8) } : null;
+    if (l.kind !== "walk") return null;
+    const marks = await (ctx.deps?.landmarks ?? loadGuideLandmarks)().catch(() => [] as readonly GuideLandmark[]);
+    const turns = l.turns.filter((x) => !/onto the path$/i.test(x.text)).slice(0, 8).map((x) => {
+      const near = landmarkAtTurn(x.at, marks);
+      return near ? `${x.text} (by ${near})` : x.text;
+    });
+    return { tripId: t.id, minutes: Math.max(1, Math.round(l.durationS / 60)), meters: Math.round(l.distanceM), turns, passes: landmarksOnWay(l.coords, marks) };
   };
 
   return {
@@ -148,7 +160,7 @@ export function makeTools(ctx: ToolContext) {
         const t = walkTrip(o, { label: dest.label, at: at(dest) }, await (ctx.deps?.walk ?? routeWalk)(at(o), at(dest)));
         offer(tripActions(t));
         offer(placeActions(dest));
-        return walkBrief(t);
+        return await walkBrief(t);
       },
     }),
     transit_plan: tool({
@@ -186,7 +198,7 @@ export function makeTools(ctx: ToolContext) {
         // The way to the nearest one, so the answer gives directions rather than just a name.
         const first = spots[0];
         const w = first ? await safe((ctx.deps?.walk ?? routeWalk)(at(from), [first.lon, first.lat]), null) : null;
-        const walk = first && w ? walkBrief(walkTrip(from, { label: first.name, at: [first.lon, first.lat] }, w)) : null;
+        const walk = first && w ? await walkBrief(walkTrip(from, { label: first.name, at: [first.lon, first.lat] }, w)) : null;
         // Coordinates stay out of the model's view; the button carries them.
         return { restrooms: spots.map((r) => ({ name: r.name, distanceM: r.distanceM, status: r.status, hours: r.hours, openNow: r.openNow, accessibility: r.accessibility, operator: r.operator })), walkToNearest: walk };
       }),
@@ -207,7 +219,7 @@ export function makeTools(ctx: ToolContext) {
         const t = w ? walkTrip(from, { label: dest.label, at: at(dest) }, w) : null;
         offer([{ kind: "flyTo", id: `fly:exit:${exit.lon.toFixed(5)},${exit.lat.toFixed(5)}`, label: "Show the exit", lon: exit.lon, lat: exit.lat, zoom: 18 }]);
         if (t) offer(tripActions(t));
-        return { station: st.name, exit: exit.label, elevatorOnly: exit.elevatorOnly, outage: exit.outage, elevatorOutages: outages.slice(0, 3), walkFromExit: t ? walkBrief(t) : null };
+        return { station: st.name, exit: exit.label, elevatorOnly: exit.elevatorOnly, outage: exit.outage, elevatorOutages: outages.slice(0, 3), walkFromExit: t ? await walkBrief(t) : null };
       }),
     }),
     line_status: tool({
