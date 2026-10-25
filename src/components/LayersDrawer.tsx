@@ -4,11 +4,19 @@ import { useFeatureToggles } from "@/lib/featureToggles";
 import { isFlagId, useFlags } from "@/lib/flags";
 import type { NtaBoundary } from "@/lib/api/nta";
 import { NtaIndex } from "@/lib/geo/ntaIndex";
+import { RestroomDetails } from "@/components/RestroomCard";
+import { currentOrigin } from "@/lib/geo/directionsFromHere";
 import { startSharing, stopSharing, useSharedLocation } from "@/lib/geo/sharedLocation";
-import { onMapInstance } from "@/lib/map/mapInstance";
+import { getMapInstance, onMapInstance } from "@/lib/map/mapInstance";
+import { eyeOrCenter } from "@/lib/map/streetPick";
+import { formatStreetText } from "@/lib/streetName";
 import { SUBWAY_ROUTES, setOptions, useMapOptions } from "@/lib/map/mapOptions";
 import { PLACE_CATEGORIES, setPlaces, usePlaces } from "@/lib/map/places";
 import { setTransitFocusOff } from "@/lib/map/transitFocus";
+import { setFollowed } from "@/lib/transit/follow";
+import { setSelectedLine, useSelectedLine } from "@/lib/transit/selectedLine";
+import { setStreetXray, useStreetXray } from "@/lib/transit/streetXray";
+import { setQuickLayer, useQuickLayer } from "@/lib/quickLayers";
 import { useDataView } from "@/lib/store/DataViewContext";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { usePanel, type PanelChip } from "@/lib/store/PanelContext";
@@ -71,6 +79,8 @@ function useNeighborhood(boundaries: NtaBoundary[] | null): string {
 }
 
 const GETTING_AROUND = ["liveTrains", "liveBuses", "transitFocus"];
+/** Agent-first home (#372): Live trains, Live buses and Restrooms live in the small Layers panel only. */
+const IN_LAYERS_PANEL = new Set(["liveTrains", "liveBuses", "restrooms", "transit"]);
 
 /**
  * Layout A (#171): every control lives in this one drawer — a bottom sheet on
@@ -96,9 +106,17 @@ export function LayersDrawer({
   onOpenSources: () => void;
 }) {
   const flags = useFlags();
-  const { chips } = usePanel();
+  // Agent-first home (#370, #372): each switch in one place; this drawer is "More layers".
+  const home = flags.agentHome;
+  const { chips, showPanel } = usePanel();
+  const xray = useStreetXray();
+  const selectedLine = useSelectedLine();
+  const quick = {
+    businesses: useQuickLayer("businesses"),
+    streetArt: useQuickLayer("streetArt"),
+  };
   const [toggledOn, toggle] = useFeatureToggles();
-  const { restrooms, setRestrooms, city3d, setCity3d, eco, setEco, setCaveatsOpen, navigate, flyTo } = useMapState();
+  const { restrooms, setRestrooms, city3d, setCity3d, eco, setEco, setCaveatsOpen, navigate, flyTo, walking } = useMapState();
   const { routePicking, routeStart, setRoutePicking } = useDataView();
   const places = usePlaces();
   const opts = useMapOptions();
@@ -115,7 +133,7 @@ export function LayersDrawer({
   const layerChips: PanelChip[] = [];
   const seen = new Set<string>();
   const add = (c: PanelChip) => {
-    if (seen.has(c.id) || GETTING_AROUND.includes(c.id) || (isFlagId(c.id) && !flags[c.id])) return;
+    if (seen.has(c.id) || GETTING_AROUND.includes(c.id) || (home && IN_LAYERS_PANEL.has(c.id)) || (isFlagId(c.id) && !flags[c.id])) return;
     seen.add(c.id);
     layerChips.push(c);
   };
@@ -124,6 +142,12 @@ export function LayersDrawer({
   if (registered.has("restroomShops")) add(registered.get("restroomShops")!);
   for (const f of FEATURES) if (f.chip && flags[f.id]) add({ id: f.chip.id, label: f.chip.label, active: toggledOn.has(f.chip.id), onToggle: () => toggle(f.chip!.id) });
   for (const c of chips) add(c);
+  // The old quick Layers menu's own switches, now only here.
+  if (home) {
+    add({ id: "quick:businesses", label: "Businesses", active: quick.businesses, onToggle: () => setQuickLayer("businesses", !quick.businesses) });
+    add({ id: "quick:streetArt", label: "Street art", active: quick.streetArt, onToggle: () => setQuickLayer("streetArt", !quick.streetArt) });
+    add({ id: "xray", label: "X-ray (trains underground)", active: xray, onToggle: () => setStreetXray(!xray) });
+  }
 
   const directing = routePicking !== null || routeStart !== null;
   const filtersOn = places.size + opts.routes.length + layerChips.filter((c) => c.active).length + (opts.stationsOnly ? 1 : 0) + (registered.get("liveBuses")?.active ? 1 : 0);
@@ -140,11 +164,13 @@ export function LayersDrawer({
     if (next.has(id)) next.delete(id); else next.add(id);
     setPlaces(next);
   };
+  // Home: choosing a line opens its panel (notices, stations, trains) and shows the map.
+  const chooseLine = (r: string) => { setSelectedLine(selectedLine?.route === r ? null : r); onOpenChange(false); };
   const toggleRoute = (r: string) => setOptions({ routes: opts.routes.includes(r) ? opts.routes.filter((x) => x !== r) : [...opts.routes, r] });
 
   const around: Array<{ id: string; label: string; on?: boolean; onClick: () => void; primary?: boolean }> = [];
   if (flags.directions) around.push({ id: "directions", label: "Directions", primary: true, on: directing, onClick: () => { setRoutePicking(routeStart ? "end" : "start"); onOpenChange(false); } });
-  for (const id of GETTING_AROUND) {
+  for (const id of GETTING_AROUND.filter((g) => !(home && IN_LAYERS_PANEL.has(g)))) {
     const c = registered.get(id);
     if (c) around.push({ id, label: c.label, on: c.active, onClick: c.onToggle });
   }
@@ -153,8 +179,35 @@ export function LayersDrawer({
       ? { id: "loc", label: "Stop sharing location", on: true, onClick: () => stopSharing() }
       : { id: "loc", label: shared.status === "asking" ? "Finding you…" : "My location", onClick: () => void startSharing().then((c) => { if (c) flyTo({ lon: c.lon, lat: c.lat, zoom: 16 }); }) },
   );
+  const findNearestRestroom = () => {
+    void (async () => {
+      const { closestRestroom, formatMetres, loadRestrooms } = await import("@/lib/map/restrooms");
+      // Street view: the walker's eye. Otherwise My location. Failing both, the camera position
+      // (not the map centre, which sits far down the look ray when the camera is tilted).
+      const shared = currentOrigin() ?? (await startSharing());
+      const map = getMapInstance();
+      const cam = map ? eyeOrCenter(map) : null;
+      const from = shared ?? (cam ? { lon: cam.lng, lat: cam.lat } : null);
+      if (!from) return;
+      const hit = closestRestroom(await loadRestrooms(), [from.lon, from.lat]);
+      if (!hit) return;
+      setRestrooms(true);
+      // The walk loop owns the camera at street level; flying it would fight the walker.
+      if (!walking) flyTo({ lon: hit.info.lon, lat: hit.info.lat, zoom: 16 });
+      onOpenChange(false);
+      const where = shared ? "you" : "the map";
+      const distanceLabel = `${formatMetres(hit.metres)} from ${where}`;
+      showPanel({
+        id: `restroom:${hit.info.lon.toFixed(5)},${hit.info.lat.toFixed(5)}`,
+        title: formatStreetText(hit.info.name),
+        subtitle: distanceLabel,
+        details: <RestroomDetails restroom={hit.info} distanceLabel={distanceLabel} />,
+      });
+    })();
+  };
 
-  const placeItems = PLACE_CATEGORIES.filter((c) => match(c.label) || c.subs.some((s) => match(s.label)));
+  // Home: Restrooms is a switch in the Layers panel, so not a place category here too.
+  const placeItems = PLACE_CATEGORIES.filter((c) => !(home && c.id === "restrooms")).filter((c) => match(c.label) || c.subs.some((s) => match(s.label)));
   const routeItems = SUBWAY_ROUTES.filter((r) => !q.trim() || match(`${r} train`) || match("subway") || match("lines"));
   const advanced = [
     { label: "Filters and settings…", onClick: () => { onOpenChange(false); onOpenControls(); } },
@@ -189,7 +242,7 @@ export function LayersDrawer({
         />
       </div>
       <div className="min-h-0 flex-1 space-y-[var(--sp-5)] overflow-y-auto overscroll-contain px-[var(--sp-4)] pb-[var(--sp-6)] pt-[var(--sp-3)]">
-        <Section title="Getting around" hidden={!around.some((a) => match(a.label))}>
+        <Section title="Getting around" hidden={!around.some((a) => match(a.label)) && !(flags.restrooms && match("Nearest restroom"))}>
           <div className="grid grid-cols-2 gap-[var(--sp-2)]">
             {around.filter((a) => match(a.label)).map((a) =>
               a.primary ? (
@@ -200,6 +253,11 @@ export function LayersDrawer({
                 <Pill key={a.id} on={a.on} onClick={a.onClick} className="h-11 text-[14px]">{a.label}</Pill>
               ),
             )}
+            {flags.restrooms && match("Nearest restroom") ? (
+              <button type="button" onClick={findNearestRestroom} className="col-span-2 h-11 rounded-full border border-border bg-card text-[14px] font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                Nearest restroom
+              </button>
+            ) : null}
           </div>
         </Section>
 
@@ -253,10 +311,10 @@ export function LayersDrawer({
           ))}
         </Section>
 
-        <Section title="Transit lines" note={opts.routes.length ? `${opts.routes.length} picked` : "all, muted"} hidden={!routeItems.length && !match("stations only")}>
+        <Section title="Transit lines" note={home ? undefined : opts.routes.length ? `${opts.routes.length} picked` : "all, muted"} hidden={!routeItems.length && !match("stations only")}>
           <div className="flex flex-wrap gap-[var(--sp-2)]">
             {routeItems.map((r) => (
-              <Pill key={r} on={opts.routes.includes(r)} onClick={() => toggleRoute(r)} className="h-9 w-11 px-0">{r}</Pill>
+              <Pill key={r} on={home ? selectedLine?.route === r : opts.routes.includes(r)} onClick={() => (home ? chooseLine(r) : toggleRoute(r))} className={home ? "h-11 w-11 px-0" : "h-9 w-11 px-0"}>{r}</Pill>
             ))}
           </div>
           <div className="flex flex-wrap gap-[var(--sp-2)]">
@@ -275,7 +333,9 @@ export function LayersDrawer({
             <Pill on={opts.buildings === "flat"} onClick={() => setOptions({ buildings: "flat" })}>Flat buildings</Pill>
             <Pill on={opts.buildings === "3d"} onClick={() => setOptions({ buildings: "3d" })}>3D buildings</Pill>
           </div>
-          <p className="text-[13px] text-muted-foreground">Rotate: right-drag or Ctrl+drag</p>
+          {home ? null : <p className="text-[13px] text-muted-foreground">Rotate: right-drag or Ctrl+drag</p>}
+          {/* Home (#370): Theme lives in Settings on the menu row. */}
+          {home ? null : <>
           <div className="text-[13px] text-muted-foreground">Theme</div>
           <div className="flex flex-wrap gap-[var(--sp-2)]" role="radiogroup" aria-label="Theme">
             {CHOICES.map((id) => (
@@ -284,9 +344,11 @@ export function LayersDrawer({
               </Pill>
             ))}
           </div>
+          </>}
         </Section>
 
-        <Section title="Advanced" hidden={!advanced.some((a) => match(a.label)) && !match("advanced")}>
+        {/* Home (#370): these moved to Settings and City data on the menu row. */}
+        <Section title="Advanced" hidden={home || (!advanced.some((a) => match(a.label)) && !match("advanced"))}>
           <div className="flex flex-wrap gap-[var(--sp-2)]">
             {advanced.filter((a) => match(a.label) || match("advanced")).map((a) => <Pill key={a.label} on={a.on} onClick={a.onClick}>{a.label}</Pill>)}
           </div>
@@ -294,7 +356,7 @@ export function LayersDrawer({
       </div>
       <div className="grid grid-cols-2 gap-[var(--sp-2)] border-t border-border px-[var(--sp-4)] py-[var(--sp-3)]">
         <button type="button" onClick={clearAll} className="h-11 rounded-full border border-border bg-card text-[14px] font-semibold">Clear all</button>
-        <button type="button" onClick={() => onOpenChange(false)} className="h-11 rounded-full bg-acc text-[14px] font-semibold text-acc-foreground">Show map</button>
+        <button type="button" onClick={() => { setFollowed(null); onOpenChange(false); }} className="h-11 rounded-full bg-acc text-[14px] font-semibold text-acc-foreground">Show map</button>
       </div>
     </div>
   );
@@ -320,9 +382,13 @@ export function LayersDrawer({
         data-testid="layers-drawer"
         className={cn(
           "fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-[22px] border border-border bg-card pb-[max(var(--sp-2),env(safe-area-inset-bottom))] text-card-foreground shadow-2xl outline-none",
+          // Home: a see-through panel that floats above the chat bar instead of covering it.
+          home && "bottom-[var(--chat-bar-h,0px)] mx-2 rounded-[22px] bg-card/85 backdrop-blur-md",
           // Leaves the top of the map free to tap; with Follow / Navigate on,
           // it stops further short so it never covers their HUD.
           hudActive ? "max-h-[50%]" : "max-h-[60%]",
+          // Home: never taller than the room between the menu row and the chat bar, so the bar always shows.
+          home && (hudActive ? "max-h-[min(50%,calc(100%_-_var(--chat-bar-h,0px)_-_76px))]" : "max-h-[min(60%,calc(100%_-_var(--chat-bar-h,0px)_-_76px))]"),
         )}
       >
         <div className="mx-auto mt-2 h-1.5 w-10 shrink-0 rounded-full bg-muted-foreground/30" />

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { GET, decodePolyline, loadBusStops } from "./routes";
+import { GET, decodePolyline, loadBusArrivals, loadBusStops } from "./routes";
 
 describe("bus sheet endpoints", () => {
   afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
@@ -60,5 +60,20 @@ describe("bus-stops", () => {
       new Response(JSON.stringify({ data: { list: [{ id: "MTA_1", name: "GRAND ST/ESSEX ST", lat: 40.718, lon: -73.988, direction: "W", routeIds: ["MTA NYCT_M14D+", "MTA NYCT_B39"] }], references: { routes: [{ id: "MTA NYCT_M14D+", shortName: "M14D-SBS" }, { id: "MTA NYCT_B39", shortName: "B39" }] } } })))));
     const { stops } = await loadBusStops("k", 40.718, -73.988);
     expect(stops).toEqual([{ id: "MTA_1", name: "GRAND ST/ESSEX ST", lat: 40.718, lon: -73.988, dir: "W", routes: ["B39", "M14D-SBS"] }]);
+  });
+});
+
+describe("bus-arrivals", () => {
+  afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
+  it("rejects a malformed stop id", async () => {
+    vi.stubEnv("MTA_BUSTIME_KEY", "k");
+    expect((await GET(new Request("http://x/api/transit/bus-arrivals?stop=../x"))).status).toBe(400);
+  });
+  it("lists visits soonest first with route, headsign and distance", async () => {
+    const visit = (line: string, t: string) => ({ MonitoredVehicleJourney: { PublishedLineName: [line], DestinationName: ["JAMAICA"], MonitoredCall: { ExpectedArrivalTime: t, Extensions: { Distances: { PresentableDistance: "2 stops away" } } } } });
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(JSON.stringify({ Siri: { ServiceDelivery: { StopMonitoringDelivery: [{ MonitoredStopVisit: [visit("Q6", "2026-01-01T00:10:00Z"), visit("Q8", "2026-01-01T00:05:00Z")] }] } } })))));
+    const { arrivals } = await loadBusArrivals("k", "MTA_1");
+    expect(arrivals.map((a) => a.route)).toEqual(["Q8", "Q6"]);
+    expect(arrivals[0]).toMatchObject({ destination: "JAMAICA", away: "2 stops away" });
   });
 });

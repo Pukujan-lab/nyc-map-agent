@@ -50,7 +50,7 @@ test("street level: Ask opens a compact sheet and sends the spot as context; han
     await route.fulfill({ contentType: "application/x-ndjson", body: nd([{ type: "text", text: "Use the stairs at 7 Av and W 43 St for the 1 train." }, { type: "done", model: "mock", usage: { inputTokens: 0, outputTokens: 0 } }]) });
   });
 
-  await page.goto("/");
+  await page.goto("/?flags=-agentHome");
   await expect(page.locator("canvas.maplibregl-canvas")).toBeVisible();
   await page.getByTestId("view-switcher").getByRole("button", { name: "Street", exact: true }).click();
   await expect(page.getByTestId("view-switcher").getByRole("button", { name: "Top", exact: true })).toBeVisible();

@@ -1,22 +1,48 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { describeStep } from "./drive/router";
 import { MTA_TOLLS, tolls } from "./drive/context";
-import { args } from "./tools";
+import { args, makeTools } from "./tools";
 import { nyLocalToDate, toNyLocal } from "./trip";
 import { octant } from "./transit";
 
 describe("tool argument schemas", () => {
-  it("transit_plan defaults from to 'here' and needs a local time", () => {
+  it("transit_plan defaults from to 'here' and takes the user's time words (resolved server-side)", () => {
     expect(args.transit_plan.parse({ to: "Grand Central", depart: "2026-10-22T09:00" }).from).toBe("here");
-    expect(() => args.transit_plan.parse({ to: "Grand Central", depart: "tomorrow 9am" })).toThrow();
+    expect(args.transit_plan.parse({ to: "Grand Central", depart: "tomorrow 9am" }).depart).toBe("tomorrow 9am");
+    expect(args.transit_plan.parse({ to: "Grand Central" }).depart).toBe("now");
   });
-  it("playFlythrough only accepts 2x/10x/30x", () => {
+  it("playFlythrough accepts 2x/5x/10x/30x", () => {
     expect(args.playFlythrough.parse({ tripId: "t" }).speed).toBe(10);
-    expect(() => args.playFlythrough.parse({ tripId: "t", speed: 5 })).toThrow();
+    expect(args.playFlythrough.parse({ tripId: "t", speed: 5 }).speed).toBe(5);
+    expect(() => args.playFlythrough.parse({ tripId: "t", speed: 3 })).toThrow();
   });
   it("drive_plan and weather validate", () => {
     expect(args.drive_plan.safeParse({ to: "JFK", depart: "2026-10-22T07:30" }).success).toBe(true);
-    expect(args.weather_forecast.safeParse({ time: "nope" }).success).toBe(false);
+    expect(args.weather_forecast.safeParse({ time: "" }).success).toBe(false);
+  });
+});
+
+describe("transit_plan resolves the time on the server", () => {
+  it("plans 'tomorrow 9am' at that New York time and marks what is not known", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"));
+    const asked: string[] = [];
+    const tools = makeTools({
+      location: { lon: -73.99, lat: 40.735 },
+      now: nyLocalToDate("2026-10-24T14:30"),
+      emit: () => {},
+      deps: {
+        otp: { plan: (_o, _d, local) => { asked.push(local); return Promise.resolve([]); } },
+        planner: { plan: () => Promise.resolve(null) },
+        changes: [],
+      },
+    });
+    const run = tools.transit_plan.execute as unknown as (a: unknown, o: unknown) => Promise<{ depart: string; whenNote?: string }>;
+    const brief = await run({ from: "here", to: "here", depart: "tomorrow 9am", arriveBy: false }, { toolCallId: "x", messages: [] });
+    expect(asked).toEqual(["2026-10-25T09:00"]);
+    expect(brief.depart).toBe("2026-10-25T09:00");
+    expect(brief.whenNote).toMatch(/Sun, Oct 25, 9:00 AM.*live delays are not known/);
+    await expect(run({ from: "here", to: "here", depart: "whenever", arriveBy: false }, { toolCallId: "y", messages: [] })).rejects.toThrow(/Could not read the time/);
+    fetchSpy.mockRestore();
   });
 });
 

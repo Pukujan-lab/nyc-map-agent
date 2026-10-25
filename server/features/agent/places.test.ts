@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { bestCandidate, matchLandmark, matchStation } from "./places";
-import { geocode } from "./services";
+import { businessQuery, geocode } from "./services";
 import type { Station } from "./transit";
 
 const st = (name: string, at: [number, number]): Station => ({ id: name, complexId: name, name, routes: [], structure: "Subway", at });
@@ -44,5 +44,27 @@ describe("geocode landmarks and stations", () => {
 
   it("drops low-confidence GeoSearch matches", () => {
     expect(bestCandidate([{ ...esplanade, confidence: 0.3 }])).toBeNull();
+  });
+});
+
+describe("businesses by name", () => {
+  it("asks for a store with its area, and leaves addresses to GeoSearch", () => {
+    expect(businessQuery("Aldi at Rego Park")).toBe("Aldi, Rego Park");
+    expect(businessQuery("Trader Joe's near Union Square")).toBe("Trader Joe's, Union Square");
+    expect(businessQuery("61-11 Junction Blvd")).toBeNull();
+  });
+
+  it("uses the store over GeoSearch's nearest address when one is found", async () => {
+    const geosearch = vi.fn();
+    const shops = vi.fn().mockResolvedValue({ label: "Aldi, 61-11 Junction Boulevard, Rego Park", at: [-73.86, 40.73] });
+    const p = await geocode("Aldi at Rego Park", { stations: () => Promise.resolve([]), geosearch, shops });
+    expect(p?.label).toContain("Aldi");
+    expect(geosearch).not.toHaveBeenCalled();
+  });
+
+  it("falls back to GeoSearch when the store lookup fails", async () => {
+    const geosearch = vi.fn().mockResolvedValue([]);
+    await geocode("Some Place in Queens", { stations: () => Promise.resolve([]), geosearch, shops: () => Promise.reject(new Error("down")) });
+    expect(geosearch).toHaveBeenCalled();
   });
 });

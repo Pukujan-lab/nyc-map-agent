@@ -18,6 +18,7 @@ import { SOURCES, type GeometrySource, type GridSource, type SourceConfig } from
 import { octoQuery } from "../api/_lib/octo";
 import { collectEvents, upsertEvents } from "../server/features/events/ingest";
 import { collectPlaceToilets, replacePlaceToilets } from "../server/features/place-toilets/ingest";
+import { collectOsmToilets, replaceOsmToilets } from "../server/features/restrooms/osm";
 import { loadEnv } from "./env";
 
 const SOCRATA = "https://data.cityofnewyork.us/resource";
@@ -241,7 +242,8 @@ async function ingest(s: SourceConfig): Promise<number> {
 
 /** Public restrooms (i7jb-7jku): a small inventory, replaced whole into raw.restrooms. */
 async function ingestRestrooms(): Promise<number> {
-  const rows = await soqlAll<Row>("i7jb-7jku", { $where: "latitude IS NOT NULL", $order: "facility_name" });
+  // :updated_at is the row's last change at NYC Open Data, served as the record's asOf.
+  const rows = await soqlAll<Row>("i7jb-7jku", { $select: "*, :updated_at", $where: "latitude IS NOT NULL", $order: "facility_name" });
   const byName = new Map(rows.filter((r) => r.facility_name).map((r) => [r.facility_name, r]));
   await octoQuery("DELETE FROM raw.restrooms");
   await insertJson(
@@ -340,6 +342,29 @@ async function main() {
     } catch (err) {
       failed++;
       console.error(`place-toilets: FAILED ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  if (!only.length || only.includes("osm-toilets")) {
+    const started = new Date().toISOString();
+    try {
+      const post = async (url: string, body: URLSearchParams): Promise<unknown> => {
+        for (let attempt = 0; ; attempt++) {
+          const res = await fetch(url, { method: "POST", body, headers: { "User-Agent": "nyc-map-agent nightly ingest (nyc.design-bakery.com)" } });
+          if (res.ok) return res.json();
+          if (attempt >= 3 || (res.status < 500 && res.status !== 429)) throw new Error(`${new URL(url).host} ${res.status}`);
+          await new Promise((r) => setTimeout(r, 5000 * 2 ** attempt));
+        }
+      };
+      const { toilets, elements } = await collectOsmToilets(post);
+      await replaceOsmToilets(toilets, (sql, params) => octoQuery(sql, params));
+      console.log(`osm-toilets: ${toilets.length} kept of ${elements} OSM amenity=toilets (private, no and customers-only dropped)`);
+      await octoQuery(
+        "INSERT INTO core.ingest_runs (source_id, started_at, finished_at, rows, status) VALUES ('osm-toilets', $1, now(), $2, 'ok')",
+        [started, toilets.length],
+      );
+    } catch (err) {
+      failed++;
+      console.error(`osm-toilets: FAILED ${err instanceof Error ? err.message : String(err)}`);
     }
   }
   if (failed) process.exit(1);

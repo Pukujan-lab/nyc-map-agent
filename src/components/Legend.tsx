@@ -33,9 +33,9 @@ function LineKey({
     <li className="flex items-center gap-2">
       <span
         aria-hidden="true"
-        className={`h-0 w-4 shrink-0 border-t ${className}`}
+        className={`h-0 w-5 shrink-0 border-t-2 ${className}`}
       />
-      <span className="flex-1 text-[11px]">{label}</span>
+      <span className="flex-1 text-[11px] font-semibold text-foreground">{label}</span>
     </li>
   );
 }
@@ -132,7 +132,7 @@ export function LegendContent({
       <ul className="mt-2.5 space-y-1 border-t border-border/60 pt-2">
         {scale === "blocks" ? (
           <LineKey
-            className="border-slate-500/50"
+            className="border-slate-500"
             label={USE_BLOCK_TILES ? "Tax block (DCP MapPLUTO)" : "~300 m block square"}
           />
         ) : null}
@@ -142,7 +142,7 @@ export function LegendContent({
           </li>
         ) : null}
         <LineKey
-          className="border-slate-700/60"
+          className="border-slate-700"
           label="Neighborhood boundary"
         />
         <LineKey className="border-slate-900" label="Borough boundary" />

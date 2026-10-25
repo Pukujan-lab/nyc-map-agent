@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layers: the important few</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#9ec5ff}a:hover{color:#cfe2ff}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #0e1726; font-family: Inter, system-ui, sans-serif; color: #f1f5f9">
+<svg width="390" height="844" viewBox="0 0 390 844" aria-hidden="true" style="position: absolute; inset: 0">
+<g stroke="#1e2b40" stroke-width="10" fill="none"><path d="M-20 120 L420 300"></path><path d="M-20 420 L420 520"></path><path d="M60 -20 L210 880"></path><path d="M300 -20 L250 880"></path></g>
+<g stroke="#17233a" stroke-width="5" fill="none"><path d="M-20 220 L420 360"></path><path d="M-20 640 L420 700"></path><path d="M150 -20 L320 880"></path></g>
+<path d="M120 80 C160 260 200 360 230 560 S250 760 260 860" stroke="#f59e0b" stroke-width="3" fill="none"></path>
+<path d="M20 520 C120 470 260 450 400 410" stroke="#a855f7" stroke-width="3" fill="none"></path>
+</svg>
+<div style="position: absolute; top: 16px; right: 16px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px">
+<a href="HomeDaily.dc.html" aria-label="Map layers" aria-expanded="true" style="text-decoration: none; box-sizing: border-box; cursor: pointer; width: 44px; height: 44px; border-radius: 22px; border: none; background: #f8fafc; color: #0f172a; display: flex; align-items: center; justify-content: center; padding: 0">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3 2 8l10 5 10-5-10-5Z"></path><path d="m2 13 10 5 10-5"></path></svg>
+</a>
+<div style="width: 232px; padding: 8px; border-radius: 20px; background: rgba(11,18,32,0.96); border: 1px solid #263449; box-shadow: 0 12px 32px rgba(0,0,0,0.5); display: flex; flex-direction: column">
+<label style="display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 0 8px; font-size: 15px; font-weight: 500">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="5" y="3" width="14" height="14" rx="3"></rect><path d="M5 11h14M8 21l2-4M16 21l-2-4"></path></svg>
+<span style="flex: 1">Live trains</span>
+<input type="checkbox" role="switch" checked="" style="width: 22px; height: 22px; accent-color: #2563eb">
+</label>
+<label style="display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 0 8px; font-size: 15px; font-weight: 500">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="4" y="3" width="16" height="15" rx="3"></rect><path d="M4 10h16M8 21v-3M16 21v-3"></path></svg>
+<span style="flex: 1">Live buses</span>
+<input type="checkbox" role="switch" style="width: 22px; height: 22px; accent-color: #2563eb">
+</label>
+
+<div style="height: 1px; margin: 4px 8px; background: #263449"></div>
+<button type="button" style="display: flex; align-items: center; justify-content: space-between; min-height: 48px; padding: 0 8px; border: none; background: transparent; color: #cbd5e1; font: 500 14px Inter, system-ui, sans-serif"><span>More layers</span><span aria-hidden="true">›</span></button>
+</div>
+</div>
+<div style="position: absolute; left: 0; right: 0; bottom: 0; padding: 0 16px 24px">
+<div style="display: flex; align-items: center; gap: 8px; padding: 6px; border-radius: 30px; background: #f8fafc; box-shadow: 0 8px 24px rgba(0,0,0,0.45)">
+<label for="ask4" style="position: absolute; left: -9999px">Ask the map</label>
+<input id="ask4" type="text" placeholder="Ask anything…" style="flex: 1; min-width: 0; height: 44px; padding-left: 12px; border: none; background: transparent; font: 400 16px Inter, system-ui, sans-serif; color: #0f172a; outline: none">
+<button type="button" aria-label="Dictate" style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 22px; border: none; background: transparent; color: #475569; display: flex; align-items: center; justify-content: center; padding: 0"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg></button><button type="button" aria-label="Hands-free conversation" style="width: 52px; height: 52px; flex-shrink: 0; border-radius: 26px; border: none; background: #2563eb; color: #ffffff; display: flex; align-items: center; justify-content: center; padding: 0"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"></path></svg></button>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

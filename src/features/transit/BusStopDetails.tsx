@@ -1,0 +1,30 @@
+import { useBusArrivals, useBusStopsNear } from "./hooks";
+import { etaText, nearestStop } from "./busStop";
+
+/** Panel body for a tapped bus stop: the routes that stop there and the next buses. */
+export function BusStopDetails({ lon, lat }: { lon: number; lat: number }) {
+  const stops = useBusStopsNear({ lon, lat });
+  const stop = stops.data ? nearestStop(stops.data.stops, lon, lat) : undefined;
+  const arrivals = useBusArrivals(stop?.id);
+  const now = Date.now() / 1000;
+  if (stops.isLoading) return <p className="text-sm">Loading stop…</p>;
+  if (!stop) return <p className="text-sm">Live bus times are not available for this stop right now.</p>;
+  return (
+    <div className="space-y-3 text-sm">
+      <div>
+        <div className="font-semibold">Routes{stop.dir ? ` · ${stop.dir}bound` : ""}</div>
+        <div className="mt-1 flex flex-wrap gap-1">{stop.routes.map((r) => <span key={r} className="rounded bg-sky-600 px-1.5 py-0.5 text-xs font-bold text-white">{r}</span>)}</div>
+      </div>
+      <div>
+        <div className="font-semibold">Next buses</div>
+        {arrivals.isLoading ? <p>Loading…</p> : arrivals.data?.arrivals.length ? (
+          <ul className="mt-1 space-y-1">
+            {arrivals.data.arrivals.map((a, i) => (
+              <li key={i} className="flex justify-between gap-2"><span><b>{a.route}</b> {a.destination}</span><span className="tabular-nums">{etaText(a.eta, now) || a.away}</span></li>
+            ))}
+          </ul>
+        ) : <p>No buses reported for this stop right now.</p>}
+      </div>
+    </div>
+  );
+}

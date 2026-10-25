@@ -28,4 +28,13 @@ describe("readable transit basemap", () => {
     expect(readableChange({ id: "road_transit_rail_hatching", type: "line", "source-layer": t }, "off")).toBeNull();
     expect(readableChange({ id: "water", type: "fill" }, "off")).toBeNull();
   });
+
+  it("hides highway number signs in every look, and leaves the rest of the full look alone", () => {
+    for (const look of ["full", "simple", "off"] as const) {
+      expect(readableChange({ id: "highway-shield-us-interstate", type: "symbol" }, look)).toEqual({ visibility: "none" });
+      expect(readableChange({ id: "road_shield_us", type: "symbol" }, look)).toEqual({ visibility: "none" });
+    }
+    expect(readableChange({ id: "road_minor", type: "line", "source-layer": "transportation" }, "full")).toBeNull();
+    expect(readableChange({ id: "highway-name-major", type: "symbol" }, "full")).toBeNull();
+  });
 });

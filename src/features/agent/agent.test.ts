@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { executeCommand, type ExecutorContext } from "./executor";
-import { buildTimeline, calloutAt, poseAt, wallSeconds } from "./flythrough";
+import { buildTimeline, calloutAt, calloutInfoAt, poseAt, speakStop, wallSeconds } from "./flythrough";
 import { command, streamEvent, trip as tripSchema, type Trip } from "./schema";
 import { readEvents } from "./stream";
 import { afterWake } from "./useWakePhrase";
@@ -91,6 +91,10 @@ describe("flythrough timeline", () => {
   it("calls out stops and the exit with its outage", () => {
     expect(calloutAt(segs[2], 0.9)).toBe("33 St");
     expect(calloutAt(segs[3], 0)).toContain("Elevator out");
+  });
+  it("speaks only the last two stops of a ride; the rest only show", () => {
+    expect([0, 1, 2, 3, 4].map((i) => speakStop(i, 5))).toEqual([false, false, false, true, true]);
+    expect(calloutInfoAt(segs[2], 0).quiet).toBe(false); // boarding is spoken
   });
 });
 

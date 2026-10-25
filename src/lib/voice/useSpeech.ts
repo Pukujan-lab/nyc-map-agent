@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isBrave, recordTurn, serverSttAvailable, transcribeTurn, type Recording } from "./serverStt";
 import { startBargeIn } from "./bargeIn";
 import { speakQueued } from "./tts";
 
@@ -56,6 +57,8 @@ function getRecognitionCtor(): SpeechRecognitionCtor | null {
 
 export interface UseSpeechOptions {
   onFinalTranscript: (text: string) => void;
+  /** Recognition and spoken-answer language (BCP 47); default "en-US". */
+  lang?: string;
 }
 
 export interface UseSpeechResult {
@@ -66,7 +69,7 @@ export interface UseSpeechResult {
   clearError: () => void;
   startListening: () => void;
   stopListening: () => void;
-  speak: (text: string, opts?: { bargeIn?: boolean }) => void;
+  speak: (text: string, opts?: { bargeIn?: boolean; lang?: string }) => void;
   stopSpeaking: () => void;
   speaking: boolean;
   muted: boolean;
@@ -75,8 +78,14 @@ export interface UseSpeechResult {
 
 export function useSpeech({
   onFinalTranscript,
+  lang = "en-US",
 }: UseSpeechOptions): UseSpeechResult {
-  const [sttSupported] = useState(() => getRecognitionCtor() !== null);
+  const [sttSupported] = useState(() => getRecognitionCtor() !== null || serverSttAvailable());
+  // Brave (and any browser whose recognizer fails with "network") records the turn and
+  // transcribes it on our server instead.
+  const serverModeRef = useRef(isBrave() || (getRecognitionCtor() === null && serverSttAvailable()));
+  const recordingRef = useRef<Recording | null>(null);
+  const retryOnServerRef = useRef(false);
   const [listening, setListening] = useState(false);
   const [interim, setInterim] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -92,7 +101,37 @@ export function useSpeech({
   const callbackRef = useRef(onFinalTranscript);
   callbackRef.current = onFinalTranscript;
 
+  const startServerTurn = useCallback(() => {
+    if (recordingRef.current) return;
+    setError(null);
+    setInterim("");
+    setListening(true);
+    recordTurn(END_OF_TURN_MS).then((rec) => {
+      recordingRef.current = rec;
+      void rec.done.then(async ({ blob, reason }) => {
+        recordingRef.current = null;
+        if (!blob) {
+          setListening(false);
+          if (reason === "no-speech") setError("I didn't catch that. Try again, a little closer to the mic.");
+          return;
+        }
+        setInterim("…");
+        const out = await transcribeTurn(blob, lang);
+        setListening(false);
+        setInterim("");
+        if ("text" in out) { if (out.text) callbackRef.current(out.text); return; }
+        setError(out.error === "unavailable" ? "Voice isn't set up on this server yet. Type your question instead."
+          : out.error === "busy" ? "Too many voice requests just now. Try again in a minute."
+          : "I couldn't make that out. Try again, or type it.");
+      });
+    }).catch(() => {
+      setListening(false);
+      setError("Microphone access is blocked. Type your question instead.");
+    });
+  }, [lang]);
+
   const startListening = useCallback(() => {
+    if (serverModeRef.current) { startServerTurn(); return; }
     const Ctor = getRecognitionCtor();
     if (!Ctor) {
       setError("Speech recognition isn't available in this browser.");
@@ -101,7 +140,7 @@ export function useSpeech({
     if (recognitionRef.current) return;
 
     const recognition = new Ctor();
-    recognition.lang = "en-US";
+    recognition.lang = lang;
     // Continuous + our own silence window: Chrome's non-continuous mode ends the
     // turn at the first short pause, which cut people off mid-sentence.
     recognition.continuous = true;
@@ -138,6 +177,10 @@ export function useSpeech({
         setError("I didn't catch that. Try again, a little closer to the mic.");
       } else if (event.error === "audio-capture") {
         setError("No microphone was found. You can still type your question.");
+      } else if (event.error === "network" && serverSttAvailable()) {
+        // The browser's speech service is blocked (Brave): switch to our server and retry this turn.
+        serverModeRef.current = true;
+        retryOnServerRef.current = true;
       } else {
         setError(`Speech recognition failed (${event.error}).`);
       }
@@ -153,6 +196,7 @@ export function useSpeech({
       finalRef.current = "";
       interimRef.current = "";
       if (transcript) callbackRef.current(transcript);
+      if (retryOnServerRef.current) { retryOnServerRef.current = false; startServerTurn(); }
     };
 
     recognition.onstart = () => setListening(true);
@@ -164,10 +208,11 @@ export function useSpeech({
     } catch {
       setError("Could not start the microphone.");
     }
-  }, []);
+  }, [lang, startServerTurn]);
 
   const stopListening = useCallback(() => {
     recognitionRef.current?.stop();
+    recordingRef.current?.stop();
   }, []);
 
   const stopSpeaking = useCallback(() => {
@@ -180,7 +225,7 @@ export function useSpeech({
   }, []);
 
   const speak = useCallback(
-    (text: string, opts?: { bargeIn?: boolean }) => {
+    (text: string, opts?: { bargeIn?: boolean; lang?: string }) => {
       if (muted) return;
       if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
       stopSpeaking();
@@ -194,7 +239,7 @@ export function useSpeech({
         stopBargeRef.current?.();
         stopBargeRef.current = null;
         setSpeaking(false);
-      });
+      }, opts?.lang ?? lang);
       cancelSpeechRef.current = cancel;
       if (opts?.bargeIn) {
         // Only in hands-free (tap-started): an echo-cancelled detector so talking over the answer stops it.
@@ -204,12 +249,13 @@ export function useSpeech({
         });
       }
     },
-    [muted, stopSpeaking],
+    [muted, stopSpeaking, lang],
   );
 
   useEffect(() => {
     return () => {
       recognitionRef.current?.abort();
+      recordingRef.current?.stop();
       if (silenceRef.current) clearTimeout(silenceRef.current);
       stopBargeRef.current?.();
       cancelSpeechRef.current?.();

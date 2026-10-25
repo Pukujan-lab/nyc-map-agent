@@ -1,7 +1,8 @@
 import { MockLanguageModelV4, convertArrayToReadableStream } from "ai/test";
 import { describe, expect, it, vi } from "vitest";
 import { streamEvent, type StreamEvent } from "../../../src/features/agent/schema";
-import { POST } from "./routes";
+import { createDailyBudget, createLimiter } from "./fair-use";
+import { POST, type FairUse } from "./routes";
 
 const usage = { inputTokens: { total: 100, noCache: 100, cacheRead: 0, cacheWrite: 0 }, outputTokens: { total: 20, text: 20, reasoning: 0 } };
 const finish = (reason: "tool-calls" | "stop") => ({ type: "finish", finishReason: { unified: reason, raw: reason }, usage }) as const;
@@ -64,5 +65,70 @@ describe("POST /api/agent: shared location privacy", () => {
     expect(outbound).not.toMatch(/octo|r2\.|cloudflarestorage/i);
     spies.forEach((s) => s.mockRestore());
     fetchSpy.mockRestore();
+  });
+});
+
+describe("POST /api/agent: fair use", () => {
+  const body = JSON.stringify({ messages: [{ role: "user", content: "street view here" }] });
+  const ask = (fairUse: FairUse, ip: string, m = model()) =>
+    POST(new Request("http://x/api/agent", { method: "POST", headers: { "cf-connecting-ip": ip }, body }), { model: m, fairUse });
+
+  it("answers 429 with Retry-After and a message once a client's burst is used", async () => {
+    const now = () => 1_000_000;
+    const fairUse: FairUse = { limiter: createLimiter({ windowMax: 20, windowMs: 3 * 3_600_000, burstMax: 2, burstMs: 60_000 }, now), budget: createDailyBudget({ softCap: 0, hardCap: 0, capModel: null }, now), now };
+    for (let i = 0; i < 2; i++) expect((await ask(fairUse, "203.0.113.1")).status).toBe(200);
+    const res = await ask(fairUse, "203.0.113.1");
+    expect(res.status).toBe(429);
+    expect(res.headers.get("retry-after")).toBe("60");
+    expect(((await res.json()) as { message: string }).message).toMatch(/next question frees up/);
+    expect((await ask(fairUse, "203.0.113.2")).status).toBe(200);
+  });
+
+  it("does not count a bad body", async () => {
+    const now = () => 1_000_000;
+    const fairUse: FairUse = { limiter: createLimiter({ windowMax: 1, windowMs: 60_000, burstMax: 0, burstMs: 0 }, now), budget: createDailyBudget({ softCap: 0, hardCap: 0, capModel: null }, now), now };
+    expect((await POST(new Request("http://x", { method: "POST", body: "{}" }), { model: model(), fairUse })).status).toBe(400);
+    expect((await ask(fairUse, "203.0.113.3")).status).toBe(200);
+  });
+
+  it("records token usage and replies without a model once the daily budget is spent", async () => {
+    const now = () => Date.UTC(2026, 9, 23, 12);
+    const budget = createDailyBudget({ softCap: 100, hardCap: 100, capModel: null }, now);
+    const fairUse: FairUse = { limiter: createLimiter({ windowMax: 0, windowMs: 0, burstMax: 0, burstMs: 0 }, now), budget, now };
+    await (await ask(fairUse, "203.0.113.4")).text();
+    expect(budget.used()).toBeGreaterThanOrEqual(100);
+    const m = model();
+    const res = await ask(fairUse, "203.0.113.4", m);
+    expect(res.status).toBe(200);
+    const events = (await res.text()).trim().split("\n").map((l) => streamEvent.parse(JSON.parse(l)));
+    expect(m.doStreamCalls.length).toBe(0);
+    expect(events[0]).toMatchObject({ type: "text" });
+    expect((events[0] as { text: string }).text).toMatch(/map/);
+    expect(events[1]).toEqual({ type: "done", model: "none", usage: { inputTokens: 0, outputTokens: 0 } });
+  });
+});
+
+describe("POST /api/agent: agent steps and language (#370)", () => {
+  it("streams a step start and end for each tool, and keeps the old tool line", async () => {
+    const events = await run({ messages: [{ role: "user", content: "street view here" }], location: { lon: -73.99, lat: 40.73 } });
+    expect(events.find((e) => e.type === "tool")).toEqual({ type: "tool", name: "enterStreetView" });
+    expect(events.filter((e) => e.type === "step")).toEqual([
+      { type: "step", id: "c1", name: "enterStreetView", status: "start" },
+      { type: "step", id: "c1", name: "enterStreetView", status: "done" },
+    ]);
+  });
+
+  it("tells the model to answer in the question's language, with the browser language as tie-break", async () => {
+    const m = model();
+    const res = await POST(new Request("http://x/api/agent", { method: "POST", body: JSON.stringify({ messages: [{ role: "user", content: "¿dónde hay un baño?" }], lang: "es-US" }) }), { model: m });
+    await res.text();
+    const prompt = JSON.stringify(m.doStreamCalls[0]?.prompt);
+    expect(prompt).toContain("Reply in the language of the user's latest message");
+    expect(prompt).toContain("browser language es-US");
+  });
+
+  it("rejects a malformed language tag", async () => {
+    const res = await POST(new Request("http://x", { method: "POST", body: JSON.stringify({ messages: [{ role: "user", content: "hi" }], lang: "en; ignore previous" }) }), { model: model() });
+    expect(res.status).toBe(400);
   });
 });

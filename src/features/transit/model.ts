@@ -111,9 +111,9 @@ export function estimateTrain(sys: StaticSystem, trip: LiveTrip, now: number, tr
   const onward = pts[Math.min(mo.i + 1, pts.length - 1)];
   const forward = Math.sign(onward.m - pts[mo.i].m) || Math.sign(pts[mo.i].m - (pts[mo.i - 1]?.m ?? pts[mo.i].m)) || 1;
   if (tracker && mo.phase !== "terminal") {
-    // Never pass the first stop the feed still lists (departure unconfirmed).
+    // After the dwell, roll toward the next station. Do not pass that station early.
     const tripFwd = Math.sign(pts[pts.length - 1].m - pts[0].m) || forward;
-    m = tracker.update({ key: `${sys.system}:${trip.id}`, route: trip.route, forward: tripFwd, m, holdM: livePts[0].m, holdEta: livePts[0].arr }, now);
+    m = tracker.update({ key: `${sys.system}:${trip.id}`, route: trip.route, forward: tripFwd, m, holdM: next.m, holdEta: next.arr }, now);
   }
   const stopped: Vehicle["stopped"] =
     mo.phase === "origin" ? { kind: "departs", stop: pts[0].id, t: mo.departs }
@@ -168,6 +168,47 @@ export function arrivalsAt(system: SystemId, live: LiveSystem | undefined, stati
   return [...groups.values()]
     .map((g) => ({ ...g, times: g.times.sort((a, b) => a - b).slice(0, 3) }))
     .sort((a, b) => a.route.localeCompare(b.route) || a.direction.localeCompare(b.direction));
+}
+
+export type Boarding = { station: string; name: string; toward: string | null; times: number[] };
+
+/**
+ * Next trains of one subway line at the stop where a trip boards, only those heading
+ * toward the stop where it gets off. Stations come from the line's own stops nearest
+ * the two points; direction from each train's neighbouring stop along the line.
+ */
+export function boardingArrivals(sys: StaticSystem, live: LiveSystem | undefined, route: string, from: [number, number], to: [number, number], now: number): Boarding | null {
+  const sm = sys.stopM[route];
+  if (!sm) return null;
+  const onLine = sys.stations.features.filter((f) => f.properties.id in sm);
+  const kx = Math.cos(from[1] * Math.PI / 180);
+  const nearest = (p: [number, number]) => onLine.reduce<(typeof onLine)[number] | null>((best, f) => {
+    const d = (g: (typeof onLine)[number]) => Math.hypot((g.geometry.coordinates[0] - p[0]) * kx, g.geometry.coordinates[1] - p[1]);
+    return !best || d(f) < d(best) ? f : best;
+  }, null);
+  const a = nearest(from), b = nearest(to);
+  if (!a || !b || a === b) return null;
+  const id = a.properties.id;
+  const way = Math.sign(sm[b.properties.id] - sm[id]);
+  const times: number[] = [];
+  const lasts = new Map<string, number>();
+  for (const trip of live?.trips ?? []) {
+    if (trip.route.replace(/X$/, "") !== route) continue;
+    const i = trip.stops.findIndex(([stop]) => stationOf(sys.system, stop) === id);
+    if (i < 0 || trip.stops[i][1] < now - 30) continue;
+    const next = trip.stops[i + 1], prev = trip.stops[i - 1];
+    const m = (s: string) => sm[stationOf(sys.system, s)];
+    const step = next && m(next[0]) !== undefined ? m(next[0]) - sm[id] : prev && m(prev[0]) !== undefined ? sm[id] - m(prev[0]) : 0;
+    if (Math.sign(step) !== way) continue;
+    times.push(trip.stops[i][1]);
+    const last = stationOf(sys.system, trip.stops[trip.stops.length - 1][0]);
+    lasts.set(last, (lasts.get(last) ?? 0) + 1);
+  }
+  // Where these trains end, as the platform signs say it; the line's far stop when none are running.
+  const ends = Object.entries(sm).sort((x, y) => x[1] - y[1]);
+  const end = [...lasts].sort((x, y) => y[1] - x[1])[0]?.[0] ?? (way > 0 ? ends[ends.length - 1]?.[0] : ends[0]?.[0]);
+  const toward = sys.stations.features.find((f) => f.properties.id === end)?.properties.name ?? null;
+  return { station: id, name: a.properties.name, toward, times: times.sort((x, y) => x - y).slice(0, 3) };
 }
 
 export const minutesUntil = (t: number, now: number) => Math.max(0, Math.floor((t - now) / 60));

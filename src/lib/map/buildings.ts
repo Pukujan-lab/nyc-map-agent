@@ -22,9 +22,54 @@ export function wantsFlatBuildings(choice: "flat" | "3d"): boolean {
   return choice !== "3d";
 }
 
+/** How the camera looks at the city: straight down, tilted (Mid / Up), or walking. */
+export type MapLevel = "top" | "tilted" | "street";
+
+export function mapLevel(walking: boolean, tilted: boolean): MapLevel {
+  return walking ? "street" : tilted ? "tilted" : "top";
+}
+
+export interface CityDetail {
+  /** Basemap buildings drawn as fill-extrusions instead of flat footprints. */
+  extrude: boolean;
+  /** The z11-14 distance skyline from the city tiles. */
+  skyline: boolean;
+  /** The textured city: facades, props and its three.js layers (signs, landmarks, storefronts). */
+  textured: boolean;
+}
+
+/**
+ * What 3D the map draws at a level. Pure, for tests.
+ *
+ * - Top: a flat 2D overview (#364). No extrusions, skyline or textured city,
+ *   so no three.js layer either.
+ * - Tilted (Mid / Up): a simple block map (#363). The basemap's own buildings
+ *   as plain theme-coloured extrusions, whatever the Flat / 3D choice. The
+ *   skyline and textured city (facades, props, hero landmark models,
+ *   storefront signs) are the optional detailed city: the `detailedCity`
+ *   flag, advanced tier, off by default.
+ * - Street: unchanged. The Flat / 3D choice and the textured-city toggle decide.
+ */
+export function cityDetail(o: { level: MapLevel; flat: boolean; eco: boolean; city3d: boolean; detailed: boolean }): CityDetail {
+  if (o.level === "top") return { extrude: false, skyline: false, textured: false };
+  if (o.level === "tilted") {
+    const detailed = o.detailed && !o.eco;
+    return { extrude: true, skyline: detailed, textured: detailed };
+  }
+  // Street level is always the 3D city (buildings, storefronts, signs) unless Eco is on:
+  // the Flat choice is for the overview, and a flat street read as an empty plane (owner, 2026-10-24).
+  const extrude = !o.eco;
+  return { extrude, skyline: extrude, textured: extrude && o.city3d };
+}
+
 const saved = new WeakMap<MapLibreMap, Map<string, { vis: unknown; min?: number; max?: number; color: unknown; outline: unknown }>>();
 
-export function applyBuildings(map: MapLibreMap, flat: boolean, tint: string, edge: string = tint): void {
+/**
+ * `flat` draws footprints instead of extrusions; `plainBlocks` (default: same
+ * as `flat`) hides the density-shaded block fill, which is the Flat choice and
+ * not a 3D cost, so Top view keeps it.
+ */
+export function applyBuildings(map: MapLibreMap, flat: boolean, tint: string, edge: string = tint, plainBlocks: boolean = flat): void {
   let store = saved.get(map);
   if (!store) { store = new Map<string, { vis: unknown; min?: number; max?: number; color: unknown; outline: unknown }>(); saved.set(map, store); }
   for (const l of (map.getStyle()?.layers ?? []) as Layer[]) {
@@ -41,7 +86,8 @@ export function applyBuildings(map: MapLibreMap, flat: boolean, tint: string, ed
       });
     }
     const o = store.get(l.id)!;
-    if (hide) map.setLayoutProperty(l.id, "visibility", flat ? "none" : ((o.vis as "visible" | "none" | undefined) ?? "visible"));
+    const off = l.id === "block-tile-fill" ? plainBlocks : flat;
+    if (hide) map.setLayoutProperty(l.id, "visibility", off ? "none" : ((o.vis as "visible" | "none" | undefined) ?? "visible"));
     // 3D: extrusions take the theme's building tint so they read against the land (#2).
     if (hide && l.type === "fill-extrusion" && !flat) map.setPaintProperty(l.id, "fill-extrusion-color", tint);
     if (foot) {

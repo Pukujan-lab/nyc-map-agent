@@ -273,6 +273,12 @@ export function setSchoolIconsVisible(map: MapLibreMap, on: boolean): void {
   map.setLayoutProperty("city3d-schools", "visibility", on ? "visible" : "none");
 }
 
+/** School icons on their own: the tiles source only, no textured layers and no three.js. */
+export async function showSchoolIcons(map: MapLibreMap, on: boolean): Promise<void> {
+  if (on) await ensureSource(map);
+  setSchoolIconsVisible(map, on);
+}
+
 /** School name under a click: a school-faced building or a school icon. */
 export function schoolAt(map: MapLibreMap, x: number, y: number): string | null {
   const layers = ["city3d-schools", "city3d-walls"].filter((id) => map.getLayer(id));

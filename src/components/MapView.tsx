@@ -2,6 +2,8 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { buildStreetContext, closeAsk, openAsk } from "@/lib/agent/streetContext";
 import { followedTrain } from "@/lib/transit/follow";
 import { setMapInstance } from "@/lib/map/mapInstance";
+import { watchMapCovers } from "@/lib/map/mapCover";
+import { DirectionsFromHere } from "@/components/DirectionsFromHere";
 import { RestroomDetails } from "@/components/RestroomCard";
 import { usePanel, usePanelChip } from "@/lib/store/PanelContext";
 import { setAmbient } from "@/lib/ambient";
@@ -10,11 +12,15 @@ import { useFeatureToggles } from "@/lib/featureToggles";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { MapCompass } from "./MapCompass";
 import { ViewSwitcher } from "./ViewSwitcher";
-import { applyReadable } from "@/lib/map/readable";
-import { busStopIconOpacity, busStopTextOpacity } from "@/lib/map/busStops";
-import { applyPlaces, placesStale, usePlaces, withQuickPlaces } from "@/lib/map/places";
+import { applyReadable, hideShields } from "@/lib/map/readable";
+import { busStopAt, busStopIconOpacity, busStopTextOpacity } from "@/lib/map/busStops";
+import { applyPlaces, classesFor, placesStale, usePlaces, withQuickPlaces } from "@/lib/map/places";
+import { insetFilters } from "@/lib/map/miniStyle";
 import { useMapOptions } from "@/lib/map/mapOptions";
-import { applyBuildings, wantsFlatBuildings } from "@/lib/map/buildings";
+import { applyBuildings, cityDetail, mapLevel, wantsFlatBuildings } from "@/lib/map/buildings";
+import { focusLandmarks, installLandmarkLabels, isLandmarkLayer } from "@/lib/map/landmarkLabels";
+import { STREET_LEVEL_RANGE_M, describeGuide, pickGuideLandmarks } from "@/lib/guide/landmarkGuide";
+import { setWalkEye } from "@/lib/map/walkEye";
 import { applyMapTheme, buildingEdge, setThemeCoords, usePalette } from "@/lib/theme";
 import { sharedCoords } from "@/lib/geo/sharedLocation";
 
@@ -60,6 +66,7 @@ import { BLOCK_FILL_LAYER, installBlockTiles, pushBlocks, setBlockFillVisible } 
 import { fetchNearestStreet, type WalkingRoute } from "@/lib/api/routing";
 import { useDataView } from "@/lib/store/DataViewContext";
 import type { CameraOptions, Map as MaplibreMapInstance } from "maplibre-gl";
+import { sendCamera } from "@/lib/map/cameraMode";
 import {
   approachBearing,
   clampLookPitch,
@@ -149,6 +156,7 @@ import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 import { WalkControls } from "./WalkControls";
 import { useQuickLayer } from "@/lib/quickLayers";
 import { QuickLayers } from "./QuickLayers";
+import { MapChrome } from "./MapChrome";
 import { StreetMiniMap } from "./StreetMiniMap";
 import { nearestCorner, type CornerSign } from "@/lib/map/corner";
 import { kioskSources, pickAt as pickFurniture } from "@/lib/map/streetPick";
@@ -262,13 +270,16 @@ export function MapView({
   const [schoolIcons, setSchoolIcons] = useState(false);
   const toggleSchools = useCallback(() => setSchoolIcons((on) => !on), []);
   const schoolsOn = useFlag("schools");
+  // Agent-first home (#370): round buttons at the top right replace the Layers menu and rotate buttons.
+  const agentHome = useFlag("agentHome");
   const analyticsFlags = useFlags();
   const analytics = analyticsFlags.noise || analyticsFlags.crashes || analyticsFlags.dataLayers;
-  const businesses = useQuickLayer("businesses");
+  // Businesses are off on the overview but on at street level, where shops are the landmarks.
+  const businessesPicked = useQuickLayer("businesses");
   const health = useQuickLayer("health");
   const parksPlaces = useQuickLayer("parksPlaces");
   const citibike = useQuickLayer("citibike");
-  const storefrontsOn = useFlag("storefronts") && businesses;
+  const storefrontsFlag = useFlag("storefronts");
   usePanelChip(schoolsOn ? { id: "schools", label: "Schools", active: schoolIcons, onToggle: toggleSchools } : null);
   const restroomsMod = useRef<typeof import("@/lib/map/restrooms") | null>(null);
   /** So leaving walk mode can restore the overhead camera exactly once. */
@@ -299,6 +310,8 @@ export function MapView({
     selectNta,
     selectBlock,
   } = useMapState();
+  const businesses = businessesPicked || walking;
+  const storefrontsOn = storefrontsFlag && businesses;
   const reducedMotion = usePrefersReducedMotion();
   /** Held d-pad buttons. A ref, because it changes without needing a render. */
   const walkPad = useRef<WalkInput>(WALK_IDLE);
@@ -469,10 +482,15 @@ export function MapView({
   const places = usePlaces();
   const opts = useMapOptions();
   const t = usePalette();
-  // Flat footprints at every level, including street view. 3D buildings is what
-  // extrudes the basemap and turns on the textured city. Ignoring Flat during a
-  // walk loaded that city under Simple streets too.
+  // At street level Flat keeps footprints flat; 3D buildings extrudes the
+  // basemap and turns on the textured city. Ignoring Flat during a walk loaded
+  // that city under Simple streets too.
   const flatBuildings = wantsFlatBuildings(opts.buildings);
+  // Top view is a flat 2D overview (#364). Tilted views are a simple block map;
+  // the detailed city above street level is an advanced, off-by-default flag (#363).
+  const detailedCity = useFlag("detailedCity");
+  const level = mapLevel(walking, tilted);
+  const { extrude, skyline: skylineOn, textured: texturedOn } = cityDetail({ level, flat: flatBuildings, eco, city3d, detailed: detailedCity });
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!map || !ready) return;
@@ -495,14 +513,17 @@ export function MapView({
     // its POIs to the person's choice instead of the style's defaults.
     const keep = () => {
       if (placesStale(map, shownPlaces)) applyPlaces(map, shownPlaces);
+      hideShields(map);
       if (!analytics && map.getLayer("label_other") && map.getLayoutProperty("label_other", "visibility") !== "none") map.setLayoutProperty("label_other", "visibility", "none");
     };
     map.on("styledata", keep);
-    applyBuildings(map, flatBuildings, t.building, buildingEdge(t));
+    applyBuildings(map, !extrude, t.building, buildingEdge(t), flatBuildings);
+    // A few named landmarks so the light map still says where you are (#363).
+    installLandmarkLabels(map, t.dark ? "#f1f5f9" : "#1f2937", t.land);
     return () => {
       map.off("styledata", keep);
     };
-  }, [ready, styleEpoch, transitFocus, places, businesses, health, parksPlaces, citibike, opts, t, flatBuildings, analytics]);
+  }, [ready, styleEpoch, transitFocus, places, businesses, health, parksPlaces, citibike, opts, t, extrude, flatBuildings, analytics]);
 
   const handleLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
@@ -510,6 +531,7 @@ export function MapView({
     installDataLayers(map);
     applyAtmosphere(map);
     setMapInstance(map);
+    watchMapCovers(map);
     setStyleEpoch((epoch) => epoch + 1);
     setReady(true);
     // Phones: the credits start folded behind the "i" toggle (MapLibre opens
@@ -649,6 +671,9 @@ export function MapView({
       };
       const transitIds = FEATURES.filter((f) => f.id === "transit").flatMap((f) => f.clickLayers ?? []);
       if (hitsAny(transitIds)) return;
+      // A bus-stop icon (basemap poi_transit, class "bus"): the transit feature
+      // opens its routes and next buses, so skip the area pick.
+      if (opts.busStops && analyticsFlags.transit && clicked && busStopAt(clicked, event.point)) return;
       // 3D restroom kiosks at street level: public ones open here, shop/café
       // ones are opened by the place-toilets feature's own click handler.
       const kiosk = walking ? pickFurniture(event.target, event.point.x, event.point.y) : null;
@@ -658,17 +683,17 @@ export function MapView({
         const str = (k: string) => (typeof p[k] === "string" && p[k] ? p[k] : null);
         const name = str("name") ?? "Public restroom";
         showPanel({
-          id: `restroom:${name}`,
+          id: `restroom:${kiosk.lng.toFixed(5)},${kiosk.lat.toFixed(5)}`,
           title: name,
           subtitle: "Public restroom",
-          details: <RestroomDetails restroom={{ name, status: str("status"), hours: str("hours"), accessibility: str("accessibility"), operator: str("operator") }} />,
+          details: <RestroomDetails restroom={{ name, status: str("status"), hours: str("hours"), accessibility: str("accessibility"), operator: str("operator"), lon: kiosk.lng, lat: kiosk.lat, source: p.source === "openstreetmap" ? "openstreetmap" : "nyc-open-data", asOf: str("asOf") }} />,
         });
         return;
       }
       const hit = restroomsMod.current?.restroomAt(event.target, event.point.x, event.point.y);
       if (hit) {
         showPanel({
-          id: `restroom:${hit.name}`,
+          id: `restroom:${hit.lon.toFixed(5)},${hit.lat.toFixed(5)}`,
           title: formatStreetText(hit.name),
           subtitle: "Public restroom",
           details: <RestroomDetails restroom={hit} />,
@@ -683,9 +708,12 @@ export function MapView({
           title: dir.name,
           subtitle: `Directory · ${shops.length} shops · © OpenStreetMap contributors`,
           details: (
-            <ul className="space-y-1 text-sm">
-              {shops.map((name) => <li key={name}>{name}</li>)}
-            </ul>
+            <div className="space-y-2">
+              <ul className="space-y-1 text-sm">
+                {shops.map((name) => <li key={name}>{name}</li>)}
+              </ul>
+              <DirectionsFromHere lon={dir.lng} lat={dir.lat} />
+            </div>
           ),
         });
         return;
@@ -697,12 +725,22 @@ export function MapView({
       if (walking) {
         const hit = eyePick(event.target, event.point.x, event.point.y);
         if (hit?.kind === "landmark") {
-          showPanel({ id: `landmark:${hit.landmark.id}`, title: hit.landmark.name, subtitle: "Landmark" });
+          showPanel({
+            id: `landmark:${hit.landmark.id}`,
+            title: hit.landmark.name,
+            subtitle: "Landmark",
+            details: <DirectionsFromHere lon={hit.landmark.lon} lat={hit.landmark.lat} />,
+          });
           return;
         }
         if (hit?.kind === "building") {
           if (typeof hit.props.school === "string" && hit.props.school) {
-            showPanel({ id: `school:${hit.props.school}`, title: hit.props.school, subtitle: "School · NYC DOE (LCGMS)" });
+            showPanel({
+              id: `school:${hit.props.school}`,
+              title: hit.props.school,
+              subtitle: "School · NYC DOE (LCGMS)",
+              details: <DirectionsFromHere lon={hit.lng} lat={hit.lat} />,
+            });
             return;
           }
           const shop = hit.props.store === 1 && hit.z < 4.5 ? signsMod.current?.storefrontAt(event.target, hit.lng, hit.lat) : null;
@@ -712,7 +750,12 @@ export function MapView({
               id: `storefront:${shop.lng},${shop.lat}:${shop.name}`,
               title: shop.name,
               subtitle: `${shop.cat ? `${shop.cat} · ` : ""}© OpenStreetMap contributors`,
-              details: shops.length ? <ul className="space-y-1 text-sm">{shops.map((name) => <li key={name}>{name}</li>)}</ul> : undefined,
+              details: (
+                <div className="space-y-2">
+                  {shops.length ? <ul className="space-y-1 text-sm">{shops.map((name) => <li key={name}>{name}</li>)}</ul> : null}
+                  <DirectionsFromHere lon={shop.lng} lat={shop.lat} />
+                </div>
+              ),
             });
             return;
           }
@@ -725,7 +768,12 @@ export function MapView({
       }
       const school = city3dMod.current?.schoolAt(event.target, event.point.x, event.point.y);
       if (school) {
-        showPanel({ id: `school:${school}`, title: school, subtitle: "School · NYC DOE (LCGMS)" });
+        showPanel({
+          id: `school:${school}`,
+          title: school,
+          subtitle: "School · NYC DOE (LCGMS)",
+          details: <DirectionsFromHere lon={event.lngLat.lng} lat={event.lngLat.lat} />,
+        });
         return;
       }
       // Neighbourhood / block complaint picks are analytics: Advanced only.
@@ -741,7 +789,7 @@ export function MapView({
         selectNta(picked.datum.ntaCode);
       }
     },
-    [pickAt, selectBlock, selectNta, routePicking, setRoutePoint, showPanel, emptyMapTap, city3d, walking, analytics],
+    [opts.busStops, analyticsFlags.transit, pickAt, selectBlock, selectNta, routePicking, setRoutePoint, showPanel, emptyMapTap, city3d, walking, analytics],
   );
 
   const handleMoveEnd = useCallback(() => {
@@ -910,6 +958,16 @@ export function MapView({
   // their flag is on, remounted after a style reload, cleaned up otherwise.
   const flags = useFlags();
   const [toggledOn] = useFeatureToggles();
+  const inset = useMemo(() => insetFilters({
+    placeClasses: classesFor(withQuickPlaces(places, { businesses, health, parksPlaces, citibike })),
+    busStops: opts.busStops,
+    restrooms,
+    shops: toggledOn.has("restroomShops"),
+    parking: toggledOn.has("parking"),
+    events: toggledOn.has("events"),
+    ferry: toggledOn.has("ferry"),
+    schools: schoolIcons,
+  }), [places, businesses, health, parksPlaces, citibike, opts.busStops, restrooms, toggledOn, schoolIcons]);
   const mountedKey = FEATURES.filter((f) => f.layers && flags[f.id] && (!f.chip || toggledOn.has(f.chip.id)))
     .map((f) => f.id)
     .join(",");
@@ -958,18 +1016,24 @@ export function MapView({
     if (!map) return;
     let cancelled = false;
     let cleanup: (() => void) | null = null;
+    const skyline = skylineOn;
+    const city3dOn = texturedOn;
+    // Nothing to draw (Top view, flat buildings, no school icons) and nothing
+    // loaded yet: skip the chunk, so Top view requests no 3D code (#364).
+    if (!skyline && !city3dOn && !schoolIcons && !city3dMod.current) return;
     // Lazy chunk: users who never turn it on never download it.
-    const city3dOn = city3d && !flatBuildings;
     import("@/lib/map/city3d")
       .then(async (mod) => {
         const { installCity3d, setCity3dVisible, city3dCoversView } = mod;
         city3dMod.current = mod;
         // Distance skyline (z11-14): on unless low-power mode; tiny and plain colour.
-        if (!eco && !flatBuildings) await mod.installSkyline(map);
+        if (skyline) await mod.installSkyline(map);
         if (cancelled) return;
-        mod.setSkylineVisible(map, !eco && !flatBuildings);
-        if (!city3dOn && !schoolIcons) {
+        mod.setSkylineVisible(map, skyline);
+        if (!city3dOn) {
           setCity3dVisible(map, false);
+          // School icons need only the tiles source, not the three.js layers.
+          await mod.showSchoolIcons(map, schoolIcons);
           return;
         }
         await installCity3d(map);
@@ -982,10 +1046,6 @@ export function MapView({
         if (storefrontsOn && !map.getLayer(signs.STOREFRONT_LAYER)) map.addLayer(signs.createStorefrontLayer());
         // Quick Layers > Businesses off takes the sign bands away.
         if (!storefrontsOn && map.getLayer(signs.STOREFRONT_LAYER)) map.removeLayer(signs.STOREFRONT_LAYER);
-        if (!city3dOn) {
-          setCity3dVisible(map, false);
-          return;
-        }
         // Basemap buildings only step aside where textured tiles exist.
         let covered: boolean | null = null;
         const sync = () => {
@@ -1004,7 +1064,7 @@ export function MapView({
       cancelled = true;
       cleanup?.();
     };
-  }, [ready, styleEpoch, city3d, schoolIcons, storefrontsOn, eco, flatBuildings]);
+  }, [ready, styleEpoch, skylineOn, texturedOn, schoolIcons, storefrontsOn]);
 
   useEffect(() => {
     if (!ready) return;
@@ -1071,18 +1131,30 @@ export function MapView({
     // it stays pinned to the ground as usual.
     map.setCenterClampedToGround(!walking);
     applyStreetPalette(map, walking);
+    // Flat footprints are already the map option. Re-apply here: this effect
+    // runs after the city load, and the street texture arrives a moment later.
+    applyBuildings(map, flatBuildings, t.building, buildingEdge(t));
     // After the street palette, so time-of-day lighting re-tints on top of it.
     setAmbient({ walking });
     // The sidewalk texture arrives a moment later; repaint once it has.
-    if (walking) void loadStreetTextures(map).then(() => applyStreetPalette(map, true)).catch(() => {});
+    if (walking) {
+      void loadStreetTextures(map).then(() => {
+        applyStreetPalette(map, true);
+        applyBuildings(map, flatBuildings, t.building, buildingEdge(t));
+      }).catch(() => {});
+    }
     // At eye level basemap labels stand on the horizon and float in the sky,
-    // so they step aside while walking; our own route markers stay.
+    // so they step aside while walking; our own route markers and the
+    // landmarks (how you know where you are) stay. Restroom icons keep the
+    // filter's own visibility — street view still needs them.
     const own = new Set(Object.keys(SOURCE_IDS).map((k) => SOURCE_IDS[k as keyof typeof SOURCE_IDS] as string));
     for (const layer of map.getStyle().layers ?? []) {
-      if (layer.type !== "symbol" || own.has((layer as { source?: string }).source ?? "")) continue;
+      // Transit layers (station names + route bullets, #186) stand in the 3D scene and stay.
+      if (layer.type !== "symbol" || own.has((layer as { source?: string }).source ?? "") || layer.id.startsWith("transit-") || isLandmarkLayer(layer.id)) continue;
+      if (layer.id === "restrooms") continue;
       map.setLayoutProperty(layer.id, "visibility", walking ? "none" : "visible");
     }
-  }, [ready, walking, styleEpoch]);
+  }, [ready, walking, styleEpoch, flatBuildings, t]);
 
   // The location card names the nearest corner from the baked sign points.
   useEffect(() => {
@@ -1146,8 +1218,15 @@ export function MapView({
         lines = namedStreetLines(map);
         at = { lng: c.lng, lat: c.lat };
         placed = true;
+        // Only nearby landmarks on the street-level map, same cap as the header.
+        focusLandmarks(map, { lon: c.lng, lat: c.lat });
       }
-      const label = streetLabel(streetPosition(lines, c.lng, c.lat));
+      // Street, then the landmark you can see: "Grand St & Essex St · Empire State Building ahead".
+      const street = streetLabel(streetPosition(lines, c.lng, c.lat));
+      const guide = describeGuide(
+        pickGuideLandmarks({ lon: c.lng, lat: c.lat }, eye ? eye.bearing : map.getBearing(), { max: 1, maxDistanceM: STREET_LEVEL_RANGE_M }),
+      );
+      const label = [street, guide].filter(Boolean).join(" · ") || null;
       setStreetHere((prev) => (prev === label ? prev : label));
     };
     update();
@@ -1162,6 +1241,8 @@ export function MapView({
     return () => {
       window.clearInterval(id);
       map.off("sourcedata", onData);
+      // Leaving street level: the whole list again, thinned by zoom.
+      focusLandmarks(map, null);
     };
   }, [ready, walking]);
 
@@ -1194,6 +1275,7 @@ export function MapView({
       ? { lon: snapped.lon, lat: snapped.lat, bearing: snapped.bearing, pitch: WALK_PITCH }
       : { lon: target[0], lat: target[1], bearing: map.getBearing(), pitch: WALK_PITCH };
     eyeRef.current = eye;
+    setWalkEye(eye);
     map.easeTo({ ...eyeCamera(map, eye), duration: reducedMotion ? 0 : 900 });
     if (!snapped) {
       // No road tiles in view yet (e.g. entering from the citywide map): ask OSRM.
@@ -1226,6 +1308,7 @@ export function MapView({
     wasWalking.current = false;
     setWalkPlace(null);
     setTilted(false);
+    setWalkEye(null);
     const map = mapRef.current?.getMap();
     if (!map || !ready) return;
     eyeRef.current = null;
@@ -1427,10 +1510,12 @@ export function MapView({
         if (!walking) startWalk();
         return;
       }
+      // A view you picked: leaves the walk, and guidance stops re-tilting the camera.
+      sendCamera({ type: "view" });
       const apply = () => {
         // Stand the camera `heightM` up, behind the current centre along the
         // bearing, looking at the centre on the ground, the same way the eye camera does.
-        const pitch = pitchForHeight(heightM);
+        const pitch = navCommand.pitch ?? pitchForHeight(heightM);
         const bearing = map.getBearing();
         const center = map.getCenter();
         const back = Math.max(heightM * Math.tan((pitch * Math.PI) / 180), heightM * 0.01);
@@ -1444,11 +1529,9 @@ export function MapView({
         map.easeTo({ ...map.calculateCameraOptionsFromTo(eye, heightM, center, 0), duration: reducedMotion ? 0 : 900 });
         setTilted(pitch > 0);
       };
-      if (walking) {
-        // Leave the walk first; its exit animation would undo the jump.
-        stopWalk();
-        window.setTimeout(apply, reducedMotion ? 0 : 750);
-      } else apply();
+      // Leaving the walk animates out first; that exit would undo the jump.
+      if (walking) window.setTimeout(apply, reducedMotion ? 0 : 750);
+      else apply();
       return;
     }
     if (navCommand.type === "zoom-in") {
@@ -1460,8 +1543,13 @@ export function MapView({
       return;
     }
     if (navCommand.type === "north") {
-      map.easeTo({ bearing: 0, pitch: 0, duration });
-      setTilted(false);
+      sendCamera({ type: "view" });
+      const apply = () => {
+        map.easeTo({ bearing: 0, pitch: 0, duration });
+        setTilted(false);
+      };
+      if (walking) window.setTimeout(apply, reducedMotion ? 0 : 750);
+      else apply();
       return;
     }
     map.jumpTo({
@@ -1472,10 +1560,10 @@ export function MapView({
     });
     setTilted(false);
     // "Reset view" means the city, not the street you were standing on.
-    stopWalk();
+    sendCamera({ type: "reset" });
     // `walking` is read, not a trigger: only a new command moves the camera.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, navCommand, reducedMotion, setTilted, stopWalk, startWalk]);
+  }, [ready, navCommand, reducedMotion, setTilted, startWalk]);
 
   // The camera-height slider shows where the camera actually is.
   useEffect(() => {
@@ -1539,12 +1627,12 @@ export function MapView({
         <Suspense fallback={null}>
           {FEATURES.map((f) => (f.MapLayer ? <f.MapLayer key={f.id} /> : null))}
         </Suspense>
-        {walking ? null : <MapCompass />}
+        {walking || agentHome ? null : <MapCompass />}
         <ViewSwitcher />
       </MapLibreMap>
 
 
-      <QuickLayers />
+      {agentHome ? <MapChrome /> : <QuickLayers />}
       {walking ? (
         <WalkControls
           place={walkPlace}
@@ -1566,7 +1654,7 @@ export function MapView({
         />
       ) : null}
       {walking && ready && mapRef.current ? (
-        <StreetMiniMap main={mapRef.current.getMap()} getEye={getEye} onExit={stopWalk} />
+        <StreetMiniMap main={mapRef.current.getMap()} getEye={getEye} onExit={stopWalk} filters={inset} />
       ) : null}
 
       {hover && !walking && canHover && !sheetOpen && analytics ? (

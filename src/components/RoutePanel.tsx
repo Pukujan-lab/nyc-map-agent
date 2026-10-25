@@ -1,9 +1,12 @@
+import { useFlag } from "@/lib/flags";
+import { useEffect } from "react";
 import { Footprints, MapPin, Navigation, X } from "lucide-react";
 import { AddressCombobox } from "@/components/AddressCombobox";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { WalkingRoute } from "@/lib/api/routing";
 import { formatCount } from "@/lib/format";
+import { onFootMinutes, shouldWalkRestroomTrip } from "@/lib/map/restroomTrip";
 import { useDataView } from "@/lib/store/DataViewContext";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { cn } from "@/lib/utils";
@@ -15,8 +18,21 @@ function formatDistance(metres: number): string {
 }
 
 function formatDuration(seconds: number): string {
-  const minutes = Math.max(1, Math.round(seconds / 60));
+  // Same minute count a restroom trip uses to decide whether to walk.
+  const minutes = onFootMinutes(seconds);
   return minutes >= 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${minutes} min`;
+}
+
+/** The existing walk-along: street view from the first vertex, camera follows the line. */
+function beginRouteWalk(
+  route: WalkingRoute,
+  routeStart: { lon: number; lat: number },
+  startWalk: (target?: { lon: number; lat: number } | null) => void,
+  setFollowingRoute: (following: boolean) => void,
+) {
+  const [lon, lat] = route.coordinates[0] ?? [routeStart.lon, routeStart.lat];
+  startWalk({ lon, lat });
+  setFollowingRoute(true);
 }
 
 /**
@@ -32,6 +48,7 @@ export function RoutePanel({
   isLoading: boolean;
   error: string | null;
 }) {
+  const home = useFlag("agentHome");
   const {
     routeStart,
     routeEnd,
@@ -41,10 +58,36 @@ export function RoutePanel({
     clearRoute,
     followingRoute,
     setFollowingRoute,
+    restroomWalkPending,
+    clearRestroomWalk,
   } = useDataView();
   const { startWalk, stopWalk, walking } = useMapState();
 
+  // Simulate trip waits for this route. Under 20 minutes, reuse the walk-along.
+  // At 20 or more, leave the walking line up and do not start the camera.
+  useEffect(() => {
+    if (!restroomWalkPending || isLoading) return;
+    if (error || !route || !routeStart) {
+      if (error) clearRestroomWalk();
+      return;
+    }
+    clearRestroomWalk();
+    if (!shouldWalkRestroomTrip(route.durationSeconds)) return;
+    beginRouteWalk(route, routeStart, startWalk, setFollowingRoute);
+  }, [
+    restroomWalkPending,
+    isLoading,
+    error,
+    route,
+    routeStart,
+    clearRestroomWalk,
+    startWalk,
+    setFollowingRoute,
+  ]);
+
   if (!routeStart && !routeEnd && !routePicking) return null;
+  // Home: Walk me there and the walk card own the route; the A/B card only covered the map (owner, 2026-10-24).
+  if (home) return null;
 
   const follow = () => {
     if (!route || !routeStart) return;
@@ -52,9 +95,7 @@ export function RoutePanel({
       setFollowingRoute(false);
       return;
     }
-    const [lon, lat] = route.coordinates[0] ?? [routeStart.lon, routeStart.lat];
-    startWalk({ lon, lat });
-    setFollowingRoute(true);
+    beginRouteWalk(route, routeStart, startWalk, setFollowingRoute);
   };
 
   return (
