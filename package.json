@@ -61,7 +61,6 @@
     "@types/geojson": "7946.0.14",
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",
-    "@vitejs/plugin-react": "4.3.3",
     "ai": "7.0.143",
     "autoprefixer": "10.4.20",
     "class-variance-authority": "0.7.0",
@@ -87,8 +86,6 @@
     "three": "0.134.0",
     "typescript": "5.6.3",
     "vaul": "1.1.2",
-    "vite": "5.4.10",
-    "vitest": "2.1.4",
     "xstate": "5.33.2",
     "zod": "4.6.7"
   },
@@ -102,6 +99,7 @@
     "@types/node": "22.10.2",
     "@types/suncalc": "1.9.2",
     "@types/three": "0.134.0",
+    "@vitejs/plugin-react": "4.7.0",
     "dependency-cruiser": "16.10.4",
     "eslint": "9.39.1",
     "eslint-plugin-jsx-a11y": "6.10.2",
@@ -111,7 +109,9 @@
     "mapshaper": "0.7.89",
     "size-limit": "11.2.0",
     "tsx": "4.19.2",
-    "typescript-eslint": "8.46.4"
+    "typescript-eslint": "8.46.4",
+    "vite": "6.4.5",
+    "vitest": "3.2.7"
   },
   "packageManager": "pnpm@11.19.0"
 }
