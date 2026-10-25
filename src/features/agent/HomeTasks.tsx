@@ -7,6 +7,7 @@ import { alertsBody, commuteFor, commutePrompt, delayDetails, delayOn, readUsual
 import { useCommuteFocus } from "./commuteFocus";
 import type { MapPoint } from "./schema";
 import { ExitStairsIcon, RestroomIcon } from "./homeIcons";
+import { useT } from "@/lib/i18n/appLang";
 
 export interface TaskHandlers {
   restroom: () => void;
@@ -20,11 +21,12 @@ const TASK = "h-[72px] flex-col gap-1.5 rounded-[18px] border border-slate-700 b
 
 /** The four task buttons above the chat bar on the idle home (#370). */
 export function TaskButtons({ on }: { on: TaskHandlers }) {
+  const t = useT();
   const tasks: Array<[string, ReactNode, () => void]> = [
-    ["Restroom", <RestroomIcon key="i" className="!h-6 !w-6" />, on.restroom],
-    ["My train", <TrainFront key="i" className="!h-[22px] !w-[22px]" aria-hidden="true" />, on.train],
-    ["Plan trip", <Route key="i" className="!h-[22px] !w-[22px]" aria-hidden="true" />, on.plan],
-    ["Find exit", <ExitStairsIcon key="i" className="!h-[22px] !w-[22px]" />, on.exit],
+    [t("restroom"), <RestroomIcon key="i" className="!h-6 !w-6" />, on.restroom],
+    [t("myTrain"), <TrainFront key="i" className="!h-[22px] !w-[22px]" aria-hidden="true" />, on.train],
+    [t("planTrip"), <Route key="i" className="!h-[22px] !w-[22px]" aria-hidden="true" />, on.plan],
+    [t("findExit"), <ExitStairsIcon key="i" className="!h-[22px] !w-[22px]" />, on.exit],
   ];
   return (
     <div className="pointer-events-auto grid grid-cols-4 gap-2 lg:flex lg:justify-center" data-testid="home-tasks">

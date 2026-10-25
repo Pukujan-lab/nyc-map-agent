@@ -1,1 +1,0 @@
-import{d as u,e as c,r as o,h as f}from"./index-CeNAmEy3.js";import{S as a,s as l}from"./store-C9XFBNkx.js";function h(){const{restrooms:s}=u(),[n,t]=c(),e=n.has(a);o.useEffect(()=>l(s&&e),[s,e]),o.useEffect(()=>()=>l(!1),[]);const r=o.useCallback(()=>t(a),[t]);return f(s?{id:a,label:"Include shops & cafés",active:e,onToggle:r}:null),null}export{h as default};

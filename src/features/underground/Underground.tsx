@@ -27,6 +27,7 @@ import { atChoices, estimate, fromLive, onMotionStop, startProgress, userAt, typ
 import { accuracyWorsened, boardingStation, endedVisits, loadDeclined, saveDeclined, stationAtEntrance, stationToAsk } from "./prompt";
 import { enqueue, isConnected, markFailed, markSent, nextDue, type Queued } from "./queue";
 import { CalibrationStep, ExitPointer, PlatformMap } from "./steps";
+import { useT } from "@/lib/i18n/appLang";
 
 type Mode = "idle" | "ride" | "which" | "station" | "calibrate" | "landmark" | "corner" | "walk";
 
@@ -144,6 +145,7 @@ const card = "task-panel task-bottom text-sm";
  * is the last confirmed station plus an honest, widening estimate.
  */
 export default function Underground() {
+  const t = useT();
   const home = useFlag("agentHome");
   const { online, navOnline, report } = useConnectivity();
   const trip = useActiveTrip();
@@ -674,14 +676,14 @@ export default function Underground() {
     }
     if (ask) {
       return (
-        <section className={card} aria-label="Are you in the station?">
-          <p className="mb-2 font-medium">Are you in the station? ({ask.name})</p>
+        <section className={card} aria-label={t("inStation")}>
+          <p className="mb-2 font-medium">{t("inStation")} ({ask.name})</p>
           <div className="flex gap-2">
             <Button type="button" size="sm" className="flex-1" onClick={() => enterStation(ask.at)}>
-              Yes
+              {t("yes")}
             </Button>
             <Button type="button" size="sm" variant="outline" className="flex-1" onClick={answerNo}>
-              No
+              {t("no")}
             </Button>
           </div>
         </section>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { localStatus, speechTag, statusKind, statusLang, type StatusKind } from "./statusLines";
+import { detectLang, localStatus, speechTag, statusKind, statusLang, type StatusKind } from "./statusLines";
 import { statusLine } from "./agentSteps";
 
 const KINDS: StatusKind[] = ["trains", "walk", "roads", "place", "restroom", "weather", "elevators", "map", "wait"];
@@ -45,5 +45,15 @@ describe("spoken status lines (#370)", () => {
   it("builds the line from the running step", () => {
     expect(statusLine([{ id: "a", name: "nearest_restroom", status: "start" }], "ko")).toBe("근처 화장실을 찾고 있어요…");
     expect(statusLine([], "es")).toBe("Un momento, estoy en ello…");
+  });
+});
+
+describe("detectLang", () => {
+  it("names the language only when the text makes it clear", () => {
+    expect(detectLang("我想去帝国大厦")).toBe("zh");
+    expect(detectLang("¿dónde está el baño?")).toBe("es");
+    expect(detectLang("где туалет")).toBe("ru");
+    expect(detectLang("where is the bathroom")).toBeNull();
+    expect(detectLang("ou twalèt la")).toBeNull();
   });
 });
