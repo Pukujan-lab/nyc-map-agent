@@ -21,7 +21,7 @@ GitHub Issues own task scope and progress; this file is a projection of them, no
 
 | Pull request | What it is | State |
 |---|---|---|
-| (this PR) | Held trains and feed-skipped stops from live MTA data, on the map and in the line panel; replaces #198 | Auto-merge on |
+| #415 | Held trains and feed-skipped stops from live MTA data, on the map and in the line panel; replaces #198 | Auto-merge on |
 | #408 | Street, nearby places and an arrival message in the trip preview | Auto-merge on; blocked by the bundle-size check |
 | #394 | Every agent gets the stack's boot steps and stops stale dev servers | Open, one failing check |
 | #388 | Trip previews don't auto-play; restart on another option | Open, two failing checks |
