@@ -7,3 +7,5 @@
 `facade-school.png` is the exception: its brick is **Bricks059** from ambientCG by Lennart Demes (https://ambientcg.com/view?id=Bricks059), CC0 1.0, downscaled with cream window frames drawn over it. It marks school buildings (DOE School Point Locations joined to footprints, or PLUTO class W*).
 
 `grass.png` is **Grass001** from ambientCG (https://ambientcg.com/view?id=Grass001), CC0 1.0, averaged down and softened to 192 px (low contrast, so it reads as lawn without shimmering at eye level). It is the street-level fill pattern for parks and lawns.
+
+`storefront-atlas.png` (street-level shop fronts: restaurant, café, deli/bodega, pharmacy, bank, clothing/retail, supermarket, mall/department store, bar, generic) is drawn by `scripts/make-storefront-atlas.py` from flat shapes — no photos, no third-party art — and released with the repo under CC0 1.0.

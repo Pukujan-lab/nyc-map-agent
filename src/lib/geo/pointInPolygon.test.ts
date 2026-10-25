@@ -68,6 +68,10 @@ describe("pointInPolygonRings", () => {
   });
 });
 
+// Building an NtaIndex over these 10-degree test boxes fills about two million
+// 0.01-degree buckets: about 1.7 s per test locally, over 5 s on a loaded CI runner.
+const NTA_INDEX_TIMEOUT_MS = 30_000;
+
 describe("NtaIndex", () => {
   const boundaries: NtaBoundary[] = [
     {
@@ -103,10 +107,10 @@ describe("NtaIndex", () => {
     expect(index.assignCode(5, 5)).toBe("QN0101");
     expect(index.assignCode(5, 25)).toBe("BK0101");
     expect(index.assignCode(50, 50)).toBeNull();
-  });
+  }, NTA_INDEX_TIMEOUT_MS);
 
   it("does not leak across bucket boundaries", () => {
     const index = new NtaIndex(boundaries);
     expect(index.assignCode(15, 15)).toBeNull();
-  });
+  }, NTA_INDEX_TIMEOUT_MS);
 });

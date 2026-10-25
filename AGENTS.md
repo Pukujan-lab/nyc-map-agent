@@ -6,6 +6,28 @@ To continue the agent-first build, start from `docs/PDD.md`: what is built, what
 
 For where the work stands right now (what merged, what is in flight, which worktree belongs to which pull request, what comes next), read `checkpoints/CURRENT.md`. Nothing updates it automatically: any pull request that finishes, starts or abandons a piece of work updates its "Completed recently", "In flight" and "Next" sections in the same pull request.
 
+<!-- acs:boot:start -->
+## Agent stack boot (ACS hot-loader, installed 2026-10-21)
+
+This repo runs the agent stack: ACS (Agent Custom Setup, coordination), PCM (Project Continuity Modules, checkpoints and PR gates), CGM (Content Generation Modules, writing rules) and OIO (Observational Issue Ops, issue logs). The pinned versions are in `stack-manifest.json`. The checkouts live in the ACS cache at `~/.cache/acs/deps/<repo>`. Every agent (Claude Code, Codex, Grok, or a person scripting one) follows these steps; nothing else delivers them.
+
+**At session start**
+1. Run `scripts/agent-hygiene.sh --yes`. It stops this repo's dev servers and test browsers that were left running for more than six hours, and reports any dev-root clutter.
+2. Check the coordination seat: `python3 .coord/bin/seat_protocol.py status`. Use `join` to take part, and `renew` while you hold the boss seat.
+3. Read `checkpoints/CURRENT.md` before choosing work.
+
+**While working**
+- **Worktrees, clones and scratch** go under `~/.cache/acs/{worktrees,deps,scratch}`, never in the projects folder or inside this repo. For example: `git worktree add ~/.cache/acs/worktrees/nyc-map-agent-<task> -b <branch>`. Remove a worktree once its branch is pushed and clean.
+- **Dev servers and test browsers:** stop every one you start as soon as you are done with it. Never stop another project's processes.
+- **Writing rules (CGM, always on):** before any human-facing writing, load and apply `~/.cache/acs/deps/content-generation-modules/modules/human-sounding-writing/SKILL.md`. That covers PR, issue and commit prose, docs and HTML reports. README and product pages use `modules/writing-direction/SKILL.md` instead; generated file names use `modules/human-output-naming/SKILL.md`. If the file can't be loaded, stop and say so.
+
+**At session end**
+1. Update `checkpoints/CURRENT.md` with what changed and the next step (PCM continuity).
+2. Stop your dev servers. Run `scripts/agent-hygiene.sh` once more.
+
+Details: `~/.cache/acs/deps/agent-custom-setup/modules/coordination/multi-agent-hotload/v0.1.0/HOTLOAD.md`. Why this block exists: Pukujan/agent-custom-setup#112.
+<!-- acs:boot:end -->
+
 <!-- oio:issue-log-guidance:start -->
 Before filing an observational or operational issue log, read `.oio/ontology/ISSUE_LOG_ONTOLOGY.md`, `.oio/ontology/project.json`, and `.oio/ontology/AGENT_GUIDE.md`. Confirm the exact destination and filing action are authorized. On OIO, ACS, CGM, and PCM, do not submit an issue or write files without explicit human direction for that destination and action. A proposal can remain a local draft until directed. Never treat adoption as permission to write to an adopter or sibling repository.
 <!-- oio:issue-log-guidance:end -->
