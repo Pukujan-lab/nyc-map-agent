@@ -418,7 +418,7 @@ export default function AgentOverlay() {
   useEffect(() => sendScreen({ type: "VOICE", on: orbShown }), [orbShown]);
   useEffect(() => () => { sendScreen({ type: "ANSWER", on: false }); sendScreen({ type: "VOICE", on: false }); sendScreen({ type: "TASK", on: false }); }, []);
   const toggleHandsFree = () => {
-    if (handsFree) { setHandsFree(false); speech.stopListening(); return; }
+    if (handsFree) { setHandsFree(false); speech.stopListening(); speech.stopSpeaking(); return; }
     speech.setMuted(false);
     speech.clearError();
     setHandsFree(true);
@@ -634,7 +634,7 @@ export default function AgentOverlay() {
         data-testid="ask-compact"
         className="pointer-events-auto absolute bottom-3 left-1/2 z-[60] flex h-[min(46vh,420px)] w-[min(440px,calc(100vw-1.5rem))] -translate-x-1/2 flex-col overflow-hidden rounded-xl border bg-card/95 shadow-xl backdrop-blur-md"
       >
-        <Button type="button" variant="ghost" size="icon" className="absolute right-1.5 top-1.5 z-10 h-8 w-8" aria-label="Close Ask" onClick={() => { setHandsFree(false); speech.stopListening(); closeAsk(); }}>
+        <Button type="button" variant="ghost" size="icon" className="absolute right-1.5 top-1.5 z-10 h-8 w-8" aria-label="Close Ask" onClick={() => { setHandsFree(false); speech.stopListening(); speech.stopSpeaking(); closeAsk(); }}>
           <X className="h-4 w-4" />
         </Button>
         {body}
@@ -675,7 +675,7 @@ export default function AgentOverlay() {
       setNotice(null);
       toggleHandsFree();
     };
-    const stopOrb = () => { setHandsFree(false); speech.stopListening(); };
+    const stopOrb = () => { setHandsFree(false); speech.stopListening(); speech.stopSpeaking(); };
 
     // The last exchange is the answer card; earlier turns stay in the history sent to the agent.
     const lastUser = [...messages].reverse().find((m) => m.role === "user") ?? null;
