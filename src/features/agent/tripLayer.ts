@@ -1,5 +1,6 @@
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import type { LngLatTuple, MapPoint, Trip } from "./schema";
+import { getAppLang, tr } from "@/lib/i18n/appLang";
 
 /** The planned trip as MapLibre line/circle layers on one GeoJSON source, plus a moving marker. */
 const SRC = "agent-trip";
@@ -19,7 +20,10 @@ function ensure(map: MapLibreMap): void {
   map.addLayer({ id: "agent-walk", type: "line", source: SRC, filter: ["==", ["get", "kind"], "walk"], paint: { "line-color": "#2563eb", "line-width": 4, "line-dasharray": [1, 1.5] } });
   map.addLayer({ id: "agent-drive", type: "line", source: SRC, filter: ["==", ["get", "kind"], "drive"], paint: { "line-color": "#2563eb", "line-width": 6, "line-opacity": 0.85 } });
   map.addLayer({ id: "agent-ride", type: "line", source: SRC, filter: ["==", ["get", "kind"], "ride"], paint: { "line-color": ["get", "color"], "line-width": 6 } });
-  map.addLayer({ id: "agent-portal", type: "circle", source: SRC, filter: ["==", ["geometry-type"], "Point"], paint: { "circle-radius": 6, "circle-color": "#ffffff", "circle-stroke-color": "#111827", "circle-stroke-width": 2 } });
+  map.addLayer({ id: "agent-portal", type: "circle", source: SRC, filter: ["all", ["==", ["geometry-type"], "Point"], ["!", ["has", "note"]]], paint: { "circle-radius": 6, "circle-color": "#ffffff", "circle-stroke-color": "#111827", "circle-stroke-width": 2 } });
+  // Where to change trains and stations the trip's lines skip, labelled on the route (#418).
+  map.addLayer({ id: "agent-note", type: "circle", source: SRC, filter: ["has", "note"], paint: { "circle-radius": 8, "circle-color": ["match", ["get", "note"], "skip", "#d4183d", "#ffffff"], "circle-stroke-color": ["match", ["get", "note"], "skip", "#ffffff", "#111827"], "circle-stroke-width": 3 } });
+  map.addLayer({ id: "agent-note-label", type: "symbol", source: SRC, filter: ["has", "note"], layout: { "text-field": ["get", "label"], "text-font": ["Noto Sans Bold"], "text-size": 12, "text-anchor": "left", "text-offset": [1.1, 0], "text-max-width": 14, "text-optional": true }, paint: { "text-color": "#111827", "text-halo-color": "#ffffff", "text-halo-width": 1.8 } });
   map.addLayer({ id: "agent-marker", type: "circle", source: MARKER, paint: { "circle-radius": 8, "circle-color": ["coalesce", ["get", "color"], "#2563eb"], "circle-stroke-color": "#ffffff", "circle-stroke-width": 3 } });
 }
 
@@ -33,6 +37,15 @@ export function tripToGeoJson(trip: Trip): GeoJSON.FeatureCollection {
       const color = l.kind === "ride" ? ROUTE_COLOR[l.route] ?? "#808183" : null;
       features.push({ type: "Feature", properties: { kind, color }, geometry: { type: "LineString", coordinates: l.coords } });
     }
+  }
+  const lang = getAppLang();
+  const rides = trip.legs.filter((l) => l.kind === "ride");
+  rides.slice(1).forEach((l) => {
+    const label = `${tr(lang, "changeTo").replace("{r}", l.route)}${l.fromStop ? ` · ${l.fromStop}` : ""}`;
+    features.push({ type: "Feature", properties: { note: "transfer", label }, geometry: { type: "Point", coordinates: l.coords[0] } });
+  });
+  for (const k of trip.skips) {
+    features.push({ type: "Feature", properties: { note: "skip", label: `${k.route} · ${tr(lang, "skipped")}: ${k.name}` }, geometry: { type: "Point", coordinates: k.at } });
   }
   return { type: "FeatureCollection", features };
 }
