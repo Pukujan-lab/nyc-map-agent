@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { z } from "zod";
+import { api } from "@/lib/api/client";
 
 const levelSchema = z.enum(["green", "yellow", "orange", "red"]).nullable();
 const rowSchema = z.object({
@@ -54,9 +55,9 @@ export function StreetLevels({ street, borough }: { street: string | null; borou
     enabled: !!street,
     staleTime: 6 * 60 * 60_000,
     queryFn: async ({ signal }) => {
-      const res = await fetch(`/api/street?${new URLSearchParams({ name: street ?? "" })}`, { signal });
-      if (!res.ok) throw new Error(`street ${res.status}`);
-      return bodySchema.parse(await res.json()).rows;
+      const { data, response } = await api.GET("/api/street", { params: { query: { name: street ?? "" } }, signal });
+      if (!data) throw new Error(`street ${response.status}`);
+      return bodySchema.parse(data).rows;
     },
   });
   const row = street && data ? pickStreetRow(data, borough) : null;

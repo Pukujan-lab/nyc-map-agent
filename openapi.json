@@ -1026,13 +1026,25 @@
                   "type": "string",
                   "format": "binary"
                 }
+              },
+              "application/vnd.pmtiles": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
               }
             }
           },
           "206": {
-            "description": "PMTiles byte range (Range header)",
+            "description": "Byte range (Range header)",
             "content": {
               "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/vnd.pmtiles": {
                 "schema": {
                   "type": "string",
                   "format": "binary"
@@ -1076,13 +1088,25 @@
                   "type": "string",
                   "format": "binary"
                 }
+              },
+              "application/vnd.pmtiles": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
               }
             }
           },
           "206": {
-            "description": "PMTiles byte range (Range header)",
+            "description": "Byte range (Range header)",
             "content": {
               "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/vnd.pmtiles": {
                 "schema": {
                   "type": "string",
                   "format": "binary"
@@ -1362,13 +1386,25 @@
                   "type": "string",
                   "format": "binary"
                 }
+              },
+              "application/vnd.pmtiles": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
               }
             }
           },
           "206": {
-            "description": "PMTiles byte range (Range header)",
+            "description": "Byte range (Range header)",
             "content": {
               "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/vnd.pmtiles": {
                 "schema": {
                   "type": "string",
                   "format": "binary"
@@ -1412,13 +1448,25 @@
                   "type": "string",
                   "format": "binary"
                 }
+              },
+              "application/vnd.pmtiles": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
               }
             }
           },
           "206": {
-            "description": "PMTiles byte range (Range header)",
+            "description": "Byte range (Range header)",
             "content": {
               "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/vnd.pmtiles": {
                 "schema": {
                   "type": "string",
                   "format": "binary"
@@ -1731,6 +1779,22 @@
     "/api/v1/vehicle-models/{mode}": {
       "get": {
         "summary": "Live-vehicle glTF model (subway, bus, rail)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "subway",
+                "bus",
+                "rail"
+              ],
+              "example": "subway"
+            },
+            "required": true,
+            "name": "mode",
+            "in": "path"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Whole file",
@@ -1740,13 +1804,25 @@
                   "type": "string",
                   "format": "binary"
                 }
+              },
+              "model/gltf-binary": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
               }
             }
           },
           "206": {
-            "description": "PMTiles byte range (Range header)",
+            "description": "Byte range (Range header)",
             "content": {
               "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "model/gltf-binary": {
                 "schema": {
                   "type": "string",
                   "format": "binary"
@@ -1781,6 +1857,22 @@
       "get": {
         "summary": "Live-vehicle glTF model (subway, bus, rail) (alias of /api/v1/vehicle-models/{mode})",
         "deprecated": true,
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "subway",
+                "bus",
+                "rail"
+              ],
+              "example": "subway"
+            },
+            "required": true,
+            "name": "mode",
+            "in": "path"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Whole file",
@@ -1790,13 +1882,25 @@
                   "type": "string",
                   "format": "binary"
                 }
+              },
+              "model/gltf-binary": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
               }
             }
           },
           "206": {
-            "description": "PMTiles byte range (Range header)",
+            "description": "Byte range (Range header)",
             "content": {
               "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "model/gltf-binary": {
                 "schema": {
                   "type": "string",
                   "format": "binary"

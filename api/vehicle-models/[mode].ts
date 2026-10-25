@@ -7,7 +7,7 @@ import { pmtilesProxy } from "../city-tiles";
  * Octo files to R2 as vehicle-<mode>.glb and served same-origin here, because
  * Octo's public bucket sends no CORS headers. Binaries never go in git.
  */
-const VEHICLE_MODES = ["subway", "bus", "rail"] as const;
+export const VEHICLE_MODES = ["subway", "bus", "rail"] as const;
 const proxies = new Map(VEHICLE_MODES.map((m) => [m, pmtilesProxy(`vehicle-${m}.glb`, "model/gltf-binary")]));
 
 export async function GET(request: Request): Promise<Response> {
