@@ -2,7 +2,7 @@ import { MockLanguageModelV4, convertArrayToReadableStream } from "ai/test";
 import { describe, expect, it } from "vitest";
 import { streamEvent, trip as tripSchema, type MapAction, type StreamEvent } from "../../../src/features/agent/schema";
 import type { ServiceChange } from "../../../src/lib/transit/serviceChanges";
-import { ActionCollector, placeActions, restroomActions, tripActions } from "./mapActions";
+import { ActionCollector, placeActions, placeName, restroomActions, tripActions } from "./mapActions";
 import { POST } from "./routes";
 import { nearestRestrooms, type RestroomRow } from "./services";
 import { skippedStops } from "./trip";
@@ -176,5 +176,10 @@ describe("buttons only for places the answer stands behind", () => {
     c.add([{ kind: "flyTo", id: "fly:1", label: "Show 3 YACHT CLUB CV, Staten Island, NY", lon: -74.1, lat: 40.5, zoom: 16 }]);
     expect(c.list(answer)).toEqual([]);
     expect(c.list()).toHaveLength(1);
+  });
+  it("names a pinned place without its address", () => {
+    expect(placeName("Bryant Park, Manhattan Community Board 5, New York, NY")).toBe("Bryant Park");
+    expect(placeName("120, Park Avenue, New York")).toBe("120 Park Avenue");
+    expect(placeActions({ label: "Bryant Park, Manhattan, New York", at: [-73.98, 40.75] })[0].label).toBe("Show Bryant Park");
   });
 });

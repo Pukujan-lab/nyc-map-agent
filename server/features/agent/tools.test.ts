@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { describeStep } from "./drive/router";
 import { MTA_TOLLS, tolls } from "./drive/context";
-import { args, makeTools } from "./tools";
+import { args, makeTools, pickStation } from "./tools";
 import { nyLocalToDate, toNyLocal } from "./trip";
 import { octant } from "./transit";
 
@@ -73,5 +73,20 @@ describe("drive helpers", () => {
     const rfk = MTA_TOLLS[0].at;
     expect(tolls([[rfk[0] - 0.001, rfk[1]], rfk, [rfk[0] + 0.001, rfk[1]]])).toHaveLength(1);
     expect(tolls([[-74.0, 40.7], [-73.99, 40.71]])).toHaveLength(0);
+  });
+});
+
+describe("pickStation", () => {
+  const st = (name: string, at: [number, number]) => ({ id: name, complexId: name, name, routes: [], structure: "Subway", at });
+  const all = [st("34 St-Herald Sq", [-73.9879, 40.7497]), st("86 St", [-73.9762, 40.7888]), st("86 St", [-73.9557, 40.7795]), st("Times Sq-42 St", [-73.9873, 40.7553])];
+
+  it("finds the station by the short name riders use", () => {
+    expect(pickStation(all, "Herald Sq", [-73.9857, 40.7484])?.name).toBe("34 St-Herald Sq");
+  });
+  it("picks the one nearest the destination when several share a name", () => {
+    expect(pickStation(all, "86 St", [-73.9540, 40.7790])?.at).toEqual([-73.9557, 40.7795]);
+  });
+  it("returns null for a name no station has", () => {
+    expect(pickStation(all, "Hogwarts", [-73.98, 40.75])).toBeNull();
   });
 });
