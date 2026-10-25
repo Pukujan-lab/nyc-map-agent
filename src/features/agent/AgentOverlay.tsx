@@ -41,6 +41,8 @@ import { nameRemindButton, remindAt, saveReminder } from "./reminder";
 import { toast } from "sonner";
 import { clearPoints, routeColor, showPoints, showTrip } from "./tripLayer";
 import { runMapAction, TROUBLE_COLOR, type MapActionContext } from "./mapActions";
+import { setQuickLayer } from "@/lib/quickLayers";
+import { setOptions } from "@/lib/map/mapOptions";
 import { AnswerActions, RestroomSpotDetails } from "./AnswerActions";
 import { AnswerSources, type AnswerSourcesLine } from "./AnswerSources";
 import { formatStreetText } from "@/lib/streetName";
@@ -279,6 +281,8 @@ export default function AgentOverlay() {
       saveReminder(t);
       toast(tr(appLang, "remindSaved").replace("{t}", remindAt(t)));
     },
+    // The same switch as the Layers menu, so turning it off again is where people expect.
+    showLayer: (layer) => { if (layer === "busStops") setOptions({ busStops: true }); else setQuickLayer(layer, true); },
   };
   const runAction = (a: MapAction) => {
     runMapAction(a, actionCtx, routeColor);

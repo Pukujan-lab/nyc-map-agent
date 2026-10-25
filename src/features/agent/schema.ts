@@ -157,6 +157,9 @@ export type RestroomSpot = z.infer<typeof restroomSpot>;
  * so a button only ever draws data a tool returned. `id` dedupes repeats.
  */
 const actionBase = { id: z.string().max(200), label: z.string().max(80) };
+/** Layers the agent may offer as a button: the plain on/off ones in the Layers menu. */
+export const LAYER_HELP_IDS = ["citibike", "health", "parksPlaces", "busStops", "xray", "streetArt", "businesses"] as const;
+export type LayerHelpId = (typeof LAYER_HELP_IDS)[number];
 export const mapAction = z.discriminatedUnion("kind", [
   z.object({ ...actionBase, kind: z.literal("flyTo"), lon: z.number().min(-180).max(180), lat: z.number().min(-90).max(90), zoom: z.number().min(9).max(20).optional() }),
   z.object({ ...actionBase, kind: z.literal("showRestroom"), restroom: restroomSpot }),
@@ -172,6 +175,8 @@ export const mapAction = z.discriminatedUnion("kind", [
   z.object({ ...actionBase, kind: z.literal("showTrouble"), route: z.string(), style: z.enum(["problem", "shuttle", "switch", "stuck"]), points: z.array(mapPoint).min(1).max(200) }),
   /** A trip planned ahead: the person taps it to put a reminder in their phone's calendar. */
   z.object({ ...actionBase, kind: z.literal("remindTrip"), trip }),
+  /** A map layer that answers the question (#313). The person taps it; the agent never switches layers itself. */
+  z.object({ ...actionBase, kind: z.literal("showLayer"), layer: z.enum(LAYER_HELP_IDS) }),
 ]);
 export type MapAction = z.infer<typeof mapAction>;
 /** Most buttons one answer carries. */

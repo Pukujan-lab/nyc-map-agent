@@ -1,9 +1,9 @@
 import { tool } from "ai";
 import { findEvent, readPage } from "./webLookup";
 import { z } from "zod";
-import { command, playbackSpeed, type AgentCommand, type LngLatTuple, type MapAction, type Trip } from "../../../src/features/agent/schema";
+import { command, LAYER_HELP_IDS, playbackSpeed, type AgentCommand, type LngLatTuple, type MapAction, type Trip } from "../../../src/features/agent/schema";
 import { elevatorStatus, geocode, hazardsAt, nearestRestrooms, publicRestrooms, routeWalk, serviceAlerts, subwayAlertEntities, subwayVehicles, troubleStations, weatherAt, type Place, type RestroomRow, type WalkResult } from "./services";
-import { placeActions, restroomActions, troubleActions, tripActions } from "./mapActions";
+import { LAYER_HELP, layerAction, placeActions, restroomActions, troubleActions, tripActions } from "./mapActions";
 import { buildDriveTrip } from "./drive/trip";
 import type { DriveRouter } from "./drive/router";
 import { portalFor, safe, toNyLocal, tripBrief } from "./trip";
@@ -77,6 +77,7 @@ export const args = {
     depart: when.describe("When to leave: the user's own words (\"tomorrow 9am\", \"now\") or a New York time 2026-10-22T09:00"),
   }),
   setTime: z.object({ iso: z.string().regex(/^\d{4}-\d\d-\d\dT\d\d:\d\d/) }),
+  suggest_layer: z.object({ layer: z.enum(LAYER_HELP_IDS) }),
 };
 
 const nearestTo = (all: Station[], p: LngLatTuple): Station | undefined => [...all].sort((a, b) => distM(a.at, p) - distM(b.at, p))[0];
@@ -267,6 +268,11 @@ export function makeTools(ctx: ToolContext) {
     openPanel: tool({ description: "Map: open the trip summary panel (weather chip, lines, alerts, elevators, exit, ETA).", inputSchema: args.tripRef, execute: ({ tripId }) => emit({ type: "openPanel", trip: tripOf(tripId) }) }),
     enterStreetView: tool({ description: "Map: drop to street level at a place.", inputSchema: args.enterStreetView, execute: async ({ place }) => { const p = await resolve(place); return emit({ type: "enterStreetView", lon: p.at[0], lat: p.at[1] }); } }),
     playFlythrough: tool({ description: "Map: load the fast-forward preview of a planned trip behind a Play button. Only when the user asks to preview or play it; it never starts on its own.", inputSchema: args.playFlythrough, execute: ({ tripId, speed }) => emit({ type: "playFlythrough", trip: tripOf(tripId), speed }) }),
+    suggest_layer: tool({
+      description: `Map: offer a button that turns on the map layer answering the question (#313). The person taps it; you never switch layers yourself. Layers: ${Object.entries(LAYER_HELP).map(([id, what]) => `${id} (${what})`).join(", ")}.`,
+      inputSchema: args.suggest_layer,
+      execute: ({ layer }) => { offer([layerAction(layer)]); return { button: layerAction(layer).label }; },
+    }),
     setTime: tool({ description: "Map: set the time the map shows (for forecasts/planned work).", inputSchema: args.setTime, execute: ({ iso }) => emit({ type: "setTime", iso }) }),
   };
 }

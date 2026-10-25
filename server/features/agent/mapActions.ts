@@ -4,7 +4,7 @@
  * button can only draw data a tool returned.
  */
 import { formatStreetText } from "../../../src/lib/streetName";
-import { mapAction, MAX_ACTIONS, type MapAction, type MapPoint, type RestroomSpot, type Trip } from "../../../src/features/agent/schema";
+import { mapAction, MAX_ACTIONS, type LayerHelpId, type MapAction, type MapPoint, type RestroomSpot, type Trip } from "../../../src/features/agent/schema";
 import type { LineTrouble, StuckTrain } from "../../../src/lib/transit/trouble";
 
 const key = (at: readonly [number, number]) => `${at[0].toFixed(5)},${at[1].toFixed(5)}`;
@@ -59,6 +59,16 @@ export function tripActions(trip: Trip): MapAction[] {
   return out;
 }
 
+/** What each Layers-menu switch shows, in the words of its button. */
+export const LAYER_HELP: Record<LayerHelpId, string> = {
+  citibike: "Citi Bike docks", health: "clinics and pharmacies", parksPlaces: "parks and public places", busStops: "bus stops",
+  xray: "underground trains", streetArt: "street art", businesses: "shops and businesses",
+};
+/** "Turn on Citi Bike docks": the person taps it, so the map changes only when they ask. */
+export function layerAction(layer: LayerHelpId): MapAction {
+  return { kind: "showLayer", id: `layer:${layer}`, label: `Turn on ${LAYER_HELP[layer]}`, layer };
+}
+
 const dedupePoints = (ps: MapPoint[]) => [...new Map(ps.map((p) => [`${p.name}|${key(p.at)}`, p])).values()];
 
 /**
@@ -101,7 +111,7 @@ export function troubleActions(troubles: LineTrouble[], stuck: StuckTrain[] = []
   return out;
 }
 
-const RANK: Record<MapAction["kind"], number> = { showRestroom: 0, showRoute: 1, remindTrip: 1, showTrouble: 2, showStops: 2, showCrashes: 2, flyTo: 3 };
+const RANK: Record<MapAction["kind"], number> = { showRestroom: 0, showRoute: 1, remindTrip: 1, showLayer: 1, showTrouble: 2, showStops: 2, showCrashes: 2, flyTo: 3 };
 
 /** Collects actions across a request's tool calls: deduped by id, validated, ranked, capped. */
 const GENERIC = new Set(["show", "street", "avenue", "road", "place", "boulevard", "new", "york", "nyc", "the", "and", "east", "west", "north", "south"]);

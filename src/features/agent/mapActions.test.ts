@@ -3,7 +3,7 @@ import { CRASH_COLOR, distanceText, runMapAction, SKIP_COLOR, TROUBLE_COLOR, typ
 import { streamEvent } from "./schema";
 import { pointsToGeoJson, routeColor } from "./tripLayer";
 
-const ctx = (): MapActionContext => ({ flyTo: vi.fn(), showTrip: vi.fn(), showRestroom: vi.fn(), showPoints: vi.fn(), remind: vi.fn() });
+const ctx = (): MapActionContext => ({ flyTo: vi.fn(), showTrip: vi.fn(), showRestroom: vi.fn(), showPoints: vi.fn(), remind: vi.fn(), showLayer: vi.fn() });
 const stops = [{ at: [-73.91, 40.74] as [number, number], name: "52 St" }];
 
 describe("answer map actions", () => {
@@ -61,5 +61,14 @@ describe("answer map actions", () => {
     expect(distanceText(123)).toBe("120 m");
     expect(distanceText(1530)).toBe("1.5 km");
     expect(routeColor("6X")).toBe("#00933C");
+  });
+});
+
+describe("showLayer (#313)", () => {
+  it("turns on the named layer and nothing else", () => {
+    const c = ctx();
+    expect(runMapAction({ kind: "showLayer", id: "layer:health", label: "Turn on clinics and pharmacies", layer: "health" }, c, () => "#000")).toEqual({ ok: true, kind: "showLayer" });
+    expect(c.showLayer).toHaveBeenCalledWith("health");
+    expect(runMapAction({ kind: "showLayer", id: "layer:x", label: "x", layer: "everything" }, c, () => "#000").ok).toBe(false);
   });
 });
