@@ -42,6 +42,13 @@ export function readableChange(l: Layer, look: StreetLook = "simple"): { visibil
   return null;
 }
 
+/** Hide the highway number signs again after a restyle put them back. */
+export function hideShields(map: MapLibreMap): void {
+  for (const l of (map.getStyle()?.layers ?? []) as Layer[]) {
+    if (l.type === "symbol" && SHIELD.test(l.id) && map.getLayoutProperty(l.id, "visibility") !== "none") map.setLayoutProperty(l.id, "visibility", "none");
+  }
+}
+
 const saved = new WeakMap<MapLibreMap, Map<string, { visibility: unknown; color: unknown; textColor: unknown }>>();
 
 export interface ReadableColors { street: string; major: string; label: string }

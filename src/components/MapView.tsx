@@ -12,7 +12,7 @@ import { useFeatureToggles } from "@/lib/featureToggles";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { MapCompass } from "./MapCompass";
 import { ViewSwitcher } from "./ViewSwitcher";
-import { applyReadable } from "@/lib/map/readable";
+import { applyReadable, hideShields } from "@/lib/map/readable";
 import { busStopAt, busStopIconOpacity, busStopTextOpacity } from "@/lib/map/busStops";
 import { applyPlaces, classesFor, placesStale, usePlaces, withQuickPlaces } from "@/lib/map/places";
 import { insetFilters } from "@/lib/map/miniStyle";
@@ -513,6 +513,7 @@ export function MapView({
     // its POIs to the person's choice instead of the style's defaults.
     const keep = () => {
       if (placesStale(map, shownPlaces)) applyPlaces(map, shownPlaces);
+      hideShields(map);
       if (!analytics && map.getLayer("label_other") && map.getLayoutProperty("label_other", "visibility") !== "none") map.setLayoutProperty("label_other", "visibility", "none");
     };
     map.on("styledata", keep);
