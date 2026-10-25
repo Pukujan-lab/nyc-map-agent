@@ -1,4 +1,4 @@
-import { Bus, Car, Footprints, Headphones, LocateFixed, Mic, MicOff, MoreVertical, Pause, Play, Send, SkipForward, X } from "lucide-react";
+import { Bus, Car, ChevronUp, Footprints, Headphones, LocateFixed, Mic, MicOff, MoreVertical, Pause, Play, Send, SkipForward, X } from "lucide-react";
 import { legFocus } from "./legFocus";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -61,6 +61,9 @@ import { applyStep, statusLine, type AgentStep } from "./agentSteps";
 import { speechTag, statusLang } from "./statusLines";
 import { needsSharedOrigin, ORIGIN_PROMPT, replyAsksForOrigin } from "./needsOrigin";
 import { framePadding } from "@/lib/map/mapCover";
+import { setOpenMenu, useOpenMenu } from "@/lib/store/openMenu";
+import { publishAnswerShown } from "@/lib/agent/answerShown";
+import { nextFold, type Fold } from "./answerFold";
 
 interface Msg { id: string; role: "user" | "assistant"; content: string; offerLocation?: boolean; actions?: MapAction[]; sources?: AnswerSourcesLine }
 
@@ -104,6 +107,17 @@ export default function AgentOverlay() {
   const isDesktop = useMediaQuery("(min-width: 1024px)");
   const driveOn = useFlag("agentDrive");
   const [messages, setMessages] = useState<Msg[]>([]);
+  // The answer folds to its question chip under a task or an open menu (docs/PDD.md, "Screen space").
+  const [fold, setFold] = useState<Fold>(null);
+  const openMenu = useOpenMenu();
+  useEffect(() => setFold((f) => nextFold(f, { menuOpen: openMenu !== null, taskStarted: false })), [openMenu]);
+  const onTask = followingRoute || walking || followed !== null;
+  const onTaskWas = useRef(onTask);
+  useEffect(() => {
+    if (onTask && !onTaskWas.current) setFold((f) => nextFold(f, { menuOpen: false, taskStarted: true }));
+    onTaskWas.current = onTask;
+  }, [onTask]);
+  useEffect(() => { if (!chatOpen) setFold(null); }, [chatOpen]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [trip, setTrip] = useState<Trip | null>(null);
@@ -269,6 +283,8 @@ export default function AgentOverlay() {
   const stopPlayer = player.stop;
   const send = useCallback(async (text: string) => {
     closeAll();
+    setOpenMenu(null);
+    setFold(null);
     const q = text.trim();
     const byVoice = voiceTurn.current;
     voiceTurn.current = false;
@@ -373,6 +389,10 @@ export default function AgentOverlay() {
     setHandsFree(false);
     stopMic();
   }, [taskOn, handsFree, stopMic]);
+  // Other panels make room while the answer or the orb is open (the line panel folds on a phone).
+  const sheetShown = home && ((chatOpen && messages.length > 0 && fold === null) || (handsFree && speech.listening && !dictating));
+  useEffect(() => publishAnswerShown(sheetShown), [sheetShown]);
+  useEffect(() => () => publishAnswerShown(false), []);
   const toggleHandsFree = () => {
     if (handsFree) { setHandsFree(false); speech.stopListening(); return; }
     speech.setMuted(false);
@@ -719,14 +739,21 @@ export default function AgentOverlay() {
       },
     };
     const panelUp = panelContent !== null && !panelMinimized;
-    const answerOpen = chatOpen && messages.length > 0;
+    const answerOpen = chatOpen && messages.length > 0 && fold === null;
     const showIdle = !selectedLine && !stationHelpVisible && !followingRoute && !player.state.active && !walking && !streetViewOpen && !answerOpen && !busy && !handsFree && !drawerOpen && !panelUp && followed === null;
-    const idle = showIdle ? (
+    const chip = chatOpen && messages.length > 0 && fold !== null ? (
+      <button type="button" aria-label="Show the answer" data-testid="answer-chip" onClick={() => setFold(null)}
+        className="pointer-events-auto flex h-11 max-w-full items-center gap-2 self-start rounded-full border border-[#263449] bg-[#0b1220]/85 px-4 text-sm font-semibold text-slate-100 shadow-lg backdrop-blur-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400">
+        <span className="truncate">{lastUser?.content}</span>
+        <ChevronUp className="h-4 w-4 shrink-0" aria-hidden="true" />
+      </button>
+    ) : null;
+    const idle = chip ?? (showIdle ? (
       <>
         <DailyCard places={places} onAsk={(q) => void send(q)} onFly={(sp) => flyTo({ lon: sp.lon, lat: sp.lat, zoom: 16 })} onShowStations={(points) => actionCtx.showPoints(points, { color: TROUBLE_COLOR.problem, title: "Delay" })} />
         <TaskButtons on={tasks} />
       </>
-    ) : null;
+    ) : null);
 
     return (
       <>

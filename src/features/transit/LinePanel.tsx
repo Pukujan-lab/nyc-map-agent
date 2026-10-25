@@ -5,6 +5,8 @@ import { lineColor } from "@/lib/transit/bullets";
 import { setSelectedLine, useSelectedLine } from "@/lib/transit/selectedLine";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { framePadding } from "@/lib/map/mapCover";
+import { useAnswerShown } from "@/lib/agent/answerShown";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 import { setAlertFocus } from "./alertFocus";
 import { useAlerts, useNow, useTransitData } from "./hooks";
 import { boardingArrivals, minutesUntil } from "./model";
@@ -79,31 +81,47 @@ export function LinePanel({ map, route, onFollow }: { map: MaplibreMap | undefin
   const text = info?.text ?? "#ffffff";
   const count = notices.length;
   const name = info?.name && info.name !== route ? info.name : "";
+  // On a phone the open answer wins: the panel folds to its pill, and tapping the pill opens it again.
+  const docked = useMediaQuery("(min-width: 640px)");
+  const answerShown = useAnswerShown();
+  const [reopened, setReopened] = useState(false);
+  useEffect(() => setReopened(false), [answerShown]);
+  const folded = !docked && answerShown && !reopened;
+  const pillLabel = (
+    <>
+      <span className="flex h-8 w-8 items-center justify-center rounded-full text-[16px] font-bold" style={{ background: color, color: text }} aria-hidden>
+        {info?.short ?? route}
+      </span>
+      <span className="pr-1.5 text-[14px] font-semibold">
+        <span className="sr-only">{route} line, </span>
+        {name ? <span className="mr-1.5 inline-block max-w-[150px] truncate align-bottom lg:max-w-[200px]">{name}</span> : null}
+        <span className={name ? "font-medium text-[#cbd5e1]" : ""}>{count === 1 ? "1 notice" : `${count} notices`}</span>
+      </span>
+    </>
+  );
 
   return (
     <div
       data-testid="line-panel"
       data-map-cover
-      className="pointer-events-none absolute left-4 right-4 z-[44] flex flex-col gap-3 font-[Inter,system-ui,sans-serif] text-[#f1f5f9] md:left-auto md:w-[380px] lg:w-[400px]"
+      className="pointer-events-none absolute left-4 right-4 z-[44] flex flex-col gap-3 font-[Inter,system-ui,sans-serif] text-[#f1f5f9] sm:left-auto sm:w-[360px] md:w-[380px] lg:w-[400px]"
       style={{ top: "calc(env(safe-area-inset-top) + 16px)", maxHeight: "calc(100% - env(safe-area-inset-top) - var(--chat-bar-h, 0px) - 32px)" }}
     >
       <div className="flex items-center justify-between">
-        <div className={`pointer-events-auto flex h-11 items-center gap-2.5 rounded-[22px] pl-1.5 pr-2 ${GLASS}`}>
-          <span className="flex h-8 w-8 items-center justify-center rounded-full text-[16px] font-bold" style={{ background: color, color: text }} aria-hidden>
-            {info?.short ?? route}
-          </span>
-          <span className="pr-1.5 text-[14px] font-semibold">
-            <span className="sr-only">{route} line, </span>
-            {name ? <span className="mr-1.5 inline-block max-w-[150px] truncate align-bottom lg:max-w-[200px]">{name}</span> : null}
-            <span className={name ? "font-medium text-[#cbd5e1]" : ""}>{count === 1 ? "1 notice" : `${count} notices`}</span>
-          </span>
-        </div>
+        {folded ? (
+          <button type="button" aria-expanded={false} aria-label={`Show the ${route} line`} data-testid="line-pill" onClick={() => setReopened(true)}
+            className={`pointer-events-auto flex h-11 items-center gap-2.5 rounded-[22px] pl-1.5 pr-2 ${GLASS} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]`}>
+            {pillLabel}
+          </button>
+        ) : (
+          <div data-testid="line-pill" className={`pointer-events-auto flex h-11 items-center gap-2.5 rounded-[22px] pl-1.5 pr-2 ${GLASS}`}>{pillLabel}</div>
+        )}
         <button type="button" aria-label="Close line" onClick={() => setSelectedLine(null)}
           className={`pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full ${GLASS} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]`}>
           <X className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden />
         </button>
       </div>
-      <div ref={panelRef} className="pointer-events-auto flex min-h-0 flex-col gap-2.5 rounded-[22px] border border-[rgba(148,163,184,0.16)] bg-[rgba(11,18,32,0.45)] p-2.5 backdrop-blur-[14px]">
+      <div ref={panelRef} data-testid="line-body" className={`pointer-events-auto ${folded ? "hidden" : "flex"} min-h-0 flex-col gap-2.5 rounded-[22px] border border-[rgba(148,163,184,0.16)] bg-[rgba(11,18,32,0.45)] p-2.5 backdrop-blur-[14px]`}>
         {board ? (
           <div data-testid="line-board" className="flex items-start gap-3 rounded-[14px] border border-[rgba(148,163,184,0.16)] bg-[rgba(15,23,42,0.35)] px-3 py-2.5 text-[14px]">
             <div className="min-w-0 flex-1">
