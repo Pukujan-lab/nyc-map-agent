@@ -64,7 +64,7 @@ import { needsSharedOrigin, ORIGIN_PROMPT, replyAsksForOrigin } from "./needsOri
 import { framePadding } from "@/lib/map/mapCover";
 import { useOpenMenu } from "@/lib/store/openMenu";
 import { sendScreen, useScreen } from "@/lib/screen/screenSpace";
-import { getUndergroundNow } from "@/features/underground/whereNow";
+import { getUndergroundNow, useUndergroundNow } from "@/features/underground/whereNow";
 
 interface Msg { id: string; role: "user" | "assistant"; content: string; offerLocation?: boolean; actions?: MapAction[]; sources?: AnswerSourcesLine }
 
@@ -112,7 +112,9 @@ export default function AgentOverlay() {
   // Who gets the screen is decided in one place (src/lib/screen/screenSpace.ts); this reports what is open.
   const openMenu = useOpenMenu();
   useEffect(() => sendScreen({ type: "MENU", on: openMenu !== null }), [openMenu]);
-  const onTask = followingRoute || walking || followed !== null;
+  // The exit card is a task too, so the answer and the follow card make room for it (#418).
+  const atExit = useUndergroundNow()?.stage === "at-station";
+  const onTask = followingRoute || walking || followed !== null || atExit;
   useEffect(() => sendScreen({ type: "TASK", on: onTask }), [onTask]);
   const answerView = useScreen((v) => v.answer);
   const [input, setInput] = useState("");
