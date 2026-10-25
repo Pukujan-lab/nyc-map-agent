@@ -82,5 +82,6 @@ describe("underground helper context", () => {
     expect(p).not.toContain("underground at");
     expect(p).toContain("Want to start?");
     expect(p).toContain("what to bring");
+    expect(p).toContain("at the station where it happens");
   });
 });

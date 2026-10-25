@@ -23,7 +23,7 @@ import { ageLabel, bearing, compassAgrees, exitKind, headingFromMovement, metres
 import { initialDetector, stepDetector } from "./motion";
 import { canUndo, riding, stepGetOff, type GetOff, type GetOffEvent } from "./getoff";
 import { cacheStationTiles, probe, readMap, registerOfflineWorker, watchCompass, watchMotion } from "./offline";
-import { buildStore, loadStore, outageLabel, packFor, saveStore, tripStops, type ExitPack, type PackExit, type PackStore } from "./pack";
+import { buildStore, loadStore, outageLabel, packFor, saveStore, tripStops, walkFromExit, type ExitPack, type PackExit, type PackStore } from "./pack";
 import { atChoices, estimate, fromLive, onMotionStop, startProgress, userAt, type Ask, type LiveTrip, type Progress } from "./progress";
 import { accuracyWorsened, boardingStation, endedVisits, loadDeclined, saveDeclined, stationAtEntrance, stationToAsk } from "./prompt";
 import { enqueue, isConnected, markFailed, markSent, nextDue, type Queued } from "./queue";
@@ -94,15 +94,17 @@ function useMapCenter(): { at: Pt; zoom: number } | null {
 }
 
 const SRC = "underground-exits";
-const LAYERS = ["underground-train", "underground-exits-dot", "underground-exits-best", "underground-exits-label"];
+const LAYERS = ["underground-walk", "underground-train", "underground-exits-dot", "underground-exits-best", "underground-exits-label"];
 /** Station, every exit with its corner name, the chosen one highlighted, and the train's direction. Works on cached tiles offline. */
-function drawOnMap(map: MapLibreMap, pack: ExitPack, chosen: number): void {
+function drawOnMap(map: MapLibreMap, pack: ExitPack, chosen: number, walk: Pt[] | null): void {
   const [lon, lat] = pack.station.at;
   const features: GeoJSON.Feature[] = pack.exits.map((e, i) => ({
     type: "Feature",
     properties: { best: i === chosen ? 1 : 0, label: signText(e.streets, e.corner)?.replace(/^Exit · /, "") ?? `Exit ${i + 1}` },
     geometry: { type: "Point", coordinates: e.at },
   }));
+  // The walk from the chosen exit to where they are going, like the video's route to the entrance (#418).
+  if (walk && walk.length >= 2) features.unshift({ type: "Feature", properties: { walk: 1 }, geometry: { type: "LineString", coordinates: walk } });
   if (pack.trackBearing !== null) {
     // A 60 m arrow shaft through the station along the train's direction.
     const r = (pack.trackBearing * Math.PI) / 180;
@@ -115,11 +117,12 @@ function drawOnMap(map: MapLibreMap, pack: ExitPack, chosen: number): void {
   const src = map.getSource<GeoJSONSource>(SRC);
   if (src) return void src.setData(data);
   map.addSource(SRC, { type: "geojson", data });
-  map.addLayer({ id: LAYERS[0], type: "line", source: SRC, filter: ["==", ["get", "train"], 1], paint: { "line-color": "#0f172a", "line-width": 5, "line-opacity": 0.6 } });
-  map.addLayer({ id: LAYERS[1], type: "circle", source: SRC, filter: ["==", ["geometry-type"], "Point"], paint: { "circle-radius": 6, "circle-color": "#ffffff", "circle-stroke-color": "#0f172a", "circle-stroke-width": 2 } });
-  map.addLayer({ id: LAYERS[2], type: "circle", source: SRC, filter: ["==", ["get", "best"], 1], paint: { "circle-radius": 9, "circle-color": "#16a34a", "circle-stroke-color": "#ffffff", "circle-stroke-width": 3 } });
+  map.addLayer({ id: LAYERS[0], type: "line", source: SRC, filter: ["==", ["get", "walk"], 1], layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#2563eb", "line-width": 5, "line-opacity": 0.9, "line-dasharray": [0.1, 1.8] } });
+  map.addLayer({ id: LAYERS[1], type: "line", source: SRC, filter: ["==", ["get", "train"], 1], paint: { "line-color": "#0f172a", "line-width": 5, "line-opacity": 0.6 } });
+  map.addLayer({ id: LAYERS[2], type: "circle", source: SRC, filter: ["==", ["geometry-type"], "Point"], paint: { "circle-radius": 6, "circle-color": "#ffffff", "circle-stroke-color": "#0f172a", "circle-stroke-width": 2 } });
+  map.addLayer({ id: LAYERS[3], type: "circle", source: SRC, filter: ["==", ["get", "best"], 1], paint: { "circle-radius": 9, "circle-color": "#16a34a", "circle-stroke-color": "#ffffff", "circle-stroke-width": 3 } });
   map.addLayer({
-    id: LAYERS[3],
+    id: LAYERS[4],
     type: "symbol",
     source: SRC,
     filter: ["==", ["geometry-type"], "Point"],
@@ -374,16 +377,20 @@ export default function Underground() {
     const unsubscribe = onMapInstance((map) => {
       clear?.();
       if (!map) return;
+      const show = !!pack && mode !== "idle" && mode !== "ride" && mode !== "which";
+      const walk = show && pack.exits[chosen] ? walkFromExit(store, pack, pack.exits[chosen].at) : null;
       const draw = () => {
-        if (pack && mode !== "idle" && mode !== "ride" && mode !== "which") drawOnMap(map, pack, chosen);
+        if (show) drawOnMap(map, pack, chosen, walk);
         else clearMap(map);
       };
-      if (map.isStyleLoaded()) draw();
-      else void map.once("load", draw);
-      clear = () => { map.off("load", draw); clearMap(map); };
+      // The style can be mid-load or swapped by a view change; once the map settles, put the exits back if they went missing.
+      const ensure = () => { if (show && !map.getSource(SRC)) draw(); };
+      draw();
+      map.on("idle", ensure);
+      clear = () => { map.off("idle", ensure); clearMap(map); };
     });
     return () => { unsubscribe(); clear?.(); };
-  }, [pack, mode, chosen]);
+  }, [pack, mode, chosen, store]);
 
   useEffect(() => {
     if (!home || mode !== "station" || !pack) return;

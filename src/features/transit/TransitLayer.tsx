@@ -62,7 +62,7 @@ import { TapCycle } from "./tapCycle";
 /** Layers a click on the map should hand to transit instead of the area pick. */
 /** CC BY 4.0 credit for the 3D bus model (public/models/LICENSE.md), shown while it can be on screen. Trains are plain boxes (#366). */
 const VEHICLE_CREDITS = "3D buses: XD40 by kieranfarr (Sketchfab, CC BY 4.0)";
-const TRANSIT_CLICK_LAYERS = ["transit-skip", "transit-alert-skipped", "transit-bus-badge-follow", "transit-bullet", "transit-bus-badge", "transit-bus-badge-full", "transit-bus-badge-selected", "transit-vehicle-2d", "transit-vehicle-hit", "transit-vehicle-hit-stop", "transit-vehicle-hit-raised", "transit-access", "transit-entrance", "transit-station-label", "transit-station-raised", "transit-station"];
+const TRANSIT_CLICK_LAYERS = ["transit-skip", "transit-alert-skipped", "transit-bus-badge-follow", "transit-bullet", "transit-bus-badge", "transit-bus-badge-full", "transit-bus-badge-selected", "transit-vehicle-2d", "transit-vehicle-hit", "transit-vehicle-hit-stop", "transit-vehicle-hit-raised", "transit-access", "transit-entrance", "transit-line-stop", "transit-line-stop-name", "transit-station-label", "transit-station-raised", "transit-station"];
 
 const MAX_VEHICLES = 400;
 const RAISED_LIFT_EM = 2.8;
@@ -1060,8 +1060,9 @@ export default function TransitLayer() {
         </Source>
       ) : null}
       <Source id="transit-work-segs" type="geojson" data={work.segs}>
-        {/* A picked line shows only its own planned work; other lines' repairs are noise there. */}
-        <Layer id="transit-work-line" type="line" filter={(lineSel ? ["in", ["get", "route"], ["literal", isoRoutes]] : ["boolean", true]) as never}
+        {/* A picked line shows only its own planned work; other lines' repairs are noise there.
+            Unpicked, repairs wait until street zoom: at city zoom the amber dashes read as dashed train lines (owner, 2026-10-25). */}
+        <Layer id="transit-work-line" type="line" minzoom={lineSel ? 0 : 13} filter={(lineSel ? ["in", ["get", "route"], ["literal", isoRoutes]] : ["boolean", true]) as never}
           paint={{ "line-color": "#f59e0b", "line-width": ["interpolate", ["linear"], ["zoom"], 10, 2, 16, 6], "line-dasharray": [1, 1.5], "line-opacity": 0.85 }} />
       </Source>
       <Source id="transit-viaduct" type="geojson" data={three ? viaduct : EMPTY} attribution={three ? VEHICLE_CREDITS : undefined}>
