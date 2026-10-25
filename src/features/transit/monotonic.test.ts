@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { estimateTrain, type LiveTrip, type StaticSystem } from "./model";
-import { ProgressTracker } from "./monotonic";
+import { CATCH_UP_MPS, ProgressTracker, SNAP_AHEAD_M } from "./monotonic";
 
 const sys: StaticSystem = {
   system: "subway",
@@ -55,5 +55,29 @@ describe("monotonic train progress", () => {
     const a = tr.update({ key: "s", route: "G", forward: -1, m: 1500, holdM: 1113, holdEta: 200 }, 100);
     const b = tr.update({ key: "s", route: "G", forward: -1, m: 1600, holdM: 1113, holdEta: 200 }, 101);
     expect(b).toBeLessThanOrEqual(a);
+  });
+
+  it("catches up at a train's speed when released after a hold, instead of jumping ahead", () => {
+    const tr = new ProgressTracker();
+    const base = { key: "subway:t9", route: "E", forward: 1 };
+    // Held at the stop at 1000 m while the feed still lists it.
+    expect(tr.update({ ...base, m: 1000, holdM: 1000, holdEta: 100 }, 100)).toBe(1000);
+    // The feed clears the stop: the raw estimate is now 600 m further on.
+    const one = tr.update({ ...base, m: 1600, holdM: 2000, holdEta: 200 }, 101);
+    expect(one).toBe(1000 + CATCH_UP_MPS);
+    let p = one;
+    for (let t = 102; t <= 140; t++) {
+      const next = tr.update({ ...base, m: 1600, holdM: 2000, holdEta: 200 }, t);
+      expect(next - p).toBeLessThanOrEqual(CATCH_UP_MPS + 1e-9);
+      p = next;
+    }
+    expect(p).toBe(1600); // caught up, then holds the estimate
+  });
+
+  it("draws a far jump ahead at once: a new snapshot, not a moving train", () => {
+    const tr = new ProgressTracker();
+    const base = { key: "subway:t10", route: "E", forward: 1 };
+    tr.update({ ...base, m: 0 }, 100);
+    expect(tr.update({ ...base, m: SNAP_AHEAD_M + 100 }, 101)).toBe(SNAP_AHEAD_M + 100);
   });
 });
