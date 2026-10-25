@@ -32,7 +32,8 @@ export function useHandsFree(s: HandsFreeState & { error: string | null; start: 
   // Armed: allowed to open the mic once. Turning on arms it; sending a question re-arms it for the reply.
   const armed = useRef(false);
   useEffect(() => { armed.current = on; }, [on]);
-  useEffect(() => { if (busy) armed.current = true; }, [busy]);
+  // One question per tap (owner, 2026-10-25): once the agent takes the request, the mic closes and hands-free ends.
+  useEffect(() => { if (busy && on) { stop(); turnOff(); } }, [busy, on, stop, turnOff]);
   useEffect(() => {
     if (!listen || !armed.current) return;
     // A short gap so the tail of the spoken answer is not picked up.
