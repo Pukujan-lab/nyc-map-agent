@@ -4,6 +4,8 @@ Before changing anything people see in the app, read `docs/DESIGN_RULES.md` (the
 
 To continue the agent-first build, start from `docs/PDD.md`: what is built, what remains, how to check it, and how to ship it. Design frames are in `docs/design/frames/`.
 
+For where the work stands right now (what merged, what is in flight, which worktree belongs to which pull request, what comes next), read `checkpoints/CURRENT.md`. Nothing updates it automatically: any pull request that finishes, starts or abandons a piece of work updates its "Completed recently", "In flight" and "Next" sections in the same pull request.
+
 <!-- oio:issue-log-guidance:start -->
 Before filing an observational or operational issue log, read `.oio/ontology/ISSUE_LOG_ONTOLOGY.md`, `.oio/ontology/project.json`, and `.oio/ontology/AGENT_GUIDE.md`. Confirm the exact destination and filing action are authorized. On OIO, ACS, CGM, and PCM, do not submit an issue or write files without explicit human direction for that destination and action. A proposal can remain a local draft until directed. Never treat adoption as permission to write to an adopter or sibling repository.
 <!-- oio:issue-log-guidance:end -->
