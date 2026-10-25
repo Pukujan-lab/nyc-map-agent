@@ -129,15 +129,17 @@ Only one depth-1 surface is open at a time, except for the pairs listed under ea
 |---|---|---|---|
 | 1 | An active task: following a train or bus, walking, the trip preview, find exit | Stays. It owns the screen until the person ends it. | Built |
 | 2 | The voice orb (hands-free, listening) | Ends when a task starts (`AgentOverlay.tsx`); the spoken answer still finishes | Built |
-| 3 | The answer card | Folds to its question chip when a task starts; reopens on tap | Fold *to build* |
-| 4 | The line panel | Stays open beside an answer on tablet and desktop; on a phone it folds to its line pill while an answer is open | Fold *to build* |
+| 3 | The answer card | Folds to its question chip when a task starts; reopens on tap | Built (#412) |
+| 4 | The line panel | Stays open beside an answer on tablet and desktop; on a phone it folds to its line pill while an answer or the voice orb is open | Built (#412) |
 | 5 | A menu dropdown or Change view | Closes. Opening one closes the other (`openMenu.ts`). The menu row is hidden while a line, a follow, a walk or street view is active (`MenuRow.tsx`). | Built |
 
+**One place decides** (built, #412): `src/lib/screen/screenSpace.ts` is an XState state machine. Each surface reports only whether it is open, and the machine decides what shows, what folds and which menu closes. `screenSpace.test.ts` opens every pair of surfaces in both orders at small-phone, phone and wide sizes against a hand-written table. A new surface that competes for space must report to it and get a row in that table.
+
 What closes what, besides the ranking:
-- **Sending a question** closes any drawer or details sheet (`closeAll`, built) and any open menu dropdown (*to build*).
-- **Starting a task** (Use this route, Follow a train, Walk me there) closes the answer down to its chip (*to build*) and ends hands-free (built).
+- **Sending a question** closes any drawer or details sheet (`closeAll`, built) and any open menu dropdown (built, #412).
+- **Starting a task** (Use this route, Follow a train, Walk me there) closes the answer down to its chip (built, #412) and ends hands-free (built).
 - **An empty-map tap** closes a details sheet and leaves the Layers drawer open (`panelSlot.ts`, built). It never closes an active task.
-- **Opening a menu dropdown while an answer is open** folds the answer to its chip (*to build*). The dropdown is the single focus until it closes, and then the answer comes back.
+- **Opening a menu dropdown while an answer is open** folds the answer to its chip (built, #412). The dropdown is the single focus until it closes, and then the answer comes back.
 
 ### By screen size
 
@@ -145,12 +147,12 @@ What closes what, besides the ranking:
 |---|---|---|---|
 | **Small phone** (under 375 px wide or under 700 px tall, such as an iPhone SE) | Top or bottom, full width | None: the older surface folds to its chip | The clear strip is often the 160 px minimum. Depth-2 lists use the caps above. The task buttons hide while any depth-1 surface is open (*to verify*). |
 | **Phone** (375–639 px) | Top (line panel, follow heading) or bottom (answer, orb, task card, chat bar) | One top and one bottom, if a quarter of the map stays clear | Same caps |
-| **Tablet** (640–1023 px) | Sides. The answer, task cards and menu dropdowns go left; the line panel goes right from 768 px (built in #410). | A left and a right surface together | Between 640 and 767 px the line panel still spans the top. Make it dock right from 640 px to match the answer card (*to build*). |
+| **Tablet** (640–1023 px) | Sides. The answer, task cards and menu dropdowns go left; the line panel goes right from 640 px (built in #412). | A left and a right surface together | None |
 | **Desktop** (1024 px and up) | Sides, the same as tablet. The line panel is 400 px wide. | A left and a right surface together | None |
 
 ### Checking these rules
 
-*To build:* a Playwright test runs at 320×568, 375×667, 390×844, 820×1180, 1280×800 and 1440×900. For each depth-1 and depth-2 surface it:
+*Built in #412* (`e2e/screen-space.spec.ts`, which measures the cover rectangles; reading the map's own padding is still to add): a Playwright test runs at 320×568, 375×667, 390×844, 820×1180, 1280×800 and 1440×900. For each depth-1 and depth-2 surface it:
 1. opens the surface;
 2. reads the map's padding and the cover rectangles;
 3. checks that the focus point (the map centre after padding) is inside the clear area, and that the clear strip is at least 160 px;
