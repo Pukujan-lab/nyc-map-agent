@@ -1,0 +1,1 @@
+let s=!1;const t=new Set,o="restroomShops";function r(){return s}function a(e){if(e!==s){s=e;for(const n of t)n(e)}}function i(e){return t.add(e),()=>void t.delete(e)}export{o as S,i as a,r as i,a as s};
