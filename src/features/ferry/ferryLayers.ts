@@ -27,9 +27,9 @@ export function mount(map: MapLibreMap): () => void {
   const add = (layer: Parameters<MapLibreMap["addLayer"]>[0]) => { if (!map.getLayer(layer.id)) map.addLayer(layer); };
   add({ id: "ferry-lines", type: "line", source: SRC_ROUTES, layout: { "line-cap": "round" }, paint: { "line-color": WATER_BLUE, "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1.5, 15, 3.5], "line-dasharray": [2, 1.5], "line-opacity": 0.9 } });
   add({ id: "ferry-terminals", type: "circle", source: SRC_TERMS, paint: { "circle-color": "#ffffff", "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 3, 15, 6], "circle-stroke-color": WATER_BLUE, "circle-stroke-width": 2 } });
-  add({ id: "ferry-terminal-labels", type: "symbol", source: SRC_TERMS, minzoom: 11.5, layout: { "text-field": ["get", "name"], "text-size": 11, "text-offset": [0, 1.1], "text-anchor": "top", "text-optional": true }, paint: { "text-color": "#0b4f75", "text-halo-color": "#ffffff", "text-halo-width": 1.2 } });
+  add({ id: "ferry-terminal-labels", type: "symbol", source: SRC_TERMS, minzoom: 11.5, layout: { "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-offset": [0, 1.1], "text-anchor": "top", "text-optional": true }, paint: { "text-color": "#0b4f75", "text-halo-color": "#ffffff", "text-halo-width": 2 } });
   add({ id: "ferry-vessels", type: "circle", source: SRC_VESSELS, paint: { "circle-color": ["case", ["get", "live"], WATER_BLUE, "#ffffff"], "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 4, 15, 8], "circle-stroke-color": WATER_BLUE, "circle-stroke-width": 2 } });
-  add({ id: "ferry-vessel-labels", type: "symbol", source: SRC_VESSELS, minzoom: 12, layout: { "text-field": ["get", "label"], "text-size": 10, "text-offset": [0, -1.3], "text-optional": true }, paint: { "text-color": "#0b4f75", "text-halo-color": "#ffffff", "text-halo-width": 1.2 } });
+  add({ id: "ferry-vessel-labels", type: "symbol", source: SRC_VESSELS, minzoom: 12, layout: { "text-field": ["get", "label"], "text-size": 10, "text-offset": [0, -1.3], "text-optional": true }, paint: { "text-color": "#0b4f75", "text-halo-color": "#ffffff", "text-halo-width": 2 } });
 
   const load = async () => {
     try {
