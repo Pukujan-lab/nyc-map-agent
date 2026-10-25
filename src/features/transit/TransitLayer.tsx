@@ -1060,8 +1060,9 @@ export default function TransitLayer() {
         </Source>
       ) : null}
       <Source id="transit-work-segs" type="geojson" data={work.segs}>
-        {/* A picked line shows only its own planned work; other lines' repairs are noise there. */}
-        <Layer id="transit-work-line" type="line" filter={(lineSel ? ["in", ["get", "route"], ["literal", isoRoutes]] : ["boolean", true]) as never}
+        {/* A picked line shows only its own planned work; other lines' repairs are noise there.
+            Unpicked, repairs wait until street zoom: at city zoom the amber dashes read as dashed train lines (owner, 2026-10-25). */}
+        <Layer id="transit-work-line" type="line" minzoom={lineSel ? 0 : 13} filter={(lineSel ? ["in", ["get", "route"], ["literal", isoRoutes]] : ["boolean", true]) as never}
           paint={{ "line-color": "#f59e0b", "line-width": ["interpolate", ["linear"], ["zoom"], 10, 2, 16, 6], "line-dasharray": [1, 1.5], "line-opacity": 0.85 }} />
       </Source>
       <Source id="transit-viaduct" type="geojson" data={three ? viaduct : EMPTY} attribution={three ? VEHICLE_CREDITS : undefined}>
