@@ -1,7 +1,7 @@
 import "@/components/task-screens.css";
 import { useFlag } from "@/lib/flags";
 import { ExitTask } from "./ExitTask";
-import { setUndergroundNow } from "./whereNow";
+import { setUndergroundNow } from "@/lib/underground/whereNow";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowUpFromLine, MessageSquare, TrainFront, X } from "lucide-react";
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";

@@ -64,7 +64,7 @@ import { needsSharedOrigin, ORIGIN_PROMPT, replyAsksForOrigin } from "./needsOri
 import { framePadding } from "@/lib/map/mapCover";
 import { useOpenMenu } from "@/lib/store/openMenu";
 import { sendScreen, useScreen } from "@/lib/screen/screenSpace";
-import { getUndergroundNow } from "@/features/underground/whereNow";
+import { getUndergroundNow } from "@/lib/underground/whereNow";
 
 interface Msg { id: string; role: "user" | "assistant"; content: string; offerLocation?: boolean; actions?: MapAction[]; sources?: AnswerSourcesLine }
 
