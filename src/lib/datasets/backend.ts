@@ -4,7 +4,7 @@ import { parseDistrictBoundaries } from "@/lib/api/districts";
 import type { NtaIndex } from "@/lib/geo/ntaIndex";
 import type { AggregateResult, DatasetId } from "@/lib/geo/types";
 import type { WindowId } from "@/lib/windows";
-import { addCell, emptyCounts, type SourceCounts } from "./fetchSource";
+import { addCell, addTaxBlock, emptyCounts, type SourceCounts } from "./fetchSource";
 import type { SourceConfig } from "./registry";
 
 /** `octo` reads pre-aggregated marts through /api; `socrata` (default) queries NYC Open Data from the browser. */
@@ -44,8 +44,8 @@ export async function fetchSourceMeta(signal?: AbortSignal): Promise<Record<stri
   return Object.fromEntries(parsed.sources.map((s) => [s.id, s]));
 }
 
-export function blocksPath(source: SourceConfig, windowId: WindowId, filters: DataFilters): string {
-  const q = new URLSearchParams({ source: source.id, window: windowId, level: "block" });
+export function blocksPath(source: SourceConfig, windowId: WindowId, filters: DataFilters, level: "block" | "taxblock" = "block"): string {
+  const q = new URLSearchParams({ source: source.id, window: windowId, level });
   if (filters.borough) q.set("borough", filters.borough);
   const cats = filters.categories[source.id];
   if (source.filters?.categories && cats?.length) q.set("categories", cats.join(","));
@@ -55,7 +55,19 @@ export function blocksPath(source: SourceConfig, windowId: WindowId, filters: Da
 
 const blockRow = z.object({ r: z.coerce.number(), c: z.coerce.number(), n: z.coerce.number() });
 
-/** Same SourceCounts shape as the Socrata path, so the map code does not care where data came from. */
+const taxBlockRow = z.object({
+  area: z.string(),
+  n: z.coerce.number(),
+  lat: z.coerce.number(),
+  lon: z.coerce.number(),
+  nta2020: z.string().nullable(),
+});
+
+/**
+ * Same SourceCounts shape as the Socrata path, so the map code does not care where data came from.
+ * Real tax blocks first (the block tiles are keyed by them, #120); the ~300 m
+ * grid when the ingest has not joined this source to blocks yet.
+ */
 export async function fetchOctoCounts(
   source: SourceConfig,
   windowId: WindowId,
@@ -63,6 +75,16 @@ export async function fetchOctoCounts(
   index: NtaIndex,
   signal?: AbortSignal,
 ): Promise<SourceCounts> {
+  const taxPath = blocksPath(source, windowId, filters, "taxblock");
+  const tax = z
+    .object({ rows: z.array(taxBlockRow), truncated: z.boolean().optional() })
+    .parse(await getJson(taxPath, signal));
+  if (tax.rows.length) {
+    const out = emptyCounts(source.id, [{ label: `${source.label} by tax block (Octo)`, query: `${API_BASE}${taxPath}` }]);
+    out.truncated = Boolean(tax.truncated);
+    for (const row of tax.rows) addTaxBlock(out, row.area, row.lat, row.lon, row.nta2020, row.n);
+    return out;
+  }
   const path = blocksPath(source, windowId, filters);
   const body = z
     .object({ rows: z.array(blockRow), truncated: z.boolean().optional() })
