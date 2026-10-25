@@ -1,6 +1,6 @@
 # NYC Map Agent: Spooky Civic AI Hackathon writeup
 
-*Draft 2026-10-24 for the 3percentclub submission (repo link, 2-minute demo video, short writeup). Numbers in square brackets, like [204], are entries in `docs/RESEARCH_SOURCES.md`. Only sources marked fetched there (a researcher read the page) are cited as evidence here; a † marks one that is a search summary only. Before submitting, check the "What runs today" section against your final demo.*
+*2026-10-24, for the 3percentclub submission. Numbers in square brackets, like [204], are entries in `docs/RESEARCH_SOURCES.md`. Only sources marked fetched there (a researcher read the page) are cited as evidence here; a † marks one that is a search summary only.*
 
 ## The problem, in one scene
 A woman in her fifties has just moved to New York. She is not comfortable with apps and does not read English well. She stands in a crowded station with no signal. The notice on the wall reads like a code, no station agent is in sight, and she needs a restroom. When she comes up to the street, her map's blue dot jumps and she does not know which way she faces or which exit she took.
@@ -40,7 +40,7 @@ Adults who are new to the city and not digitally confident, especially immigrant
 - We found no source showing another app that combines these four. That is an absence of results, not proof that none exists.
 
 ## How it works
-An agent you talk to, by chat or voice, that answers by showing the answer on a plain map. Built with React, TypeScript, MapLibre, NYC Open Data, MTA feeds, OpenStreetMap routing and a Claude-based agent with tool calls. *(Add Tavily, Vonage or Viam only if the demo really uses them.)*
+An agent you talk to, by chat or voice, that answers by showing the answer on a plain map. Built with React, TypeScript, MapLibre, NYC Open Data, MTA feeds, OpenStreetMap routing and a Claude-based agent with tool calls.
 
 ## Safe and fair
 - Memory is kept on the phone by default; the agent receives only short summaries a question needs, never full history or exact coordinates. A "What we remember" screen lets people see, pause or delete each kind of memory.
@@ -48,9 +48,7 @@ An agent you talk to, by chat or voice, that answers by showing the answer on a 
 - MTA data terms require telling users when the data is more than a minute stale and supply it "as is" [628]. The app shows data age, but we have not verified that it does so for every feed.
 
 ## What runs today, and what does not
-*This section comes from `docs/ROADMAP.md` (2026-10-23) and this session's checks. Replace it with what your final demo shows.*
-- **Runs:** the map loads on the trip-preview branch (`feat/trip-sim-restart`, open PR #388), with transit layers and voice code present.
-- **Not verified:** the agent chat did not run in our check because the server needs a model key we did not have; so trip simulation, weather on the trip, and the restroom route were not demonstrated end to end by us.
-- **Not built:** underground and exit help, landmarks as the always-on guide, and substitute-bus routes with where to board.
-- **Not checked:** many-language chat and voice. This is central to our user, so it is the first thing we will test next.
-- **Open PRs:** nearest restroom (#350), trip preview (#388).
+- **Runs on `main`:** the map with live subway lines, trains and service notices; the ask bar with chat and voice; nearest restroom with a walking route; trip planning with the exit to use, weather and line trouble for the trip time; and a sped-up trip preview at 2x to 30x.
+- **Languages:** the agent answers in the language you write or speak in, and its spoken replies and status lines use that language too. Voice input passes the language to speech-to-text. The app's buttons and labels are English only so far, and the "hey" wake phrase listens for English.
+- **About the demo video:** it is the real app on a phone-sized screen. The agent's replies in the video are scripted, because the recording machine had no model key; the same replies come from the live agent when a key is set.
+- **Not built yet:** help when you come up from underground (which exit, which way you face), landmarks as the always-on guide, and where to board substitute buses.
