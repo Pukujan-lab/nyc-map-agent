@@ -41,8 +41,8 @@ export function mount(map: MapLibreMap): () => void {
   let alive = true;
   const render = () => {
     const { pins, lines } = toCollections(events);
-    map.getSource<GeoJSONSource>(SRC_PINS)?.setData(pins);
-    map.getSource<GeoJSONSource>(SRC_LINES)?.setData(lines);
+    void map.getSource<GeoJSONSource>(SRC_PINS)?.setData(pins);
+    void map.getSource<GeoJSONSource>(SRC_LINES)?.setData(lines);
   };
   const load = () => void fetchEvents(getWindow()).then((f) => { if (alive) { events = f; render(); } }).catch(() => {});
 

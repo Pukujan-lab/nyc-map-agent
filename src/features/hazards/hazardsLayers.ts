@@ -106,9 +106,9 @@ export function mount(map: MapLibreMap): () => void {
   const load = async () => {
     try {
       const g = toGeo(await fetchHazards());
-      (map.getSource<GeoJSONSource>(SRC_AREAS))?.setData(g.areas);
-      (map.getSource<GeoJSONSource>(SRC_SENSORS))?.setData(g.sensors);
-      (map.getSource<GeoJSONSource>(SRC_WATER))?.setData(g.water);
+      void (map.getSource<GeoJSONSource>(SRC_AREAS))?.setData(g.areas);
+      void (map.getSource<GeoJSONSource>(SRC_SENSORS))?.setData(g.sensors);
+      void (map.getSource<GeoJSONSource>(SRC_WATER))?.setData(g.water);
     } catch {
       /* the feed is best-effort */
     }

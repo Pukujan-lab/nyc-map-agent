@@ -216,7 +216,7 @@ export function refreshInsetSource(mini: MapLibreMap, main: MapLibreMap, sourceI
   if (!src || !asGeoJson(mini.getSource(sourceId))) return;
   void src.getData().then((data) => {
     try {
-      asGeoJson(mini.getSource(sourceId))?.setData(data);
+      void asGeoJson(mini.getSource(sourceId))?.setData(data);
     } catch {
       /* inset already removed */
     }

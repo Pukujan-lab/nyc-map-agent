@@ -51,7 +51,7 @@ export function mount(map: MapLibreMap): () => void {
       void fetchPlaceToilets().then((p) => {
         if (!alive) return;
         places = p;
-        map.getSource<GeoJSONSource>(SRC)?.setData(toCollection(p));
+        void map.getSource<GeoJSONSource>(SRC)?.setData(toCollection(p));
       });
     }
   };

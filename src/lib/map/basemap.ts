@@ -147,10 +147,10 @@ function setPaint(map: MapLibreMap, layer: string, prop: string, value: unknown,
   if (!store) saved.set(map, (store = new Map()));
   const key = `${layer}|${prop}`;
   if (on) {
-    if (!store.has(key)) store.set(key, map.getPaintProperty(layer, prop) ?? null);
-    map.setPaintProperty(layer, prop, value);
+    if (!store.has(key)) store.set(key, map.getPaintProperty(layer, prop as never) ?? null);
+    map.setPaintProperty(layer, prop as never, value as never);
   } else if (store.has(key)) {
-    map.setPaintProperty(layer, prop, store.get(key) ?? undefined);
+    map.setPaintProperty(layer, prop as never, (store.get(key) ?? undefined) as never);
     store.delete(key);
   }
 }

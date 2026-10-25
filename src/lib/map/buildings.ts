@@ -92,8 +92,8 @@ export function applyBuildings(map: MapLibreMap, flat: boolean, tint: string, ed
     if (hide && l.type === "fill-extrusion" && !flat) map.setPaintProperty(l.id, "fill-extrusion-color", tint);
     if (foot) {
       map.setLayerZoomRange(l.id, flat ? 13 : (o.min ?? 0), flat ? 24 : (o.max ?? 24));
-      map.setPaintProperty(l.id, "fill-color", flat ? tint : o.color);
-      map.setPaintProperty(l.id, "fill-outline-color", flat ? edge : o.outline);
+      map.setPaintProperty(l.id, "fill-color", (flat ? tint : o.color) as never);
+      map.setPaintProperty(l.id, "fill-outline-color", (flat ? edge : o.outline) as never);
     }
   }
 }

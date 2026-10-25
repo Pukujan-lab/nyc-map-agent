@@ -36,9 +36,10 @@ export function mount(map: MapLibreMap): () => void {
       const source = (layer as { source?: string }).source;
       // Our data layers, other features' overlays and the glow keep their own colours.
       if (layer.id === GLOW_LAYER || (source && own.has(source)) || /^(hazards|restrooms|weather|traffic|parking|transit)/.test(layer.id)) continue;
+      // Colour props are read from a table, so their names are plain strings to the setter types.
       for (const prop of COLOR_PROPS[layer.type] ?? []) {
         const key = `${layer.id}|${prop}`;
-        const current = map.getPaintProperty(layer.id, prop);
+        const current = map.getPaintProperty(layer.id, prop as never);
         let entry = saved.get(key);
         // Someone else (the street palette) changed it since we wrote: new base.
         if (!entry || (typeof current === "string" ? current : JSON.stringify(current)) !== entry.written) {
@@ -55,7 +56,8 @@ export function mount(map: MapLibreMap): () => void {
         }
         const value = next ?? entry.base;
         if (value === undefined) continue;
-        map.setPaintProperty(layer.id, prop, value);
+        // Colour props come from a table, so their names are plain strings to the typed setter.
+        map.setPaintProperty(layer.id, prop as never, value as never);
         entry.written = typeof value === "string" ? value : JSON.stringify(value);
       }
     }
