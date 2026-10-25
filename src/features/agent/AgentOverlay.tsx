@@ -492,7 +492,7 @@ export default function AgentOverlay() {
             <DropdownMenuSeparator />
             <p className="px-2 py-1.5 text-xs text-muted-foreground">
               {speech.sttSupported
-                ? "Hold a conversation by voice: tap the mic, or turn on “Hey map”. Your location is sent only after you tap Use my location, and only for that question."
+                ? "Hold a conversation by voice: tap the mic, or turn on “Hey map”. Your location is sent only after you tap Use my location, then with each question until you tap Stop sharing location."
                 : "Voice input is not available in this browser, so type instead. Answers can still be spoken."}
             </p>
           </DropdownMenuContent>
