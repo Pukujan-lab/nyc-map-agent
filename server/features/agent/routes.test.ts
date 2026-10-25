@@ -106,6 +106,19 @@ describe("POST /api/agent: fair use", () => {
     expect((events[0] as { text: string }).text).toMatch(/map/);
     expect(events[1]).toEqual({ type: "done", model: "none", usage: { inputTokens: 0, outputTokens: 0 } });
   });
+
+  it("still answers a line question from the live feed once the budget is spent (#199)", async () => {
+    const now = () => Date.UTC(2026, 9, 23, 12);
+    const fairUse: FairUse = { limiter: createLimiter({ windowMax: 0, windowMs: 0, burstMax: 0, burstMs: 0 }, now), budget: createDailyBudget({ softCap: 1, hardCap: 1, capModel: null }, now), now };
+    fairUse.budget.record(5);
+    const m = model();
+    const req = new Request("http://x/api/agent", { method: "POST", body: JSON.stringify({ messages: [{ role: "user", content: "is the L train running?" }] }) });
+    const res = await POST(req, { model: m, fairUse, deps: { alerts: () => Promise.resolve([]), alertEntities: () => Promise.resolve([]) } });
+    const events = (await res.text()).trim().split("\n").map((l) => streamEvent.parse(JSON.parse(l)));
+    expect(m.doStreamCalls.length).toBe(0);
+    expect(events.find((e) => e.type === "text")).toMatchObject({ text: expect.stringMatching(/no delays or changes on the L train/) as unknown });
+    expect(events.at(-1)).toMatchObject({ type: "done", model: "none" });
+  });
 });
 
 describe("POST /api/agent: agent steps and language (#370)", () => {
