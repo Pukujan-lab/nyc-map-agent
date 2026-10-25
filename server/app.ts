@@ -7,6 +7,7 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import type { Context } from "hono";
 import { compress } from "hono/compress";
+import { apiRateLimit } from "./lib/apiRateLimit";
 import { AGENT_ROUTE, STT_ROUTE, API_INFO, ROUTES, legacyAlias, toV1, toV1Route } from "./openapi";
 import * as aggregate from "../api/aggregate";
 import * as area from "../api/area/[block]";
@@ -79,6 +80,8 @@ export const app = new OpenAPIHono({
     }
   },
 });
+// Refresh spam and scripts get a 429 before any handler runs (#369).
+app.use("/api/*", apiRateLimit());
 // Rollups and boundaries are 0.2-2 MB of JSON; gzip cuts them ~5x.
 app.use("/api/*", async (c, next) => {
   // Tile ranges are already-compressed binary; gzip would break Content-Range.
