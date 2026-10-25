@@ -54,10 +54,12 @@ test("answer follow-ups ask the agent even when extra map actions exist", async 
   });
   await page.goto("/");
   await ask(page, "Show Bryant Park");
+  await page.getByRole("button", { name: "More", exact: true }).click();
   await page.getByRole("button", { name: "What's nearby", exact: true }).click();
   await expect.poll(() => questions.length).toBe(2);
   expect(questions[1]).toMatch(/landmarks/i);
   expect(questions[1]).not.toMatch(/food|caf[eé]|shop/i);
+  await page.getByRole("button", { name: "More", exact: true }).click();
   await page.getByRole("button", { name: "Other options", exact: true }).click();
   await expect.poll(() => questions.length).toBe(3);
   expect(questions[2]).toMatch(/other options/i);

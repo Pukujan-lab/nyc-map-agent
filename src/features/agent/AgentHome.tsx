@@ -1,4 +1,4 @@
-import { AlertCircle, ArrowUp, AudioLines, Check, Loader2, Mic, X } from "lucide-react";
+import { AlertCircle, ArrowUp, AudioLines, Check, ChevronDown, Loader2, Mic, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -57,7 +57,7 @@ export interface AnswerCardProps {
   text: string;
   busy: boolean;
   working: ReactNode;
-  /** The sources/age line (#375), revealed by the round "i". */
+  /** The sources/age line (#375), behind "More". */
   sources: ReactNode;
   primary: { label: string; run: () => void } | null;
   onNearby: () => void;
@@ -66,10 +66,13 @@ export interface AnswerCardProps {
   extra: ReactNode;
 }
 
-/** One answer (#370): the question bubble, the answer with its "i", one primary action and two follow-ups. */
+/**
+ * One answer (#370): the question bubble, the answer and one primary action. Sources and the
+ * follow-ups wait behind "More", so someone just getting around never has to read them.
+ */
 export function AnswerCard(p: AnswerCardProps) {
-  const [why, setWhy] = useState(false);
-  useEffect(() => setWhy(false), [p.question]);
+  const [more, setMore] = useState(false);
+  useEffect(() => setMore(false), [p.question]);
   const done = !p.busy && !!p.text;
   return (
     <div className="flex flex-col gap-3.5" data-testid="answer-card">
@@ -78,22 +81,7 @@ export function AnswerCard(p: AnswerCardProps) {
       ) : null}
       {p.text ? (
         <div className="flex flex-col gap-3 rounded-[18px] border border-[#22314a] bg-[#111c2f]/90 p-3.5">
-          <div className="flex items-start gap-2.5">
-            <p className="flex-1 whitespace-pre-wrap text-[15px] leading-relaxed text-slate-100" aria-live="polite">{p.text}</p>
-            {p.sources ? (
-              <Button
-                type="button"
-                variant="ghost"
-                aria-label="Where this comes from"
-                aria-expanded={why}
-                className="-mr-1.5 -mt-1.5 h-11 w-11 shrink-0 rounded-full border border-slate-700 p-0 font-serif text-sm font-semibold text-slate-300 hover:bg-slate-800 hover:text-white"
-                onClick={() => setWhy((v) => !v)}
-              >
-                i
-              </Button>
-            ) : null}
-          </div>
-          {why ? p.sources : null}
+          <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-slate-100" aria-live="polite">{p.text}</p>
           {done ? (
             <div className="flex flex-col gap-2">
               {p.primary ? (
@@ -101,10 +89,20 @@ export function AnswerCard(p: AnswerCardProps) {
                   {p.primary.label}
                 </Button>
               ) : null}
-              <div className="grid grid-cols-2 gap-2">
-                <Button type="button" variant="ghost" className={SECONDARY} onClick={p.onNearby}>What's nearby</Button>
-                <Button type="button" variant="ghost" className={SECONDARY} onClick={p.onOther}>Other options</Button>
-              </div>
+              <Button type="button" variant="ghost" aria-expanded={more} onClick={() => setMore((v) => !v)}
+                className="h-11 self-center rounded-full px-4 text-sm font-semibold text-slate-300 hover:bg-slate-800 hover:text-white">
+                More
+                <ChevronDown className={cn("!h-4 !w-4 transition-transform motion-reduce:transition-none", more && "rotate-180")} aria-hidden="true" />
+              </Button>
+              {more ? (
+                <>
+                  {p.sources}
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button type="button" variant="ghost" className={SECONDARY} onClick={p.onNearby}>What's nearby</Button>
+                    <Button type="button" variant="ghost" className={SECONDARY} onClick={p.onOther}>Other options</Button>
+                  </div>
+                </>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -277,6 +275,8 @@ export function AgentHome(p: AgentHomeProps) {
     >
       <div
         ref={stackRef}
+        // An open answer or the orb is a map cover: the map keeps you and the answer's place beside it.
+        data-map-cover={sheet ? "" : undefined}
         className={cn(
           "pointer-events-none flex w-full flex-col sm:mb-4 sm:max-w-[480px]",
           // An open answer docks to the left on wide screens, so the middle of the map stays clear.
@@ -300,7 +300,7 @@ export function AgentHome(p: AgentHomeProps) {
             >
               <X className="!h-5 !w-5" aria-hidden="true" />
             </Button>
-            <div ref={scroller} className="max-h-[min(56dvh,520px)] min-h-11 overflow-y-auto overscroll-contain">
+            <div ref={scroller} className="max-h-[min(44dvh,520px)] min-h-11 overflow-y-auto overscroll-contain">
               {p.answer}
             </div>
           </section>

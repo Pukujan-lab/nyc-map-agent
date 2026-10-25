@@ -84,7 +84,7 @@ export function LinePanel({ map, route, onFollow }: { map: MaplibreMap | undefin
     <div
       data-testid="line-panel"
       data-map-cover
-      className="pointer-events-none absolute left-4 right-4 z-[44] flex flex-col gap-3 font-[Inter,system-ui,sans-serif] text-[#f1f5f9] lg:left-auto lg:w-[400px]"
+      className="pointer-events-none absolute left-4 right-4 z-[44] flex flex-col gap-3 font-[Inter,system-ui,sans-serif] text-[#f1f5f9] md:left-auto md:w-[380px] lg:w-[400px]"
       style={{ top: "calc(env(safe-area-inset-top) + 16px)", maxHeight: "calc(100% - env(safe-area-inset-top) - var(--chat-bar-h, 0px) - 32px)" }}
     >
       <div className="flex items-center justify-between">
@@ -123,7 +123,7 @@ export function LinePanel({ map, route, onFollow }: { map: MaplibreMap | undefin
           </div>
         ) : null}
         {count ? (
-          <ul className={`line-notices flex ${picked ? "max-h-[236px]" : "max-h-[104px]"} min-h-0 flex-col gap-2 overflow-y-auto overscroll-contain pr-1.5`} aria-label={`${route} line notices`}>
+          <ul className={`line-notices flex ${picked ? "max-h-[min(236px,30dvh)]" : "max-h-[104px]"} min-h-0 flex-col gap-2 overflow-y-auto overscroll-contain pr-1.5`} aria-label={`${route} line notices`}>
             {notices.map((n) => {
               const open = n.id === picked;
               const tone = TONE[n.tone];

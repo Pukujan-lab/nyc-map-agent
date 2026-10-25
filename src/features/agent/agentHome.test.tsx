@@ -13,16 +13,16 @@ describe("chat-first home (#370)", () => {
     expect(html.match(/<svg/g)).toHaveLength(4);
   });
 
-  it("shows one primary action and two follow-ups once the answer is in", () => {
+  it("shows one primary action and keeps sources and follow-ups behind More", () => {
     const html = renderToStaticMarkup(
       <AnswerCard question="Nearest restroom?" text="Bryant Park, 6 min." busy={false} working={null} sources={<span>Sources</span>} primary={{ label: "Walk me there", run: noop }} onNearby={noop} onOther={noop} extra={null} />,
     );
     expect(html).toContain("Nearest restroom?");
     expect(html).toContain("Walk me there");
-    expect(html).toContain("What&#x27;s nearby");
-    expect(html).toContain("Other options");
-    expect(html).toContain('aria-label="Where this comes from"');
-    // The sources line stays behind the "i" until it is tapped.
+    expect(html).toMatch(/aria-expanded="false"[^>]*>More/);
+    // A casual user sees only the answer and one action; the rest waits behind More.
+    expect(html).not.toContain("What&#x27;s nearby");
+    expect(html).not.toContain("Other options");
     expect(html).not.toContain("<span>Sources</span>");
   });
 
