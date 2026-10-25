@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { WALK_IDLE, type WalkInput } from "@/lib/map/walk";
+import { StreetLevels } from "./StreetLevels";
 
 interface WalkControlsProps {
   /** The block underfoot, so the strip reports what you are walking through. */
@@ -19,6 +20,8 @@ interface WalkControlsProps {
   street?: string | null;
   /** Nearest intersection, e.g. "W 44 St at 8 Av"; null when no corner is near. */
   corner?: string | null;
+  /** The street underfoot alone and its borough, for the noise and crash dots. */
+  levelsFor?: { street: string; borough: string | null } | null;
   /** Fires on press and release; the map reads it every frame. */
   onInput: (input: WalkInput) => void;
   onExit: () => void;
@@ -72,6 +75,7 @@ export function WalkControls({
   place,
   street = null,
   corner = null,
+  levelsFor = null,
   onInput,
   onAsk,
 }: WalkControlsProps) {
@@ -92,7 +96,7 @@ export function WalkControls({
         centre, and a window switch while walking must not put the two on top
         of each other.
       */}
-      <div className={`pointer-events-none absolute left-3 z-30 flex max-w-[calc(100%-1.5rem)] ${home ? "top-[230px]" : "top-3"}`}>
+      <div className={`pointer-events-none absolute left-3 z-30 flex ${home ? "top-[230px] max-w-[calc(100%-5.5rem)] sm:max-w-[calc(100%-1.5rem)]" : "top-3 max-w-[calc(100%-1.5rem)]"}`}>
         <div className="pointer-events-auto max-w-full rounded-xl border border-border/70 bg-card/90 py-1.5 pl-3 pr-1 shadow-xl backdrop-blur-md">
           <div className="flex items-center gap-2">
             <Camera
@@ -137,6 +141,7 @@ export function WalkControls({
               </Button>
             ) : null}
           </div>
+          <StreetLevels street={levelsFor?.street ?? null} borough={levelsFor?.borough ?? null} />
           <div className="flex items-center gap-1.5 pr-1 text-[11px] text-muted-foreground">
             {place?.detail ? (
               <span className="tabular-nums">{place.detail}</span>
@@ -169,7 +174,7 @@ export function WalkControls({
       <div
         role="group"
         aria-label="Street-level camera controls"
-        className={`absolute z-30 grid grid-cols-3 grid-rows-3 gap-1 ${home ? "bottom-[310px] right-3" : "bottom-32 left-3 sm:bottom-20"}`}
+        className={`absolute z-30 grid grid-cols-3 grid-rows-3 gap-1 ${home ? "bottom-[310px] left-3" : "bottom-32 left-3 sm:bottom-20"}`}
       >
         <span />
         {pad("Walk forward", ChevronUp, {
