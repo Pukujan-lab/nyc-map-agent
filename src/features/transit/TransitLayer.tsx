@@ -469,6 +469,12 @@ export default function TransitLayer() {
       affected: fc((alertGeo?.affected ?? []).map((x) => line(x.coords, x.route))),
       reroute: fc((alertGeo?.reroute ?? []).map((x) => line(x.coords, alertFocus?.routes[0] ?? x.route))),
       skipped: fc((alertGeo?.skipped ?? []).map((x) => ({ type: "Feature", properties: { id: x.id, name: oneWay ? `${x.name} · ${oneWay}-bound skipped` : x.name, icon: oneWay ? "transit-skip-half" : "transit-skip-x" }, geometry: { type: "Point", coordinates: x.coord } }))),
+      // Where a suspension ends: take the shuttle from here, or at least know the trains stop here.
+      ends: fc((alertGeo?.ends ?? []).map((x) => {
+        const bus = alertFocus?.replacement ?? [];
+        const label = bus.length ? `Take the ${bus.join(" or ")} bus here` : `No ${alertFocus?.routes[0] ?? ""} past here`;
+        return { type: "Feature", properties: { label }, geometry: { type: "Point", coordinates: x.coord } };
+      })),
     };
   }, [alertGeo, alertFocus]);  
   const followedRef = useRef(followedKey);
@@ -1126,9 +1132,25 @@ export default function TransitLayer() {
           <Source id="transit-alert-veil" type="geojson" data={WORLD}>
             <Layer id="transit-alert-veil" type="fill" beforeId="transit-line-under" paint={{ "fill-color": focusVeil(theme), "fill-opacity": 0.55 }} />
           </Source>
-          <Source id="transit-alert-affected" type="geojson" data={alertFc.affected}>
-            <Layer id="transit-alert-affected" type="line" layout={{ "line-cap": "round", "line-join": "round" }}
-              paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 5, 16, 11], "line-opacity": 0.95 }} />
+          {alertGeo?.suspended ? (
+            // No trains on this stretch (owner report, 2026-10-25): the line is cut under the replacement
+            // shuttle and thin dashes ride on top, so both the broken link and the bus read.
+            <Source key="gap" id="transit-alert-affected" type="geojson" data={alertFc.affected}>
+              <Layer id="transit-alert-gap" type="line" beforeId="transit-bus-route-line" layout={{ "line-cap": "butt", "line-join": "round" }}
+                paint={{ "line-color": theme.land, "line-width": ["interpolate", ["linear"], ["zoom"], 10, 6, 16, 12] }} />
+              <Layer id="transit-alert-affected" type="line" layout={{ "line-cap": "butt", "line-join": "round" }}
+                paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 2, 16, 4], "line-dasharray": [1.2, 1.6], "line-opacity": 0.9 }} />
+            </Source>
+          ) : (
+            <Source key="bar" id="transit-alert-affected" type="geojson" data={alertFc.affected}>
+              <Layer id="transit-alert-affected" type="line" layout={{ "line-cap": "round", "line-join": "round" }}
+                paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 5, 16, 11], "line-opacity": 0.95 }} />
+            </Source>
+          )}
+          <Source id="transit-alert-ends" type="geojson" data={alertFc.ends}>
+            <Layer id="transit-alert-end" type="symbol"
+              layout={{ "text-field": ["get", "label"], "text-font": ["Noto Sans Bold"], "text-size": 12, "text-anchor": "top", "text-offset": [0, 1.1], "text-allow-overlap": true, "text-max-width": 14 }}
+              paint={{ "text-color": theme.dark ? "#7dd3fc" : "#0369a1", "text-halo-color": theme.land, "text-halo-width": 2 }} />
           </Source>
           <Source id="transit-alert-reroute" type="geojson" data={alertFc.reroute}>
             <Layer id="transit-alert-reroute" type="line" layout={{ "line-join": "round" }}
@@ -1150,10 +1172,10 @@ export default function TransitLayer() {
       {/* Data is written by the hit-target timer, never from render. */}
       <Source id="transit-vehicle-hits" type="geojson" data={EMPTY}>
         <Layer id="transit-vehicle-hit" type="circle" filter={["!=", ["get", "atStop"], 1]} paint={{ "circle-radius": 14, "circle-opacity": 0, "circle-pitch-alignment": "map" }} />
-        {/* A dwelling train's tap target lifts with its bullet so the station underneath stays clickable. */}
+        {/* In 3D a dwelling train's tap target lifts with its bullet; flat, it stays on the track with it. */}
         <Layer id="transit-vehicle-hit-stop" type="circle"
           filter={three ? ["all", ["==", ["get", "atStop"], 1], ["!=", ["get", "grade"], "elevated"]] : ["==", ["get", "atStop"], 1]}
-          paint={{ "circle-radius": 14, "circle-opacity": 0, "circle-pitch-alignment": "viewport", "circle-translate-anchor": "viewport", "circle-translate": [0, -STOP_LIFT_PX] }} />
+          paint={{ "circle-radius": 14, "circle-opacity": 0, "circle-pitch-alignment": "viewport", "circle-translate-anchor": "viewport", "circle-translate": [0, three ? -STOP_LIFT_PX : 0] }} />
         {three ? (
           <Layer id="transit-vehicle-hit-raised" type="circle"
             filter={["all", ["==", ["get", "atStop"], 1], ["==", ["get", "grade"], "elevated"]]}
@@ -1194,7 +1216,7 @@ export default function TransitLayer() {
         {/* A held train: "Held 4 min" beside its bullet, from the live feed alone. */}
         <Layer id="transit-held" type="symbol" filter={["all", ["==", ["get", "system"], "subway"], ["!=", ["get", "held"], ""]]}
           layout={{ "text-field": ["get", "held"], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-anchor": "left", "text-allow-overlap": true, "text-ignore-placement": true,
-            "text-offset": ["case", ["==", ["get", "atStop"], 1], ["literal", [1.3, -STOP_LIFT_PX / 11]], ["literal", [1.3, 0]]] as unknown as [number, number] }}
+            "text-offset": ["case", ["==", ["get", "atStop"], 1], ["literal", [1.3, three ? -STOP_LIFT_PX / 11 : 0]], ["literal", [1.3, 0]]] as unknown as [number, number] }}
           paint={{ "text-color": "#f59e0b", "text-halo-color": "#111827", "text-halo-width": 1.5, "text-opacity": bulletAlpha }} />
         {/* Buses: SQUARE badges, so they never read as round subway bullets. Zoomed out
             only the borough prefix (all shown, so each heading notch has its badge); from z15 or for the

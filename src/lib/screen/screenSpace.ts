@@ -14,6 +14,7 @@ import { setOpenMenu } from "@/lib/store/openMenu";
  *   open; from 640 px it docks to the side and both stay.
  * - A task, the orb or a line opening closes an open menu; so does sending.
  * - Tapping a chip or pill opens that surface again until something new opens.
+ * - A question the person sends opens its answer, even during a task ("I'm lost").
  */
 export type ScreenSize = "small" | "phone" | "wide";
 
@@ -73,7 +74,8 @@ export const screenMachine = setup({
       { guard: rising("menu"), actions: assign({ menu: true, answerReveal: false }) },
       { actions: assign({ menu: ({ event }) => event.on }) },
     ],
-    ANSWER: { guard: ({ context, event }) => event.on !== context.answer, actions: assign({ answer: ({ event }) => event.on, answerReveal: false, lineReveal: false }) },
+    // A question the person just sent (SEND) opens its answer even over a task: only a closing answer forgets that.
+    ANSWER: { guard: ({ context, event }) => event.on !== context.answer, actions: assign({ answer: ({ event }) => event.on, answerReveal: ({ context, event }) => event.on && context.answerReveal, lineReveal: false }) },
     SEND: { actions: [assign({ answerReveal: true, lineReveal: false }), "menuShut", "closeMenu"] },
     SHOW_ANSWER: { actions: [assign({ answerReveal: true, lineReveal: false }), "menuShut", "closeMenu"] },
     SHOW_LINE: { actions: assign({ lineReveal: true, answerReveal: false }) },
