@@ -419,7 +419,7 @@ export default function Underground() {
     return onMapInstance((map) => {
       const to = pack.exits[chosen]?.at;
       // Once you are placed at the station, frame you and your exit; otherwise the station.
-      if (map && you && to) map.fitBounds([[Math.min(you[0], to[0]), Math.min(you[1], to[1])], [Math.max(you[0], to[0]), Math.max(you[1], to[1])]], { padding: { top: 260, bottom: 140, left: 60, right: 60 }, maxZoom: 18, pitch: 0, bearing: 0, duration: 600 });
+      if (map && you && to) map.fitBounds([[Math.min(you[0], to[0]), Math.min(you[1], to[1])], [Math.max(you[0], to[0]), Math.max(you[1], to[1])]], { padding: { top: 300, bottom: 200, left: 60, right: 90 }, maxZoom: 18, pitch: 0, bearing: 0, duration: 600 });
       else map?.easeTo({ center: pack.station.at, zoom: 17, pitch: 0, bearing: 0, offset: [0, 100], duration: 600 });
     });
   }, [home, mode, pack?.station.id, chosen, !!you]); // eslint-disable-line react-hooks/exhaustive-deps
