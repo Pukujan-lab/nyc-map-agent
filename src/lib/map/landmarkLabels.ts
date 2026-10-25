@@ -1,5 +1,6 @@
 import type { ExpressionSpecification, GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import type { FeatureCollection, Point } from "geojson";
+import { skipPlaceNames } from "./places";
 import { STREET_LEVEL_RANGE_M, TIER_MIN_ZOOM, guideLandmarks, landmarksNear, loadGuideLandmarks, type LonLat, type GuideCategory, type GuideLandmark } from "@/lib/guide/landmarkGuide";
 
 /**
@@ -125,12 +126,15 @@ export function installLandmarkLabels(map: MapLibreMap, color: string, halo: str
   if (!map.getSource(LANDMARK_LABELS_SOURCE)) {
     const list = guideLandmarks();
     map.addSource(LANDMARK_LABELS_SOURCE, { type: "geojson", data: landmarkLabelsGeoJson(list), attribution: "Landmarks: Wikidata (CC0)" });
+    // A landmark's name is drawn here; the basemap's own place label for it would say it twice.
+    if (list.length) skipPlaceNames(map, list.map((l) => l.name));
     // The list is a lazy chunk: fill the source when it arrives (if this style still has it).
     if (!list.length) {
       void loadGuideLandmarks()
         .then((all) => {
           const src = map.getSource(LANDMARK_LABELS_SOURCE);
           if (src && "setData" in src) (src as GeoJSONSource).setData(landmarkLabelsGeoJson(all));
+          skipPlaceNames(map, all.map((l) => l.name));
         })
         .catch(() => {});
     }
@@ -158,7 +162,7 @@ export function installLandmarkLabels(map: MapLibreMap, color: string, halo: str
         "icon-pitch-alignment": "viewport",
         "symbol-sort-key": ["get", "sort"],
       },
-      paint: { "text-color": color, "text-halo-color": halo, "text-halo-width": 1.4 },
+      paint: { "text-color": color, "text-halo-color": halo, "text-halo-width": 2 },
     });
   } else {
     map.setPaintProperty(LANDMARK_LABELS_LAYER, "text-color", color);

@@ -33,7 +33,7 @@ function LineKey({
     <li className="flex items-center gap-2">
       <span
         aria-hidden="true"
-        className={`h-0 w-5 shrink-0 border-t-2 ${className}`}
+        className={`h-0 w-6 shrink-0 border-t-[3px] ${className}`}
       />
       <span className="flex-1 text-[11px] font-semibold text-foreground">{label}</span>
     </li>
@@ -80,8 +80,8 @@ export function LegendContent({
       ) : (
         <div className="mt-2 space-y-1">
           {/* Same stops as CHOROPLETH_RAMP in src/lib/map/style.ts (ColorBrewer YlOrRd). */}
-          <div className="h-2 rounded-full bg-[linear-gradient(to_right,#ffffcc,#fed976,#fd8d3c,#e31a1c,#800026)]" />
-          <div className="flex justify-between text-[10px] text-muted-foreground">
+          <div className="h-3 rounded-full ring-1 ring-border bg-[linear-gradient(to_right,#ffffcc,#fed976,#fd8d3c,#e31a1c,#800026)]" />
+          <div className="flex justify-between text-[11px] font-semibold text-foreground">
             <span>fewer</span>
             <span>more</span>
           </div>

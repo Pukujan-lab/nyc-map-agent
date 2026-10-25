@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PLACE_CATEGORIES, POI_LAYERS, classesFor, readPlaces } from "./places";
+import { PLACE_CATEGORIES, POI_LAYERS, classesFor, placeFilter, readPlaces } from "./places";
 
 describe("places", () => {
   it("are hidden until a category is chosen", () => {
@@ -17,5 +17,10 @@ describe("places", () => {
   it("targets only the basemap place-icon layers", () => {
     expect(["poi_r1", "poi_r7", "poi_r20"].every((id) => POI_LAYERS.test(id))).toBe(true);
     expect(POI_LAYERS.test("poi_transit")).toBe(false);
+  });
+  it("leaves out a basemap place the landmark guide already names (#312)", () => {
+    expect(placeFilter(["museum"], [])).toEqual(["match", ["get", "class"], ["museum"], true, false]);
+    expect(placeFilter(["museum"], ["empire state building"])).toEqual(["all", ["match", ["get", "class"], ["museum"], true, false],
+      ["!", ["in", ["downcase", ["to-string", ["get", "name"]]], ["literal", ["empire state building"]]]]]);
   });
 });
