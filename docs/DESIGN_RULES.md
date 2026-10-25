@@ -44,7 +44,8 @@
 - Never suggest food, cafés, shops, events or other things to do unless the person asks.
 - Unasked help is limited to their own trip: delays, planned work, skipped stops, elevator outages, weather that affects the trip.
 - Never tell people how to manage their time ("leave 8 min later"). Show the facts; they plan their own day.
-- Updates appear inside the app only. No push notifications.
+- One exception, decided by the owner on 2026-10-25 to match the demo video: a trip planned for later has a Remind me button. Tapping it puts the trip in the phone's own calendar with an alert 10 minutes before the time they chose. The agent may offer it for those trips; it never sets one by itself or picks a different time.
+- Updates appear inside the app only. No push notifications from the app; the reminder above is the phone calendar's.
 
 ## Memory and data
 - What the app learns (daily rides, Home and Work, past conversations, trips looked up) stays on the phone by default.

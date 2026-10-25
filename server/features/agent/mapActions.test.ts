@@ -62,6 +62,13 @@ describe("map actions from tool results", () => {
     expect(tripActions(walk).map((x) => x.label)).toEqual(["Show the walk"]);
   });
 
+  it("a trip planned for later offers Remind me right after the route; one leaving now does not", () => {
+    const later = tripSchema.parse({ ...driveTrip, id: "w2", mode: "walk", context: [], scheduled: { future: true, note: "Planned for tomorrow" } });
+    expect(tripActions(later).map((x) => x.kind)).toEqual(["showRoute", "remindTrip"]);
+    const now = tripSchema.parse({ ...later, scheduled: { future: false, note: "Leaving now" } });
+    expect(tripActions(now).map((x) => x.kind)).toEqual(["showRoute"]);
+  });
+
   it("the nearest open restroom comes first and carries its card details", () => {
     const here: [number, number] = [-73.99, 40.735];
     const spots = nearestRestrooms([row("Far Park", -73.95, 40.78), row("Closed Kiosk", -73.9901, 40.7351, "Not Operational"), row("Union Square Park", -73.9905, 40.7362)], here, 3, new Date("2026-10-25T12:00:00-04:00"));

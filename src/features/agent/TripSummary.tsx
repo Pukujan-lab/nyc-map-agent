@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
-import { Ship } from "lucide-react";
+import { BellRing, Ship } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { remindAt, saveReminder } from "./reminder";
 import { useFlags } from "@/lib/flags";
 import { useT } from "@/lib/i18n/appLang";
 import { headsUpFacts, recommend, type HourWeather } from "@/lib/weather/street";
@@ -125,6 +128,11 @@ export function TripSummary({ trip, compact, mapTime, bodyOnly, onSelect, onLeg 
       {bodyOnly ? null : <WeatherHeadsUp trip={trip} />}
       {trip.exitAdvice && !bodyOnly ? <p className="font-medium">{trip.exitAdvice}</p> : null}
       {trip.scheduled && !bodyOnly ? <p className="text-xs text-muted-foreground" data-testid="trip-when">{trip.scheduled.note}</p> : null}
+      {trip.scheduled?.future && !bodyOnly ? (
+        <Button type="button" size="sm" variant="outline" className="h-11 gap-1.5 rounded-full" data-testid="trip-remind" onClick={() => { saveReminder(trip); toast(t("remindSaved").replace("{t}", remindAt(trip))); }}>
+          <BellRing className="h-4 w-4" aria-hidden="true" />{t("remindMe")}
+        </Button>
+      ) : null}
       {compact ? <OtherOptions trip={trip} onSelect={onSelect} /> : (
         <>
           <Steps legs={trip.legs} onLeg={onLeg} />
