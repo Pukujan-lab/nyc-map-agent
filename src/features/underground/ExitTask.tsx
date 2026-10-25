@@ -27,10 +27,10 @@ export function ExitTask(p: {
         <h2 className="text-sm font-semibold">{p.pack.station.name}</h2>
         {!p.online ? <span className="ml-auto flex items-center gap-1 text-xs text-slate-300"><WifiOff size={14} />Offline</span> : null}
       </div>
-      <button type="button" aria-label="Close underground help" className="task-action task-secondary h-11 w-11 shrink-0 p-0" onClick={p.onClose}><X size={18} /></button>
+      <button type="button" aria-label="Close underground help" className="task-action task-close" onClick={p.onClose}><X size={18} /></button>
     </div>
     {/* A short strip under the station name: the map below shows you, the exit and the way there (owner, 2026-10-25). */}
-    <section className="task-panel absolute left-3 top-[140px] z-40 flex max-h-[calc(100dvh-250px)] w-[min(420px,calc(100%-76px))] flex-col gap-2 overflow-y-auto rounded-2xl px-3 py-2.5" aria-label="Station exits">
+    <section style={{ top: "calc(env(safe-area-inset-top) + 132px)" }} className="task-panel absolute left-3 z-40 flex max-h-[calc(100dvh-250px)] w-[min(420px,calc(100%-104px))] flex-col gap-2 overflow-y-auto rounded-2xl px-3 py-2.5" aria-label="Station exits">
       {w && w.kind !== "here" ? <WhereRow where={w} station={p.pack.station.name} onShare={p.onShare} onHere={p.onHere} onWalkThere={p.onWalkThere} onPickStation={p.onPickStation} /> : null}
       <div className="flex items-center gap-3">
         {exit && p.rotation !== null ? <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 border-slate-400/25" role="img" aria-label="Approximate direction to your exit"><ArrowUp className="h-7 w-7 text-blue-400" style={{ transform: `rotate(${p.rotation}deg)` }} /></div> : null}
