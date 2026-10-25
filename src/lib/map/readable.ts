@@ -18,6 +18,8 @@ type Layer = { id: string; type: string; "source-layer"?: string };
 const isRoadLine = (l: Layer) => l.type === "line" && l["source-layer"] === "transportation" && !/rail|hatching|pattern/.test(l.id);
 const isCasing = (l: Layer) => isRoadLine(l) && /casing/.test(l.id);
 const HIDE = /^(highway-name-(minor|path)|road_one_way_arrow|highway-shield|road_shield)/;
+/** Highway number signs (278, GCP, BP…): hidden in every look, they read as clutter over the train lines (owner, 2026-10-24). */
+const SHIELD = /^(highway-shield|road_shield)/;
 const MAJOR_LABEL = "highway-name-major";
 const ROAD_LABEL = /^(highway-|road_)/;
 
@@ -29,7 +31,9 @@ export function isRoadLayer(l: Layer): boolean {
 }
 
 /** What readable mode changes on one layer, or null to leave it alone. Pure, for tests. */
-export function readableChange(l: Layer, look: "simple" | "off" = "simple"): { visibility?: "none"; color?: string; textColor?: string } | null {
+export function readableChange(l: Layer, look: StreetLook = "simple"): { visibility?: "none"; color?: string; textColor?: string } | null {
+  if (l.type === "symbol" && SHIELD.test(l.id)) return { visibility: "none" };
+  if (look === "full") return null;
   if (look === "off") return isRoadLayer(l) ? { visibility: "none" } : null;
   if (isCasing(l)) return { visibility: "none" };
   if (isRoadLine(l)) return { color: /motorway|trunk|primary|secondary/.test(l.id) ? PALE_MAJOR : PALE_STREET };
@@ -49,7 +53,7 @@ export function applyReadable(map: MapLibreMap, look: StreetLook, colors: Readab
   let store = saved.get(map);
   if (!store) { store = new Map<string, { visibility: unknown; color: unknown; textColor: unknown }>(); saved.set(map, store); }
   for (const l of layers) {
-    const change = look === "full" ? null : readableChange(l, look);
+    const change = readableChange(l, look);
     if (!change) {
       const orig = store.get(l.id);
       if (!orig) continue;
