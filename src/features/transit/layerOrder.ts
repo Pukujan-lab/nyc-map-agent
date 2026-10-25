@@ -2,7 +2,7 @@ import type { Map as MaplibreMap } from "maplibre-gl";
 
 /** In 3D, labels and bullets on raised track lift by about a viaduct's height on screen. */
 export const RAISED_LIFT_PX = 26;
-/** A dwelling train lifts this far so the station name and dot stay readable and clickable. */
+/** In 3D a dwelling train lifts this far so the station stays readable; flat, it stays on the track (owner report, 2026-10-25). */
 export const STOP_LIFT_PX = 52;
 
 /** These stay above the 3D vehicle layer: the station, its train bullet, skip marks, and the followed bus badge. */
@@ -26,7 +26,8 @@ export function paintAboveVehicles(map: LayerOrderMap, vehicleLayerId?: string) 
 /** Screen offset for a train bullet or its heading notch. Dwelling trains clear the station. */
 export function trainIconOffset(three: boolean, notch: number) {
   const y = (lift: number) => ["literal", [0, -(lift + notch)]] as unknown as [number, number];
-  if (!three) return ["case", ["==", ["get", "atStop"], 1], y(STOP_LIFT_PX), y(0)] as unknown as [number, number];
+  // Flat, a train sits on its track even at a station: lifted 52 px it read as off the line.
+  if (!three) return y(0);
   return ["case",
     ["all", ["==", ["get", "grade"], "elevated"], ["==", ["get", "atStop"], 1]], y(RAISED_LIFT_PX + STOP_LIFT_PX),
     ["==", ["get", "atStop"], 1], y(STOP_LIFT_PX),

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { alertGeometry, isSkipped, lineStatus, namedStations, skippedStations, stationChanges } from "./alertFocus";
+import { alertGeometry, isSkipped, lineStatus, namedStations, skippedStations, stationChanges, suspendedBetween } from "./alertFocus";
 import type { TransitAlert } from "./hooks";
 import type { StaticSystem } from "./model";
 
@@ -35,6 +35,22 @@ describe("alert focus geometry", () => {
     expect(g.affected[0].coords.length).toBeLessThan(sub.shapes["7"].c.length / 2);
     const many = "In Queens, Flushing-bound [7] skips 52 St and 69 St. All trains at Woodside-61 St board from the Manhattan-bound platform";
     expect(namedStations(many, sub, "7").map(name).sort()).toEqual(["52 St", "61 St-Woodside", "69 St"]);
+  });
+  it("a suspension breaks exactly the named stretch and skips only the stations inside it (owner report, 2026-10-25)", () => {
+    const text = "No [M] between Myrtle Av (Broadway) and Delancey St-Essex St\nAll trains at Myrtle Av (Broadway) board from the Manhattan-bound platform";
+    expect(suspendedBetween(text)).toEqual(["Myrtle Av (Broadway)", "Delancey St-Essex St"]);
+    const g = alertGeometry({ ...base, routes: ["M"], text, skipNames: ["Myrtle Av (Broadway)", "Delancey St-Essex St", "Myrtle Av"], replacement: ["T432"] }, sub);
+    expect(g.suspended).toBe(true);
+    expect(g.ends.map((e) => e.name).sort()).toEqual(["Delancey St-Essex St", "Myrtle Av"]);
+    const skipped = g.skipped.map((s) => s.name);
+    expect(skipped).toEqual(expect.arrayContaining(["Marcy Av", "Hewes St", "Lorimer St", "Flushing Av"]));
+    expect(skipped).not.toContain("Myrtle Av");
+    expect(skipped).not.toContain("Delancey St-Essex St");
+    expect(g.affected).toHaveLength(1);
+  });
+  it("other alerts are not suspensions", () => {
+    expect(suspendedBetween("In Queens, no [7] at Flushing-Main St")).toBeNull();
+    expect(alertGeometry({ ...base, kind: "delay", reroute: false, routes: ["Q"] }, sub).suspended).toBe(false);
   });
   it("highlights the whole line for a line-wide delay", () => {
     const g = alertGeometry({ ...base, kind: "delay", reroute: false, routes: ["Q"] }, sub);
