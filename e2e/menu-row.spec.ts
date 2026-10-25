@@ -1,0 +1,48 @@
+import { expect, test } from "@playwright/test";
+import { mockNetwork } from "./mocks";
+
+const ORDER = [
+  ["myDay", "My day"],
+  ["layers", "Layers"],
+  ["filters", "Filters"],
+  ["data", "Data"],
+  ["cityData", "City data"],
+  ["settings", "Settings"],
+] as const;
+
+test("menu row: tapping an item makes it the leftmost pill and opens only its dropdown", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await mockNetwork(page);
+  await page.goto("/");
+  await expect(page.locator("canvas.maplibregl-canvas").first()).toBeVisible();
+  const row = page.getByTestId("menu-row");
+  await expect(row).toBeVisible();
+
+  const pill = page.getByTestId("menu-pill");
+  await expect(pill).toHaveText("My day");
+  await expect(page.getByTestId("menu-dropdown")).toHaveCount(0);
+
+  for (const [id, label] of ORDER) {
+    if (id !== "myDay") await page.getByTestId(`menu-${id}`).click();
+    else await pill.click();
+    await expect(pill).toHaveText(label);
+    await expect(pill).toHaveAttribute("aria-expanded", "true");
+    const pillBox = await pill.boundingBox();
+    expect(pillBox).not.toBeNull();
+    const icons = row.locator("button[data-menu]");
+    const n = await icons.count();
+    for (let i = 0; i < n; i++) {
+      const box = await icons.nth(i).boundingBox();
+      expect(box).not.toBeNull();
+      expect(pillBox!.x).toBeLessThanOrEqual(box!.x + 1);
+    }
+    await expect(page.getByTestId("menu-dropdown")).toHaveCount(1);
+    await expect(page.getByRole("region", { name: label })).toBeVisible();
+  }
+
+  await pill.click();
+  await expect(pill).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByTestId("menu-dropdown")).toHaveCount(0);
+  await pill.click();
+  await expect(page.getByTestId("menu-dropdown")).toHaveCount(1);
+});

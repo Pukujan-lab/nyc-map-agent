@@ -4,9 +4,9 @@
  * feed snapshot can put the raw estimate behind where we already drew the
  * train. Within one trip, progress along the route never decreases. When the
  * raw estimate falls behind, the train slows down to reach the next stop at the
- * new ETA instead of snapping back. It never passes the next stop the feed
- * still lists until the feed drops it (confirmed departure). A new trip, a new
- * route or a large stop-list change (reroute) resets the state.
+ * new ETA instead of snapping back. The caller names the stop the train may
+ * not pass yet. A new trip, a new route or a large stop-list change (reroute)
+ * resets the state.
  */
 
 /** Progress jump (m) behind the drawn train that counts as a reroute, not a late ETA. */
@@ -23,7 +23,7 @@ export type ProgressInput = {
   forward: number;
   /** Raw estimated position along the shape (m). */
   m: number;
-  /** Position (m) of the next stop the feed still lists; the train may not pass it. */
+  /** Position (m) of the stop the train may not pass yet. */
   holdM?: number;
   /** Predicted arrival at that stop (unix s). */
   holdEta?: number;

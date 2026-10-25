@@ -1,0 +1,53 @@
+/* Task frames: floating glass cards, with the persistent menu and chat clear. */
+.task-panel {
+  pointer-events: auto;
+  color: #f1f5f9;
+  background: rgba(11, 18, 32, .55);
+  border: 1px solid rgba(148, 163, 184, .16);
+  border-radius: 22px;
+  padding: 12px;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.task-top, .task-bottom {
+  position: absolute;
+  left: 12px;
+  width: min(460px, calc(100% - 80px));
+  z-index: 40;
+}
+.task-top { top: calc(env(safe-area-inset-top) + 76px); }
+.task-bottom {
+  bottom: calc(env(safe-area-inset-bottom) + 104px);
+  width: min(460px, calc(100% - 24px));
+  /* Phone: a short sheet, so the middle of the map (the train, the walk) stays visible. */
+  max-height: min(42dvh, calc(100dvh - 290px));
+  overflow-y: auto;
+}
+.task-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 24px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.task-action:hover { filter: brightness(1.15); }
+.task-action:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }
+.task-secondary { border: 1px solid rgba(148, 163, 184, .3); background: transparent; }
+.task-caption { color: #a5b4cb; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+/* Tablet and desktop: docked to the left edge, above the chat bar; nothing covers the map's middle. */
+@media (min-width: 640px) {
+  .task-top, .task-bottom { width: min(380px, 42vw); }
+  .task-bottom {
+    left: 12px;
+    bottom: calc(var(--chat-bar-h, 96px) + 16px);
+    max-height: calc(100dvh - env(safe-area-inset-top) - 76px - var(--chat-bar-h, 96px) - 28px);
+  }
+}

@@ -23,11 +23,15 @@ export function spokenSummary(text: string, max = 240): string {
   return out.length < plain.length - 5 ? `${out} The details are on screen.` : out;
 }
 
-export const pickVoice = (v: SpeechSynthesisVoice[]) =>
-  v.find((x) => x.lang === "en-US" && /google|samantha|natural|aria/i.test(x.name)) ?? v.find((x) => x.lang.startsWith("en"));
+/** A voice for `lang` (BCP 47); English keeps the preferred natural US voices. */
+export const pickVoice = (v: SpeechSynthesisVoice[], lang = "en-US") => {
+  const base = lang.split("-")[0].toLowerCase();
+  if (base === "en") return v.find((x) => x.lang === "en-US" && /google|samantha|natural|aria/i.test(x.name)) ?? v.find((x) => x.lang.startsWith("en"));
+  return v.find((x) => x.lang.toLowerCase() === lang.toLowerCase()) ?? v.find((x) => x.lang.toLowerCase().startsWith(base));
+};
 
 /** Speaks `text` chunk by chunk. Returns cancel. Callers mark speaking before calling. `onEnd` fires once: after the last chunk, on cancel, or on interruption. */
-export function speakQueued(synth: SpeechSynthesis, text: string, onEnd: () => void): () => void {
+export function speakQueued(synth: SpeechSynthesis, text: string, onEnd: () => void, lang?: string): () => void {
   const chunks = chunkText(text);
   let done = false;
   let timer: ReturnType<typeof setInterval> | undefined;
@@ -41,7 +45,7 @@ export function speakQueued(synth: SpeechSynthesis, text: string, onEnd: () => v
   synth.cancel();
   const go = () => {
     if (done || timer) return;
-    const voice = pickVoice(synth.getVoices());
+    const voice = pickVoice(synth.getVoices(), lang);
     timer = setInterval(() => { if (synth.speaking && !synth.paused) { synth.pause(); synth.resume(); } }, 10_000);
     let i = 0;
     const next = () => {
@@ -49,6 +53,7 @@ export function speakQueued(synth: SpeechSynthesis, text: string, onEnd: () => v
       if (i >= chunks.length) return end();
       const u = new SpeechSynthesisUtterance(chunks[i++]);
       if (voice) u.voice = voice;
+      if (lang) u.lang = lang;
       u.rate = 1.02;
       u.onend = next;
       u.onerror = (e) => (/interr|cancel/.test(e.error) ? end() : next());

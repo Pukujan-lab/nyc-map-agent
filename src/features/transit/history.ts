@@ -44,3 +44,10 @@ export function lookupFrom(byRoute: Map<string, SegmentRow[]>): SegmentLookup {
   for (const [route, rows] of byRoute) for (const r of rows) if (r.kind === "travel") idx.set(`${route}|${r.dir}|${r.from}|${r.to}`, r.median);
   return (route, dir, from, to) => idx.get(`${route}|${dir ?? -1}|${from}|${to}`) ?? idx.get(`${route}|-1|${from}|${to}`);
 }
+
+/** ISO weekday (1 = Monday) and hour in New York; mirrors the server's nyHourOfWeek so segment URLs stay stable for the hour. */
+export function nyHourOfWeek(d: Date): { dow: number; hour: number } {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short", hour: "numeric", hourCycle: "h23" }).formatToParts(d);
+  const wd = parts.find((p) => p.type === "weekday")!.value;
+  return { dow: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].indexOf(wd) + 1, hour: Number(parts.find((p) => p.type === "hour")!.value) };
+}

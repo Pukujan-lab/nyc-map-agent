@@ -18,6 +18,8 @@ interface AmbientState {
   /** Live condition (already resolved against weatherMode by the weather feature). */
   weather: WeatherKind;
   tempC: number | null;
+  /** Departure ("YYYY-MM-DDTHH:mm", New York) of the trip on screen, set by the agent; street weather forecasts that hour. */
+  tripDepart: string | null;
 }
 
 const KEY = "nma:ambient";
@@ -34,7 +36,7 @@ function load(): Pick<AmbientState, "lighting" | "weatherMode"> {
   }
 }
 
-let state: AmbientState = { ...load(), eco: false, walking: false, weather: "clear", tempC: null };
+let state: AmbientState = { ...load(), eco: false, walking: false, weather: "clear", tempC: null, tripDepart: null };
 const listeners = new Set<() => void>();
 
 export function getAmbient(): AmbientState {

@@ -27,6 +27,215 @@
           "error"
         ]
       },
+      "RestroomsResponse": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "FeatureCollection"
+            ]
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "Feature"
+                  ]
+                },
+                "id": {
+                  "type": "string"
+                },
+                "geometry": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "Point"
+                      ]
+                    },
+                    "coordinates": {
+                      "type": "array",
+                      "prefixItems": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "coordinates"
+                  ]
+                },
+                "properties": {
+                  "$ref": "#/components/schemas/Restroom"
+                }
+              },
+              "required": [
+                "type",
+                "id",
+                "geometry",
+                "properties"
+              ]
+            }
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "enum": [
+                    "nyc-open-data",
+                    "openstreetmap"
+                  ]
+                },
+                "asOf": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "count": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "id",
+                "asOf",
+                "count"
+              ]
+            }
+          }
+        },
+        "required": [
+          "type",
+          "features",
+          "sources"
+        ]
+      },
+      "Restroom": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "osm:node/322546340"
+          },
+          "name": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "nyc-open-data",
+              "openstreetmap"
+            ],
+            "description": "Where the record comes from; a merged place keeps nyc-open-data"
+          },
+          "asOf": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the source last updated this record (ISO); city rows carry the dataset's row update time, OSM the last edit"
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hours": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "accessibility": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "operator": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "location_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fee": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "changingTable": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "unisex": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "osmId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The matched or source OpenStreetMap element"
+          },
+          "osmUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "filledFromOsm": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "City fields that were empty and were filled from the matched OSM toilet"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "source",
+          "asOf",
+          "status",
+          "hours",
+          "accessibility",
+          "operator",
+          "location_type",
+          "fee",
+          "changingTable",
+          "unisex",
+          "osmId",
+          "osmUrl",
+          "filledFromOsm"
+        ]
+      },
       "EventsResponse": {
         "type": "object",
         "properties": {
@@ -184,6 +393,73 @@
           "features"
         ]
       },
+      "PlaceToiletsResponse": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "FeatureCollection"
+            ]
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "Feature"
+                  ]
+                },
+                "id": {
+                  "type": "string"
+                },
+                "geometry": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "Point"
+                      ]
+                    },
+                    "coordinates": {
+                      "type": "array",
+                      "prefixItems": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "coordinates"
+                  ]
+                },
+                "properties": {
+                  "$ref": "#/components/schemas/PlaceToilet"
+                }
+              },
+              "required": [
+                "type",
+                "id",
+                "geometry",
+                "properties"
+              ]
+            }
+          }
+        },
+        "required": [
+          "type",
+          "features"
+        ]
+      },
       "PlaceToilet": {
         "type": "object",
         "properties": {
@@ -251,71 +527,30 @@
           "url"
         ]
       },
-      "PlaceToiletsResponse": {
+      "AgentRateLimited": {
         "type": "object",
         "properties": {
-          "type": {
+          "error": {
             "type": "string",
             "enum": [
-              "FeatureCollection"
+              "rate_limited"
             ]
           },
-          "features": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "type": {
-                  "type": "string",
-                  "enum": [
-                    "Feature"
-                  ]
-                },
-                "id": {
-                  "type": "string"
-                },
-                "geometry": {
-                  "type": "object",
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "enum": [
-                        "Point"
-                      ]
-                    },
-                    "coordinates": {
-                      "type": "array",
-                      "prefixItems": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "number"
-                        }
-                      ]
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "coordinates"
-                  ]
-                },
-                "properties": {
-                  "$ref": "#/components/schemas/PlaceToilet"
-                }
-              },
-              "required": [
-                "type",
-                "id",
-                "geometry",
-                "properties"
-              ]
-            }
+          "message": {
+            "type": "string"
+          },
+          "retryAfterSeconds": {
+            "type": "integer"
+          },
+          "retryAt": {
+            "type": "string"
           }
         },
         "required": [
-          "type",
-          "features"
+          "error",
+          "message",
+          "retryAfterSeconds",
+          "retryAt"
         ]
       },
       "AgentRequest": {
@@ -419,10 +654,29 @@
               "lon",
               "lat"
             ]
+          },
+          "lang": {
+            "type": "string",
+            "maxLength": 35
+          },
+          "memory": {
+            "type": "string",
+            "maxLength": 240
           }
         },
         "required": [
           "messages"
+        ]
+      },
+      "SttResult": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
         ]
       }
     },
@@ -1197,14 +1451,14 @@
     },
     "/api/v1/restrooms": {
       "get": {
-        "summary": "Public restrooms GeoJSON",
+        "summary": "Public restrooms GeoJSON: NYC Open Data merged with OpenStreetMap public toilets (ODbL); places within ~40 m are one record, each with its source and asOf",
         "responses": {
           "200": {
             "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Json"
+                  "$ref": "#/components/schemas/RestroomsResponse"
                 }
               }
             }
@@ -1234,7 +1488,7 @@
     },
     "/api/restrooms": {
       "get": {
-        "summary": "Public restrooms GeoJSON (alias of /api/v1/restrooms)",
+        "summary": "Public restrooms GeoJSON: NYC Open Data merged with OpenStreetMap public toilets (ODbL); places within ~40 m are one record, each with its source and asOf (alias of /api/v1/restrooms)",
         "deprecated": true,
         "responses": {
           "200": {
@@ -1242,7 +1496,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Json"
+                  "$ref": "#/components/schemas/RestroomsResponse"
                 }
               }
             }
@@ -1546,6 +1800,143 @@
                 "schema": {
                   "type": "string",
                   "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/weather/hour": {
+      "get": {
+        "summary": "One forecast hour (Open-Meteo) and active NWS alerts near a point, rounded to about 1 km",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 39,
+              "maximum": 42
+            },
+            "required": true,
+            "name": "lat",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": -75.5,
+              "maximum": -72.5
+            },
+            "required": true,
+            "name": "lon",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}"
+            },
+            "required": false,
+            "name": "at",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/weather/hour": {
+      "get": {
+        "summary": "One forecast hour (Open-Meteo) and active NWS alerts near a point, rounded to about 1 km (alias of /api/v1/weather/hour)",
+        "deprecated": true,
+        "parameters": [
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 39,
+              "maximum": 42
+            },
+            "required": true,
+            "name": "lat",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": -75.5,
+              "maximum": -72.5
+            },
+            "required": true,
+            "name": "lon",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}"
+            },
+            "required": false,
+            "name": "at",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
                 }
               }
             }
@@ -2413,6 +2804,267 @@
         }
       }
     },
+    "/api/v1/transit-segments/all": {
+      "get": {
+        "summary": "Historical subway segment travel and dwell times for many routes at once, keyed by route; cached for hours when dow and hour are given",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 200,
+              "pattern": "^[A-Za-z0-9]{1,4}(,[A-Za-z0-9]{1,4}){0,49}$"
+            },
+            "required": true,
+            "name": "routes",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 7
+            },
+            "required": false,
+            "name": "dow",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 23
+            },
+            "required": false,
+            "name": "hour",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "dow": {
+                      "type": "integer"
+                    },
+                    "hour": {
+                      "type": "integer"
+                    },
+                    "routes": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "dir": {
+                              "type": "integer"
+                            },
+                            "from": {
+                              "type": "string"
+                            },
+                            "to": {
+                              "type": "string"
+                            },
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "travel",
+                                "dwell"
+                              ]
+                            },
+                            "n": {
+                              "type": "integer"
+                            },
+                            "median": {
+                              "type": "number"
+                            },
+                            "p80": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "dir",
+                            "from",
+                            "to",
+                            "kind",
+                            "n",
+                            "median",
+                            "p80"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "dow",
+                    "hour",
+                    "routes"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transit-segments/all": {
+      "get": {
+        "summary": "Historical subway segment travel and dwell times for many routes at once, keyed by route; cached for hours when dow and hour are given (alias of /api/v1/transit-segments/all)",
+        "deprecated": true,
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 200,
+              "pattern": "^[A-Za-z0-9]{1,4}(,[A-Za-z0-9]{1,4}){0,49}$"
+            },
+            "required": true,
+            "name": "routes",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 7
+            },
+            "required": false,
+            "name": "dow",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 23
+            },
+            "required": false,
+            "name": "hour",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "dow": {
+                      "type": "integer"
+                    },
+                    "hour": {
+                      "type": "integer"
+                    },
+                    "routes": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "dir": {
+                              "type": "integer"
+                            },
+                            "from": {
+                              "type": "string"
+                            },
+                            "to": {
+                              "type": "string"
+                            },
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "travel",
+                                "dwell"
+                              ]
+                            },
+                            "n": {
+                              "type": "integer"
+                            },
+                            "median": {
+                              "type": "number"
+                            },
+                            "p80": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "dir",
+                            "from",
+                            "to",
+                            "kind",
+                            "n",
+                            "median",
+                            "p80"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "dow",
+                    "hour",
+                    "routes"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/transit-segments": {
       "get": {
         "summary": "Historical subway segment travel and dwell times (median, p80) for a route at an hour of the week",
@@ -2650,6 +3302,135 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/transit-live": {
+      "get": {
+        "summary": "Live subway / LIRR / Metro-North trips and (alerts=1) service alerts in one response; ETag + If-None-Match (304), Cache-Control public, s-maxage=30, stale-while-revalidate=30",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 40,
+              "pattern": "^((subway|lirr|mnr)(,(subway|lirr|mnr))*)?$"
+            },
+            "required": false,
+            "name": "systems",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "0",
+                "1"
+              ]
+            },
+            "required": false,
+            "name": "alerts",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK ({ at, systems: { subway?, lirr?, mnr? }, alerts?, failed? })",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified (If-None-Match matched the ETag)"
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream (Octo / R2) error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transit-live": {
+      "get": {
+        "summary": "Live subway / LIRR / Metro-North trips and (alerts=1) service alerts in one response; ETag + If-None-Match (304), Cache-Control public, s-maxage=30, stale-while-revalidate=30 (alias of /api/v1/transit-live)",
+        "deprecated": true,
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 40,
+              "pattern": "^((subway|lirr|mnr)(,(subway|lirr|mnr))*)?$"
+            },
+            "required": false,
+            "name": "systems",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "0",
+                "1"
+              ]
+            },
+            "required": false,
+            "name": "alerts",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK ({ at, systems: { subway?, lirr?, mnr? }, alerts?, failed? })",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Json"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified (If-None-Match matched the ETag)"
           },
           "400": {
             "description": "Invalid query",
@@ -3004,7 +3785,7 @@
     },
     "/api/v1/transit/{system}": {
       "get": {
-        "summary": "Live MTA GTFS-rt (subway / lirr / mnr trips, bus positions, alerts + elevator outages), cached ~15 s; bus?routes=Q1,Q2 filters the cached fleet to at most 20 routes; bus-lines is the borough page catalog; bus-trip?vehicle= (one bus's headsign + upcoming stops), bus-route?route= (route shape + stops) and bus-stops?lat=&lon= (stops within ~300 m with the routes serving each)",
+        "summary": "Live MTA GTFS-rt (subway / lirr / mnr trips, bus positions, alerts + elevator outages), cached ~15 s; bus?routes=Q1,Q2 filters the cached fleet to at most 20 routes; bus-lines is the borough page catalog; bus-trip?vehicle= (one bus's headsign + upcoming stops), bus-route?route= (route shape + stops) and bus-stops?lat=&lon= (stops within ~300 m with the routes serving each) and bus-arrivals?stop= (next buses at one stop)",
         "parameters": [
           {
             "schema": {
@@ -3018,7 +3799,8 @@
                 "alerts",
                 "bus-trip",
                 "bus-route",
-                "bus-stops"
+                "bus-stops",
+                "bus-arrivals"
               ],
               "example": "subway"
             },
@@ -3051,6 +3833,15 @@
             },
             "required": false,
             "name": "routes",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 20
+            },
+            "required": false,
+            "name": "stop",
             "in": "query"
           },
           {
@@ -3108,7 +3899,7 @@
     },
     "/api/transit/{system}": {
       "get": {
-        "summary": "Live MTA GTFS-rt (subway / lirr / mnr trips, bus positions, alerts + elevator outages), cached ~15 s; bus?routes=Q1,Q2 filters the cached fleet to at most 20 routes; bus-lines is the borough page catalog; bus-trip?vehicle= (one bus's headsign + upcoming stops), bus-route?route= (route shape + stops) and bus-stops?lat=&lon= (stops within ~300 m with the routes serving each) (alias of /api/v1/transit/{system})",
+        "summary": "Live MTA GTFS-rt (subway / lirr / mnr trips, bus positions, alerts + elevator outages), cached ~15 s; bus?routes=Q1,Q2 filters the cached fleet to at most 20 routes; bus-lines is the borough page catalog; bus-trip?vehicle= (one bus's headsign + upcoming stops), bus-route?route= (route shape + stops) and bus-stops?lat=&lon= (stops within ~300 m with the routes serving each) and bus-arrivals?stop= (next buses at one stop) (alias of /api/v1/transit/{system})",
         "deprecated": true,
         "parameters": [
           {
@@ -3123,7 +3914,8 @@
                 "alerts",
                 "bus-trip",
                 "bus-route",
-                "bus-stops"
+                "bus-stops",
+                "bus-arrivals"
               ],
               "example": "subway"
             },
@@ -3156,6 +3948,15 @@
             },
             "required": false,
             "name": "routes",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 20
+            },
+            "required": false,
+            "name": "stop",
             "in": "query"
           },
           {
@@ -3223,6 +4024,7 @@
               "example": "-74.02,40.70,-73.93,40.80"
             },
             "required": false,
+            "description": "west,south,east,north",
             "name": "bbox",
             "in": "query"
           },
@@ -3233,6 +4035,7 @@
               "description": "Default: now"
             },
             "required": false,
+            "description": "Default: now",
             "name": "from",
             "in": "query"
           },
@@ -3243,6 +4046,7 @@
               "description": "Default: 7 days after from"
             },
             "required": false,
+            "description": "Default: 7 days after from",
             "name": "to",
             "in": "query"
           },
@@ -3254,6 +4058,7 @@
               "example": "fair,market"
             },
             "required": false,
+            "description": "Comma-separated kinds",
             "name": "kind",
             "in": "query"
           }
@@ -3305,6 +4110,7 @@
               "example": "-74.02,40.70,-73.93,40.80"
             },
             "required": false,
+            "description": "west,south,east,north",
             "name": "bbox",
             "in": "query"
           },
@@ -3315,6 +4121,7 @@
               "description": "Default: now"
             },
             "required": false,
+            "description": "Default: now",
             "name": "from",
             "in": "query"
           },
@@ -3325,6 +4132,7 @@
               "description": "Default: 7 days after from"
             },
             "required": false,
+            "description": "Default: 7 days after from",
             "name": "to",
             "in": "query"
           },
@@ -3336,6 +4144,7 @@
               "example": "fair,market"
             },
             "required": false,
+            "description": "Comma-separated kinds",
             "name": "kind",
             "in": "query"
           }
@@ -3798,6 +4607,24 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "Fair-use limit for this client; Retry-After says when the next question frees up",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next question is allowed",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRateLimited"
+                }
+              }
+            }
           }
         }
       }
@@ -3829,6 +4656,159 @@
           },
           "400": {
             "description": "Invalid body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Fair-use limit for this client; Retry-After says when the next question frees up",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next question is allowed",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRateLimited"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/stt": {
+      "post": {
+        "summary": "Transcribe one short voice turn (Whisper); the audio is not stored",
+        "responses": {
+          "200": {
+            "description": "The words heard",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SttResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No recording",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Recording too long",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Transcription failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Speech-to-text is not set up on this server",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stt": {
+      "post": {
+        "summary": "Transcribe one short voice turn (Whisper); the audio is not stored (alias of /api/v1/stt)",
+        "deprecated": true,
+        "responses": {
+          "200": {
+            "description": "The words heard",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SttResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No recording",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Recording too long",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Transcription failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Speech-to-text is not set up on this server",
             "content": {
               "application/json": {
                 "schema": {

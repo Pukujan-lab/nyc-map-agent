@@ -58,6 +58,31 @@ export function platformNotes(changes: ServiceChange[], st: Station, route: stri
   return changes.filter((c) => c.kind === "platform" && c.route === route.replace(/X$/, "") && c.names.some((n) => sameStation(n, st.name)) && (!c.toward || headsToward(c.toward, route, from.at, to.at, stations))).map((c) => c.notice);
 }
 
+/** Stations the trip's lines skip right now, placed on the map (a name no station on that line matches is left out). */
+export function skippedStops(changes: ServiceChange[], stations: Station[], routes: string[]): Trip["skips"] {
+  const lines = new Set(routes.map((r) => r.replace(/X$/, "")));
+  const out: Trip["skips"] = [];
+  const seen = new Set<string>();
+  for (const c of changes) {
+    if (c.kind !== "skip" || !lines.has(c.route)) continue;
+    for (const n of c.names) {
+      const st = stations.find((s) => s.routes.includes(c.route) && sameStation(n, s.name));
+      const key = `${c.route}|${st?.id}|${c.toward}`;
+      if (!st || seen.has(key)) continue;
+      seen.add(key);
+      out.push({ route: c.route, name: st.name, at: st.at, toward: c.toward });
+    }
+  }
+  return out;
+}
+
+/** Active skips on a trip's lines, for planners that do not route around them (OTP). */
+export async function tripSkips(routes: string[], departLocal: string, deps: TripDeps = {}): Promise<Trip["skips"]> {
+  const changes = deps.changes ?? await safe(stationServiceChanges(Math.floor(nyLocalToDate(departLocal).getTime() / 1000)), [] as ServiceChange[]);
+  if (!changes.some((c) => c.kind === "skip")) return [];
+  return skippedStops(changes, await safe((deps.entrances ?? openDataEntrances).stations(), [] as Station[]), routes);
+}
+
 export async function buildTrip(
   origin: { label: string; at: LngLatTuple },
   destination: { label: string; at: LngLatTuple },
@@ -124,6 +149,7 @@ export async function buildTrip(
     weather,
     exitAdvice,
     context: [],
+    skips: skippedStops(changes, allStations, routes),
     stubbed: plan ? stubbed : [],
     planner: "fallback",
     alternatives: [],
@@ -146,9 +172,12 @@ export function tripBrief(t: Trip) {
     routes: t.routes,
     weather: t.weather,
     plannedWork: t.alerts,
+    skippedStops: t.skips.length ? t.skips.map((s) => `${s.route}${s.toward ? ` (${s.toward}-bound)` : ""} skips ${s.name}`) : undefined,
     elevatorOutages: t.elevators,
     hazards: t.hazards,
     exitAdvice: t.exitAdvice,
+    /** Present for a trip planned ahead: say it, so nobody expects live delays for tomorrow. */
+    whenNote: t.scheduled?.note,
     roadNotes: t.context.map((c) => c.text),
     missingData: t.mode === "drive" ? t.stubbed : undefined,
   };

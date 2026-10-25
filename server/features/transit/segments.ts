@@ -3,6 +3,11 @@
  * p80 segment travel / station dwell seconds for one subway route at one
  * New York hour of the week, from marts.transit_segment_hourly. dow/hour
  * default to now. The live interpolator blends these with realtime ETAs.
+ *
+ * GET /api/transit-segments/all?routes=A,C,E&dow=&hour=: the same rows for many
+ * routes in one query and one response (the map asks for every line it draws).
+ * With an explicit dow and hour the answer only changes when the marts refresh,
+ * so it is cached for hours at the edge.
  */
 import { z } from "zod";
 import { octoQuery } from "../../../api/_lib/octo";
@@ -52,6 +57,39 @@ export async function GET(request: Request): Promise<Response> {
       segments: rows.map((r) => ({ dir: Number(r.dir), from: r.from_stop, to: r.to_stop, kind: r.kind, n: Number(r.n), median: Number(r.median_s), p80: Number(r.p80_s) })),
     };
     return json(body, { maxAge: 900, browserMaxAge: 600 });
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export const AllQuery = z.object({
+  routes: z.string().max(200).regex(/^[A-Za-z0-9]{1,4}(,[A-Za-z0-9]{1,4}){0,49}$/, "comma-separated route ids (at most 50)"),
+  dow: z.coerce.number().int().min(1).max(7).optional(),
+  hour: z.coerce.number().int().min(0).max(23).optional(),
+});
+export const AllResponse = z.object({ dow: z.number().int(), hour: z.number().int(), routes: z.record(z.string(), z.array(Segment)) });
+export type AllSegmentsResponse = z.infer<typeof AllResponse>;
+
+export async function GET_ALL(request: Request): Promise<Response> {
+  const q = parseQuery(AllQuery, request.url);
+  if (q instanceof Response) return q;
+  const routes = [...new Set(q.routes.split(","))].sort();
+  const now = nyHourOfWeek(new Date());
+  const pinned = q.dow != null && q.hour != null;
+  const dow = q.dow ?? now.dow, hour = q.hour ?? now.hour;
+  try {
+    const { rows } = await octoQuery<{ route: string; dir: number; from_stop: string; to_stop: string; kind: "travel" | "dwell"; n: number; median_s: number; p80_s: number }>(
+      `SELECT route, dir, from_stop, to_stop, kind, n, median_s, p80_s FROM marts.transit_segment_hourly
+       WHERE system = 'subway' AND route = ANY($1::text[]) AND dow = $2 AND hour = $3 AND n >= 3`,
+      [routes, dow, hour],
+      { rowLimit: 50_000 },
+    );
+    const body: AllSegmentsResponse = { dow, hour, routes: Object.fromEntries(routes.map((r) => [r, []])) };
+    for (const r of rows) {
+      (body.routes[r.route] ??= []).push({ dir: Number(r.dir), from: r.from_stop, to: r.to_stop, kind: r.kind, n: Number(r.n), median: Number(r.median_s), p80: Number(r.p80_s) });
+    }
+    // A pinned hour of the week only changes when the marts refresh (nightly).
+    return json(body, pinned ? { maxAge: 6 * 3600, browserMaxAge: 3600 } : { maxAge: 900, browserMaxAge: 600 });
   } catch (err) {
     return fail(err);
   }

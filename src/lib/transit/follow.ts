@@ -16,7 +16,8 @@ export function bindPreviewRelease(fn: (() => void) | null) {
 }
 
 export function setFollowed(key: string | null) {
-  // Drag and Esc release the camera where it is. The Stop button sets the flag first.
+  // Drag, Esc, Show on map, Show map, and a non-vehicle map click release the camera where it is.
+  // The Stop button sets the flag first.
   if (key === null && !restoreOnStop) snap = null;
   // A new vehicle owns the camera, so a playing trip preview lets go without gliding home.
   if (key !== null && key !== followed) onLeavePreview?.();
@@ -63,8 +64,8 @@ export function useFollowed(): string | null {
 /** Non-hook read, for one-off snapshots such as the Ask context. */
 export const followedTrain = (): string | null => followed;
 
-/** Follow camera: behind, beside, above, or in the train's cab. */
-export type FollowMode = "chase" | "side" | "overhead" | "cab";
+/** Follow camera: a flat map view, behind, beside, above, or in the train's cab. */
+export type FollowMode = "map" | "chase" | "side" | "overhead" | "cab";
 let mode: FollowMode = "chase";
 const modeSubs = new Set<() => void>();
 export function setFollowMode(m: FollowMode) {
@@ -73,6 +74,22 @@ export function setFollowMode(m: FollowMode) {
 }
 export function useFollowMode(): FollowMode {
   return useSyncExternalStore((f) => (modeSubs.add(f), () => modeSubs.delete(f)), () => mode);
+}
+
+/**
+ * Keeps the person's own zoom while a camera drives the map every frame: a
+ * zoom since the last frame becomes an offset on top of the camera's zoom.
+ */
+export class ZoomKeeper {
+  private offset = 0;
+  private last: number | null = null;
+  reset(): void { this.offset = 0; this.last = null; }
+  /** The zoom to set this frame, given the camera's own zoom and the map's current zoom. */
+  next(cameraZoom: number, mapZoom: number): number {
+    if (this.last !== null && Math.abs(mapZoom - this.last) > 0.01) this.offset = Math.max(-5, Math.min(4, this.offset + mapZoom - this.last));
+    this.last = cameraZoom + this.offset;
+    return this.last;
+  }
 }
 
 /**

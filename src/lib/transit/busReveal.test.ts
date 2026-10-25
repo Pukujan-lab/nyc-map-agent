@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { busRoutesOfTrip, busesToShow, holdShuttle, registerBusToggle, revealTripBuses, setShuttleBuses, setTripBuses, shownVehicles } from "./busReveal";
+import { busRoutesOfTrip, busesToShow, capPerLine, parseBusCap, parseBusLines, holdShuttle, registerBusToggle, revealTripBuses, setShuttleBuses, setTripBuses, shownVehicles } from "./busReveal";
 
 const leg = (route: string, mode: "bus" | "subway") => ({ kind: "ride", route, mode });
 
@@ -53,5 +53,30 @@ describe("which buses a trip reveals", () => {
     expect(shownVehicles([train, bus], [])).toEqual([train]);
     expect(shownVehicles([train, bus], ["q1"])).toEqual([train, bus]);
     expect(shownVehicles([train, bus], ["B44"])).toEqual([train]);
+  });
+});
+
+describe("picking bus lines and capping buses per line", () => {
+  it("cleans the list: upper case, no repeats, at most 20", () => {
+    expect(parseBusLines(" q1, B41,q1,,m15 ")).toEqual(["Q1", "B41", "M15"]);
+    expect(parseBusLines(null)).toEqual([]);
+    expect(parseBusLines(Array.from({ length: 30 }, (_, i) => `Q${i + 1}`).join(","))).toHaveLength(20);
+  });
+
+  it("keeps buses per line between 1 and 10 and defaults to 3", () => {
+    expect(parseBusCap(null)).toBe(3);
+    expect(parseBusCap("0")).toBe(3);
+    expect(parseBusCap("abc")).toBe(3);
+    expect(parseBusCap("2")).toBe(2);
+    expect(parseBusCap("99")).toBe(10);
+  });
+
+  it("keeps the nearest buses on each line and leaves a short line whole", () => {
+    const at = (route: string, lon: number) => ({ route, lon, lat: 40.7 });
+    const buses = [at("Q1", -73.9), at("Q1", -73.5), at("Q1", -73.81), at("Q1", -73.8), at("B41", -74)];
+    const out = capPerLine(buses, 2, { lon: -73.8, lat: 40.7 });
+    expect(out.filter((b) => b.route === "Q1").map((b) => b.lon)).toEqual([-73.8, -73.81]);
+    expect(out.filter((b) => b.route === "B41")).toHaveLength(1);
+    expect(capPerLine(buses, 2)).toHaveLength(3);
   });
 });

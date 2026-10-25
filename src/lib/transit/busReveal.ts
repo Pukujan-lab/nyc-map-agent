@@ -1,7 +1,37 @@
 import { useSyncExternalStore } from "react";
 
-/** A trip, or a replacement shuttle, may name at most one page of bus routes. */
+/** A trip, a replacement shuttle, or the lines a person picks may name at most this many bus routes. */
 const BUS_REVEAL_CAP = 20;
+export const MAX_PICKED_LINES = BUS_REVEAL_CAP;
+export const DEFAULT_BUSES_PER_LINE = 3;
+export const MAX_BUSES_PER_LINE = 10;
+
+/** `Q1,B41` from the URL to a clean, deduplicated, capped list of route ids. */
+export function parseBusLines(raw: string | null | undefined): string[] {
+  const ids = (raw ?? "").split(",").map((r) => r.trim().toUpperCase()).filter(Boolean);
+  return [...new Set(ids)].slice(0, MAX_PICKED_LINES);
+}
+
+/** A buses-per-line setting from the URL, kept inside 1..MAX_BUSES_PER_LINE. */
+export function parseBusCap(raw: string | null | undefined): number {
+  const n = Math.round(Number(raw));
+  return Number.isFinite(n) && n >= 1 ? Math.min(n, MAX_BUSES_PER_LINE) : DEFAULT_BUSES_PER_LINE;
+}
+
+/**
+ * At most `cap` buses per line, the ones nearest `near`. Without a point the
+ * first reports win, so the result is still stable.
+ */
+export function capPerLine<T extends { route: string; lon: number; lat: number }>(buses: readonly T[], cap: number, near?: { lon: number; lat: number } | null): T[] {
+  const dist = (b: T) => (near ? (b.lon - near.lon) ** 2 + ((b.lat - near.lat) * 1.32) ** 2 : 0);
+  const byLine = new Map<string, T[]>();
+  for (const b of buses) {
+    const key = b.route.toUpperCase();
+    const list = byLine.get(key);
+    if (list) list.push(b); else byLine.set(key, [b]);
+  }
+  return [...byLine.values()].flatMap((list) => [...list].sort((a, b) => dist(a) - dist(b)).slice(0, cap));
+}
 
 type Ride = { kind: string; mode?: string; route?: string };
 type TripLike = { legs: Ride[]; alternatives?: Array<{ legs: Ride[] }> };

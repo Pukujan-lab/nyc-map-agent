@@ -11,7 +11,11 @@
 import { z } from "zod";
 import type { LngLatTuple } from "../../../src/features/agent/schema";
 
-export interface Station { id: string; complexId: string; name: string; routes: string[]; structure: string; at: LngLatTuple }
+export interface Station {
+  id: string; complexId: string; name: string; routes: string[]; structure: string; at: LngLatTuple;
+  /** GTFS stop id (what alert entities and live feeds use) and the direction labels riders see (#361). */
+  gtfsId?: string; north?: string; south?: string;
+}
 export interface Entrance { complexId: string; at: LngLatTuple; type: string; entry: boolean; exit: boolean }
 
 /** What the transit worker's entrances module must expose. */
@@ -55,7 +59,7 @@ export function octant(a: LngLatTuple, b: LngLatTuple): string {
   return ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(deg / 45) % 8];
 }
 
-const stationRow = z.object({ station_id: z.string(), complex_id: z.string(), stop_name: z.string(), daytime_routes: z.string(), structure: z.string(), gtfs_latitude: z.string(), gtfs_longitude: z.string() });
+const stationRow = z.object({ station_id: z.string(), complex_id: z.string(), stop_name: z.string(), daytime_routes: z.string(), structure: z.string(), gtfs_latitude: z.string(), gtfs_longitude: z.string(), gtfs_stop_id: z.string().optional(), north_direction_label: z.string().optional(), south_direction_label: z.string().optional() });
 const entranceRow = z.object({ complex_id: z.string(), entrance_type: z.string(), entry_allowed: z.string(), exit_allowed: z.string(), entrance_latitude: z.string(), entrance_longitude: z.string() });
 
 let stationCache: Promise<Station[]> | null = null;
@@ -70,7 +74,7 @@ async function socrata<T>(id: string, schema: z.ZodType<T>): Promise<T[]> {
 export const openDataEntrances: StationEntrances = {
   stations() {
     stationCache ??= socrata("39hk-dx4f", stationRow).then((rows) =>
-      rows.map((r) => ({ id: r.station_id, complexId: r.complex_id, name: r.stop_name, routes: r.daytime_routes.split(/\s+/).filter(Boolean), structure: r.structure, at: [Number(r.gtfs_longitude), Number(r.gtfs_latitude)] as LngLatTuple })),
+      rows.map((r) => ({ id: r.station_id, complexId: r.complex_id, name: r.stop_name, routes: r.daytime_routes.split(/\s+/).filter(Boolean), structure: r.structure, at: [Number(r.gtfs_longitude), Number(r.gtfs_latitude)] as LngLatTuple, gtfsId: r.gtfs_stop_id, north: r.north_direction_label, south: r.south_direction_label })),
     ).catch((e) => { stationCache = null; throw e; });
     return stationCache;
   },

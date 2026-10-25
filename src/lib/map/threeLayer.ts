@@ -11,6 +11,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { cornerOffset, crossingsNear, dirOf, streetBearingAt, toLocal, type NamedStreet } from "./signPlacement";
 import { busStopsShown, eyeOrCenter, kioskSources, setPickTargets, subscribeBusStops, type PickTarget } from "./streetPick";
 import { LANDMARKS } from "./landmarks";
+import { drawRestroomPictogram } from "./restroomPictogram";
 import { atlasCell, facadeCategory } from "./storefrontCategory";
 import maplibregl, { type CustomLayerInterface, type CustomRenderMethodInput, type Map as MaplibreMap } from "maplibre-gl";
 // Default import: also loads under Node (CJS) for scripts/make-landmarks.ts.
@@ -61,12 +62,19 @@ export type VehicleMode = "subway" | "rail" | "bus";
  * is the real car length in metres the model is scaled to. Until a model loads
  * (or if it fails) the mode keeps its low-poly box. Sources and CC-BY credits:
  * public/models/LICENSE.md.
+ *
+ * Trains (subway, LIRR, Metro-North) have no slot: they are always a box in the
+ * route colour with the route bullet drawn above it (#366). The train models
+ * flashed, stuck after Follow and rode under the el (#319), and cost load time.
  */
-export const VEHICLE_MODELS: Record<VehicleMode, { url: string; length: number }> = {
-  subway: { url: "/api/vehicle-models/subway", length: 15.7 }, // R142, 51 ft
-  rail: { url: "/api/vehicle-models/rail", length: 21.2 }, // P32AC-DM, 69 ft
+export const VEHICLE_MODELS: Partial<Record<VehicleMode, { url: string; length: number }>> = {
   bus: { url: "/api/vehicle-models/bus", length: 12.2 }, // New Flyer XD40, 40 ft
 };
+
+/** True when this mode may load a glTF model at all (trains never do). */
+export function hasVehicleModel(mode: VehicleMode): boolean {
+  return Boolean(VEHICLE_MODELS[mode]);
+}
 
 /**
  * The glTF keeps its own livery (the subway car still reads as a generic train).
@@ -302,10 +310,10 @@ export function createVehicleLayer() {
     // The meshopt decoder is only needed for these models: keep it out of the shared 3D chunk.
     void import("three/examples/jsm/libs/meshopt_decoder.module.js").then(({ MeshoptDecoder }) => {
     const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
-    for (const mode of Object.keys(VEHICLE_MODELS) as VehicleMode[]) {
-      loader.load(VEHICLE_MODELS[mode].url, (gltf) => {
+    for (const [mode, slot] of Object.entries(VEHICLE_MODELS) as Array<[VehicleMode, { url: string; length: number }]>) {
+      loader.load(slot.url, (gltf) => {
         if (models[mode].length) return;
-        models[mode] = vehicleParts(gltf.scene, VEHICLE_MODELS[mode].length).map(({ geometry, material }) => {
+        models[mode] = vehicleParts(gltf.scene, slot.length).map(({ geometry, material }) => {
           // The subway emissive map is a noisy sign atlas. It strobes as the camera moves, and the baked word stays "train".
           const lit = material as THREE.MeshStandardMaterial;
           if (lit.emissive) { lit.emissive.set(0); lit.emissiveMap = null; lit.emissiveIntensity = 0; }
@@ -525,14 +533,14 @@ export function createVehicleLayer() {
       }
       const i = n[v.kind]++;
       if (i >= CAP) continue;
-      const parts = detailed ? models[v.kind] : [];
+      const parts = detailed && hasVehicleModel(v.kind) ? models[v.kind] : [];
       // A loaded model keeps its own livery; the box stand-in carries the route color.
       if (parts.length) for (const part of parts) part.setMatrixAt(i, m4);
       else { boxes[v.kind].setMatrixAt(i, m4); boxes[v.kind].setColorAt(i, color.set(v.color)); }
     }
     for (const mode of Object.keys(n) as VehicleMode[]) {
       const count = Math.min(n[mode], CAP);
-      const useModel = detailed && models[mode].length > 0;
+      const useModel = detailed && hasVehicleModel(mode) && models[mode].length > 0;
       const active = useModel ? models[mode] : [boxes[mode]];
       const inactive = useModel ? [boxes[mode]] : models[mode];
       for (const mesh of active) {
@@ -1119,8 +1127,7 @@ function drawKioskPanels(g: CanvasRenderingContext2D) {
       g.fillRect(x + 10, 10, S - 20, 14);
       g.textAlign = "center";
       g.textBaseline = "middle";
-      g.font = '800 150px "Helvetica Neue", Arial, sans-serif';
-      g.fillText("WC", x + S / 2, 150);
+      drawRestroomPictogram(g, x + S / 2, 150, 170, "#16161a");
       g.font = '600 46px "Helvetica Neue", Arial, sans-serif';
       g.fillText("Restroom", x + S / 2, 262);
       const band = access === "anyone";

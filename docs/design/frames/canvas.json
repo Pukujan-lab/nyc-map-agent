@@ -1,0 +1,260 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Answer.dc.html": {
+      "h": 844,
+      "page": "older",
+      "title": "Older \u00b7 answer with four buttons",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "Answer2.dc.html": {
+      "h": 844,
+      "page": "agreed",
+      "title": "3 \u00b7 Answer with map buttons",
+      "w": 390,
+      "x": 940,
+      "y": 0,
+      "is_interactive": true
+    },
+    "Bus.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "tasks",
+      "title": "14 \u00b7 Following your bus: line focus + notices",
+      "w": 390,
+      "x": 2350,
+      "y": 0
+    },
+    "Calibrate.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "tasks",
+      "title": "10 \u00b7 Calibrate: aim the camera at a landmark",
+      "w": 390,
+      "x": 1880,
+      "y": 0
+    },
+    "Commute.dc.html": {
+      "h": 844,
+      "page": "daily",
+      "title": "12 \u00b7 Commute alert: your train is delayed",
+      "w": 390,
+      "x": 470,
+      "y": 0,
+      "is_interactive": true
+    },
+    "Exit.dc.html": {
+      "h": 844,
+      "page": "tasks",
+      "title": "7 \u00b7 Find exit (underground)",
+      "w": 390,
+      "x": 470,
+      "y": 0,
+      "is_interactive": true
+    },
+    "HomeDaily.dc.html": {
+      "h": 844,
+      "page": "daily",
+      "title": "11 \u00b7 Home for a daily explorer",
+      "w": 390,
+      "x": 0,
+      "y": 0,
+      "is_interactive": true
+    },
+    "Layers.dc.html": {
+      "h": 844,
+      "page": "agreed",
+      "title": "4 \u00b7 Layers: the important few",
+      "w": 390,
+      "x": 1410,
+      "y": 0,
+      "is_interactive": true
+    },
+    "Line.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "agreed",
+      "title": "5 \u00b7 A subway line, selected",
+      "w": 390,
+      "x": 1880,
+      "y": 0
+    },
+    "Listening.dc.html": {
+      "h": 844,
+      "page": "older",
+      "title": "Older \u00b7 hands-free (bars)",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "Listening2.dc.html": {
+      "h": 844,
+      "page": "agreed",
+      "title": "2 \u00b7 Hands-free (orb)",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "Main.dc.html": {
+      "h": 844,
+      "page": "agreed",
+      "title": "1 \u00b7 Home: chat first",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "Memory.dc.html": {
+      "h": 844,
+      "page": "daily",
+      "title": "15 \u00b7 What we remember: memory and data controls",
+      "w": 390,
+      "x": 1410,
+      "y": 0,
+      "is_interactive": true
+    },
+    "MyDay.dc.html": {
+      "h": 844,
+      "page": "daily",
+      "title": "13 \u00b7 My day: the daily explorer dashboard",
+      "w": 390,
+      "x": 940,
+      "y": 0,
+      "is_interactive": true
+    },
+    "Train.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "tasks",
+      "title": "9 \u00b7 Following your train: line focus + notices",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "Trip.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "tasks",
+      "title": "6 \u00b7 Plan trip: preview tomorrow",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "ViewMenu.dc.html": {
+      "h": 844,
+      "page": "agreed",
+      "title": "6 \u00b7 Change view: one button, four views",
+      "w": 390,
+      "x": 2350,
+      "y": 0,
+      "is_interactive": true
+    },
+    "Walk.dc.html": {
+      "h": 844,
+      "page": "tasks",
+      "title": "8 \u00b7 Walk me there: landmark checkpoints",
+      "w": 390,
+      "x": 940,
+      "y": 0,
+      "is_interactive": true
+    },
+    "MyDayClosed.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "daily",
+      "title": "13b \u00b7 My day, closed (dark)",
+      "w": 390,
+      "x": 1880,
+      "y": 0
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-10-24T09:00:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "page": "agreed",
+    "view": "canvas"
+  },
+  "notes": {
+    "t1": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "agreed",
+      "text": "Agreed screens",
+      "w": 240,
+      "x": 0,
+      "y": -260
+    },
+    "t3": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "tasks",
+      "text": "Main tasks",
+      "w": 240,
+      "x": 0,
+      "y": -260
+    },
+    "t4": {
+      "kind": "title1",
+      "maxW": 860,
+      "page": "older",
+      "text": "Older options",
+      "w": 240,
+      "x": 0,
+      "y": -260
+    },
+    "t5": {
+      "kind": "title1",
+      "maxW": 2270,
+      "page": "daily",
+      "text": "Daily explorer",
+      "w": 240,
+      "x": 0,
+      "y": -260
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Listening.dc.html",
+    "Answer.dc.html",
+    "Layers.dc.html",
+    "Line.dc.html",
+    "Listening2.dc.html",
+    "Answer2.dc.html",
+    "Trip.dc.html",
+    "Exit.dc.html",
+    "Walk.dc.html",
+    "Train.dc.html",
+    "Calibrate.dc.html",
+    "HomeDaily.dc.html",
+    "Commute.dc.html",
+    "MyDay.dc.html",
+    "Bus.dc.html",
+    "ViewMenu.dc.html",
+    "Memory.dc.html",
+    "MyDayClosed.dc.html"
+  ],
+  "pages": [
+    {
+      "id": "agreed",
+      "name": "Agreed"
+    },
+    {
+      "id": "tasks",
+      "name": "Main tasks"
+    },
+    {
+      "id": "daily",
+      "name": "Daily explorer"
+    },
+    {
+      "id": "older",
+      "name": "Older options"
+    }
+  ],
+  "title": "NYC Map Agent \u2014 chat-first controls"
+}

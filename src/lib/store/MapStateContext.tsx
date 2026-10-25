@@ -16,6 +16,7 @@ import {
   type MapStyleId,
 } from "@/lib/layers";
 import { parseWindowId, type WindowId } from "@/lib/windows";
+import { sendCamera, useCameraMode } from "@/lib/map/cameraMode";
 
 export interface CameraTarget {
   lon: number;
@@ -33,6 +34,8 @@ export interface NavCommand {
   type: NavCommandType;
   /** For "height": the camera height above the street, in metres. */
   heightM?: number;
+  /** For "height": a tilt to use instead of the one the height implies (Aerial on the agent-first home). */
+  pitch?: number;
   nonce: number;
 }
 
@@ -107,7 +110,7 @@ interface MapStateActions {
   flyTo: (target: Omit<CameraTarget, "nonce">) => void;
   navigate: (type: NavCommandType) => void;
   /** Moves the camera to this height (metres), from eye level to overhead. */
-  setCameraHeight: (heightM: number) => void;
+  setCameraHeight: (heightM: number, pitch?: number) => void;
   /** The camera's current height above the street, reported by the map. */
   cameraHeightM: number;
   reportCameraHeight: (heightM: number) => void;
@@ -134,15 +137,18 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
   const city3dParam = searchParams.get("city3d");
 
   const [tilted, setTilted] = useState(false);
-  const [walking, setWalking] = useState(false);
+  // Street walking is one mode of the camera store, so it can't overlap guidance.
+  const camera = useCameraMode();
+  const walking = camera.kind === "street";
   // Street level defaults to the textured city; an explicit choice in the
   // Layers dropdown (city3d=0/1 in the URL) always wins.
   const eco = searchParams.get("eco") === "1";
   // Eco mode drops the textured city (its facades and props are the heaviest draw).
   const city3d = !eco && (city3dParam === "1" || (city3dParam === null && walking));
-  // Restrooms are on by default (transit-first open, #first-open); restrooms=0 turns them off.
-  const restrooms = searchParams.get("restrooms") !== "0";
-  const [walkRequest, setWalkRequest] = useState<WalkRequest | null>(null);
+  // Restrooms are off by default so the open map stays clean (owner, 2026-10-24);
+  // the Restroom task, an answer or the Layers switch (restrooms=1) shows them.
+  const restrooms = searchParams.get("restrooms") === "1";
+  const walkRequest: WalkRequest | null = camera.kind === "street" ? camera.target : null;
   const [selectedNtaCode, setSelectedNtaCode] = useState<string | null>(null);
   const [selectedBlockKey, setSelectedBlockKey] = useState<string | null>(null);
   const [highlightedNtaCodes, setHighlighted] = useState<string[]>([]);
@@ -216,14 +222,12 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
       // Street level means the block grid: a neighborhood column is a wall you
       // would be standing inside.
       setScale("blocks");
-      // A stale target would drag the camera back to the last block walked.
-      setWalkRequest(target ? { ...target, nonce: Date.now() } : null);
-      setWalking(true);
+      sendCamera({ type: "street", target });
     },
     [setScale],
   );
 
-  const stopWalk = useCallback(() => setWalking(false), []);
+  const stopWalk = useCallback(() => sendCamera({ type: "leave-street" }), []);
 
   const selectNta = useCallback(
     (ntaCode: string | null) => {
@@ -265,8 +269,8 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
     setNavCommand({ type, nonce: Date.now() });
   }, []);
 
-  const setCameraHeight = useCallback((heightM: number) => {
-    setNavCommand({ type: "height", heightM, nonce: Date.now() });
+  const setCameraHeight = useCallback((heightM: number, pitch?: number) => {
+    setNavCommand({ type: "height", heightM, ...(pitch === undefined ? {} : { pitch }), nonce: Date.now() });
   }, []);
 
   const reportCameraHeight = useCallback((heightM: number) => {

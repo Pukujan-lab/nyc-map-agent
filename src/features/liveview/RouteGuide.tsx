@@ -1,4 +1,9 @@
 import "./nav.css";
+import "@/components/task-screens.css";
+import { useSharedLocation } from "@/lib/geo/sharedLocation";
+import { useFlag } from "@/lib/flags";
+import { loadGuideLandmarks, type GuideLandmark } from "@/lib/guide/landmarkGuide";
+import { nextCheckpoint } from "./checkpoints";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowUp, CornerUpLeft, CornerUpRight, Flag, LocateFixed, Navigation, Square, Undo2 } from "lucide-react";
 import type { Map as MapLibreMap } from "maplibre-gl";
@@ -7,9 +12,11 @@ import { Button } from "@/components/ui/button";
 import { onMapInstance } from "@/lib/map/mapInstance";
 import { LOOK_CENTER_DISTANCE_M, poseAlongRoute } from "@/lib/map/walk";
 import { useDataView } from "@/lib/store/DataViewContext";
+import { appGeo } from "@/lib/geo/devGeo";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { installNavLayers, readNavColors, removeNavLayers, roadNameAt, updateNavLayers } from "./layers";
 import { distanceAlong, fetchGuidedRoute, formatMetres, metresLeft, progressAt, type RouteStep } from "./steps";
+import { sendCamera, useCameraMode } from "@/lib/map/cameraMode";
 
 const MILE = 1609.344;
 
@@ -39,13 +46,23 @@ interface Fix {
  * stays in this tab, and is never sent to our API.
  */
 export default function RouteGuide() {
-  const { routeStart, routeEnd } = useDataView();
-  const { walking } = useMapState();
+  const home = useFlag("agentHome");
+  const { routeStart, routeEnd, clearRoute, followingRoute } = useDataView();
+  const { walking, stopWalk, seedChat, setChatOpen, chatOpen } = useMapState();
+  const [landmarks, setLandmarks] = useState<readonly GuideLandmark[]>([]);
+  const [confirmed, setConfirmed] = useState<string[]>([]);
+  const [showPhoto, setShowPhoto] = useState(false);
+  useEffect(() => { void loadGuideLandmarks().then(setLandmarks).catch(() => {}); }, []);
+  useEffect(() => { setConfirmed([]); setShowPhoto(false); }, [routeStart, routeEnd]);
+  const shared = useSharedLocation();
   const [map, setMap] = useState<MapLibreMap | null>(null);
   const [pos, setPos] = useState<{ lon: number; lat: number; bearing: number } | null>(null);
-  const [navigating, setNavigating] = useState(false);
+  // Guidance is a camera mode: it can't overlap a street walk, and a view you pick keeps it from re-tilting.
+  const camera = useCameraMode();
+  const navigating = camera.kind === "guide" || (camera.kind === "street" && camera.back === "guide");
+  const centered = camera.kind === "guide" && camera.centred;
+  const tilt = camera.kind === "guide" && camera.tilt;
   const [fix, setFix] = useState<Fix | null>(null);
-  const [centered, setCentered] = useState(true);
   const [geoError, setGeoError] = useState<string | null>(null);
   const watchRef = useRef<number | null>(null);
 
@@ -59,7 +76,7 @@ export default function RouteGuide() {
     queryFn: ({ signal }) => fetchGuidedRoute(routeStart!, routeEnd!, signal),
   });
 
-  const active = Boolean(route) && (walking || navigating);
+  const active = Boolean(route) && (walking || navigating || (home && followingRoute));
 
   // Layers live while guidance is active; re-added after a style reload and on theme change.
   useEffect(() => {
@@ -112,20 +129,20 @@ export default function RouteGuide() {
 
   // 2D navigation: geolocation only after the tap, cleared on stop and unmount.
   const stopNav = () => {
-    if (watchRef.current !== null) navigator.geolocation.clearWatch(watchRef.current);
+    if (watchRef.current !== null) appGeo()?.clearWatch(watchRef.current);
     watchRef.current = null;
-    setNavigating(false);
+    sendCamera({ type: "stop-guide" });
     setFix(null);
   };
   const startNav = () => {
-    if (!("geolocation" in navigator)) {
+    const g = appGeo();
+    if (!g) {
       setGeoError("This browser has no location access.");
       return;
     }
     setGeoError(null);
-    setNavigating(true);
-    setCentered(true);
-    watchRef.current = navigator.geolocation.watchPosition(
+    sendCamera({ type: "guide" });
+    watchRef.current = g.watchPosition(
       (p) =>
         setFix({
           lon: p.coords.longitude,
@@ -138,13 +155,14 @@ export default function RouteGuide() {
     );
   };
   useEffect(() => () => {
-    if (watchRef.current !== null) navigator.geolocation.clearWatch(watchRef.current);
+    if (watchRef.current !== null) appGeo()?.clearWatch(watchRef.current);
+    sendCamera({ type: "stop-guide" });
   }, []);
   useEffect(() => {
     if (!routeStart || !routeEnd) stopNav();
   }, [routeStart, routeEnd]);
 
-  const here = walking ? pos : fix;
+  const here = walking ? pos : fix ?? (home && followingRoute ? shared.coords ?? routeStart : null);
   const along = route && here ? distanceAlong(route.coordinates, here) : 0;
   const routeBearing = route ? poseAlongRoute(route.coordinates, along + 1)?.bearing ?? 0 : 0;
   const heading = walking ? pos?.bearing ?? 0 : fix?.heading ?? routeBearing;
@@ -170,20 +188,45 @@ export default function RouteGuide() {
   // Heading-up, tilted camera that follows the fix until you pan away.
   useEffect(() => {
     if (!map || !navigating || walking) return;
-    const off = () => setCentered(false);
+    const off = () => sendCamera({ type: "pan" });
     map.on("dragstart", off);
     return () => {
       map.off("dragstart", off);
     };
   }, [map, navigating, walking]);
+  // Heading-up and tilted until you pick a view (Top, Aerial); after that only keep you centred.
   useEffect(() => {
-    if (!map || !navigating || walking || !fix || !centered) return;
+    if (!map || camera.kind !== "guide" || !fix || !centered) return;
+    if (!tilt) { map.easeTo({ center: [fix.lon, fix.lat], duration: 600 }); return; }
     map.easeTo({ center: [fix.lon, fix.lat], bearing: heading, pitch: 55, zoom: Math.max(map.getZoom(), 17), duration: 600 });
-  }, [map, navigating, walking, fix, centered, heading]);
+  }, [map, camera.kind, fix, centered, tilt, heading]);
 
   if (!route) return null;
 
   const left = here ? metresLeft(route, here) : route.steps.reduce((s, x) => s + x.distance, 0);
+
+  const checkpoint = here ? nextCheckpoint(here, heading, landmarks, confirmed) : null;
+  if (home && active) return chatOpen ? null : <>
+    <section className="task-panel task-top flex items-center gap-3.5 px-4 py-3.5" aria-label="Walking guidance">
+      <TurnIcon step={progress?.next ?? null} />
+      <div className="min-w-0 flex-1"><h2 className="text-xl font-bold leading-tight">{checkpoint ? `Walk toward ${checkpoint.landmark.name}` : progress?.instruction ?? "Follow the walking route"}</h2>
+        <p className="mt-0.5 text-sm text-slate-300">{[progress && !checkpoint ? `In ${formatMetres(progress.metresToNext)}` : progress?.instruction, street, `${Math.max(1, Math.round(left / 80))} min left`].filter(Boolean).join(" · ")}</p></div>
+      <button type="button" className="task-action task-secondary h-11 w-11 shrink-0 p-0" aria-label="Stop walking guidance" onClick={() => { stopNav(); stopWalk(); clearRoute(); }}><Square size={18} /></button>
+    </section>
+    {checkpoint?.landmark.picture ? <section className="task-panel task-bottom flex flex-col gap-2.5 p-3.5" aria-label="Landmark checkpoint">
+      <div className="flex items-center gap-2.5">
+        <img src={checkpoint.landmark.picture.url} alt={checkpoint.landmark.name} className="h-11 w-11 shrink-0 rounded-xl border border-slate-400/25 object-cover" />
+        <h3 className="text-base font-semibold">See {checkpoint.landmark.name} {checkpoint.direction}?</h3>
+      </div>
+      {showPhoto ? <figure><img src={checkpoint.landmark.picture.url} alt={`Look for ${checkpoint.landmark.name}`} className="max-h-40 w-full rounded-xl object-contain" /><figcaption className="mt-1 text-xs text-slate-300">About {checkpoint.distanceM} m · {checkpoint.direction}</figcaption></figure> : null}
+      <div className="grid grid-cols-3 gap-2">
+        <button type="button" className="task-action min-h-12" onClick={() => { setConfirmed([...confirmed, checkpoint.landmark.id]); setShowPhoto(false); }}>Yes, I see it</button>
+        <button type="button" className="task-action task-secondary min-h-12" aria-expanded={showPhoto} onClick={() => setShowPhoto(!showPhoto)}>Not yet</button>
+        <button type="button" className="task-action task-secondary min-h-12" onClick={() => { seedChat(`I'm lost on my walk. Help me find ${checkpoint.landmark.name} using visible landmarks.`); setChatOpen(true); }}>I'm lost</button>
+      </div>
+      <a href={checkpoint.landmark.picture.page} target="_blank" rel="noreferrer" className="text-xs text-slate-300">Photo: {checkpoint.landmark.picture.artist} · {checkpoint.landmark.picture.license}</a>
+    </section> : <div className="task-panel task-bottom"><button type="button" className="task-action task-secondary w-full" onClick={() => { seedChat("I'm lost on my walking route. Help me find a visible landmark."); setChatOpen(true); }}>I'm lost</button></div>}
+  </>;
 
   return (
     <>
@@ -212,7 +255,7 @@ export default function RouteGuide() {
       {!walking ? (
         <div className="pointer-events-none absolute inset-x-0 bottom-8 z-30 flex flex-col items-center gap-2 [&>*]:pointer-events-auto">
           {navigating && !centered ? (
-            <Button type="button" size="sm" variant="secondary" onClick={() => setCentered(true)}>
+            <Button type="button" size="sm" variant="secondary" onClick={() => sendCamera({ type: "recenter" })}>
               <LocateFixed className="h-4 w-4" /> Recenter
             </Button>
           ) : null}

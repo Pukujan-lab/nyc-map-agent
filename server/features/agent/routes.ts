@@ -6,95 +6,130 @@
  */
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { stepCountIs, streamText, type LanguageModel } from "ai";
-import { requestBody, type AskContext, type StreamEvent } from "../../../src/features/agent/schema";
+import { requestBody, type StreamEvent } from "../../../src/features/agent/schema";
 import { resolveFlags } from "../../../src/lib/flags/registry";
 import { makeTools, type ToolContext } from "./tools";
 import { toNyLocal } from "./trip";
 import { fallbackFetch, modelChain } from "./model-fallback";
+import { clientIp } from "../../lib/clientIp";
+import { budgetConfigFromEnv, createDailyBudget, createLimiter, limitConfigFromEnv, limitedResponse, noModelMessage } from "./fair-use";
+import { ActionCollector } from "./mapActions";
+import { contextLine, systemPrompt } from "./prompt";
+import { AnswerAudit } from "./audit";
+import { RunLog } from "./runLog";
 
 export const INFERHUB_BASE_URL = process.env.INFERHUB_BASE_URL ?? "https://api.inferhub.dev/v1";
 /** Cheap, fast, good at tool calls: ~$0.075 in / $0.30 out per M tokens (InferHub market max ask). */
 export const DEFAULT_MODEL = "cb/deepseek-v4.1-flash";
 
-/**
- * The exact shared position goes to the model so "from here" directions start
- * at the right corner. It is used for this request only: the server never
- * logs it, writes it to Octo or R2, or keeps it after the response ends.
- */
-export function contextLine(c: AskContext | undefined): string | null {
-  if (!c) return null;
-  const parts = [`The user is in street view at longitude ${c.lon}, latitude ${c.lat}`];
-  if (c.heading !== null) parts.push(`facing ${c.heading} degrees`);
-  if (c.nearestStation) parts.push(`nearest station ${c.nearestStation}`);
-  if (c.nearestEntrance) parts.push(`nearest entrance ${c.nearestEntrance}`);
-  if (c.followedTrain) parts.push(`following train ${c.followedTrain}`);
-  return `${parts.join("; ")}. Treat "here" as that spot unless they say otherwise.`;
-}
+// The prompt lives in prompt.ts; re-exported for existing importers.
+export { contextLine, systemPrompt } from "./prompt";
 
-export function systemPrompt(nowLocal: string, location: { lon: number; lat: number } | null, mode: "walk" | "transit" | "drive" = "transit", context?: AskContext): string {
-  const street = contextLine(context);
-  return [
-    ...(street ? [street] : []),
-    "You are the NYC Map's trip assistant. Answers are spoken aloud: 2-4 short sentences, no markdown, no lists.",
-    `Now is ${nowLocal} in New York. Resolve relative times ("tomorrow at 9am") to local New York time YYYY-MM-DDTHH:MM.`,
-    location
-      ? `The user shared their exact location: longitude ${location.lon}, latitude ${location.lat}. Use "here" for it in tools; do not repeat the coordinates back.`
-      : 'The user\'s location is unknown. If they say "here" or need a start point, tell them to tap Use my location under your reply, or to type a starting address. That button is already on screen.',
-    `The user's mode chip is ${mode}: use drive_plan for drive, route_walk for walk, transit_plan for transit, unless they ask otherwise.`,
-    "For a drive: call drive_plan, then showRoute, openPanel, playFlythrough; answer with ETA, slow segments, closures, tolls and only the parking hints the tool returned.",
-    "For a trip question: call transit_plan, then showRoute, openPanel and playFlythrough with its tripId (speed 10), then answer with: the recommended itinerary (the first one; it arrives earliest) and how it compares with the alternatives in plain words (e.g. \"The Q53 SBS is 20 minutes faster than the subway\"), lines, ETA, weather at that time, any planned work, the recommended exit said plainly (e.g. \"Use the NE exit near East 42nd Street & Lexington Avenue\"), and elevator outages.",
-    'For "arrive by" questions set arriveBy true on transit_plan; otherwise the time is a departure time.',
-    "Spell street names out in full: Street, Avenue, Boulevard, Place, East/West (\"West 44th Street\", \"St. Marks Place\"), never St/Av abbreviations. Keep station names exactly as the MTA writes them (\"Times Sq-42 St\").",
-    "Never advise which train car to board; that data is not available. Do not invent service information that tools did not return.",
-  ].join("\n");
-}
-
-function defaultModel(): LanguageModel {
+function defaultModel(only?: string, run?: RunLog): LanguageModel {
   const key = process.env.INFERHUB_API_KEY;
   if (!key) throw new Error("INFERHUB_API_KEY is not set on the server.");
-  const models = modelChain(process.env.INFERHUB_MODEL ?? DEFAULT_MODEL, process.env.INFERHUB_MODEL_FALLBACKS);
-  return createOpenAICompatible({ name: "inferhub", baseURL: INFERHUB_BASE_URL, apiKey: key, fetch: fallbackFetch(models) })(models[0]);
+  // Over the daily cap only the configured cheap model is tried, with no fallbacks to pricier ones.
+  const models = only ? [only] : modelChain(process.env.INFERHUB_MODEL ?? DEFAULT_MODEL, process.env.INFERHUB_MODEL_FALLBACKS);
+  return createOpenAICompatible({ name: "inferhub", baseURL: INFERHUB_BASE_URL, apiKey: key, fetch: fallbackFetch(models, fetch, (m) => { console.warn(m); run?.note(m); }, undefined, undefined, (m) => run?.usedModel(m)) })(models[0]);
 }
 
-export async function POST(request: Request, opts: { model?: LanguageModel; deps?: ToolContext["deps"] } = {}): Promise<Response> {
+export type FairUse = { limiter: ReturnType<typeof createLimiter>; budget: ReturnType<typeof createDailyBudget>; now: () => number };
+
+/** In-memory, per process (see fair-use.ts): one Node process serves the deployment. Created on first use so env is read at runtime. */
+let shared: FairUse | undefined;
+const sharedFairUse = (): FairUse =>
+  (shared ??= { limiter: createLimiter(limitConfigFromEnv()), budget: createDailyBudget(budgetConfigFromEnv()), now: Date.now });
+
+export async function POST(request: Request, opts: { model?: LanguageModel; deps?: ToolContext["deps"]; fairUse?: FairUse } = {}): Promise<Response> {
   const parsed = requestBody.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "bad_request" }, { status: 400 });
-  const { messages, now, mode, context } = parsed.data;
+  // Only well-formed questions count. The client sends no device id, so the key is the address alone.
+  const fair = opts.fairUse ?? sharedFairUse();
+  const limit = fair.limiter.take(`ip:${clientIp(request.headers)}`);
+  if (!limit.ok) return limitedResponse(limit.retryAt, limit.reason, fair.now());
+  const budget = fair.budget.tier();
+  const { messages, now, mode, context, lang, memory } = parsed.data;
   // Street view's spot counts as the shared location for "here".
   const location = parsed.data.location ?? (context ? { lon: context.lon, lat: context.lat } : null);
   const enc = new TextEncoder();
-  const modelId = process.env.INFERHUB_MODEL ?? DEFAULT_MODEL;
+  const modelId = budget.tier === "cheap" ? budget.model : budget.tier === "none" ? "none" : (process.env.INFERHUB_MODEL ?? DEFAULT_MODEL);
+  // The asker's clock resolves "tomorrow"; a missing or broken one falls back to the server's.
+  const asked = now ? new Date(now) : null;
+  const clock = asked && Number.isFinite(asked.getTime()) ? asked : new Date();
 
   const body = new ReadableStream<Uint8Array>({
     async start(controller) {
       const send = (e: StreamEvent) => controller.enqueue(enc.encode(`${JSON.stringify(e)}\n`));
+      if (budget.tier === "none") {
+        // Daily budget spent: answer without a model call so the chat still says something useful.
+        send({ type: "text", text: noModelMessage(budget.resetAt) });
+        send({ type: "done", model: modelId, usage: { inputTokens: 0, outputTokens: 0 } });
+        controller.close();
+        return;
+      }
+      // Timings for this request: one log line and one core.agent_runs row (no question text).
+      const run = new RunLog(modelId);
+      let finished = false;
+      // Buttons under the answer, from the tool results (#371); one "actions" line before "done".
+      const actions = new ActionCollector();
+      let answerText = "";
+      const flushActions = () => {
+        const list = actions.list(answerText);
+        if (list.length) send({ type: "actions", actions: list });
+      };
+      const nowLocal = toNyLocal(clock);
+      // Data sources and their age, plus the "no guessing" check (#375); one "sources" line before "done".
+      const audit = new AnswerAudit([nowLocal, contextLine(context) ?? "", ...messages.filter((m) => m.role === "user").map((m) => m.content)]);
       try {
-        const model = opts.model ?? defaultModel();
+        const model = opts.model ?? defaultModel(budget.tier === "cheap" ? budget.model : undefined, run);
         const result = streamText({
           model,
-          system: systemPrompt(toNyLocal(now ? new Date(now) : new Date()), location, mode, context),
+          system: systemPrompt(nowLocal, location, mode, context, lang, memory),
           messages,
-          tools: makeTools({ location, emit: (command) => send({ type: "command", command }), deps: opts.deps, drive: resolveFlags({ env: process.env.VITE_FLAGS, advancedMode: false }).agentDrive }),
+          tools: makeTools({ location, now: clock, emit: (command) => send({ type: "command", command }), actions: (a) => actions.add(a), sources: audit.ledger, deps: opts.deps, followedTrain: context?.followedTrain ?? null, drive: resolveFlags({ env: process.env.VITE_FLAGS, advancedMode: false }).agentDrive }),
           stopWhen: stepCountIs(8),
           maxRetries: 1,
           // The default handler console.logs the raw provider error; keep logs to the request id only.
           onError: ({ error }) => {
-            const id = (error as { responseHeaders?: Record<string, string> }).responseHeaders?.["x-inferhub-request-id"];
-            console.warn(`[agent] model call failed${id ? ` (x-inferhub-request-id ${id})` : ""}`);
+            const e = error as { responseHeaders?: Record<string, string>; statusCode?: number; message?: string };
+            const id = e.responseHeaders?.["x-inferhub-request-id"];
+            // Status and the provider's own message say why (busy market, price limit, bad model); the key and request never appear in either.
+            const why = [e.statusCode ? `HTTP ${e.statusCode}` : null, typeof e.message === "string" ? e.message.replace(/\b(sk|ih|Bearer)[-_ ]?[\w.-]{8,}/gi, "[redacted]").slice(0, 160) : null].filter(Boolean).join(" ");
+            console.warn(`[agent] model call failed${why ? `: ${why}` : ""}${id ? ` (x-inferhub-request-id ${id})` : ""}`);
           },
         });
         for await (const part of result.fullStream) {
-          if (part.type === "text-delta") send({ type: "text", text: part.text });
-          else if (part.type === "tool-call") send({ type: "tool", name: part.toolName });
-          else if (part.type === "error") send({ type: "error", message: "The model call failed." });
+          if (part.type === "text-delta") { run.text(); audit.text(part.text); answerText += part.text; send({ type: "text", text: part.text }); }
+          else if (part.type === "tool-call") {
+            // "tool" stays for older clients; "step" pairs a start with its end (#370).
+            send({ type: "tool", name: part.toolName });
+            send({ type: "step", id: part.toolCallId.slice(0, 100), name: part.toolName, status: "start" });
+            run.stepStart(part.toolCallId, part.toolName);
+          } else if (part.type === "tool-result") {
+            audit.toolResult(part.toolName, part.output);
+            send({ type: "step", id: part.toolCallId.slice(0, 100), name: part.toolName, status: "done" });
+            run.stepEnd(part.toolCallId, true);
+          } else if (part.type === "tool-error") { run.stepEnd(part.toolCallId, false); send({ type: "step", id: part.toolCallId.slice(0, 100), name: part.toolName, status: "error" }); }
+          else if (part.type === "error") { run.finish("error", null); finished = true; send({ type: "error", message: "The model call failed." }); }
           else if (part.type === "finish") {
-            send({ type: "done", model: modelId, usage: { inputTokens: part.totalUsage.inputTokens ?? 0, outputTokens: part.totalUsage.outputTokens ?? 0 } });
+            fair.budget.record((part.totalUsage.inputTokens ?? 0) + (part.totalUsage.outputTokens ?? 0));
+            flushActions();
+            const sources = audit.event();
+            if (sources) send(sources);
+            const usage = { inputTokens: part.totalUsage.inputTokens ?? 0, outputTokens: part.totalUsage.outputTokens ?? 0 };
+            run.finish("done", usage);
+            finished = true;
+            send({ type: "done", model: modelId, usage });
           }
         }
       } catch (err) {
+        run.finish("error", null);
+        finished = true;
         // Never echo provider errors verbatim: they can include request headers.
         send({ type: "error", message: err instanceof Error && /INFERHUB_API_KEY/.test(err.message) ? err.message : "The assistant is unavailable right now." });
       } finally {
+        // The stream ended with no finish part: the person left or the provider hung up.
+        if (!finished) run.finish("aborted", null);
         controller.close();
       }
     },
