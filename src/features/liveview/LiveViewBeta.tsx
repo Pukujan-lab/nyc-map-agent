@@ -1,8 +1,11 @@
 import { ArrowUp, Camera, X } from "lucide-react";
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { accuracyLine, accuracyTooLow, headingFromEvent, MAX_AR_ACCURACY_M, relativeBearing, smoothHeading } from "./heading";
 import { fallbackReason, initialPermissions, modeOf, permissionReducer } from "./permission";
+import type { NavFrame } from "./layers";
+
+const ArOverlay = lazy(() => import("./ArOverlay"));
 
 interface Props {
   /** GPS error in metres, null until the first fix. */
@@ -11,6 +14,10 @@ interface Props {
   targetBearing: number;
   instruction: string;
   distanceLabel: string;
+  /** The route and the walker's place on it, for the ribbon over the camera. */
+  frame?: Omit<NavFrame, "puck"> | null;
+  /** GPS position; the overlay is posed from it. */
+  at?: { lon: number; lat: number } | null;
 }
 
 type IosOrientation = typeof DeviceOrientationEvent & { requestPermission?: () => Promise<"granted" | "denied"> };
@@ -18,12 +25,12 @@ type IosOrientation = typeof DeviceOrientationEvent & { requestPermission?: () =
 /**
  * Live View (Beta) scaffold: camera plus compass behind the `liveviewAr` flag.
  * Permissions are requested only on the tap. The camera stream never leaves
- * the page (no recording, no upload). The transparent street-pitch MapLibre
- * overlay is NOT built yet: in this slice the camera shows with the 2D arrow
- * on top, rotated by the smoothed compass heading. Without camera or compass,
- * or above 25 m of GPS error, only the 2D arrow is shown.
+ * the page (no recording, no upload). With camera, compass and a fix within
+ * 25 m, a transparent street-pitch map draws the route ribbon, chevrons and
+ * turn arrow over the picture. Without any of those, a big 2D arrow toward the
+ * next turn, rotated by the smoothed compass heading, stands in.
  */
-export default function LiveViewBeta({ accuracyM, targetBearing, instruction, distanceLabel }: Props) {
+export default function LiveViewBeta({ accuracyM, targetBearing, instruction, distanceLabel, frame = null, at = null }: Props) {
   const [perm, dispatch] = useReducer(permissionReducer, initialPermissions);
   const [open, setOpen] = useState(false);
   const [heading, setHeading] = useState<number | null>(null);
@@ -106,6 +113,7 @@ export default function LiveViewBeta({ accuracyM, targetBearing, instruction, di
   const showCamera = mode === "ar" && !lowAccuracy;
   const reason = fallbackReason(perm);
   const rotation = heading === null ? 0 : relativeBearing(targetBearing, heading);
+  const overlay = showCamera && frame !== null && at !== null && heading !== null;
 
   if (!open) {
     return (
@@ -118,11 +126,18 @@ export default function LiveViewBeta({ accuracyM, targetBearing, instruction, di
   return (
     <div className="pointer-events-auto fixed inset-0 z-50 flex flex-col items-center justify-end gap-3 bg-background p-4 pb-10" role="dialog" aria-label="Live View (Beta)">
       <video ref={videoRef} autoPlay playsInline muted className={`absolute inset-0 h-full w-full object-cover ${showCamera ? "" : "hidden"}`} />
+      {overlay ? (
+        <Suspense fallback={null}>
+          <ArOverlay frame={frame} at={at} heading={heading} />
+        </Suspense>
+      ) : null}
       <div className="relative flex flex-1 flex-col items-center justify-center gap-2">
         {mode === "requesting" ? <p className="rounded bg-background/90 px-3 py-1 text-sm">Waiting for camera and compass permission…</p> : null}
         {mode !== "requesting" ? (
           <>
-            <ArrowUp className="h-32 w-32 text-primary drop-shadow-lg" style={{ transform: `rotate(${showCamera ? rotation : 0}deg)` }} aria-hidden />
+            {overlay ? null : (
+              <ArrowUp className="h-32 w-32 text-primary drop-shadow-lg" style={{ transform: `rotate(${showCamera ? rotation : 0}deg)` }} aria-hidden />
+            )}
             <p className="rounded bg-background/90 px-3 py-1 text-lg font-semibold" role="status">
               {instruction}, {distanceLabel}
             </p>

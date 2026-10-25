@@ -287,6 +287,8 @@ export default function RouteGuide() {
                 targetBearing={fix ? bearingTo(fix, { lon: progress.next.location[0], lat: progress.next.location[1] }) : routeBearing}
                 instruction={progress.instruction}
                 distanceLabel={formatMetres(progress.metresToNext)}
+                frame={route ? { route, along, next: progress.next } : null}
+                at={fix}
               />
             </Suspense>
           ) : null}
