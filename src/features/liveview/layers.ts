@@ -224,7 +224,7 @@ export function removeNavLayers(map: MapLibreMap): void {
   for (const id of Object.values(SRC)) if (map.getSource(id)) map.removeSource(id);
 }
 
-interface NavFrame {
+export interface NavFrame {
   route: GuidedRoute;
   along: number;
   next: RouteStep | null;
