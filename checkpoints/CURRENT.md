@@ -12,6 +12,8 @@ GitHub Issues own task scope and progress; this file is a projection of them, no
 
 ## Completed recently
 
+- **Focused lines and stations read properly (2026-10-25, #419):** a focused line used to break into gaps where it shared track with another line, and a skipped station said nothing when tapped. Now a focused line is drawn solid end to end, underground too, with only its own repairs and skips; a station panel opens with the notices that name it, sits below the menu row, and lets you tap one line's bullet to see only that line. Repeated taps on one spot step through each train and then the station. The exit card is a short strip so the map stays in view.
+- **Live map fixes for judging (2026-10-25, #419):** trains on the way to their first remaining stop glide again instead of parking at it; restrooms closed by their listed hours are skipped; More scrolls what it opens into view; the locate button uses the crosshair people know from Google Maps. Every visitor now gets one question per 5 seconds, and the 20-per-3-hours window is off until the end of 26 Oct in New York, then comes back on its own.
 - **The agent-first home landed:** chat bar at the bottom, menus top-left, task screens, memory on the phone (#395), followed by fixes to the map, panels, buses, answers and voice (#396 to #407).
 - **Panels no longer hide what you are tracking:** the map moves its centre into the uncovered part of the screen, and the line panel docks to the side on tablets and desktops (#409, #410).
 - **One place now decides who gets the screen:** an XState state machine in `src/lib/screen/screenSpace.ts`. The answer folds to a chip under menus and tasks, the line panel folds to a pill on phones, and sending a question closes menus. A test covers every pair of panels in both orders, and a browser test checks six screen sizes (#412). The rules themselves are in `docs/PDD.md`, "Screen space" (#411).
@@ -25,9 +27,11 @@ GitHub Issues own task scope and progress; this file is a projection of them, no
 |---|---|---|
 | #415 | Held trains and feed-skipped stops from live MTA data, on the map and in the line panel; replaces #198 | Auto-merge on |
 | #359 | Live View camera and compass scaffold, behind a flag (groundwork for fixing which way you face after the subway) | Auto-merge on |
-| #416 | The app's own buttons, ask bar and station prompt follow the language you ask in (eight languages) | Auto-merge on |
+| #417 | The top menu row and its dropdowns, including My day, follow the app language too | Auto-merge on |
 | #378 | Docs: realign the project, hackathon writeup and research sources | Open for review |
 | #232 | The release bot's release pull request | Left to the bot |
+
+#416 (app text follows the asked language) merged on 2026-10-25.
 
 Merged from the sort: #209, #348, #349, #394, #408, #414.
 

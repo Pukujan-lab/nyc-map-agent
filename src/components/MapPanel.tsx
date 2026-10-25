@@ -153,11 +153,13 @@ export function MapPanel({
       root.style.removeProperty("--controls-display");
     };
   }, [isDesktop, showSheet, layersOpen, snap]);
-  // No top bar: the sheet, the drawer and the status chip start at the top edge.
+  // No top bar, but the menu row (My day, layers…) sits top-left: the side sheet starts below it, or its
+  // title hides under the row (owner screenshot, 2026-10-25).
   useLayoutEffect(() => {
     if (!home) return;
     const root = document.documentElement;
-    root.style.setProperty("--topbar-h", "0px");
+    const row = document.querySelector<HTMLElement>("[data-testid='menu-row'] > *");
+    root.style.setProperty("--topbar-h", `${row ? Math.ceil(row.getBoundingClientRect().bottom) : 64}px`);
     return () => { root.style.removeProperty("--topbar-h"); };
   }, [home]);
   if (panelHidden) return null;

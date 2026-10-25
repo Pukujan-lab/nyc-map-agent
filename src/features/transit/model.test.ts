@@ -213,4 +213,21 @@ describe("live feed status on the real subway build", () => {
     expect(v.stopped).toBeUndefined();
     expect(v.nextStop).toBe("F33S");
   });
+  // #419: 116 of 252 live trips reported their first remaining stop as the one they were travelling to.
+  it("a train travelling to its first remaining stop moves toward it instead of parking at it", () => {
+    const t = { id: "094550_F..S", route: "F", dir: 1, stops: [["F33S", NOW + 60], ["F34S", NOW + 200]] as Array<[string, number]>, at: "F33S", st: 2 };
+    const a = estimateTrain(real, t, NOW)!;
+    const b = estimateTrain(real, t, NOW + 30)!;
+    expect(a.stopped).toBeUndefined();
+    expect(a.nextStop).toBe("F33S");
+    expect(Math.hypot(b.lon - a.lon, b.lat - a.lat)).toBeGreaterThan(0); // it glides between updates
+  });
+  it("a late train still on the way waits short of its first remaining stop, not at it", () => {
+    const t = { id: "094550_F..S", route: "F", dir: 1, stops: [["F33S", NOW - 60], ["F34S", NOW + 200]] as Array<[string, number]>, at: "F33S", st: 2 };
+    const v = estimateTrain(real, t, NOW)!;
+    expect(v.stopped).toBeUndefined();
+    expect(v.nextStop).toBe("F33S");
+    const stop = real.stations.features.find((f) => f.properties.id === "F33")!.geometry.coordinates;
+    expect(Math.hypot(v.lon - stop[0], v.lat - stop[1])).toBeGreaterThan(0.0005);
+  });
 });

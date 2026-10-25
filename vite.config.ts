@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig, loadEnv, type Plugin, type ViteDevServer } from "vite";
 import react from "@vitejs/plugin-react";
 
@@ -69,5 +70,8 @@ export default defineConfig(({ mode }) => {
       host: true,
       proxy: proxyTarget ? { "/api": { target: proxyTarget, changeOrigin: true } } : undefined,
     },
+    // Route tests share one client address; the live 5-second cooldown would refuse their back-to-back questions.
+    // Tests that check the limits build their own limiter.
+    test: { env: { AGENT_RATE_BURST_MAX: "0" } },
   };
 });

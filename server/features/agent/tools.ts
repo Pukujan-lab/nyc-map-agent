@@ -144,13 +144,13 @@ export function makeTools(ctx: ToolContext) {
       }),
     }),
     nearest_restroom: tool({
-      description: "Closest public restrooms (NYC Open Data) to a place, open ones first: name, distance in meters, status, hours, accessibility.",
+      description: "Closest public restrooms (NYC Open Data) to a place, skipping ones closed right now by their listed hours: name, distance in meters, status, hours, accessibility.",
       inputSchema: args.nearest_restroom,
       execute: sourced(async ({ place }: z.infer<typeof args.nearest_restroom>) => {
-        const spots = nearestRestrooms(await (ctx.deps?.restrooms ?? publicRestrooms)(), at(await resolve(place)));
+        const spots = nearestRestrooms(await (ctx.deps?.restrooms ?? publicRestrooms)(), at(await resolve(place)), 3, now());
         offer(restroomActions(spots));
         // Coordinates stay out of the model's view; the button carries them.
-        return { restrooms: spots.map((r) => ({ name: r.name, distanceM: r.distanceM, status: r.status, hours: r.hours, accessibility: r.accessibility, operator: r.operator })) };
+        return { restrooms: spots.map((r) => ({ name: r.name, distanceM: r.distanceM, status: r.status, hours: r.hours, openNow: r.openNow, accessibility: r.accessibility, operator: r.operator })) };
       }),
     }),
     line_status: tool({

@@ -76,6 +76,11 @@ export function AnswerCard(p: AnswerCardProps) {
   const t = useT();
   const [more, setMore] = useState(false);
   useEffect(() => setMore(false), [p.question]);
+  // What More opens sits below the fold of the scrolling answer area: bring it into view.
+  const moreEnd = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (more) moreEnd.current?.scrollIntoView({ block: "nearest", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  }, [more]);
   const done = !p.busy && !!p.text;
   return (
     <div className="flex flex-col gap-3.5" data-testid="answer-card">
@@ -104,6 +109,7 @@ export function AnswerCard(p: AnswerCardProps) {
                     <Button type="button" variant="ghost" className={SECONDARY} onClick={p.onNearby}>{t("nearby")}</Button>
                     <Button type="button" variant="ghost" className={SECONDARY} onClick={p.onOther}>{t("otherOptions")}</Button>
                   </div>
+                  <div ref={moreEnd} aria-hidden="true" />
                 </>
               ) : null}
             </div>

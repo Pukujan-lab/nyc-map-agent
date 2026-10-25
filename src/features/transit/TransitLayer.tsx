@@ -57,6 +57,7 @@ import { usePalette, type Palette } from "@/lib/theme";
 import { RAISED_LIFT_PX, STOP_LIFT_PX, alertCameraAction, paintAboveVehicles, trainIconOffset } from "./layerOrder";
 import { FOCUS_OPACITY, FOCUS_VEIL_ID, WORLD, focusVeil, useTransitFocus } from "@/lib/map/transitFocus";
 import { framePadding } from "@/lib/map/mapCover";
+import { TapCycle } from "./tapCycle";
 
 /** Layers a click on the map should hand to transit instead of the area pick. */
 /** CC BY 4.0 credit for the 3D bus model (public/models/LICENSE.md), shown while it can be on screen. Trains are plain boxes (#366). */
@@ -367,6 +368,22 @@ export default function TransitLayer() {
       return s.system === "subway" ? splitRaised(fs, raised.raisedCells) : fs;
     }),
   }), [staticKey, raised]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The picked line drawn from its own shapes, whole and solid. The deduped drawing gives a shared trunk to
+  // whichever same-colour route came first (the N's Broadway run is labelled Q or R), so dimming the other
+  // routes left gaps in the picked one (#419).
+  // An open subway station with no line picked highlights every line that stops there (owner, 2026-10-25);
+  // its line bullets then isolate one.
+  const stationOpen = !lineSel && content?.id.startsWith("transit:station:subway:") ? content.id.split(":").pop() ?? "" : "";
+  const stationRoutes = useMemo(() => {
+    const sub = statics.find((s) => s.system === "subway");
+    const f = stationOpen && sub ? sub.stations.features.find((x) => String(x.properties.id) === stationOpen) : undefined;
+    return f ? String(f.properties.routes ?? "").split(/[\s,]+/).filter(Boolean) : [];
+  }, [staticKey, stationOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shownRoutes = lineSel ? isoRoutes : stationRoutes;
+  const pickedLine = useMemo<GeoJSON.FeatureCollection>(() => {
+    const sub = statics.find((s) => s.system === "subway");
+    return { type: "FeatureCollection", features: shownRoutes.length && sub ? sub.lines.features.filter((f) => shownRoutes.includes(String(f.properties.route))) : [] };
+  }, [staticKey, shownRoutes]); // eslint-disable-line react-hooks/exhaustive-deps
   const stations = useMemo<GeoJSON.FeatureCollection>(() => {
     // One name per station complex: same-name neighbours would stack the label twice (#312).
     const labelled = labelledStationIds(statics.flatMap((s) => s.system !== "subway" ? [] : s.stations.features.map((f) => ({ id: String(f.properties.id), name: String(f.properties.name ?? ""), lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1] }))));
@@ -401,11 +418,11 @@ export default function TransitLayer() {
         const st = stationPos.get(key);
         if (!st || seen.has(key)) continue;
         seen.add(key);
-        if (a.kind === "planned") points.push({ type: "Feature", properties: { id: a.id }, geometry: st.geometry });
+        if (a.kind === "planned") points.push({ type: "Feature", properties: { id: a.id, routes: ` ${a.routes.join(" ")} ` }, geometry: st.geometry });
       }
       for (const r of a.routes) {
         const c = shapeSlice(sys, r, a.stops);
-        if (c) segs.push({ type: "Feature", properties: { id: a.id }, geometry: { type: "LineString", coordinates: c } });
+        if (c) segs.push({ type: "Feature", properties: { id: a.id, route: r }, geometry: { type: "LineString", coordinates: c } });
       }
     }
     // Skipped stations (direction-aware): full cross when skipped both ways, half strike + label for one direction.
@@ -415,7 +432,7 @@ export default function TransitLayer() {
         const st = stationPos.get(`subway:${id}`);
         if (!st || !c.skips.length) continue;
         const both = c.skips.some((k) => k.end === null);
-        skips.push({ type: "Feature", properties: { ...st.properties, icon: both ? "transit-skip-x" : "transit-skip-half", label: both ? "Skipped" : `Skipped ${c.skips[0].toward}-bound`, alertId: c.skips[0].alertId }, geometry: st.geometry });
+        skips.push({ type: "Feature", properties: { ...st.properties, skipRoutes: ` ${[...new Set(c.skips.map((k) => k.route))].join(" ")} `, icon: both ? "transit-skip-x" : "transit-skip-half", label: both ? "Skipped" : `Skipped ${c.skips[0].toward}-bound`, alertId: c.skips[0].alertId }, geometry: st.geometry });
       }
     }
     const accessSeen = new Set<string>();
@@ -869,12 +886,14 @@ export default function TransitLayer() {
   homeRef.current = home;
   const followZoom = useRef(new ZoomKeeper());
   const followZoomKey = useRef<string | null>(null);
+  const tapCycle = useRef(new TapCycle());
   // A train or bus starts Follow. Any other map click, including empty map, drops it in place.
   useEffect(() => {
     if (!map) return;
     const onClick = (e: MapLayerMouseEvent) => {
       const layers = TRANSIT_CLICK_LAYERS.filter((id) => map.getLayer(id));
-      const f = layers.length ? map.queryRenderedFeatures(e.point, { layers })[0] : undefined;
+      const all = layers.length ? map.queryRenderedFeatures(e.point, { layers }) : [];
+      const f = tapCycle.current.next(e.point, all);
       if (f?.properties && (f.layer.id === "transit-skip" || f.layer.id === "transit-alert-skipped")) {
         const id = String(f.properties.id ?? "");
         if (!id) return;
@@ -997,11 +1016,11 @@ export default function TransitLayer() {
   const fadeIn = (alpha: unknown) => ["interpolate", ["linear"], ["zoom"], 11.5, brightRoutes.length ? ["case", bright, alpha, 0] : 0, 12.5, alpha] as unknown as number;
   const bulletAlpha = fadeIn(trainAlpha);
   const dotAlpha = (brightRoutes.length ? ["interpolate", ["linear"], ["zoom"], 11.5, ["case", bright, 1, 0], 12.5, 0] : 0) as unknown as number;
-  const dimLines = (alertFocus ? 0.12 : lineAlpha);
+  const dimLines = (alertFocus || stationRoutes.length ? 0.12 : lineAlpha);
   // Isolated lines: their stations stay, the rest fade.
   const stationAlpha = (isoRoutes.length ? ["case", ["any", ...isoRoutes.map((r) => ["in", ` ${r} `, ["concat", " ", ["get", "routes"], " "]])], 1, 0.15] : 1) as number;
   // Underground dashes keep their width (#336); a selected line's read solid, the others fade.
-  const underAlpha = (lineSel ? ["case", ["in", ["get", "route"], ["literal", isoRoutes]], 0.95, 0.08] : 0.75) as number;
+  const underAlpha = (lineSel ? ["case", ["in", ["get", "route"], ["literal", isoRoutes]], 0.95, 0.08] : stationRoutes.length ? 0.08 : 0.75) as number;
   // The selected line's trains read larger than the dimmed rest.
   const bulletScale = (lineSel ? ["case", ["in", ["get", "route"], ["literal", isoRoutes]], 1.3, 1] : 1) as unknown;
   // No line picked: match nothing. A legacy ["==", 1, 0] filter is a style error, and one
@@ -1015,14 +1034,18 @@ export default function TransitLayer() {
       {followed ? <FollowCard vehicle={followed} /> : null}
       {lineSel && !followedKey ? <Suspense fallback={null}><LinePanel map={map} route={lineSel} onFollow={followLine} /></Suspense> : null}
       <Source id="transit-lines" type="geojson" data={lines}>
-        {/* X-ray on stays a solid glow. Off: a dash nearly as wide as the at-grade stroke (zoom 10 → 2.4, 16 → 5), opacity 0.75: the lines lead the map. */}
-        <Layer id="transit-line-under" type="line" filter={["==", ["get", "grade"], "underground"]}
+        {/* X-ray on stays a solid glow. Off: solid too (owner, 2026-10-25: dashes read as a broken line), nearly as wide as the at-grade stroke, opacity 0.75. */}
+        <Layer id="transit-line-under" type="line" filter={["==", ["get", "grade"], "underground"]} layout={{ "line-cap": "round", "line-join": "round" }}
           paint={xrayOn
             ? { "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 2, 16, 6], "line-opacity": 0.95, "line-blur": 1 }
-            : { "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 2.4, 16, 5], "line-opacity": underAlpha, "line-dasharray": [2, 1.5] }} />
+            : { "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 2.4, 16, 5], "line-opacity": underAlpha }} />
         <Layer id="transit-line" type="line" filter={three ? ["==", ["get", "grade"], "grade"] : ["!=", ["get", "grade"], "underground"]}
           layout={{ "line-cap": "round", "line-join": "round" }}
           paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, focus ? 3 : 2.6, 16, focus ? 5.8 : 5], "line-opacity": dimLines }} />
+      </Source>
+      <Source id="transit-line-picked" type="geojson" data={pickedLine}>
+        <Layer id="transit-line-picked" type="line" layout={{ "line-cap": "round", "line-join": "round" }}
+          paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 3.2, 16, 6.5], "line-opacity": 1 }} />
       </Source>
       {xrayOn && !three ? (
         // Top-down X-ray: the ground and buildings fade so the tunnels below read through.
@@ -1037,7 +1060,9 @@ export default function TransitLayer() {
         </Source>
       ) : null}
       <Source id="transit-work-segs" type="geojson" data={work.segs}>
-        <Layer id="transit-work-line" type="line" paint={{ "line-color": "#f59e0b", "line-width": ["interpolate", ["linear"], ["zoom"], 10, 2, 16, 6], "line-dasharray": [1, 1.5], "line-opacity": lineSel ? 0.15 : 0.85 }} />
+        {/* A picked line shows only its own planned work; other lines' repairs are noise there. */}
+        <Layer id="transit-work-line" type="line" filter={(lineSel ? ["in", ["get", "route"], ["literal", isoRoutes]] : ["boolean", true]) as never}
+          paint={{ "line-color": "#f59e0b", "line-width": ["interpolate", ["linear"], ["zoom"], 10, 2, 16, 6], "line-dasharray": [1, 1.5], "line-opacity": 0.85 }} />
       </Source>
       <Source id="transit-viaduct" type="geojson" data={three ? viaduct : EMPTY} attribution={three ? VEHICLE_CREDITS : undefined}>
         <Layer id="transit-viaduct" type="fill-extrusion" minzoom={13} filter={["any", ["get", "bridge"], ["<", ["zoom"], 15]]}
@@ -1082,11 +1107,11 @@ export default function TransitLayer() {
           paint={{ "circle-color": "#16a34a", "circle-stroke-color": "#ffffff", "circle-stroke-width": walking ? 0 : 1, "circle-radius": walking ? 14 : 3.5, "circle-opacity": walking ? 0.01 : 1, "circle-stroke-opacity": walking ? 0 : 1 }} />
       </Source>
       <Source id="transit-work-points" type="geojson" data={work.points}>
-        <Layer id="transit-work" type="symbol" minzoom={11}
+        <Layer id="transit-work" type="symbol" minzoom={11} filter={(lineSel ? ["in", ` ${lineSel} `, ["get", "routes"]] : ["boolean", true]) as never}
           layout={{ "icon-image": "transit-wrench", "icon-size": ["interpolate", ["linear"], ["zoom"], 11, 0.35, 16, 0.6], "icon-offset": [18, -18], "icon-allow-overlap": true }} />
       </Source>
       <Source id="transit-skips" type="geojson" data={work.skips}>
-        <Layer id="transit-skip" type="symbol" minzoom={11}
+        <Layer id="transit-skip" type="symbol" minzoom={11} filter={(lineSel ? ["in", ` ${lineSel} `, ["get", "skipRoutes"]] : ["boolean", true]) as never}
           layout={{ "icon-image": ["get", "icon"], "icon-size": ["interpolate", ["linear"], ["zoom"], 11, 0.5, 16, 0.9], "icon-allow-overlap": true, "icon-ignore-placement": true,
             "icon-offset": [18, -18],
             "text-field": ["step", ["zoom"], "", 13.5, ["get", "label"]], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-anchor": "left", "text-offset": [1.1, 0], "text-optional": true }}
