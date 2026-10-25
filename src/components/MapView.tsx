@@ -58,8 +58,11 @@ import {
   applyStreetPalette,
   loadStreetTextures,
   BASEMAP_STYLE_URL,
+  VECTOR_SOURCE,
   installDataLayers,
+  warmBasemapFonts,
 } from "@/lib/map/basemap";
+import { markBasemapReady } from "@/lib/map/basemapReady";
 import {
   blockSelectionToGeoJson,
   blocksToGeoJson,
@@ -545,6 +548,8 @@ export function MapView({
     if (!map) return;
     installDataLayers(map);
     applyAtmosphere(map);
+    // "load" waits for the first tiles; onSourceData below covers browsers that never send it.
+    markBasemapReady();
     setMapInstance(map);
     watchMapCovers(map);
     setStyleEpoch((epoch) => epoch + 1);
@@ -1625,6 +1630,8 @@ export function MapView({
     };
   }, [ready, reportCameraHeight]);
 
+  useEffect(warmBasemapFonts, []);
+
   // Eco mode: render at 1x instead of the device pixel ratio.
   useEffect(() => {
     if (!ready) return;
@@ -1663,6 +1670,9 @@ export function MapView({
         dragRotate={!walking}
         touchPitch={!walking}
         onLoad={handleLoad}
+        onSourceData={(e) => {
+          if (e.sourceId === VECTOR_SOURCE && e.isSourceLoaded) markBasemapReady();
+        }}
         onError={handleError}
         onMouseMove={handleMouseMove}
         onMoveStart={handleMoveStart}

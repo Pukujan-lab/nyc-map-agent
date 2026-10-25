@@ -8,12 +8,23 @@ import { DATA_LAYERS, DATA_SOURCES, LAYER_IDS } from "./style";
  *
  * Override with `VITE_BASEMAP_STYLE` to point at any MapLibre style URL.
  */
-export const BASEMAP_STYLE_URL =
-  import.meta.env.VITE_BASEMAP_STYLE ??
-  "https://tiles.openfreemap.org/styles/liberty";
+const DEFAULT_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
+export const BASEMAP_STYLE_URL = import.meta.env.VITE_BASEMAP_STYLE ?? DEFAULT_STYLE_URL;
 
 /** OpenMapTiles schema names, used only if the style has no 3D buildings yet. */
-const VECTOR_SOURCE = "openmaptiles";
+export const VECTOR_SOURCE = "openmaptiles";
+
+/**
+ * MapLibre asks for label fonts only after it has parsed the first tiles, and
+ * draws none of a tile until they arrive. Asking for the default style's two
+ * fonts as the map starts puts them in the browser's cache by then.
+ */
+export function warmBasemapFonts(): void {
+  if (BASEMAP_STYLE_URL !== DEFAULT_STYLE_URL || typeof fetch !== "function") return;
+  for (const font of ["Noto Sans Regular", "Noto Sans Italic"]) {
+    void fetch(`https://tiles.openfreemap.org/fonts/${encodeURIComponent(font)}/0-255.pbf`).catch(() => {});
+  }
+}
 const BUILDING_SOURCE_LAYER = "building";
 
 /**

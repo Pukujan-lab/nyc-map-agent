@@ -7,6 +7,7 @@ import {
   writeCachedAggregate,
 } from "@/lib/cache/aggregateCache";
 import { windowBounds, type WindowId } from "@/lib/windows";
+import { useBasemapReady } from "@/lib/map/basemapReady";
 import type {
   AggregateResult,
   AggregateWorkerRequest,
@@ -129,6 +130,7 @@ export function useMapData(windowId: WindowId, analytics = true): MapData {
     null,
   );
 
+  const mapShown = useBasemapReady();
   const boundariesQuery = useQuery({
     queryKey: ["nta-boundaries"],
     queryFn: ({ signal }) =>
@@ -136,6 +138,8 @@ export function useMapData(windowId: WindowId, analytics = true): MapData {
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: Number.POSITIVE_INFINITY,
     retry: 2,
+    // Neighbourhood shapes (70 kB) wait for the basemap on a slow phone (basemapReady.ts).
+    enabled: mapShown,
   });
 
   const boundaries = boundariesQuery.data ?? null;

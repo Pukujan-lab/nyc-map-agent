@@ -32,6 +32,7 @@ import { useT } from "@/lib/i18n/appLang";
 import { usePanel } from "@/lib/store/PanelContext";
 import { setSelectedLine, useSelectedLine } from "@/lib/transit/selectedLine";
 import { whereYouAre } from "./where";
+import { useBasemapReady } from "@/lib/map/basemapReady";
 
 type Mode = "idle" | "ride" | "which" | "station" | "calibrate" | "landmark" | "corner" | "walk";
 
@@ -241,10 +242,12 @@ export default function Underground() {
   );
 
   // Static data: same query key as the transit feature, so subway.json is fetched once (and the worker keeps it).
+  const mapShown = useBasemapReady();
   const { data: sys } = useQuery({
     queryKey: ["transit", "static", "subway"],
     queryFn: async () => (await (await fetch("/transit/subway.json")).json()) as SubwayStatic,
     staleTime: Infinity,
+    enabled: mapShown,
   });
   const { data: units = [] } = useQuery({
     queryKey: ["underground", "equipment"],

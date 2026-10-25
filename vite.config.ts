@@ -55,7 +55,8 @@ function devApi(env: Record<string, string>): Plugin {
  * Build only: main.tsx loads the app (src/boot.tsx) after the first paint, so nothing in
  * index.html points at the app's files and they would not start downloading until then.
  * This adds a modulepreload for the app and every file it imports, and a preload for its
- * styles, so they download alongside the page without holding up the first paint.
+ * styles (crossorigin, like Vite's own stylesheet links, or the browser fetches them twice),
+ * so they download alongside the page without holding up the first paint.
  */
 function preloadBoot(): Plugin {
   return {
@@ -79,7 +80,7 @@ function preloadBoot(): Plugin {
         };
         visit(boot.fileName);
         const tags: HtmlTagDescriptor[] = [];
-        for (const css of styles) tags.push({ tag: "link", attrs: { rel: "preload", as: "style", href: `/${css}` }, injectTo: "head" });
+        for (const css of styles) tags.push({ tag: "link", attrs: { rel: "preload", as: "style", crossorigin: true, href: `/${css}` }, injectTo: "head" });
         for (const js of scripts) tags.push({ tag: "link", attrs: { rel: "modulepreload", crossorigin: true, href: `/${js}` }, injectTo: "head" });
         return tags;
       },
