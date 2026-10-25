@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bladeName, cornerOffset, crossingsNear, streetBearingAt } from "./signPlacement";
+import { bladeName, cornerOffset, crossingsNear, onPavement, streetBearingAt } from "./signPlacement";
 
 describe("cornerOffset", () => {
   it("puts a right-angle corner pole 6.5 m off both centrelines", () => {
@@ -52,5 +52,27 @@ describe("bladeName", () => {
     expect(bladeName("West 44th Street")).toBe("W 44 St");
     expect(bladeName("Avenue of the Americas")).toBe("Av of the Americas");
     expect(bladeName("Essex Street")).toBe("Essex St");
+  });
+});
+
+describe("onPavement", () => {
+  // An east-west street along lat 40.75.
+  const street: Array<Array<[number, number]>> = [[[-73.99, 40.75], [-73.98, 40.75]]];
+  const north = (m: number) => 40.75 + m / 111_320;
+
+  it("moves a point recorded inside a building out to the pavement", () => {
+    const [lng, lat] = onPavement(street, -73.985, north(30));
+    expect(lng).toBeCloseTo(-73.985, 6);
+    expect((lat - 40.75) * 111_320).toBeCloseTo(7, 1);
+  });
+
+  it("keeps a point already on the pavement, and one far from any street", () => {
+    expect(onPavement(street, -73.985, north(8))).toEqual([-73.985, north(8)]);
+    expect(onPavement(street, -73.985, north(80))).toEqual([-73.985, north(80)]);
+  });
+
+  it("stays on the side of the street it was recorded on", () => {
+    const [, lat] = onPavement(street, -73.985, north(-25));
+    expect((lat - 40.75) * 111_320).toBeCloseTo(-7, 1);
   });
 });
