@@ -5,8 +5,7 @@ import { lineColor } from "@/lib/transit/bullets";
 import { setSelectedLine, useSelectedLine } from "@/lib/transit/selectedLine";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { framePadding } from "@/lib/map/mapCover";
-import { useAnswerShown } from "@/lib/agent/answerShown";
-import { useMediaQuery } from "@/lib/useMediaQuery";
+import { sendScreen, useScreen } from "@/lib/screen/screenSpace";
 import { setAlertFocus } from "./alertFocus";
 import { useAlerts, useNow, useTransitData } from "./hooks";
 import { boardingArrivals, minutesUntil } from "./model";
@@ -81,12 +80,9 @@ export function LinePanel({ map, route, onFollow }: { map: MaplibreMap | undefin
   const text = info?.text ?? "#ffffff";
   const count = notices.length;
   const name = info?.name && info.name !== route ? info.name : "";
-  // On a phone the open answer wins: the panel folds to its pill, and tapping the pill opens it again.
-  const docked = useMediaQuery("(min-width: 640px)");
-  const answerShown = useAnswerShown();
-  const [reopened, setReopened] = useState(false);
-  useEffect(() => setReopened(false), [answerShown]);
-  const folded = !docked && answerShown && !reopened;
+  // On a phone the open answer or orb wins: the panel folds to its pill, and tapping the pill opens it again (src/lib/screen/screenSpace.ts).
+  useEffect(() => { sendScreen({ type: "LINE", on: true }); return () => sendScreen({ type: "LINE", on: false }); }, []);
+  const folded = useScreen((v) => v.line === "pill");
   const pillLabel = (
     <>
       <span className="flex h-8 w-8 items-center justify-center rounded-full text-[16px] font-bold" style={{ background: color, color: text }} aria-hidden>
@@ -109,7 +105,7 @@ export function LinePanel({ map, route, onFollow }: { map: MaplibreMap | undefin
     >
       <div className="flex items-center justify-between">
         {folded ? (
-          <button type="button" aria-expanded={false} aria-label={`Show the ${route} line`} data-testid="line-pill" onClick={() => setReopened(true)}
+          <button type="button" aria-expanded={false} aria-label={`Show the ${route} line`} data-testid="line-pill" onClick={() => sendScreen({ type: "SHOW_LINE" })}
             className={`pointer-events-auto flex h-11 items-center gap-2.5 rounded-[22px] pl-1.5 pr-2 ${GLASS} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]`}>
             {pillLabel}
           </button>

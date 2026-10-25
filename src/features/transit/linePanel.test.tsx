@@ -1,20 +1,20 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-let wide = false;
-vi.mock("@/lib/useMediaQuery", () => ({ useMediaQuery: () => wide }));
 vi.mock("@/lib/store/MapStateContext", () => ({ useMapState: () => ({ seedChat: () => {}, setChatOpen: () => {} }) }));
 vi.mock("./hooks", () => ({ useTransitData: () => ({}), useAlerts: () => ({ data: undefined }), useNow: () => 0 }));
 
 const { LinePanel } = await import("./LinePanel");
-const { publishAnswerShown } = await import("@/lib/agent/answerShown");
+const { sendScreen } = await import("@/lib/screen/screenSpace");
 const render = () => renderToStaticMarkup(<LinePanel map={undefined} route="A" onFollow={() => {}} />);
 
 describe("line panel and the answer (docs/PDD.md, Screen space)", () => {
-  afterEach(() => { publishAnswerShown(false); wide = false; });
+  // Server rendering runs no effects, so the test reports the open line itself.
+  beforeEach(() => sendScreen({ type: "LINE", on: true }));
+  afterEach(() => { sendScreen({ type: "ANSWER", on: false }); sendScreen({ type: "LINE", on: false }); sendScreen({ type: "SIZE", size: "phone" }); });
 
   it("folds to its pill on a phone while an answer is open", () => {
-    publishAnswerShown(true);
+    sendScreen({ type: "ANSWER", on: true });
     const html = render();
     expect(html).toMatch(/data-testid="line-body" class="pointer-events-auto hidden/);
     expect(html).toContain('aria-label="Show the A line"');
@@ -25,8 +25,8 @@ describe("line panel and the answer (docs/PDD.md, Screen space)", () => {
   });
 
   it("stays open beside the answer from 640 px, docked to the side", () => {
-    wide = true;
-    publishAnswerShown(true);
+    sendScreen({ type: "SIZE", size: "wide" });
+    sendScreen({ type: "ANSWER", on: true });
     const html = render();
     expect(html).toMatch(/data-testid="line-body" class="pointer-events-auto flex/);
     expect(html).toContain("sm:left-auto");
