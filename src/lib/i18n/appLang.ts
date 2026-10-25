@@ -53,7 +53,8 @@ type Key =
   | "askAnything" | "askFollowUp" | "askLabel" | "more" | "nearby" | "otherOptions" | "agentsWorking"
   | "walkMeThere" | "inStation" | "yes" | "no" | "listening" | "stopListening" | "closeAnswer" | "showAnswer"
   | "changeTo" | "skipped"
-  | "walk" | "transit" | "drive" | "bus" | "train" | "ferry" | "getOffAt" | "oneStop" | "nStops" | "steps" | "sameTime" | "plannedWork" | "elevators" | "weatherAlerts" | "onTheRoad" | "rain" | "remindMe" | "remindSaved";
+  | "walk" | "transit" | "drive" | "bus" | "train" | "ferry" | "getOffAt" | "oneStop" | "nStops" | "steps" | "sameTime" | "plannedWork" | "elevators" | "weatherAlerts" | "onTheRoad" | "rain" | "remindMe" | "remindSaved"
+  | "useMyLocation" | "findingYou" | "locationBlocked";
 
 const T: Record<AppLang, Record<Key, string>> = {
   en: {
@@ -61,56 +62,56 @@ const T: Record<AppLang, Record<Key, string>> = {
     askAnything: "Ask anything…", askFollowUp: "Ask a follow-up…", askLabel: "Ask the assistant", more: "More", nearby: "What's nearby", otherOptions: "Other options", agentsWorking: "Agents working",
     walkMeThere: "Walk me there", inStation: "Are you in the station?", yes: "Yes", no: "No", listening: "Listening", stopListening: "Stop listening", closeAnswer: "Close answer", showAnswer: "Show the answer",
     changeTo: "Change to the {r}", skipped: "Skipped",
-    walk: "Walk", transit: "Transit", drive: "Drive", bus: "Bus", train: "Train", ferry: "Ferry", getOffAt: "Get off at {s}", oneStop: "1 stop", nStops: "{n} stops", steps: "Steps", sameTime: "same time", plannedWork: "Planned work", elevators: "Elevators", weatherAlerts: "Weather alerts", onTheRoad: "On the road", rain: "rain", remindMe: "Remind me", remindSaved: "Saved to your calendar. It will remind you at {t}, 10 minutes before you leave.",
+    walk: "Walk", transit: "Transit", drive: "Drive", bus: "Bus", train: "Train", ferry: "Ferry", getOffAt: "Get off at {s}", oneStop: "1 stop", nStops: "{n} stops", steps: "Steps", sameTime: "same time", plannedWork: "Planned work", elevators: "Elevators", weatherAlerts: "Weather alerts", onTheRoad: "On the road", rain: "rain", remindMe: "Remind me", remindSaved: "Saved to your calendar. It will remind you at {t}, 10 minutes before you leave.", useMyLocation: "Use my location", findingYou: "Finding you…", locationBlocked: "Can't get your location. Type a street, a place or a station instead.",
   },
   es: {
     restroom: "Baño", myTrain: "Mi tren", planTrip: "Planear viaje", findExit: "Buscar salida",
     askAnything: "Pregunta lo que quieras…", askFollowUp: "Haz otra pregunta…", askLabel: "Pregúntale al asistente", more: "Más", nearby: "Qué hay cerca", otherOptions: "Otras opciones", agentsWorking: "Trabajando",
     walkMeThere: "Llévame caminando", inStation: "¿Estás en la estación?", yes: "Sí", no: "No", listening: "Escuchando", stopListening: "Dejar de escuchar", closeAnswer: "Cerrar respuesta", showAnswer: "Ver la respuesta",
     changeTo: "Cambia al {r}", skipped: "No para aquí",
-    walk: "Caminar", transit: "Transporte", drive: "Auto", bus: "Autobús", train: "Tren", ferry: "Ferry", getOffAt: "Bájate en {s}", oneStop: "1 parada", nStops: "{n} paradas", steps: "Pasos", sameTime: "misma hora", plannedWork: "Obras programadas", elevators: "Ascensores", weatherAlerts: "Alertas del clima", onTheRoad: "En la vía", rain: "lluvia", remindMe: "Recuérdame", remindSaved: "Guardado en tu calendario. Te avisará a las {t}, 10 minutos antes de salir.",
+    walk: "Caminar", transit: "Transporte", drive: "Auto", bus: "Autobús", train: "Tren", ferry: "Ferry", getOffAt: "Bájate en {s}", oneStop: "1 parada", nStops: "{n} paradas", steps: "Pasos", sameTime: "misma hora", plannedWork: "Obras programadas", elevators: "Ascensores", weatherAlerts: "Alertas del clima", onTheRoad: "En la vía", rain: "lluvia", remindMe: "Recuérdame", remindSaved: "Guardado en tu calendario. Te avisará a las {t}, 10 minutos antes de salir.", useMyLocation: "Usar mi ubicación", findingYou: "Buscándote…", locationBlocked: "No se pudo obtener tu ubicación. Escribe una calle, un lugar o una estación.",
   },
   zh: {
     restroom: "厕所", myTrain: "我的列车", planTrip: "规划行程", findExit: "找出口",
     askAnything: "想问什么都可以…", askFollowUp: "继续提问…", askLabel: "问助手", more: "更多", nearby: "附近有什么", otherOptions: "其他选择", agentsWorking: "正在处理",
     walkMeThere: "带我走过去", inStation: "你在车站里吗？", yes: "是", no: "不是", listening: "正在听", stopListening: "停止听", closeAnswer: "关闭回答", showAnswer: "显示回答",
     changeTo: "换乘 {r} 线", skipped: "不停靠",
-    walk: "步行", transit: "公共交通", drive: "开车", bus: "公交", train: "地铁", ferry: "渡轮", getOffAt: "在 {s} 下车", oneStop: "1 站", nStops: "{n} 站", steps: "步骤", sameTime: "同一时间", plannedWork: "计划施工", elevators: "电梯", weatherAlerts: "天气警报", onTheRoad: "路况", rain: "降雨", remindMe: "提醒我", remindSaved: "已存到你的日历。会在 {t} 提醒你，出发前 10 分钟。",
+    walk: "步行", transit: "公共交通", drive: "开车", bus: "公交", train: "地铁", ferry: "渡轮", getOffAt: "在 {s} 下车", oneStop: "1 站", nStops: "{n} 站", steps: "步骤", sameTime: "同一时间", plannedWork: "计划施工", elevators: "电梯", weatherAlerts: "天气警报", onTheRoad: "路况", rain: "降雨", remindMe: "提醒我", remindSaved: "已存到你的日历。会在 {t} 提醒你，出发前 10 分钟。", useMyLocation: "使用我的位置", findingYou: "正在定位…", locationBlocked: "无法获取你的位置。请输入街道、地点或车站。",
   },
   ru: {
     restroom: "Туалет", myTrain: "Мой поезд", planTrip: "Маршрут", findExit: "Найти выход",
     askAnything: "Спросите что угодно…", askFollowUp: "Задайте ещё вопрос…", askLabel: "Спросить помощника", more: "Ещё", nearby: "Что рядом", otherOptions: "Другие варианты", agentsWorking: "Работаю",
     walkMeThere: "Проводите меня", inStation: "Вы на станции?", yes: "Да", no: "Нет", listening: "Слушаю", stopListening: "Перестать слушать", closeAnswer: "Закрыть ответ", showAnswer: "Показать ответ",
     changeTo: "Пересадка на {r}", skipped: "Без остановки",
-    walk: "Пешком", transit: "Транспорт", drive: "На машине", bus: "Автобус", train: "Поезд", ferry: "Паром", getOffAt: "Выйти на {s}", oneStop: "1 остановка", nStops: "Остановок: {n}", steps: "Шаги", sameTime: "в то же время", plannedWork: "Плановые работы", elevators: "Лифты", weatherAlerts: "Погодные предупреждения", onTheRoad: "На дороге", rain: "дождь", remindMe: "Напомнить", remindSaved: "Сохранено в календаре. Напомнит в {t}, за 10 минут до выхода.",
+    walk: "Пешком", transit: "Транспорт", drive: "На машине", bus: "Автобус", train: "Поезд", ferry: "Паром", getOffAt: "Выйти на {s}", oneStop: "1 остановка", nStops: "Остановок: {n}", steps: "Шаги", sameTime: "в то же время", plannedWork: "Плановые работы", elevators: "Лифты", weatherAlerts: "Погодные предупреждения", onTheRoad: "На дороге", rain: "дождь", remindMe: "Напомнить", remindSaved: "Сохранено в календаре. Напомнит в {t}, за 10 минут до выхода.", useMyLocation: "Моё местоположение", findingYou: "Ищу вас…", locationBlocked: "Не удалось определить ваше местоположение. Напишите улицу, место или станцию.",
   },
   bn: {
     restroom: "টয়লেট", myTrain: "আমার ট্রেন", planTrip: "যাত্রা পরিকল্পনা", findExit: "বের হওয়ার পথ",
     askAnything: "যা খুশি জিজ্ঞেস করুন…", askFollowUp: "আরেকটি প্রশ্ন করুন…", askLabel: "সহকারীকে জিজ্ঞেস করুন", more: "আরও", nearby: "কাছে কী আছে", otherOptions: "অন্য উপায়", agentsWorking: "কাজ চলছে",
     walkMeThere: "হেঁটে নিয়ে চলুন", inStation: "আপনি কি স্টেশনের ভেতরে?", yes: "হ্যাঁ", no: "না", listening: "শুনছি", stopListening: "শোনা বন্ধ করুন", closeAnswer: "উত্তর বন্ধ করুন", showAnswer: "উত্তর দেখান",
     changeTo: "{r} ট্রেনে বদলান", skipped: "থামবে না",
-    walk: "হাঁটা", transit: "গণপরিবহন", drive: "গাড়ি", bus: "বাস", train: "ট্রেন", ferry: "ফেরি", getOffAt: "{s}-এ নামুন", oneStop: "1 স্টপ", nStops: "{n} স্টপ", steps: "ধাপ", sameTime: "একই সময়", plannedWork: "পরিকল্পিত কাজ", elevators: "লিফট", weatherAlerts: "আবহাওয়া সতর্কতা", onTheRoad: "রাস্তায়", rain: "বৃষ্টি", remindMe: "মনে করিয়ে দিন", remindSaved: "আপনার ক্যালেন্ডারে রাখা হয়েছে। {t}-এ মনে করিয়ে দেবে, বের হওয়ার 10 মিনিট আগে।",
+    walk: "হাঁটা", transit: "গণপরিবহন", drive: "গাড়ি", bus: "বাস", train: "ট্রেন", ferry: "ফেরি", getOffAt: "{s}-এ নামুন", oneStop: "1 স্টপ", nStops: "{n} স্টপ", steps: "ধাপ", sameTime: "একই সময়", plannedWork: "পরিকল্পিত কাজ", elevators: "লিফট", weatherAlerts: "আবহাওয়া সতর্কতা", onTheRoad: "রাস্তায়", rain: "বৃষ্টি", remindMe: "মনে করিয়ে দিন", remindSaved: "আপনার ক্যালেন্ডারে রাখা হয়েছে। {t}-এ মনে করিয়ে দেবে, বের হওয়ার 10 মিনিট আগে।", useMyLocation: "আমার অবস্থান ব্যবহার করুন", findingYou: "আপনাকে খুঁজছি…", locationBlocked: "আপনার অবস্থান পাওয়া যাচ্ছে না। একটি রাস্তা, জায়গা বা স্টেশনের নাম লিখুন।",
   },
   ht: {
     restroom: "Twalèt", myTrain: "Tren mwen", planTrip: "Planifye vwayaj", findExit: "Jwenn sòti",
     askAnything: "Mande nenpòt bagay…", askFollowUp: "Poze yon lòt kesyon…", askLabel: "Mande asistan an", more: "Plis", nearby: "Sa ki toupre", otherOptions: "Lòt chwa", agentsWorking: "M ap travay",
     walkMeThere: "Mennen m a pye", inStation: "Èske ou nan estasyon an?", yes: "Wi", no: "Non", listening: "M ap koute", stopListening: "Sispann koute", closeAnswer: "Fèmen repons lan", showAnswer: "Montre repons lan",
     changeTo: "Chanje pou {r} la", skipped: "Pa kanpe la",
-    walk: "Mache", transit: "Transpò", drive: "Machin", bus: "Bis", train: "Tren", ferry: "Ferry", getOffAt: "Desann nan {s}", oneStop: "1 arè", nStops: "{n} arè", steps: "Etap", sameTime: "menm lè", plannedWork: "Travay planifye", elevators: "Asansè", weatherAlerts: "Alèt move tan", onTheRoad: "Sou wout la", rain: "lapli", remindMe: "Raple m", remindSaved: "Li nan kalandriye w. L ap raple w a {t}, 10 minit anvan ou soti.",
+    walk: "Mache", transit: "Transpò", drive: "Machin", bus: "Bis", train: "Tren", ferry: "Ferry", getOffAt: "Desann nan {s}", oneStop: "1 arè", nStops: "{n} arè", steps: "Etap", sameTime: "menm lè", plannedWork: "Travay planifye", elevators: "Asansè", weatherAlerts: "Alèt move tan", onTheRoad: "Sou wout la", rain: "lapli", remindMe: "Raple m", remindSaved: "Li nan kalandriye w. L ap raple w a {t}, 10 minit anvan ou soti.", useMyLocation: "Sèvi ak pozisyon mwen", findingYou: "M ap chèche w…", locationBlocked: "Nou pa ka jwenn pozisyon w. Ekri yon lari, yon kote oswa yon estasyon pito.",
   },
   fr: {
     restroom: "Toilettes", myTrain: "Mon train", planTrip: "Itinéraire", findExit: "Trouver la sortie",
     askAnything: "Posez votre question…", askFollowUp: "Une autre question…", askLabel: "Demander à l'assistant", more: "Plus", nearby: "À proximité", otherOptions: "Autres options", agentsWorking: "En cours",
     walkMeThere: "Guidez-moi à pied", inStation: "Êtes-vous dans la station ?", yes: "Oui", no: "Non", listening: "J'écoute", stopListening: "Arrêter l'écoute", closeAnswer: "Fermer la réponse", showAnswer: "Voir la réponse",
     changeTo: "Changez pour le {r}", skipped: "Ne s'arrête pas",
-    walk: "À pied", transit: "Transports", drive: "Voiture", bus: "Bus", train: "Train", ferry: "Ferry", getOffAt: "Descendez à {s}", oneStop: "1 arrêt", nStops: "{n} arrêts", steps: "Étapes", sameTime: "même heure", plannedWork: "Travaux prévus", elevators: "Ascenseurs", weatherAlerts: "Alertes météo", onTheRoad: "Sur la route", rain: "pluie", remindMe: "Me rappeler", remindSaved: "Ajouté à votre calendrier. Rappel à {t}, 10 minutes avant le départ.",
+    walk: "À pied", transit: "Transports", drive: "Voiture", bus: "Bus", train: "Train", ferry: "Ferry", getOffAt: "Descendez à {s}", oneStop: "1 arrêt", nStops: "{n} arrêts", steps: "Étapes", sameTime: "même heure", plannedWork: "Travaux prévus", elevators: "Ascenseurs", weatherAlerts: "Alertes météo", onTheRoad: "Sur la route", rain: "pluie", remindMe: "Me rappeler", remindSaved: "Ajouté à votre calendrier. Rappel à {t}, 10 minutes avant le départ.", useMyLocation: "Utiliser ma position", findingYou: "Je vous cherche…", locationBlocked: "Impossible de trouver votre position. Écrivez une rue, un lieu ou une station.",
   },
   ko: {
     restroom: "화장실", myTrain: "내 열차", planTrip: "경로 찾기", findExit: "출구 찾기",
     askAnything: "무엇이든 물어보세요…", askFollowUp: "이어서 물어보세요…", askLabel: "도우미에게 묻기", more: "더 보기", nearby: "근처 장소", otherOptions: "다른 방법", agentsWorking: "처리 중",
     walkMeThere: "걸어서 안내", inStation: "역 안에 계세요?", yes: "네", no: "아니요", listening: "듣고 있어요", stopListening: "듣기 중지", closeAnswer: "답변 닫기", showAnswer: "답변 보기",
     changeTo: "{r} 호선으로 환승", skipped: "정차 안 함",
-    walk: "도보", transit: "대중교통", drive: "자동차", bus: "버스", train: "지하철", ferry: "페리", getOffAt: "{s}에서 내리기", oneStop: "1개 역", nStops: "{n}개 역", steps: "단계", sameTime: "같은 시간", plannedWork: "예정 공사", elevators: "엘리베이터", weatherAlerts: "기상 특보", onTheRoad: "도로 상황", rain: "비", remindMe: "알림 받기", remindSaved: "캘린더에 저장했어요. 출발 10분 전인 {t}에 알려 드려요.",
+    walk: "도보", transit: "대중교통", drive: "자동차", bus: "버스", train: "지하철", ferry: "페리", getOffAt: "{s}에서 내리기", oneStop: "1개 역", nStops: "{n}개 역", steps: "단계", sameTime: "같은 시간", plannedWork: "예정 공사", elevators: "엘리베이터", weatherAlerts: "기상 특보", onTheRoad: "도로 상황", rain: "비", remindMe: "알림 받기", remindSaved: "캘린더에 저장했어요. 출발 10분 전인 {t}에 알려 드려요.", useMyLocation: "내 위치 사용", findingYou: "위치 찾는 중…", locationBlocked: "위치를 가져올 수 없어요. 거리, 장소 또는 역 이름을 입력하세요.",
   },
 };
 

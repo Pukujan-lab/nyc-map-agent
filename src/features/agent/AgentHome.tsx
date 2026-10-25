@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/appLang";
 import { removeShell, shellFocused, shellText } from "@/lib/shellDraft";
 import { stepLabel, type AgentStep } from "./agentSteps";
+import { plainText } from "./plainText";
 
 /**
  * "Agents working" (#370): what the agent is doing right now, from the stream's
@@ -90,7 +91,7 @@ export function AnswerCard(p: AnswerCardProps) {
       ) : null}
       {p.text ? (
         <div className="flex flex-col gap-3 rounded-[18px] border border-[#22314a] bg-[#111c2f]/90 p-3.5">
-          <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-slate-100" aria-live="polite">{p.text}</p>
+          <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-slate-100" aria-live="polite">{plainText(p.text)}</p>
           {done ? (
             <div className="flex flex-col gap-2">
               {p.primary ? (

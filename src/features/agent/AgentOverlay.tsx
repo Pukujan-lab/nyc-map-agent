@@ -724,8 +724,12 @@ export default function AgentOverlay() {
             {reply?.offerLocation && shared.status !== "on" ? (
               <Button type="button" className="h-12 w-full gap-1.5 rounded-full" disabled={shared.status === "asking"} onClick={() => void enableLocation()}>
                 <LocateFixed className="h-4 w-4" aria-hidden="true" />
-                {shared.status === "asking" ? "Finding you…" : "Use my location"}
+                {tr(appLang, shared.status === "asking" ? "findingYou" : "useMyLocation")}
               </Button>
+            ) : null}
+            {/* A blocked or failed location used to leave the button looking untouched (owner report, 2026-10-25). */}
+            {reply?.offerLocation && (shared.status === "denied" || shared.status === "unavailable") ? (
+              <p role="status" className="px-2 text-center text-sm text-slate-300">{tr(appLang, "locationBlocked")}</p>
             ) : null}
             {trip && !busy ? (
               <div className="rounded-[18px] border border-[#22314a] bg-[#111c2f]/90 p-3 text-slate-100">
