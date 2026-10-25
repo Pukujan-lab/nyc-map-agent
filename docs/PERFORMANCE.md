@@ -351,7 +351,7 @@ window.__bench = function (opts) {
 **The first load asks for fewer things and uses far less memory, but the crime and noise
 summaries still download in the simple view.** This was one warm-cache load of the deployed
 site (main at `855d675`) in the desktop app's browser pane, 1024 × 768, on the same
-development Mac. It is a spot check, not a new baseline: one run, and the Mac was busy.
+development Mac, with a load average near 5 (the baseline ran at 20–127). It is a spot check, not a new baseline: one run.
 
 | | Baseline (2026-10-23, warm, 1440 × 900) | Now (2026-10-25, warm, 1024 × 768) |
 |---|---|---|
