@@ -75,13 +75,13 @@ export function watchMapCovers(map: MapLibreMap): () => void {
     const want = measureCover(map);
     if (same(want, map.getPadding())) return;
     if (map.isMoving()) {
-      if (!waiting) { waiting = true; map.once("moveend", () => { waiting = false; schedule(); }); }
+      if (!waiting) { waiting = true; void map.once("moveend", () => { waiting = false; schedule(); }); }
       return;
     }
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     map.easeTo({ padding: want, duration: reduce ? 0 : 350 });
     // Following a train or playing a trip moves the camera every frame, which stops the glide part-way: finish it at once.
-    map.once("moveend", () => {
+    void map.once("moveend", () => {
       if (!same(want, map.getPadding()) && same(want, measureCover(map))) map.setPadding(want);
     });
   };
@@ -104,6 +104,6 @@ export function watchMapCovers(map: MapLibreMap): () => void {
     sizes.disconnect();
     window.removeEventListener("resize", schedule);
   };
-  map.once("remove", stop);
+  void map.once("remove", stop);
   return stop;
 }
