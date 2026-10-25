@@ -1,5 +1,6 @@
 import { ArrowUp, Camera, X } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { accuracyLine, accuracyTooLow, headingFromEvent, MAX_AR_ACCURACY_M, relativeBearing, smoothHeading } from "./heading";
 import { fallbackReason, initialPermissions, modeOf, permissionReducer } from "./permission";
@@ -18,6 +19,10 @@ interface Props {
   frame?: Omit<NavFrame, "puck"> | null;
   /** GPS position; the overlay is posed from it. */
   at?: { lon: number; lat: number } | null;
+  /** An icon-only trigger, for the walking card on the home screen. */
+  compact?: boolean;
+  /** Told when the camera view opens and closes, so the caller can watch GPS meanwhile. */
+  onOpenChange?: (open: boolean) => void;
 }
 
 type IosOrientation = typeof DeviceOrientationEvent & { requestPermission?: () => Promise<"granted" | "denied"> };
@@ -30,7 +35,7 @@ type IosOrientation = typeof DeviceOrientationEvent & { requestPermission?: () =
  * turn arrow over the picture. Without any of those, a big 2D arrow toward the
  * next turn, rotated by the smoothed compass heading, stands in.
  */
-export default function LiveViewBeta({ accuracyM, targetBearing, instruction, distanceLabel, frame = null, at = null }: Props) {
+export default function LiveViewBeta({ accuracyM, targetBearing, instruction, distanceLabel, frame = null, at = null, compact = false, onOpenChange }: Props) {
   const [perm, dispatch] = useReducer(permissionReducer, initialPermissions);
   const [open, setOpen] = useState(false);
   const [heading, setHeading] = useState<number | null>(null);
@@ -38,6 +43,11 @@ export default function LiveViewBeta({ accuracyM, targetBearing, instruction, di
   const streamRef = useRef<MediaStream | null>(null);
   const headingRef = useRef<number | null>(null);
   const listenerRef = useRef<{ type: string; fn: (e: Event) => void } | null>(null);
+  const onOpenChangeRef = useRef(onOpenChange);
+  const openRef = useRef(false);
+  useEffect(() => {
+    onOpenChangeRef.current = onOpenChange;
+  }, [onOpenChange]);
 
   const stop = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -47,6 +57,8 @@ export default function LiveViewBeta({ accuracyM, targetBearing, instruction, di
     listenerRef.current = null;
     headingRef.current = null;
     setHeading(null);
+    if (openRef.current) onOpenChangeRef.current?.(false);
+    openRef.current = false;
     setOpen(false);
     dispatch({ type: "stop" });
   }, []);
@@ -67,6 +79,8 @@ export default function LiveViewBeta({ accuracyM, targetBearing, instruction, di
     const cameraSupported = "mediaDevices" in navigator && "getUserMedia" in navigator.mediaDevices;
     const orientationSupported = typeof DeviceOrientationEvent !== "undefined";
     setOpen(true);
+    openRef.current = true;
+    onOpenChange?.(true);
     dispatch({ type: "request", cameraSupported, orientationSupported });
 
     // iOS only allows this call synchronously inside the tap.
@@ -116,14 +130,19 @@ export default function LiveViewBeta({ accuracyM, targetBearing, instruction, di
   const overlay = showCamera && frame !== null && at !== null && heading !== null;
 
   if (!open) {
-    return (
+    return compact ? (
+      <button type="button" className="task-action task-secondary h-11 w-11 shrink-0 p-0" aria-label="Live View (Beta)" title="Live View (Beta)" onClick={start}>
+        <Camera size={18} />
+      </button>
+    ) : (
       <Button type="button" size="sm" variant="secondary" onClick={start}>
         <Camera className="h-4 w-4" /> Live View (Beta)
       </Button>
     );
   }
 
-  return (
+  // In the body, so a blurred card around the trigger cannot trap the full-screen view.
+  return createPortal(
     <div className="pointer-events-auto fixed inset-0 z-50 flex flex-col items-center justify-end gap-3 bg-background p-4 pb-10" role="dialog" aria-label="Live View (Beta)">
       <video ref={videoRef} autoPlay playsInline muted className={`absolute inset-0 h-full w-full object-cover ${showCamera ? "" : "hidden"}`} />
       {overlay ? (
@@ -157,6 +176,7 @@ export default function LiveViewBeta({ accuracyM, targetBearing, instruction, di
       <Button type="button" size="sm" variant="outline" className="relative" onClick={stop}>
         <X className="h-4 w-4" /> Stop camera
       </Button>
-    </div>
+    </div>,
+    document.body,
   );
 }

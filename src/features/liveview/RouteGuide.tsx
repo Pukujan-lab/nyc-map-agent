@@ -138,14 +138,15 @@ export default function RouteGuide() {
     sendCamera({ type: "stop-guide" });
     setFix(null);
   };
-  const startNav = () => {
+  // Precise GPS for the walker, shared by navigation and the home screen's Live View.
+  const watchFix = () => {
     const g = appGeo();
     if (!g) {
       setGeoError("This browser has no location access.");
-      return;
+      return false;
     }
     setGeoError(null);
-    sendCamera({ type: "guide" });
+    if (watchRef.current !== null) return true;
     watchRef.current = g.watchPosition(
       (p) =>
         setFix({
@@ -157,6 +158,19 @@ export default function RouteGuide() {
       (e) => setGeoError(e.code === e.PERMISSION_DENIED ? "Location permission was declined." : "Location is unavailable."),
       { enableHighAccuracy: true, maximumAge: 1000, timeout: 20_000 },
     );
+    return true;
+  };
+  const startNav = () => {
+    if (watchFix()) sendCamera({ type: "guide" });
+  };
+  // Live View opened from the home walking card: GPS only while the camera is up.
+  const liveViewOpen = (open: boolean) => {
+    if (open) watchFix();
+    else if (!navigating) {
+      if (watchRef.current !== null) appGeo()?.clearWatch(watchRef.current);
+      watchRef.current = null;
+      setFix(null);
+    }
   };
   useEffect(() => () => {
     if (watchRef.current !== null) appGeo()?.clearWatch(watchRef.current);
@@ -228,6 +242,20 @@ export default function RouteGuide() {
       <TurnIcon step={progress?.next ?? null} />
       <div className="min-w-0 flex-1"><h2 className="text-xl font-bold leading-tight">{checkpoint ? `Walk toward ${checkpoint.landmark.name}` : progress?.instruction ?? "Follow the walking route"}</h2>
         <p className="mt-0.5 text-sm text-slate-300">{[progress && !checkpoint ? `In ${formatMetres(progress.metresToNext)}` : progress?.instruction, street, `${Math.max(1, Math.round(left / 80))} min left`].filter(Boolean).join(" · ")}</p></div>
+      {arFlag && progress ? (
+        <Suspense fallback={null}>
+          <LiveViewBeta
+            compact
+            onOpenChange={liveViewOpen}
+            accuracyM={fix?.accuracy ?? null}
+            targetBearing={here ? bearingTo(here, { lon: progress.next.location[0], lat: progress.next.location[1] }) : routeBearing}
+            instruction={progress.instruction}
+            distanceLabel={formatMetres(progress.metresToNext)}
+            frame={{ route, along, next: progress.next }}
+            at={fix}
+          />
+        </Suspense>
+      ) : null}
       <button type="button" className="task-action task-secondary h-11 w-11 shrink-0 p-0" aria-label="Stop walking guidance" onClick={() => { stopNav(); stopWalk(); clearRoute(); }}><Square size={18} /></button>
     </section>
     {checkpoint?.landmark.picture ? <section className="task-panel task-bottom flex flex-col gap-2.5 p-3.5" aria-label="Landmark checkpoint">
