@@ -170,6 +170,8 @@ import { parseAt, streetLabel, streetPosition, type NamedLine } from "@/lib/map/
 import { MAX_HEIGHT_M, pitchForHeight, STREET_LEVEL_M } from "@/lib/map/cameraHeight";
 import { hoverBlocked } from "@/lib/map/hover";
 import { FEATURES } from "@/features";
+import { hasMapillaryToken, MAPILLARY_TOKEN } from "@/lib/api/mapillary";
+import { showCoverage } from "@/lib/map/mapillaryCoverage";
 
 /**
  * How far the camera may tilt — MapLibre's own ceiling. Anything less and walk
@@ -316,6 +318,7 @@ export function MapView({
     selectedBlockKey,
     selectNta,
     selectBlock,
+    streetViewOpen,
   } = useMapState();
   const businesses = businessesPicked || walking;
   const storefrontsOn = storefrontsFlag && businesses;
@@ -1103,6 +1106,13 @@ export function MapView({
       map.getSource(SOURCE_IDS.blockSelection) as GeoJSONSource | undefined
     )?.setData(selectionGeoJson);
   }, [ready, styleEpoch, emphasisGeoJson, selectionGeoJson]);
+
+  // Where street photos exist, while the photo sheet is open (#10).
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!ready || !map || !streetViewOpen || !hasMapillaryToken) return;
+    return showCoverage(map, MAPILLARY_TOKEN);
+  }, [ready, styleEpoch, streetViewOpen]);
 
   useEffect(() => {
     if (!ready || !cameraTarget) return;
