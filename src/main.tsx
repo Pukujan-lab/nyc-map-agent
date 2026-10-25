@@ -8,6 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { DataViewProvider } from "@/lib/store/DataViewContext";
 import { MapStateProvider } from "@/lib/store/MapStateContext";
 import { PanelProvider } from "@/lib/store/PanelContext";
+import { keepLastData } from "@/lib/queryKeep";
 import "./index.css";
 
 const queryClient = new QueryClient({
@@ -18,6 +19,8 @@ const queryClient = new QueryClient({
     },
   },
 });
+// The previous visit's line shapes and stations show at once; fresh data replaces them (#368).
+keepLastData(queryClient);
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing #root element");
