@@ -50,7 +50,7 @@ export default function ArOverlay({ frame, at, heading }: Props) {
     map.on("load", () => {
       installNavLayers(map, readNavColors());
       pose(map);
-      updateNavLayers(map, { ...latest.current.frame, puck: null });
+      updateNavLayers(map, { ...latest.current.frame, puck: null, destPin: true });
     });
     return () => {
       mapRef.current = null;
@@ -69,7 +69,7 @@ export default function ArOverlay({ frame, at, heading }: Props) {
   useEffect(() => {
     const map = mapRef.current;
     if (!map?.isStyleLoaded()) return;
-    updateNavLayers(map, { ...frame, puck: null });
+    updateNavLayers(map, { ...frame, puck: null, destPin: true });
   }, [frame]);
 
   return <div ref={box} data-testid="ar-overlay" aria-hidden="true" className="pointer-events-none absolute inset-0" />;

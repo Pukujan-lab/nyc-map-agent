@@ -9,19 +9,21 @@ import { splitAt } from "./steps";
  * the ground at the next maneuver, and the user's chevron puck with an
  * accuracy halo. Colours come from CSS variables so every theme (including
  * the time-of-day theme) repaints them: `--nav-route`, `--nav-glow`, falling
- * back to `--primary`.
+ * back to `--primary`. Over the camera (Live View) a standing pin also marks
+ * the destination; the map has its own marker for it.
  */
-const SRC = { route: "nav-route", turn: "nav-turn", puck: "nav-puck" } as const;
+const SRC = { route: "nav-route", turn: "nav-turn", puck: "nav-puck", dest: "nav-dest" } as const;
 const LAYERS = {
   glow: "nav-route-glow",
   walked: "nav-route-walked",
   core: "nav-route-core",
   chevrons: "nav-route-chevrons",
   turn: "nav-turn-arrow",
+  dest: "nav-dest-pin",
   halo: "nav-puck-halo",
   puck: "nav-puck",
 } as const;
-const IMG = { chevron: "nav-chevron", turn: "nav-turn", puck: "nav-puck" } as const;
+const IMG = { chevron: "nav-chevron", turn: "nav-turn", puck: "nav-puck", dest: "nav-dest" } as const;
 
 interface NavColors {
   route: string;
@@ -104,6 +106,24 @@ const puckIcon = (fill: string, ink: string) =>
     c.fill();
   });
 
+/** A map pin, point at the bottom centre. */
+const destPin = (fill: string, ink: string) =>
+  canvas(96, (c) => {
+    c.fillStyle = fill;
+    c.strokeStyle = ink;
+    c.lineWidth = 6;
+    c.beginPath();
+    c.arc(48, 36, 30, Math.PI * 0.8, Math.PI * 2.2);
+    c.lineTo(48, 92);
+    c.closePath();
+    c.fill();
+    c.stroke();
+    c.fillStyle = ink;
+    c.beginPath();
+    c.arc(48, 36, 11, 0, Math.PI * 2);
+    c.fill();
+  });
+
 const empty = (): GeoJSON.FeatureCollection => ({ type: "FeatureCollection", features: [] });
 
 function putImage(map: MapLibreMap, id: string, img: ImageData | null): void {
@@ -118,8 +138,9 @@ export function installNavLayers(map: MapLibreMap, colors: NavColors): void {
   putImage(map, IMG.chevron, chevron(colors.ink));
   putImage(map, IMG.turn, turnArrow(colors.route, colors.ink));
   putImage(map, IMG.puck, puckIcon(colors.route, colors.ink));
+  putImage(map, IMG.dest, destPin(colors.route, colors.ink));
   // Sources last-in-first-checked: `nav-puck` existing means the set is installed.
-  for (const id of [SRC.route, SRC.turn]) {
+  for (const id of [SRC.route, SRC.turn, SRC.dest]) {
     if (!map.getSource(id)) map.addSource(id, { type: "geojson", data: empty() });
   }
   // Widths grow with zoom so the ribbon keeps a street-scale width at eye level.
@@ -182,6 +203,20 @@ export function installNavLayers(map: MapLibreMap, colors: NavColors): void {
       "icon-ignore-placement": true,
     },
   });
+  add({
+    id: LAYERS.dest,
+    type: "symbol",
+    source: SRC.dest,
+    layout: {
+      "icon-image": IMG.dest,
+      "icon-anchor": "bottom",
+      // Standing up, facing the viewer, so it reads as a pin over the camera picture.
+      "icon-pitch-alignment": "viewport",
+      "icon-size": ["interpolate", ["exponential", 2], ["zoom"], 15, 0.5, 22, 2] as unknown as number,
+      "icon-allow-overlap": true,
+      "icon-ignore-placement": true,
+    },
+  });
   if (!map.getSource(SRC.puck)) map.addSource(SRC.puck, { type: "geojson", data: empty() });
   add({
     id: LAYERS.halo,
@@ -229,6 +264,8 @@ export interface NavFrame {
   along: number;
   next: RouteStep | null;
   puck: { lon: number; lat: number; bearing: number; accuracyM: number; show: boolean } | null;
+  /** Draw a pin at the route's end (Live View only; the map marks it already). */
+  destPin?: boolean;
 }
 
 /** Pixels per metre at a latitude and zoom (Web Mercator, 512 px tiles). */
@@ -255,6 +292,12 @@ export function updateNavLayers(map: MapLibreMap, f: NavFrame): void {
             { type: "Feature", properties: { bearing: f.next.bearingAfter }, geometry: { type: "Point", coordinates: f.next.location } },
           ],
         }
+      : empty(),
+  );
+  const end = f.route.coordinates.at(-1);
+  void map.getSource<GeoJSONSource>(SRC.dest)?.setData(
+    f.destPin && end
+      ? { type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: end } }] }
       : empty(),
   );
   const p = f.puck;
