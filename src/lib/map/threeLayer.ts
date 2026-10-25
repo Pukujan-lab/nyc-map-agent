@@ -8,7 +8,7 @@
  */
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { cornerOffset, crossingsNear, dirOf, streetBearingAt, toLocal, type NamedStreet } from "./signPlacement";
+import { cornerOffset, crossingsNear, dirOf, onPavement, streetBearingAt, toLocal, type NamedStreet } from "./signPlacement";
 import { busStopsShown, eyeOrCenter, kioskSources, setPickTargets, subscribeBusStops, type PickTarget } from "./streetPick";
 import { LANDMARKS } from "./landmarks";
 import { drawRestroomPictogram } from "./restroomPictogram";
@@ -1315,8 +1315,8 @@ export function createFurnitureLayer(): CustomLayerInterface {
         .slice(0, BUS_MAX)
         .map((x) => x.s)
       : [];
-    const ks = kiosks(eye);
-    const key = `${showBus ? 1 : 0}|` + near.map((s) => s.id).join(",") + "|" + ks.map((k) => k.id).join(",") + `|${eye.lng.toFixed(4)},${eye.lat.toFixed(4)}`;
+    const found = kiosks(eye);
+    const key = `${showBus ? 1 : 0}|` + near.map((s) => s.id).join(",") + "|" + found.map((k) => k.id).join(",") + `|${eye.lng.toFixed(4)},${eye.lat.toFixed(4)}`;
     if (key === shown) return;
     shown = key;
     eyeAt = eye;
@@ -1324,7 +1324,12 @@ export function createFurnitureLayer(): CustomLayerInterface {
     meters = origin.meterInMercatorCoordinateUnits();
     const m = new THREE.Matrix4();
     const Z = new THREE.Vector3(0, 0, 1);
-    const lines = near.length ? streetLines() : [];
+    const lines = near.length || found.length ? streetLines() : [];
+    // The city's point is often inside the building; stand the kiosk on the pavement in front.
+    const ks = found.map((k) => {
+      const [lng, lat] = onPavement(lines, k.lng, k.lat);
+      return { ...k, lng, lat };
+    });
     bg.clearRect(0, 0, busCanvas.width, busCanvas.height);
     let nf = 0;
     near.forEach((s, i) => {
