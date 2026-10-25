@@ -58,7 +58,8 @@ import { useFollowed } from "@/lib/transit/follow";
 import { useLinesControl } from "@/lib/transit/linesControl";
 import { useStationHelp, useStationHelpVisible } from "@/lib/underground/stationHelp";
 import { applyStep, statusLine, type AgentStep } from "./agentSteps";
-import { speechTag, statusLang } from "./statusLines";
+import { detectLang, speechTag, statusLang } from "./statusLines";
+import { setAskedLang, tr, useAppLang } from "@/lib/i18n/appLang";
 import { needsSharedOrigin, ORIGIN_PROMPT, replyAsksForOrigin } from "./needsOrigin";
 import { framePadding } from "@/lib/map/mapCover";
 import { useOpenMenu } from "@/lib/store/openMenu";
@@ -99,6 +100,7 @@ export default function AgentOverlay() {
   // A stored language wins; otherwise the browser's, read when it changes.
   const storedLang = useLangPref();
   const lang = storedLang ?? browserLang();
+  const appLang = useAppLang();
   // One panel at a time (#225): opening Ask closes the drawer and any sheet.
   useEffect(() => {
     if (chatOpen) closeAll();
@@ -313,6 +315,9 @@ export default function AgentOverlay() {
     let spoken = "";
     // A voice question still working after ~2.5 s gets one short spoken status line.
     const sayIn = statusLang(q, lang);
+    // A question clearly in another language switches the app's own text to it (unless one is picked in the menu).
+    const asked = detectLang(q);
+    if (asked) setAskedLang(asked);
     const statusTimer = home && byVoice ? window.setTimeout(() => speech.speak(statusLine(stepsRef.current, sayIn), { lang: speechTag(sayIn, lang) }), STATUS_AFTER_MS) : undefined;
     try {
       const memory = home ? memorySummary() : null;
@@ -394,7 +399,7 @@ export default function AgentOverlay() {
     setHandsFree(true);
   };
 
-  useWakePhrase(wake && speech.sttSupported, speech.listening || busy || speech.speaking, (t) => { voiceTurn.current = true; void send(t); });
+  useWakePhrase(wake && speech.sttSupported, speech.listening || busy || speech.speaking, (t) => { voiceTurn.current = true; void send(t); }, speechTag(appLang, lang));
   useEffect(() => () => abort.current?.abort(), []);
   // Other features (underground help) prepare for the trip on screen through core.
   useEffect(() => publishActiveTrip(trip), [trip]);
@@ -674,7 +679,7 @@ export default function AgentOverlay() {
 
     const primary = first
       ? first.kind === "showRestroom"
-        ? { label: "Walk me there", run: () => { void walkTo(first.restroom); } }
+        ? { label: tr(appLang, "walkMeThere"), run: () => { void walkTo(first.restroom); } }
         : { label: first.label, run: () => runAction(first) }
       : null;
     const onNearby = () => { void send(followUpQuestion("nearby", placeOf())); };
@@ -736,7 +741,7 @@ export default function AgentOverlay() {
     const answerOpen = hasAnswer && answerView === "open";
     const showIdle = !selectedLine && !stationHelpVisible && !followingRoute && !player.state.active && !walking && !streetViewOpen && !answerOpen && !busy && !handsFree && !drawerOpen && !panelUp && followed === null;
     const chip = hasAnswer && answerView === "chip" ? (
-      <button type="button" aria-label="Show the answer" data-testid="answer-chip" onClick={() => sendScreen({ type: "SHOW_ANSWER" })}
+      <button type="button" aria-label={tr(appLang, "showAnswer")} data-testid="answer-chip" onClick={() => sendScreen({ type: "SHOW_ANSWER" })}
         className="pointer-events-auto flex h-11 max-w-full items-center gap-2 self-start rounded-full border border-[#263449] bg-[#0b1220]/85 px-4 text-sm font-semibold text-slate-100 shadow-lg backdrop-blur-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400">
         <span className="truncate">{lastUser?.content}</span>
         <ChevronUp className="h-4 w-4 shrink-0" aria-hidden="true" />

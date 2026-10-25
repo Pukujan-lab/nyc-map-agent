@@ -2,6 +2,7 @@ import { AlertCircle, ArrowUp, AudioLines, Check, ChevronDown, Loader2, Mic, X }
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/appLang";
 import { stepLabel, type AgentStep } from "./agentSteps";
 
 /**
@@ -9,13 +10,14 @@ import { stepLabel, type AgentStep } from "./agentSteps";
  * step lines, instead of a spinner. The first row is the agent reading the question.
  */
 export function WorkingPanel({ steps }: { steps: AgentStep[] }) {
+  const t = useT();
   // Something always spins while the agent works: once every step is done, the answer is being written.
   const writing = steps.length > 0 && !steps.some((s) => s.status === "start");
   const rows: AgentStep[] = [{ id: "planner", name: "", status: steps.length ? "done" : "start" }, ...steps, ...(writing ? [{ id: "writing", name: "", status: "start" as const }] : [])];
   const slow = useSlow(SLOW_MS);
   return (
-    <div className="rounded-xl border bg-background/60 p-3" role="status" aria-live="polite" aria-label="Agents working" data-testid="agents-working">
-      <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Agents working</div>
+    <div className="rounded-xl border bg-background/60 p-3" role="status" aria-live="polite" aria-label={t("agentsWorking")} data-testid="agents-working">
+      <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("agentsWorking")}</div>
       <ul className="space-y-1.5 text-sm">
         {rows.map((s) => (
           <li key={s.id} className="flex items-center gap-2">
@@ -71,6 +73,7 @@ export interface AnswerCardProps {
  * follow-ups wait behind "More", so someone just getting around never has to read them.
  */
 export function AnswerCard(p: AnswerCardProps) {
+  const t = useT();
   const [more, setMore] = useState(false);
   useEffect(() => setMore(false), [p.question]);
   const done = !p.busy && !!p.text;
@@ -91,15 +94,15 @@ export function AnswerCard(p: AnswerCardProps) {
               ) : null}
               <Button type="button" variant="ghost" aria-expanded={more} onClick={() => setMore((v) => !v)}
                 className="h-11 self-center rounded-full px-4 text-sm font-semibold text-slate-300 hover:bg-slate-800 hover:text-white">
-                More
+                {t("more")}
                 <ChevronDown className={cn("!h-4 !w-4 transition-transform motion-reduce:transition-none", more && "rotate-180")} aria-hidden="true" />
               </Button>
               {more ? (
                 <>
                   {p.sources}
                   <div className="grid grid-cols-2 gap-2">
-                    <Button type="button" variant="ghost" className={SECONDARY} onClick={p.onNearby}>What's nearby</Button>
-                    <Button type="button" variant="ghost" className={SECONDARY} onClick={p.onOther}>Other options</Button>
+                    <Button type="button" variant="ghost" className={SECONDARY} onClick={p.onNearby}>{t("nearby")}</Button>
+                    <Button type="button" variant="ghost" className={SECONDARY} onClick={p.onOther}>{t("otherOptions")}</Button>
                   </div>
                 </>
               ) : null}
@@ -115,9 +118,10 @@ export function AnswerCard(p: AnswerCardProps) {
 
 /** The hands-free voice orb from the owner's mockup; tap it to stop. Still under prefers-reduced-motion. */
 function VoiceOrb({ transcript, onStop }: { transcript: string; onStop: () => void }) {
+  const t = useT();
   return (
-    <section aria-label="Listening" data-testid="voice-listening" className="flex min-h-[236px] flex-col items-center justify-end gap-5 pt-3">
-      <button type="button" aria-label="Stop listening" onClick={onStop} className="relative h-28 w-28 shrink-0 cursor-pointer rounded-full border-0 bg-transparent p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300">
+    <section aria-label={t("listening")} data-testid="voice-listening" className="flex min-h-[236px] flex-col items-center justify-end gap-5 pt-3">
+      <button type="button" aria-label={t("stopListening")} onClick={onStop} className="relative h-28 w-28 shrink-0 cursor-pointer rounded-full border-0 bg-transparent p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300">
         <span className="absolute -inset-3.5 animate-orb-glow rounded-full bg-[radial-gradient(circle,rgba(96,165,250,0.35)_0%,rgba(139,92,246,0.18)_45%,rgba(14,23,38,0)_70%)] motion-reduce:animate-none" />
         <span className="absolute inset-0 animate-orb-pulse overflow-hidden rounded-full bg-[radial-gradient(circle_at_35%_30%,#a5d8ff_0%,#3b82f6_38%,#6d28d9_78%,#1e1b4b_100%)] shadow-[inset_0_-10px_24px_rgba(30,27,75,0.55),inset_0_8px_18px_rgba(255,255,255,0.25)] motion-reduce:animate-none">
           <svg width="112" height="112" viewBox="0 0 112 112" aria-hidden="true" className="absolute inset-0">
@@ -166,6 +170,7 @@ interface AgentHomeProps {
  * sheet that wraps the bar so the map shows through.
  */
 export function AgentHome(p: AgentHomeProps) {
+  const t = useT();
   const scroller = useRef<HTMLDivElement>(null);
   const { orb, answerOpen, onCloseAnswer } = p;
 
@@ -234,8 +239,8 @@ export function AgentHome(p: AgentHomeProps) {
         value={shown}
         readOnly={p.dictation.on}
         onChange={(e) => p.setInput(e.target.value)}
-        placeholder={answerOpen ? "Ask a follow-up…" : "Ask anything…"}
-        aria-label="Ask the assistant"
+        placeholder={answerOpen ? t("askFollowUp") : t("askAnything")}
+        aria-label={t("askLabel")}
         enterKeyHint="send"
         className="h-11 min-w-0 flex-1 rounded-full bg-transparent pl-3 text-base text-slate-900 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-blue-500/60"
       />
@@ -294,7 +299,7 @@ export function AgentHome(p: AgentHomeProps) {
             <Button
               type="button"
               variant="ghost"
-              aria-label="Close answer"
+              aria-label={t("closeAnswer")}
               className="absolute left-0 top-0 z-10 h-11 w-11 rounded-full p-0 text-slate-300 hover:bg-slate-800 hover:text-white"
               onClick={onCloseAnswer}
             >

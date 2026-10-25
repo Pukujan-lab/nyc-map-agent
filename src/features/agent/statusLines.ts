@@ -59,6 +59,20 @@ export function statusLang(message: string, browserLang?: string): StatusLang {
   return browser ?? "en";
 }
 
+/**
+ * The language of a question only when the text itself makes it clear (its
+ * script, or Spanish punctuation); null for plain Latin text, which could be
+ * English, French, Haitian Creole or Spanish without accents.
+ */
+export function detectLang(message: string): StatusLang | null {
+  if (/[ㄱ-ㆎ가-힣]/.test(message)) return "ko";
+  if (/[一-鿿]/.test(message)) return "zh";
+  if (/[Ѐ-ӿ]/.test(message)) return "ru";
+  if (/[ঀ-৿]/.test(message)) return "bn";
+  if (/[¿¡ñÑ]/.test(message)) return "es";
+  return null;
+}
+
 /** The spoken status line for a step kind, English when the language has none. */
 export function localStatus(kind: StatusKind, lang: string): string {
   const l = baseOf(lang) ?? "en";
