@@ -14,7 +14,7 @@ export type CameraMode =
   | { kind: "street"; target: { lon: number; lat: number; nonce: number } | null; back: "map" | "guide" }
   /**
    * 2D guidance from your location. `centred` keeps you in the middle until you pan;
-   * `tilt` frames heading-up and close until you pick a view yourself.
+   * `tilt` frames you close (top-down, north up) until you pick a view yourself.
    */
   | { kind: "guide"; centred: boolean; tilt: boolean };
 

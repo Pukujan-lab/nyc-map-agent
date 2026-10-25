@@ -214,7 +214,7 @@ export default function AgentOverlay() {
     handoffCamera();
     showPoints(m, f.marks.map((x) => ({ at: x.at, name: x.name })), "#2563eb");
     const wide = window.innerWidth >= 640;
-    m.fitBounds(f.bounds, { padding: framePadding(m, wide ? { top: 100, bottom: 120, left: 460, right: 100 } : { top: 110, bottom: Math.round(window.innerHeight * 0.55), left: 40, right: 40 }), maxZoom: 17, duration: 800 });
+    m.fitBounds(f.bounds, { padding: framePadding(m, wide ? { top: 100, bottom: 120, left: 460, right: 100 } : { top: 110, bottom: Math.round(window.innerHeight * 0.55), left: 40, right: 40 }), maxZoom: 17, pitch: 0, bearing: 0, duration: 800 });
   };
   /** Close the line panel and stop following, so a new trip or answer starts on a clean map. */
   const clearMapTask = () => {

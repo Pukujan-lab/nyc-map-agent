@@ -50,6 +50,7 @@ import { alertGeometry, setAlertFocus, stationChanges, useAlertFocus } from "./a
 import { LinesDrawer } from "./LinesDrawer";
 import { BusStopDetails } from "./BusStopDetails";
 import { busStopAt } from "@/lib/map/busStops";
+import { keepInView } from "@/lib/map/keepInView";
 import { lineOpacity, useMapOptions } from "@/lib/map/mapOptions";
 import { NOTCH_ICON, addBulletImage, lineColor as lineColorOf, stationRowId, bulletId, busBadgeId, busIconSize, busPrefix } from "@/lib/transit/bullets";
 import { usePalette, type Palette } from "@/lib/theme";
@@ -163,6 +164,7 @@ type FrameInputs = {
   xrayOn: boolean;
   followedKey: string | null | undefined;
   followMode: Parameters<typeof followRig>[0];
+  reducedMotion: boolean;
   hide: boolean;
   alerted: Set<string>;
   theme: Palette;
@@ -259,9 +261,6 @@ export default function TransitLayer() {
   // The panel owns what is open; a vehicle stays "selected" while its panel is up.
   const selectedKey = content?.id.startsWith("transit:vehicle:") ? content.id.slice(16) : undefined;
   const followedKey = useFollowed();
-  // On the agent-first home a new follow starts on the flat Map view; Chase, Side, Overhead and Cab are a tap away.
-  const homeFlag = useFlag("agentHome");
-  useEffect(() => { if (homeFlag && followedKey) setFollowMode("map"); }, [homeFlag, followedKey]);
   useEffect(() => {
     if (!show.routes.length && followedKey?.startsWith("bus:")) setFollowed(null);
   }, [show.routes.length, followedKey]);
@@ -583,6 +582,8 @@ export default function TransitLayer() {
   // fought the trip preview. A heading that flips almost backward waits out.
   const headingKey = useRef<string | null>(null);
   const headingHold = useRef({ bearing: 0, streak: 0 });
+  /** The vehicle the flat follow camera has already framed once. */
+  const followFramed = useRef<string | null>(null);
   // Positions go straight to MapLibre (GeoJSON source) and the three.js layer, never through
   // React state: a per-frame setState re-rendered this whole layer ~15 times a second (#365).
   const drawFrame = useCallback((list: Vehicle[]) => {
@@ -622,9 +623,17 @@ export default function TransitLayer() {
     // Your own zoom stays on top of the follow camera, in every mode.
     if (followZoomKey.current !== fv.key) { followZoomKey.current = fv.key; followZoom.current.reset(); }
     if (f.followMode === "map") {
-      m.jumpTo({ center: [fv.lon, fv.lat], zoom: followZoom.current.next(fv.system === "bus" ? 15.5 : 14.8, m.getZoom()), pitch: 0, bearing: 0 });
+      // Top-down and north up. One glide frames a new vehicle; after that the map stays
+      // still and re-centres only when the vehicle nears the edge, never every frame.
+      if (followFramed.current !== fv.key) {
+        followFramed.current = fv.key;
+        m.easeTo({ center: [fv.lon, fv.lat], zoom: fv.system === "bus" ? 15.5 : 14.8, pitch: 0, bearing: 0, duration: f.reducedMotion ? 0 : 800 });
+        return;
+      }
+      keepInView(m, [fv.lon, fv.lat]);
       return;
     }
+    followFramed.current = null;
     const { eye, look } = followRig(f.followMode, headingHold.current.bearing, fv.z ?? 0);
     const at = (dx: number, dy: number) => new LngLat(fv.lon + dx / (111_320 * Math.cos((fv.lat * Math.PI) / 180)), fv.lat + dy / 111_320);
     const cam = m.calculateCameraOptionsFromTo(at(eye[0], eye[1]), eye[2], at(look[0], look[1]), look[2]);
@@ -832,11 +841,11 @@ export default function TransitLayer() {
     wasFollowing.current = Boolean(followedKey);
     if (next !== null) setStreetXray(next);
   }, [followedKey, followedUnder]);
-  // Following needs the 3D scene: leave street level (one scene, the camera just moves) and tilt.
+  // Following leaves street level (one scene, the camera just moves) and stays flat: the follow camera is top-down.
   useEffect(() => {
     if (!following) return;
     if (walking) stopWalk();
-    setTilted(!home);
+    setTilted(false);
   }, [following]); // eslint-disable-line react-hooks/exhaustive-deps
   // Snapshot the view before the chase camera moves it. Stop following eases back here.
   useEffect(() => {
@@ -907,7 +916,7 @@ export default function TransitLayer() {
       }
       if (decision.action === "start") {
         setDrawerOpen(false);
-        setFollowMode("chase");
+        setFollowMode("map");
         setFollowed(decision.key);
         return;
       }
@@ -959,7 +968,7 @@ export default function TransitLayer() {
       if (!pick) return false;
       setDrawerOpen(false);
       setSelectedLine(request.system === "subway" ? lineOf(request.route) : null, pick.key);
-      setFollowMode("chase");
+      setFollowMode("map");
       setFollowed(pick.key);
       return true;
     });
@@ -975,7 +984,7 @@ export default function TransitLayer() {
     const pick = shown.find((v) => v.key === selected.train) ?? shown.sort((a, z) => Math.hypot(a.lon - c.lng, a.lat - c.lat) - Math.hypot(z.lon - c.lng, z.lat - c.lat))[0];
     if (!pick) { toast(`No ${route} train on the map right now`); return; }
     setDrawerOpen(false);
-    setFollowMode("chase");
+    setFollowMode("map");
     setFollowed(pick.key);
   }, [map, selected, setDrawerOpen]);
   // A line chosen from More layers that is not on screen: bring its whole length into view.
@@ -992,7 +1001,7 @@ export default function TransitLayer() {
 
   // Route bullets stay on in every view but street level: symbols draw above the 3D
   // buildings, so a train is never lost behind a tower or under the ground when tilted.
-  frame.current = { map, three, xrayOn, followedKey, followMode, hide: walking || Boolean(opts.stationsOnly), alerted, theme };
+  frame.current = { map, three, xrayOn, followedKey, followMode, reducedMotion, hide: walking || Boolean(opts.stationsOnly), alerted, theme };
 
   if (!enabled || (!rail.length && !busOn)) return null;
 
