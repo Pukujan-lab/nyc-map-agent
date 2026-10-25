@@ -24,6 +24,10 @@ export interface CameraTarget {
   zoom?: number;
   /** Omitted means "keep the tilt the user is already looking at". */
   pitch?: number;
+  /** Omitted means "keep the heading the user is already looking at". */
+  bearing?: number;
+  /** Ease straight there instead of a fly arc: for following street photos step by step (#10). */
+  glide?: boolean;
   /** Bumped on every request so repeat flights to the same place still fire. */
   nonce: number;
 }
