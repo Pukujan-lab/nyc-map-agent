@@ -17,7 +17,7 @@ export interface TaskHandlers {
 }
 
 // Phone: four 72px tiles for thumbs. Wide screens: small pills in one row, so they don't cover the map.
-const TASK = "h-[72px] flex-col gap-1.5 rounded-[18px] border border-slate-700 bg-slate-900/90 p-0 text-[13px] font-semibold text-slate-100 shadow-lg backdrop-blur-md hover:bg-slate-800/95 hover:text-white lg:h-10 lg:flex-row lg:gap-2 lg:rounded-full lg:px-4 lg:[&_svg]:!h-[18px] lg:[&_svg]:!w-[18px]";
+const TASK = "h-[72px] min-w-0 flex-col gap-1.5 rounded-[18px] border border-slate-700 bg-slate-900/90 px-1 py-0 text-[13px] font-semibold text-slate-100 shadow-lg backdrop-blur-md hover:bg-slate-800/95 hover:text-white lg:h-10 lg:flex-row lg:gap-2 lg:rounded-full lg:px-4 lg:[&_svg]:!h-[18px] lg:[&_svg]:!w-[18px]";
 
 /** The four task buttons above the chat bar on the idle home (#370). */
 export function TaskButtons({ on }: { on: TaskHandlers }) {
@@ -33,7 +33,8 @@ export function TaskButtons({ on }: { on: TaskHandlers }) {
       {tasks.map(([label, icon, run]) => (
         <Button key={label} type="button" variant="ghost" className={TASK} onClick={run}>
           {icon}
-          <span>{label}</span>
+          {/* Long labels ("Buscar salida") wrap to two lines instead of touching the edge on a phone. */}
+          <span className="whitespace-normal text-center leading-tight">{label}</span>
         </Button>
       ))}
     </div>
