@@ -1,5 +1,6 @@
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import { z } from "zod";
+import { api } from "@/lib/api/client";
 
 /**
  * Ferry routes as water-blue dashed lines, terminals/piers as labelled dots,
@@ -33,9 +34,9 @@ export function mount(map: MapLibreMap): () => void {
 
   const load = async () => {
     try {
-      const res = await fetch("/api/ferry");
-      if (!res.ok) return;
-      const d = data.parse(await res.json());
+      const { data: body } = await api.GET("/api/ferry");
+      if (!body) return;
+      const d = data.parse(body);
       void map.getSource<GeoJSONSource>(SRC_ROUTES)?.setData(d.routes as GeoJSON.FeatureCollection);
       void map.getSource<GeoJSONSource>(SRC_TERMS)?.setData(d.terminals as GeoJSON.FeatureCollection);
       void map.getSource<GeoJSONSource>(SRC_VESSELS)?.setData(vesselsGeo(d.vessels));

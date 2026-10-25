@@ -1,4 +1,5 @@
 import type { EventWindow } from "./window";
+import { api } from "@/lib/api/client";
 import { windowRange } from "./window";
 
 /** One event as /api/events serves it (see server/features/events/schema.ts). */
@@ -31,11 +32,8 @@ export const SOURCE_LABEL: Record<EventProps["source"], string> = {
 
 export async function fetchEvents(w: EventWindow, now = new Date()): Promise<EventFeature[]> {
   const { from, to } = windowRange(w, now);
-  const q = new URLSearchParams({ from: from.toISOString(), to: to.toISOString() });
-  const res = await fetch(`/api/v1/events?${q}`);
-  if (!res.ok) return [];
-  const body = (await res.json()) as { features?: EventFeature[] };
-  return body.features ?? [];
+  const { data } = await api.GET("/api/v1/events", { params: { query: { from: from.toISOString(), to: to.toISOString() } } });
+  return (data?.features as EventFeature[] | undefined) ?? [];
 }
 
 /** Where a pin goes: the point, or the middle of a closed block. */

@@ -16,6 +16,7 @@ import {
   type HourWeather,
 } from "@/lib/weather/street";
 import { startPrecip, type PrecipHandle } from "./precipCanvas";
+import { api } from "@/lib/api/client";
 
 /**
  * Street weather: while you are in street view, the forecast hour (the
@@ -106,9 +107,9 @@ function useHour(cell: string | null, at: string): HourResponse | null {
     const [lat, lon] = cell.split(",");
     const ctrl = new AbortController();
     const load = () =>
-      fetch(`/api/weather/hour?${new URLSearchParams({ lat, lon, at })}`, { signal: ctrl.signal })
-        .then((r) => (r.ok ? (r.json() as Promise<HourResponse>) : null))
-        .then((d) => d && setData(d))
+      api
+        .GET("/api/weather/hour", { params: { query: { lat: Number(lat), lon: Number(lon), at } }, signal: ctrl.signal })
+        .then(({ data: d }) => d && setData(d as unknown as HourResponse))
         .catch(() => {
           /* keep the last hour */
         });

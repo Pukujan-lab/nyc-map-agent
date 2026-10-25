@@ -38,17 +38,22 @@ const jsonRoute = (path: string, summary: string, query?: z.ZodObject, params?: 
     responses: { 200: { description: "OK", content: { "application/json": { schema: Json } } }, ...errors },
   });
 
-const binaryRoute = (path: string, summary: string) =>
-  createRoute({
+const binary = z.string().openapi({ format: "binary" });
+
+/** octet-stream stays listed beside the real type so older clients keep matching. */
+const binaryRoute = (path: string, summary: string, contentType: string) => {
+  const content = { "application/octet-stream": { schema: binary }, [contentType]: { schema: binary } };
+  return createRoute({
     method: "get",
     path,
     summary,
     responses: {
-      200: { description: "Whole file", content: { "application/octet-stream": { schema: z.string().openapi({ format: "binary" }) } } },
-      206: { description: "PMTiles byte range (Range header)", content: { "application/octet-stream": { schema: z.string().openapi({ format: "binary" }) } } },
+      200: { description: "Whole file", content },
+      206: { description: "Byte range (Range header)", content },
       ...errors,
     },
   });
+};
 
 /**
  * POST /api/stt: speech-to-text for browsers without a working recognizer.
@@ -131,10 +136,10 @@ export const ROUTES = {
     z.object({ block: z.string().openapi({ param: { name: "block", in: "path" }, example: "120:340" }) }),
   ),
   "/api/areas": jsonRoute("/api/areas", "Simplified boundary GeoJSON", AreasQuery),
-  "/api/block-tiles": binaryRoute("/api/block-tiles", "Real NYC tax-block PMTiles"),
+  "/api/block-tiles": binaryRoute("/api/block-tiles", "Real NYC tax-block PMTiles", "application/vnd.pmtiles"),
   "/api/blocks": jsonRoute("/api/blocks", "One row per area for a source", BlocksQuery),
-  "/api/city-tiles": binaryRoute("/api/city-tiles", "Citywide 3D-city PMTiles"),
-  "/api/vehicle-models/:mode": binaryRoute("/api/vehicle-models/{mode}", "Live-vehicle glTF model (subway, bus, rail)"),
+  "/api/city-tiles": binaryRoute("/api/city-tiles", "Citywide 3D-city PMTiles", "application/vnd.pmtiles"),
+  "/api/vehicle-models/:mode": binaryRoute("/api/vehicle-models/{mode}", "Live-vehicle glTF model (subway, bus, rail)", "model/gltf-binary"),
   "/api/restrooms": createRoute({
     method: "get",
     path: "/api/restrooms",
