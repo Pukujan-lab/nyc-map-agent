@@ -65,6 +65,97 @@ graph TD
 4. Home → Plan trip → preview → "Use this route" → following your train.
 5. Home → menu row → Layers, Data, City data, Settings, Filters.
 
+## Screen space: who wins and what closes what
+
+Many things want the same small screen: the menu row's dropdowns, the line panel, the answer card, the voice orb, the trip preview, the follow card and the walk guide. These rules say which one wins. They apply to every screen size. **Status** says whether the code does it yet; anything marked *to build* doesn't exist until a commit names it.
+
+### The focus always stays on screen
+
+The **focus** is the one thing the person is tracking right now. The first item in this list that applies is the focus:
+
+1. the train or bus they are following;
+2. their own position on a walk or trip that is playing;
+3. the place an answer is about (a restroom, an exit, a stretch of line);
+4. the stretch of line a picked notice affects;
+5. their own blue dot.
+
+**Rule:** at depth 0, 1 and 2 (below), the focus is always inside the part of the map no panel covers. Only depth 3 may cover it.
+
+**How the code does it** (built in #409 and #410, `src/lib/map/mapCover.ts`):
+- Every panel that sits over the map is marked as a **cover**: `data-map-cover`, or the `task-top` / `task-bottom` classes.
+- The map adds padding on the edge each cover sits against, so its centre (where the focus is kept) moves into the clear part.
+- A cover wider than 60% of the map pads the top or bottom. A narrower one pads its side.
+- At least a quarter of the map, and never less than 160 px, always stays clear in each direction. When two covers would take more than that, both paddings shrink by the same share.
+- Fitting a route or an alert to the screen (`framePadding`) adds its own margins on top of the cover padding.
+
+**When space runs out, the panel gives way, never the focus.** The steps, in order:
+1. The panel's list scrolls inside a capped height. An opened notice is capped at 30% of the screen height and the answer at 44%.
+2. The older of two panels folds down to its chip or pill.
+3. Only then does a panel reach depth 3 and cover the focus.
+
+### Depth levels
+
+Each tap goes one level deeper. A casual user getting around should never need to go past depth 1.
+
+| Depth | What it is | Examples | May cover the focus? |
+|---|---|---|---|
+| 0 | Map only, with the fixed parts | Chat bar, quick bar, menu row, task buttons | No |
+| 1 | One surface opened by a tap: the least information that answers | A menu dropdown with its sections folded; Change view; the line panel (next trains and about one and a half notices); the answer card (one line and one button); the voice orb; the trip preview; the follow card; the walk guide; the exit card | No |
+| 2 | One step inside it | An opened notice; **More** on an answer (sources, What's nearby, Other options); an unfolded section of My day; the agent's working steps | No |
+| 3 | A deliberate full focus | City data dashboards; street view; a full notice or See all list; the Data policy page | Yes, and it closes back to depth 2 |
+
+<details>
+<summary>Depth diagram</summary>
+
+```mermaid
+graph TD
+  M[Depth 0: map] --> P[Depth 1: one panel]
+  P --> I[Depth 2: inside the panel]
+  I --> F[Depth 3: full focus]
+  F -->|close| I
+  I -->|close| P
+  P -->|close| M
+```
+
+</details>
+
+Closing always steps back one level, so Esc and Back (`dismissTop`, built) close the top level first.
+
+### Who wins
+
+Only one depth-1 surface is open at a time, except for the pairs listed under each screen size. When a new one opens, the higher row in this table wins:
+
+| Rank | Surface | When something higher opens | Status |
+|---|---|---|---|
+| 1 | An active task: following a train or bus, walking, the trip preview, find exit | Stays. It owns the screen until the person ends it. | Built |
+| 2 | The voice orb (hands-free, listening) | Ends when a task starts (`AgentOverlay.tsx`); the spoken answer still finishes | Built |
+| 3 | The answer card | Folds to its question chip when a task starts; reopens on tap | Fold *to build* |
+| 4 | The line panel | Stays open beside an answer on tablet and desktop; on a phone it folds to its line pill while an answer is open | Fold *to build* |
+| 5 | A menu dropdown or Change view | Closes. Opening one closes the other (`openMenu.ts`). The menu row is hidden while a line, a follow, a walk or street view is active (`MenuRow.tsx`). | Built |
+
+What closes what, besides the ranking:
+- **Sending a question** closes any drawer or details sheet (`closeAll`, built) and any open menu dropdown (*to build*).
+- **Starting a task** (Use this route, Follow a train, Walk me there) closes the answer down to its chip (*to build*) and ends hands-free (built).
+- **An empty-map tap** closes a details sheet and leaves the Layers drawer open (`panelSlot.ts`, built). It never closes an active task.
+- **Opening a menu dropdown while an answer is open** folds the answer to its chip (*to build*). The dropdown is the single focus until it closes, and then the answer comes back.
+
+### By screen size
+
+| Size | Where panels dock | Pairs allowed together | Extra limits |
+|---|---|---|---|
+| **Small phone** (under 375 px wide or under 700 px tall, such as an iPhone SE) | Top or bottom, full width | None: the older surface folds to its chip | The clear strip is often the 160 px minimum. Depth-2 lists use the caps above. The task buttons hide while any depth-1 surface is open (*to verify*). |
+| **Phone** (375–639 px) | Top (line panel, follow heading) or bottom (answer, orb, task card, chat bar) | One top and one bottom, if a quarter of the map stays clear | Same caps |
+| **Tablet** (640–1023 px) | Sides. The answer, task cards and menu dropdowns go left; the line panel goes right from 768 px (built in #410). | A left and a right surface together | Between 640 and 767 px the line panel still spans the top. Make it dock right from 640 px to match the answer card (*to build*). |
+| **Desktop** (1024 px and up) | Sides, the same as tablet. The line panel is 400 px wide. | A left and a right surface together | None |
+
+### Checking these rules
+
+*To build:* a Playwright test runs at 320×568, 375×667, 390×844, 820×1180, 1280×800 and 1440×900. For each depth-1 and depth-2 surface it:
+1. opens the surface;
+2. reads the map's padding and the cover rectangles;
+3. checks that the focus point (the map centre after padding) is inside the clear area, and that the clear strip is at least 160 px;
+4. checks that Esc steps back exactly one level.
+
 ## Remaining work
 
 Do these in order, one commit each, with tests where logic is involved. After each, run the checks in "Checking" and look at it in the browser.
@@ -101,6 +192,13 @@ Do these in order, one commit each, with tests where logic is involved. After ea
    - Test both cases.
 8. **Restyle the task screens to match their frames:** Trip (6), Exit (7), Walk (8), Train (9), Bus (14, crosstown route). Calibrate (10) can stay behind its flag if the camera work is too large; say so in the PR.
 9. **Dead ends.** Every button in the frames does something or is hidden. What's nearby and Other options ask the agent.
+10. **Screen space rules: the parts marked *to build*** in "Screen space: who wins and what closes what" above.
+    - Fold the answer to its question chip when a task starts or a menu dropdown opens.
+    - Fold the line panel to its pill under an answer on a phone.
+    - Close menu dropdowns when a question is sent.
+    - Dock the line panel right from 640 px.
+    - Add the Playwright check for the focus and the clear strip at the six sizes.
+    - *Done when:* that check passes at every size.
 
 ## Checking
 
