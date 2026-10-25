@@ -6,14 +6,15 @@
  *
  * The block cells are real tax blocks: the window's points are spatially
  * joined to the published nyc-blocks.geojson in DuckDB (scripts/block-join.ts),
- * and the per-block totals also land in marts.block_stats.
+ * and the per-block totals also land in marts.block_stats. The registry
+ * sources' fine-grid cells get the same join into marts.taxblock_month (#120).
  *
  *   pnpm build:aggregates      (after ingest + load:areas + publish:block-tiles)
  */
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { blockJoin, type BlockPoint } from "./block-join";
+import { blockJoin, type BlockJoin, type BlockPoint, type TaxPoint } from "./block-join";
 import { octoQuery } from "../api/_lib/octo";
 import { parseNtaBoundaries } from "../src/lib/api/nta";
 import { NOISE_FIELDS } from "../src/lib/api/noise";
@@ -21,6 +22,7 @@ import { CRASH_FIELDS } from "../src/lib/api/crashes";
 import { aggregateRows, type RowSource } from "../src/lib/geo/aggregateCore";
 import { windowBounds, WINDOW_IDS, type WindowId } from "../src/lib/windows";
 import type { AggregateResult, AggregateWorkerRequest, DatasetId } from "../src/lib/geo/types";
+import { FINE_GRID_DEG } from "../src/lib/geo/blocks";
 import { loadEnv } from "./env";
 
 /** Crashes always use 12 months (see CRASH_WINDOW in src/lib/geo/aggregate.ts). */
@@ -108,6 +110,44 @@ async function writeBlockStats(dataset: DatasetId, windowId: WindowId, cells: Ag
   }
 }
 
+const TAX_PAGE = 50_000;
+
+/** raw.source_fine_cells, one source at a time, joined to tax blocks into marts.taxblock_month. */
+async function buildTaxBlocks(blocks: BlockJoin) {
+  const { rows: sources } = await octoQuery<{ source_id: string }>("SELECT DISTINCT source_id FROM raw.source_fine_cells");
+  for (const { source_id: source } of sources) {
+    const t0 = Date.now();
+    const points: TaxPoint[] = [];
+    for (let offset = 0; ; offset += TAX_PAGE) {
+      const { rows } = await octoQuery<{ fr: number; fc: number; month: string | null; category: string; n: number }>(
+        `SELECT fr, fc, to_char(month, 'YYYY-MM-DD') AS month, category, n::float8 AS n
+         FROM raw.source_fine_cells WHERE source_id = $1 ORDER BY month NULLS FIRST, fr, fc, category LIMIT ${TAX_PAGE} OFFSET ${offset}`,
+        [source],
+        { rowLimit: TAX_PAGE },
+      );
+      // The cell's centre stands for its records.
+      for (const r of rows) {
+        points.push({ lat: (Number(r.fr) + 0.5) * FINE_GRID_DEG, lon: (Number(r.fc) + 0.5) * FINE_GRID_DEG, month: r.month, category: r.category, n: Number(r.n) });
+      }
+      if (rows.length < TAX_PAGE) break;
+    }
+    const counts = await blocks.count(source, points);
+    await octoQuery("DELETE FROM marts.taxblock_month WHERE source_id = $1", [source]);
+    for (let i = 0; i < counts.length; i += 2000) {
+      const batch = counts.slice(i, i + 2000).map((c) => ({
+        month: c.month, block_id: c.blockId, nta2020: c.nta2020, lon: c.lon, lat: c.lat, category: c.category, n: c.n,
+      }));
+      await octoQuery(
+        `INSERT INTO marts.taxblock_month (source_id, month, block_id, nta2020, lon, lat, category, n)
+         SELECT $1, x.month::date, x.block_id, x.nta2020, x.lon, x.lat, x.category, x.n
+         FROM jsonb_to_recordset($2::jsonb) AS x(month text, block_id int, nta2020 text, lon float8, lat float8, category text, n float8)`,
+        [source, JSON.stringify(batch)],
+      );
+    }
+    console.log(`${source}: ${points.length} fine cells, ${counts.length} block rows (${Date.now() - t0} ms)`);
+  }
+}
+
 async function main() {
   loadEnv();
   const shapes = await octoQuery<{ area: string; name: string; borough: string; geometry: unknown }>(
@@ -151,6 +191,7 @@ async function main() {
     );
     console.log(`${dataset} ${windowId}: ${result.totalRows} rows, ${result.blocks.length} blocks, ${(body.length / 1e6).toFixed(2)} MB (${Date.now() - t0} ms)`);
   }
+  await buildTaxBlocks(blocks);
 }
 
 main().catch((err) => {
