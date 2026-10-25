@@ -178,6 +178,8 @@ export function tripBrief(t: Trip) {
     exitAdvice: t.exitAdvice,
     /** Present for a trip planned ahead: say it, so nobody expects live delays for tomorrow. */
     whenNote: t.scheduled?.note,
+    /** Planned for later: the answer carries a Remind me button. */
+    remindable: t.scheduled?.future ? true : undefined,
     roadNotes: t.context.map((c) => c.text),
     missingData: t.mode === "drive" ? t.stubbed : undefined,
   };

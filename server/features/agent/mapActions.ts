@@ -44,6 +44,8 @@ export function skipActions(skips: Trip["skips"]): MapAction[] {
 /** Route, skipped stations, crash hotspots, then each line's stops. */
 export function tripActions(trip: Trip): MapAction[] {
   const out: MapAction[] = [{ kind: "showRoute", id: `route:${trip.id}`, label: trip.mode === "drive" ? "Show the drive" : trip.mode === "walk" ? "Show the walk" : "Show the route", trip }];
+  // Second, so the button cap never drops it; only for a trip planned ahead, as one starting now needs no reminder.
+  if (trip.scheduled?.future) out.push({ kind: "remindTrip", id: `remind:${trip.id}`, label: "Remind me", trip });
   out.push(...skipActions(trip.skips));
   const crashes = trip.context.filter((c) => c.kind === "crashes" && c.at).map((c) => ({ at: c.at!, name: c.text }));
   if (crashes.length) out.push({ kind: "showCrashes", id: `crashes:${trip.id}`, label: "Show crashes on this route", points: crashes });
@@ -99,7 +101,7 @@ export function troubleActions(troubles: LineTrouble[], stuck: StuckTrain[] = []
   return out;
 }
 
-const RANK: Record<MapAction["kind"], number> = { showRestroom: 0, showRoute: 1, showTrouble: 2, showStops: 2, showCrashes: 2, flyTo: 3 };
+const RANK: Record<MapAction["kind"], number> = { showRestroom: 0, showRoute: 1, remindTrip: 1, showTrouble: 2, showStops: 2, showCrashes: 2, flyTo: 3 };
 
 /** Collects actions across a request's tool calls: deduped by id, validated, ranked, capped. */
 const GENERIC = new Set(["show", "street", "avenue", "road", "place", "boulevard", "new", "york", "nyc", "the", "and", "east", "west", "north", "south"]);

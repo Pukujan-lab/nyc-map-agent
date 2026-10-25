@@ -37,6 +37,8 @@ import { PLAYBACK_SPEEDS, langTag, type Leg, type MapAction, type PlaybackSpeed,
 import { askAgent } from "./stream";
 import { TripPreview } from "./TripPreview";
 import { TripSummary, selectAlternative } from "./TripSummary";
+import { remindAt, saveReminder } from "./reminder";
+import { toast } from "sonner";
 import { clearPoints, routeColor, showPoints, showTrip } from "./tripLayer";
 import { runMapAction, TROUBLE_COLOR, type MapActionContext } from "./mapActions";
 import { AnswerActions, RestroomSpotDetails } from "./AnswerActions";
@@ -272,6 +274,10 @@ export default function AgentOverlay() {
       handoffCamera();
       const m = getMapInstance();
       if (m) showPoints(m, points, color);
+    },
+    remind: (t) => {
+      saveReminder(t);
+      toast(tr(appLang, "remindSaved").replace("{t}", remindAt(t)));
     },
   };
   const runAction = (a: MapAction) => {

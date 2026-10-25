@@ -170,6 +170,8 @@ export const mapAction = z.discriminatedUnion("kind", [
    * or a train that has not moved.
    */
   z.object({ ...actionBase, kind: z.literal("showTrouble"), route: z.string(), style: z.enum(["problem", "shuttle", "switch", "stuck"]), points: z.array(mapPoint).min(1).max(200) }),
+  /** A trip planned ahead: the person taps it to put a reminder in their phone's calendar. */
+  z.object({ ...actionBase, kind: z.literal("remindTrip"), trip }),
 ]);
 export type MapAction = z.infer<typeof mapAction>;
 /** Most buttons one answer carries. */
