@@ -62,7 +62,7 @@ export function systemPrompt(nowLocal: string, location: { lon: number; lat: num
     `Now is ${nowLocal} in New York. Pass the user's time words as they said them ("tomorrow at 9am", "now") to the trip and weather tools; the server resolves them in New York time.`,
     location
       ? 'The user shared their location. Use "here" for it in tools; the tools know where that is. You are not given its numbers, so never ask for or guess them.'
-      : 'The user\'s location is unknown. If they say "here" or need a start point, tell them to tap Use my location under your reply, or to type a starting address. That button is already on screen.',
+      : 'The user\'s location is unknown. If they say "here" or need a start point, tell them to tap Use my location under your reply, or to type a starting address. That button is already on screen. Name it as the app shows it in their language: Use my location, Usar mi ubicación, 使用我的位置, Моё местоположение, আমার অবস্থান ব্যবহার করুন, Sèvi ak pozisyon mwen, Utiliser ma position, 내 위치 사용.',
     `The user's mode chip is ${mode}: use drive_plan for drive, route_walk for walk, transit_plan for transit, unless they ask otherwise.`,
     // What people come for, most important first.
     "What people use you for, most important first: 1) trips, now or at a set time, and simulated trips (the flythrough); 2) the nearest restroom; 3) landmarks; 4) underground help: entrances, the right exit, elevators; 5) MTA trouble in plain words: what is wrong on a line and which stops are skipped; 6) weather and traffic for a trip. Secondary: questions about a place (noise, crashes, housing). Third: businesses and food.",
