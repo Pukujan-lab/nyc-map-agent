@@ -3,6 +3,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Badge } from "@/components/ui/badge";
 import { Ship } from "lucide-react";
 import { useFlags } from "@/lib/flags";
+import { useT } from "@/lib/i18n/appLang";
 import { headsUpFacts, recommend, type HourWeather } from "@/lib/weather/street";
 import type { Leg, Trip, TripCore } from "./schema";
 
@@ -45,6 +46,7 @@ function RouteBullet({ route, mode, color }: { route: string; mode?: string; col
 }
 
 function LegRow({ l, onLeg }: { l: Leg; onLeg?: (l: Leg) => void }) {
+  const t = useT();
   const dur = "durationS" in l ? ` · ${Math.max(1, Math.round(l.durationS / 60))} min` : "";
   // A step is a place: tapping it shows that stretch and its stops on the map.
   const Row = ({ children }: { children: React.ReactNode }) => onLeg
@@ -53,8 +55,8 @@ function LegRow({ l, onLeg }: { l: Leg; onLeg?: (l: Leg) => void }) {
   if (l.kind === "ride" && l.fromStop) {
     return (
       <Row>
-        <span className="inline-flex items-center gap-1"><RouteBullet route={l.route} mode={l.mode} color={l.color} /> {l.mode === "bus" ? "Bus" : l.mode === "subway" ? "Train" : l.mode === "ferry" ? "Ferry" : "Train"}{dur}</span>
-        <div className="truncate text-xs">Get off at {l.toStop}{l.numStops ? ` · ${l.numStops} stop${l.numStops === 1 ? "" : "s"}` : ""}</div>
+        <span className="inline-flex items-center gap-1"><RouteBullet route={l.route} mode={l.mode} color={l.color} /> {t(l.mode === "bus" ? "bus" : l.mode === "ferry" ? "ferry" : "train")}{dur}</span>
+        <div className="truncate text-xs">{t("getOffAt").replace("{s}", l.toStop ?? "")}{l.numStops ? ` · ${l.numStops === 1 ? t("oneStop") : t("nStops").replace("{n}", String(l.numStops))}` : ""}</div>
       </Row>
     );
   }
@@ -63,10 +65,11 @@ function LegRow({ l, onLeg }: { l: Leg; onLeg?: (l: Leg) => void }) {
 
 function Steps({ legs, onLeg }: { legs: Leg[]; onLeg?: (l: Leg) => void }) {
   const [open, setOpen] = useState(false);
+  const t = useT();
   return (
     <div>
       <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground">
-        Steps ({legs.length}) {open ? "▴" : "▾"}
+        {t("steps")} ({legs.length}) {open ? "▴" : "▾"}
       </button>
       {open ? (
         <ol className="mt-1 list-decimal space-y-0.5 pl-5 text-muted-foreground">
@@ -78,19 +81,20 @@ function Steps({ legs, onLeg }: { legs: Leg[]; onLeg?: (l: Leg) => void }) {
 }
 
 function OtherOptions({ trip, onSelect }: { trip: Trip; onSelect?: (t: TripCore) => void }) {
+  const t = useT();
   if (!trip.alternatives.length || !onSelect) return null;
   return (
     <div>
-      <div className="text-xs font-semibold uppercase text-muted-foreground">Other options</div>
+      <div className="text-xs font-semibold uppercase text-muted-foreground">{t("otherOptions")}</div>
       <div className="mt-1 flex flex-wrap gap-1.5">
         {trip.alternatives.map((a) => {
           const d = mins(trip.arriveIso, a.arriveIso);
           const rides = a.legs.filter((l): l is Extract<Leg, { kind: "ride" }> => l.kind === "ride");
           return (
             <button key={a.id} type="button" onClick={() => onSelect?.(a)} className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-muted" aria-label={`Option arriving ${fmt(a.arriveIso)}`}>
-              {rides.length ? rides.map((r, i) => <RouteBullet key={i} route={r.route} mode={r.mode} color={r.color} />) : "Walk"}
+              {rides.length ? rides.map((r, i) => <RouteBullet key={i} route={r.route} mode={r.mode} color={r.color} />) : t("walk")}
               <span>{fmt(a.departIso)}–{fmt(a.arriveIso)}</span>
-              <span className="text-muted-foreground">{d === 0 ? "same time" : d > 0 ? `+${d} min` : `${d} min`}</span>
+              <span className="text-muted-foreground">{d === 0 ? t("sameTime") : d > 0 ? `+${d} min` : `${d} min`}</span>
             </button>
           );
         })}
@@ -107,6 +111,7 @@ export function selectAlternative(trip: Trip, alt: TripCore): Trip {
 
 /** Weather chip, lines, ETA, exit, planned work, elevators, driving context. Text only, no tooltips. */
 export function TripSummary({ trip, compact, mapTime, bodyOnly, onSelect, onLeg }: { trip: Trip; compact?: boolean; mapTime?: string | null; bodyOnly?: boolean; onSelect?: (t: TripCore) => void; onLeg?: (l: Leg) => void }) {
+  const t = useT();
   const w = trip.weather;
   const rides = trip.legs.filter((l): l is Extract<Leg, { kind: "ride" }> => l.kind === "ride");
   return (
@@ -114,7 +119,7 @@ export function TripSummary({ trip, compact, mapTime, bodyOnly, onSelect, onLeg 
       {bodyOnly ? null : <div className="flex flex-wrap items-center gap-1.5">
         <Badge>{fmt(trip.departIso)} → {fmt(trip.arriveIso)}</Badge>
         {rides.length ? rides.map((r, i) => <RouteBullet key={`${r.route}${i}`} route={r.route} mode={r.mode} color={r.color} />) : trip.routes.map((r, i) => <Badge key={`${r}${i}`} variant="secondary">{r}</Badge>)}
-        {w ? <Badge variant="outline">{w.summary} · {Math.round(w.tempC)}°C / {Math.round(w.tempC * 9 / 5 + 32)}°F · {w.precipPct}% rain</Badge> : null}
+        {w ? <Badge variant="outline">{w.summary} · {Math.round(w.tempC)}°C / {Math.round(w.tempC * 9 / 5 + 32)}°F · {w.precipPct}% {t("rain")}</Badge> : null}
         {mapTime ? <Badge variant="outline">Map time {mapTime.replace("T", " ")}</Badge> : null}
       </div>}
       {bodyOnly ? null : <WeatherHeadsUp trip={trip} />}
@@ -124,7 +129,7 @@ export function TripSummary({ trip, compact, mapTime, bodyOnly, onSelect, onLeg 
         <>
           <Steps legs={trip.legs} onLeg={onLeg} />
           <OtherOptions trip={trip} onSelect={onSelect} />
-          {[["Planned work", trip.alerts], ["Elevators", trip.elevators], ["Weather alerts", trip.hazards], ["On the road", trip.context.map((c) => c.text)]].map(([title, items]) =>
+          {[[t("plannedWork"), trip.alerts], [t("elevators"), trip.elevators], [t("weatherAlerts"), trip.hazards], [t("onTheRoad"), trip.context.map((c) => c.text)]].map(([title, items]) =>
             (items as string[]).length ? (
               <div key={title as string}>
                 <div className="text-xs font-semibold uppercase text-muted-foreground">{title as string}</div>
