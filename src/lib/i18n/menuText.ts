@@ -7,7 +7,7 @@ import { useAppLang } from "./appLang";
  * from appLang.ts so the agent overlay does not carry the menu's words.
  */
 type Key =
-  | "myDay" | "layers" | "filters" | "data" | "cityData" | "settings" | "menus"
+  | "myDay" | "layers" | "filters" | "data" | "cityData" | "settings" | "menus" | "moreMenus"
   | "liveTrains" | "liveBuses" | "restrooms" | "moreLayers"
   | "stationsOnly" | "busStops" | "streetNames" | "buildings3d" | "moreFilters"
   | "remembered" | "countOf" | "yourData" | "seeAll" | "nothingKept" | "dataPolicy" | "policyText" | "tapAgain" | "deleted" | "deleteEverything"
@@ -20,7 +20,7 @@ type Key =
 
 const T: Record<AppLang, Record<Key, string>> = {
   en: {
-    myDay: "My day", layers: "Layers", filters: "Filters", data: "Data", cityData: "City data", settings: "Settings", menus: "Menus",
+    myDay: "My day", layers: "Layers", filters: "Filters", data: "Data", cityData: "City data", settings: "Settings", menus: "Menus", moreMenus: "More menus",
     liveTrains: "Live trains", liveBuses: "Live buses", restrooms: "Restrooms", moreLayers: "More layers",
     stationsOnly: "Stations only", busStops: "Bus stops", streetNames: "Street names", buildings3d: "3D buildings", moreFilters: "More filters",
     remembered: "Remembered", countOf: "{n} of {m}", yourData: "Your data", seeAll: "See all", nothingKept: "Nothing kept", dataPolicy: "Data policy",
@@ -34,7 +34,7 @@ const T: Record<AppLang, Record<Key, string>> = {
     home: "Home", work: "Work",
   },
   es: {
-    myDay: "Mi día", layers: "Capas", filters: "Filtros", data: "Datos", cityData: "Datos de la ciudad", settings: "Ajustes", menus: "Menús",
+    myDay: "Mi día", layers: "Capas", filters: "Filtros", data: "Datos", cityData: "Datos de la ciudad", settings: "Ajustes", menus: "Menús", moreMenus: "Más menús",
     liveTrains: "Trenes en vivo", liveBuses: "Autobuses en vivo", restrooms: "Baños", moreLayers: "Más capas",
     stationsOnly: "Solo estaciones", busStops: "Paradas de autobús", streetNames: "Nombres de calles", buildings3d: "Edificios 3D", moreFilters: "Más filtros",
     remembered: "Recordado", countOf: "{n} de {m}", yourData: "Tus datos", seeAll: "Ver todo", nothingKept: "Nada guardado", dataPolicy: "Política de datos",
@@ -48,7 +48,7 @@ const T: Record<AppLang, Record<Key, string>> = {
     home: "Casa", work: "Trabajo",
   },
   zh: {
-    myDay: "我的一天", layers: "图层", filters: "筛选", data: "数据", cityData: "城市数据", settings: "设置", menus: "菜单",
+    myDay: "我的一天", layers: "图层", filters: "筛选", data: "数据", cityData: "城市数据", settings: "设置", menus: "菜单", moreMenus: "更多菜单",
     liveTrains: "实时列车", liveBuses: "实时公交", restrooms: "厕所", moreLayers: "更多图层",
     stationsOnly: "只看车站", busStops: "公交站", streetNames: "街道名", buildings3d: "3D 建筑", moreFilters: "更多筛选",
     remembered: "已记住", countOf: "{n} / {m}", yourData: "你的数据", seeAll: "全部查看", nothingKept: "没有保存任何内容", dataPolicy: "数据政策",
@@ -62,7 +62,7 @@ const T: Record<AppLang, Record<Key, string>> = {
     home: "家", work: "公司",
   },
   ru: {
-    myDay: "Мой день", layers: "Слои", filters: "Фильтры", data: "Данные", cityData: "Данные города", settings: "Настройки", menus: "Меню",
+    myDay: "Мой день", layers: "Слои", filters: "Фильтры", data: "Данные", cityData: "Данные города", settings: "Настройки", menus: "Меню", moreMenus: "Другие меню",
     liveTrains: "Поезда сейчас", liveBuses: "Автобусы сейчас", restrooms: "Туалеты", moreLayers: "Ещё слои",
     stationsOnly: "Только станции", busStops: "Остановки автобусов", streetNames: "Названия улиц", buildings3d: "3D-здания", moreFilters: "Ещё фильтры",
     remembered: "Запомнено", countOf: "{n} из {m}", yourData: "Ваши данные", seeAll: "Показать всё", nothingKept: "Ничего не сохранено", dataPolicy: "Политика данных",
@@ -76,7 +76,7 @@ const T: Record<AppLang, Record<Key, string>> = {
     home: "Дом", work: "Работа",
   },
   bn: {
-    myDay: "আমার দিন", layers: "স্তর", filters: "ফিল্টার", data: "ডেটা", cityData: "শহরের ডেটা", settings: "সেটিংস", menus: "মেনু",
+    myDay: "আমার দিন", layers: "স্তর", filters: "ফিল্টার", data: "ডেটা", cityData: "শহরের ডেটা", settings: "সেটিংস", menus: "মেনু", moreMenus: "আরও মেনু",
     liveTrains: "লাইভ ট্রেন", liveBuses: "লাইভ বাস", restrooms: "টয়লেট", moreLayers: "আরও স্তর",
     stationsOnly: "শুধু স্টেশন", busStops: "বাস স্টপ", streetNames: "রাস্তার নাম", buildings3d: "3D ভবন", moreFilters: "আরও ফিল্টার",
     remembered: "মনে রাখা", countOf: "{m}টির মধ্যে {n}", yourData: "আপনার ডেটা", seeAll: "সব দেখুন", nothingKept: "কিছুই রাখা নেই", dataPolicy: "ডেটা নীতি",
@@ -90,7 +90,7 @@ const T: Record<AppLang, Record<Key, string>> = {
     home: "বাড়ি", work: "কাজ",
   },
   ht: {
-    myDay: "Jounen mwen", layers: "Kouch", filters: "Filt", data: "Done", cityData: "Done vil la", settings: "Paramèt", menus: "Meni",
+    myDay: "Jounen mwen", layers: "Kouch", filters: "Filt", data: "Done", cityData: "Done vil la", settings: "Paramèt", menus: "Meni", moreMenus: "Plis meni",
     liveTrains: "Tren an dirèk", liveBuses: "Bis an dirèk", restrooms: "Twalèt", moreLayers: "Plis kouch",
     stationsOnly: "Estasyon sèlman", busStops: "Arè bis", streetNames: "Non lari", buildings3d: "Bilding 3D", moreFilters: "Plis filt",
     remembered: "Sa m sonje", countOf: "{n} sou {m}", yourData: "Done ou", seeAll: "Wè tout", nothingKept: "Pa gen anyen ki sere", dataPolicy: "Règ sou done",
@@ -104,7 +104,7 @@ const T: Record<AppLang, Record<Key, string>> = {
     home: "Lakay", work: "Travay",
   },
   fr: {
-    myDay: "Ma journée", layers: "Calques", filters: "Filtres", data: "Données", cityData: "Données de la ville", settings: "Réglages", menus: "Menus",
+    myDay: "Ma journée", layers: "Calques", filters: "Filtres", data: "Données", cityData: "Données de la ville", settings: "Réglages", menus: "Menus", moreMenus: "Plus de menus",
     liveTrains: "Trains en direct", liveBuses: "Bus en direct", restrooms: "Toilettes", moreLayers: "Plus de calques",
     stationsOnly: "Stations seulement", busStops: "Arrêts de bus", streetNames: "Noms de rues", buildings3d: "Bâtiments 3D", moreFilters: "Plus de filtres",
     remembered: "Mémorisé", countOf: "{n} sur {m}", yourData: "Vos données", seeAll: "Tout voir", nothingKept: "Rien de gardé", dataPolicy: "Politique des données",
@@ -118,7 +118,7 @@ const T: Record<AppLang, Record<Key, string>> = {
     home: "Domicile", work: "Travail",
   },
   ko: {
-    myDay: "나의 하루", layers: "레이어", filters: "필터", data: "데이터", cityData: "도시 데이터", settings: "설정", menus: "메뉴",
+    myDay: "나의 하루", layers: "레이어", filters: "필터", data: "데이터", cityData: "도시 데이터", settings: "설정", menus: "메뉴", moreMenus: "더 많은 메뉴",
     liveTrains: "실시간 열차", liveBuses: "실시간 버스", restrooms: "화장실", moreLayers: "레이어 더 보기",
     stationsOnly: "역만 보기", busStops: "버스 정류장", streetNames: "거리 이름", buildings3d: "3D 건물", moreFilters: "필터 더 보기",
     remembered: "기억한 항목", countOf: "{m}개 중 {n}개", yourData: "내 데이터", seeAll: "모두 보기", nothingKept: "저장된 것 없음", dataPolicy: "데이터 정책",

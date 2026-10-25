@@ -431,7 +431,7 @@ export function FollowCard({ vehicle }: { vehicle: Vehicle }) {
           <span className={`flex h-8 min-w-8 shrink-0 items-center justify-center px-2 text-[13px] font-extrabold ${vehicle.system === "bus" ? "rounded-[10px]" : "rounded-full"}`} style={{ background: vehicle.system === "bus" ? "#0ea5e9" : vehicle.color }}>{vehicle.route}</span>
           <div className="min-w-0"><h2 className="text-sm font-bold">Following your {vehicle.route}</h2><p className="text-xs text-amber-200">{vehicle.system === "bus" ? "Bus" : vehicle.grade === "underground" ? "Underground" : "Train"} · {grouped.delays.length ? "Delays reported" : "No delay reported"}</p></div>
         </div>
-        <button type="button" className="task-action task-secondary h-11 w-11 shrink-0 p-0" aria-label="Stop following" onClick={stopFollowing}><X size={18} /></button>
+        <button type="button" className="task-action task-close" aria-label="Stop following" onClick={stopFollowing}><X size={18} /></button>
       </div>
       {!chatOpen ? <section className="task-panel task-bottom flex flex-col gap-2.5 p-2.5" data-testid="follow-card" aria-label={`Following ${vehicle.route}`}>
         <div className="flex flex-col gap-1.5 px-1 py-1">

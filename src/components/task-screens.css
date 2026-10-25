@@ -12,7 +12,8 @@
 .task-top, .task-bottom {
   position: absolute;
   left: 12px;
-  width: min(460px, calc(100% - 80px));
+  /* Leaves a wide gap before the right-hand view and zoom buttons, so a tap meant for one never lands on the other. */
+  width: min(460px, calc(100% - 104px));
   z-index: 40;
 }
 .task-top { top: calc(env(safe-area-inset-top) + 76px); }
@@ -41,6 +42,20 @@
 .task-action:hover { filter: brightness(1.15); }
 .task-action:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }
 .task-secondary { border: 1px solid rgba(148, 163, 184, .3); background: transparent; }
+/* A card's close button: solid and plainly visible over a light map, drawn above the card it closes. */
+.task-close {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  pointer-events: auto;
+  border: 1px solid rgba(148, 163, 184, .45);
+  background: #0b1220;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .35);
+  touch-action: manipulation;
+}
 .task-caption { color: #a5b4cb; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 /* Tablet and desktop: docked to the left edge, above the chat bar; nothing covers the map's middle. */
 @media (min-width: 640px) {

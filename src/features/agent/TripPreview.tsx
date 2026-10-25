@@ -33,7 +33,7 @@ export function TripPreview(p: {
           <div className="min-w-0"><h2 className="text-[15px] font-semibold">{leave}</h2>
             <p className="text-[13px] text-slate-300">{trip.origin.label} → {trip.destination.label} · about {minutes} min</p></div>
         </div>
-        <button type="button" className="task-action task-secondary h-11 w-11 shrink-0 p-0" aria-label="Close trip" onClick={p.onClose}><X size={18} /></button>
+        <button type="button" className="task-action task-close" aria-label="Close trip" onClick={p.onClose}><X size={18} /></button>
       </div>
       <div className="flex flex-wrap gap-2">
         {w ? <span className="task-panel rounded-full px-3 py-2 text-[13px]">{w.summary} · {Math.round(w.tempC)}°C / {Math.round(w.tempC * 9 / 5 + 32)}°F{w.precipPct >= 40 ? ` · ${w.precipPct}% rain` : ""}</span> : null}

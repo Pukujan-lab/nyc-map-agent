@@ -40,6 +40,38 @@ const VIEWS: Array<{ id: ViewLevel; label: string; note: string; icon: ReactNode
   { id: "street", label: "Street", note: "Walk at street level", icon: <svg {...svg}><circle cx="12" cy="5" r="2" /><path d="M12 7v7M9 21l3-7 3 7M8 11h8" /></svg> },
 ];
 
+const LIVE_URL = "https://nyc.design-bakery.com";
+const QrIcon = () => <svg {...svg} width={18} height={18}><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3" /></svg>;
+
+/** A small QR button: opens a code for the live app, so someone nearby can scan it any time. */
+function QrButton() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [open]);
+  return <>
+    <button type="button" aria-label="QR code for this app" data-testid="qr-button" onClick={() => setOpen(true)}
+      className={`${ROUND} ${DARK} pointer-events-auto !h-9 !w-9`}><QrIcon /></button>
+    {open ? (
+      <div className="pointer-events-auto fixed inset-0 z-[60] flex items-center justify-center p-4" data-testid="qr-sheet">
+        {/* A tap anywhere around the code closes it. */}
+        <button type="button" aria-label="Close QR code" tabIndex={-1} className="absolute inset-0 bg-black/45" onClick={() => setOpen(false)} />
+        <div role="dialog" aria-modal="true" aria-label="Scan to open the app"
+          className="relative flex w-[min(300px,100%)] flex-col items-center gap-3 rounded-[24px] bg-white p-5 text-center text-[#0f172a] shadow-[0_16px_40px_rgba(0,0,0,0.45)]">
+          <button type="button" aria-label="Close QR code" onClick={() => setOpen(false)}
+            className="absolute right-2 top-2 flex h-11 w-11 items-center justify-center rounded-full bg-[#0b1220] text-xl leading-none text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]">×</button>
+          <p className="pr-10 text-left text-[15px] font-semibold">Scan to open the app</p>
+          <img src="/qr-live.svg" alt={`QR code for ${LIVE_URL}`} width={220} height={220} className="h-[220px] w-[220px] [image-rendering:pixelated]" />
+          <p className="text-[13px] font-medium text-[#334155]">nyc.design-bakery.com</p>
+        </div>
+      </div>
+    ) : null}
+  </>;
+}
+
 /** The live map and its bearing and pitch, outside the react-map-gl tree. */
 function useCamera(): { map: MapLibreMap | null; bearing: number; pitch: number } {
   const [map, setMap] = useState<MapLibreMap | null>(null);
@@ -219,6 +251,7 @@ export function MapChrome() {
         </div>
         <ZoomControl map={map} />
         <LocateButton map={map} />
+        <QrButton />
       </div>
     );
   }
@@ -248,6 +281,7 @@ export function MapChrome() {
       <ZoomControl map={map} />
       {rotated && map ? <Compass map={map} bearing={bearing} /> : null}
       <LocateButton map={map} />
+      <QrButton />
     </div>
   );
 }

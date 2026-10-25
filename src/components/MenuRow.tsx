@@ -1,5 +1,5 @@
 import { ErrorBoundary } from "./ErrorBoundary";
-import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import {
   BarChart3, BusFront, Building2, CalendarDays, ChevronRight, CircleDot, Database, Ear, History, House, Info, Languages, Layers,
   Leaf, Lightbulb, LocateFixed, Lock, MessageSquare, Box, Palette, Settings, Shield, Signpost, SlidersHorizontal, Sun, TrainFront, Trash2, Volume2, Gauge, CloudSun, type LucideIcon,
@@ -26,8 +26,8 @@ import { useMenuT, type MenuKey } from "@/lib/i18n/menuText";
 /**
  * The agent-first home's top-left menu row (#370, docs/DESIGN_RULES.md): six
  * menus in a fixed order that loops round. The active one sits leftmost as a
- * pill with its icon and label; the rest follow as bare icons, each smaller
- * and fainter, and the row fades out at its right edge and scrolls sideways.
+ * pill with its icon and label; the rest follow as icons in one boxed strip
+ * that swipes sideways, with a › button for the ones out of view.
  * Each opens one floating, see-through dropdown; only one is open at a time.
  */
 export type MenuId = Exclude<OpenMenu, "view" | null>;
@@ -42,11 +42,11 @@ const ITEMS: Array<{ id: MenuId; label: MenuKey; Icon: LucideIcon }> = [
 export const MENU_IDS: MenuId[] = ITEMS.map((i) => i.id);
 const IDS = new Set<OpenMenu>(MENU_IDS);
 /**
- * Size (px) and opacity by place in the row. The pill is first (44, full);
- * the rest are bare icons, each smaller and fainter (docs/design/frames/MyDay.dc.html).
+ * Size (px) and opacity by place in the row. The pill is first (44); the rest
+ * are equal icons at full strength: faded ones read as broken (owner, 2026-10-25).
  */
-export const MENU_SIZE = [44, 40, 34, 28, 24, 20];
-export const MENU_ALPHA = [1, 0.9, 0.7, 0.5, 0.32, 0.18];
+export const MENU_SIZE = [44, 36, 36, 36, 36, 36];
+export const MENU_ALPHA = [1, 1, 1, 1, 1, 1];
 
 /** Tap an icon: it becomes the active pill and its dropdown opens. Tap the pill again: it closes. */
 export function pressMenu(active: MenuId, open: MenuId | null, id: MenuId): { active: MenuId; open: MenuId | null } {
@@ -307,12 +307,19 @@ export function MenuRow({ onOpenDashboard, onOpenSources }: { onOpenDashboard: (
   };
   const items = rowOrder(ITEMS, active);
   const top = "calc(env(safe-area-inset-top) + 16px)";
-  const fade: CSSProperties = { maskImage: "linear-gradient(to right, #000 62%, transparent 100%)", WebkitMaskImage: "linear-gradient(to right, #000 62%, transparent 100%)" };
+  // › slides to the icons out of view; at the end it goes back to the start.
+  const slide = () => {
+    const el = scroller.current;
+    if (!el) return;
+    const end = el.scrollLeft + el.clientWidth >= el.scrollWidth - 4;
+    el.scrollTo({ left: end ? 0 : el.scrollLeft + el.clientWidth * 0.7, behavior: "smooth" });
+  };
 
   return (
-    <div ref={wrap} data-testid="menu-row" className="pointer-events-none absolute left-3 z-40 flex flex-col gap-2" style={{ top, width: "min(310px, calc(100vw - 80px))" }}>
-      <nav aria-label={t("menus")} className="pointer-events-auto" data-active={active}>
-        <div ref={scroller} className="-my-3 flex snap-x snap-mandatory items-center gap-1.5 overflow-x-auto py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" style={fade}>
+    <div ref={wrap} data-testid="menu-row" className="pointer-events-none absolute left-3 z-40 flex flex-col gap-2" style={{ top, width: "min(310px, calc(100vw - 104px))" }}>
+      {/* One boxed strip, so it never runs under the view and zoom buttons; swipe it or tap ›. */}
+      <nav aria-label={t("menus")} className="pointer-events-auto flex items-center overflow-hidden rounded-full border border-[#263449] bg-[rgba(15,23,42,0.72)] p-1 backdrop-blur-[8px]" data-active={active}>
+        <div ref={scroller} className="flex min-w-0 flex-1 snap-x snap-mandatory items-center gap-1.5 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {items.map((it, i) => {
             const { Icon } = it;
             if (i === 0) {
@@ -336,8 +343,11 @@ export function MenuRow({ onOpenDashboard, onOpenSources }: { onOpenDashboard: (
               </button>
             );
           })}
-          <span aria-hidden className="w-6 shrink-0" />
         </div>
+        <button type="button" aria-label={t("moreMenus")} onClick={slide} data-testid="menu-more"
+          className={`flex h-9 w-7 shrink-0 items-center justify-center rounded-full p-0 text-[#cbd5e1] ${RING}`}>
+          <ChevronRight className="h-4 w-4" aria-hidden />
+        </button>
       </nav>
       {open ? (
         <div role="region" aria-label={t(ITEMS.find((x) => x.id === open)!.label)} data-testid="menu-dropdown" data-map-cover

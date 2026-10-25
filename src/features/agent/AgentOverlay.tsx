@@ -800,7 +800,8 @@ export default function AgentOverlay() {
           hidden={false}
           lift={!isDesktop && panelContent !== null && panelMinimized}
         />
-        {trip && player.state.active && !answerOpen ? <TripPreview
+        {/* One card at a time: station help covers the same spot, so the trip waits under it. */}
+        {trip && player.state.active && !answerOpen && !stationHelpVisible ? <TripPreview
           trip={trip} state={player.state} speed={player.state.speed}
           onToggle={player.toggle} onSpeed={(s) => { setPrefSpeed(s); player.setSpeed(s); }}
           onAlert={(route) => setSelectedLine(route)}

@@ -9,9 +9,9 @@ describe("menu row order", () => {
     expect(rowOrder(items, "settings").map((i) => i.id)).toEqual(["settings", "myDay", "layers", "filters", "data", "cityData"]);
   });
 
-  it("shrinks and fades each place after the pill", () => {
-    expect(MENU_SIZE).toEqual([44, 40, 34, 28, 24, 20]);
-    expect(MENU_ALPHA).toEqual([1, 0.9, 0.7, 0.5, 0.32, 0.18]);
+  it("keeps the icons after the pill equal and at full strength", () => {
+    expect(MENU_SIZE).toEqual([44, 36, 36, 36, 36, 36]);
+    expect(MENU_ALPHA).toEqual([1, 1, 1, 1, 1, 1]);
     expect(MENU_SIZE).toHaveLength(MENU_IDS.length);
   });
 
