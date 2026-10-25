@@ -1005,7 +1005,13 @@ export default function TransitLayer() {
     const b = map.getBounds();
     if (shape.some((p) => b.contains(p))) return;
     const xs = shape.map((p) => p[0]), ys = shape.map((p) => p[1]);
-    map.fitBounds([[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]], { padding: { top: 140, bottom: 140, left: 40, right: 40 }, duration: 800 });
+    // Frame it once the line panel is open, between the panel and the chat bar. Fitting first let the
+    // panel's padding slide in afterwards and push the line's far end under the chat bar (owner report, 2026-10-25).
+    const t = window.setTimeout(() => {
+      const chatBar = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--chat-bar-h"), 10) || 0;
+      map.fitBounds([[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]], { padding: framePadding(map, { top: 140, bottom: Math.max(140, chatBar + 32), left: 40, right: 40 }), duration: 800 });
+    }, 300);
+    return () => window.clearTimeout(t);
   }, [map, lineSel, staticKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Route bullets stay on in every view but street level: symbols draw above the 3D
