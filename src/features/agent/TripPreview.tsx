@@ -1,5 +1,5 @@
 import "@/components/task-screens.css";
-import { Clock, Pause, Play, TriangleAlert, X } from "lucide-react";
+import { Clock, MapPin, Pause, PartyPopper, Play, TriangleAlert, X } from "lucide-react";
 import { plainAlertText } from "@/lib/transit/trouble";
 import { PLAYBACK_SPEEDS, type PlaybackSpeed, type Trip } from "./schema";
 import type { PlayerState } from "./usePlayer";
@@ -48,11 +48,35 @@ export function TripPreview(p: {
         </div>
       </div>
       <div role="progressbar" aria-label="Preview progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)} className="h-1.5 overflow-hidden rounded bg-slate-400/25"><div className="h-full bg-amber-500" style={{ width: `${progress}%` }} /></div>
-      {state.active ? <p className="text-[13px] text-slate-300" aria-live="polite">{state.callout}</p> : null}
+      {state.status === "ended" ? <div className="flex items-start gap-2.5" data-testid="trip-arrived" role="status">
+        <PartyPopper size={22} className="mt-0.5 shrink-0 text-amber-300" aria-hidden />
+        <div className="min-w-0"><p className="text-[15px] font-semibold">You've arrived at {trip.destination.label.split(",")[0]}</p>
+          {state.where ? <p className="text-[13px] text-slate-300">{state.where}</p> : null}</div>
+      </div> : <>
+        {state.active ? <p className="text-[13px] text-slate-300" aria-live="polite">{state.callout}</p> : null}
+        {state.where ? <p className="flex items-center gap-1.5 text-[13px] text-slate-200" data-testid="trip-where">
+          <MapPin size={14} className="shrink-0" aria-hidden /><span className="truncate">{state.where}</span></p> : null}
+      </>}
       <div className="grid grid-cols-2 gap-2">
         <button type="button" className="task-action" onClick={p.onUse}>Use this route</button>
         <button type="button" className="task-action task-secondary" onClick={p.onOther}>Other options</button>
       </div>
     </section>
+    {state.status === "ended" ? <Balloons key={state.restart} /> : null}
   </>;
+}
+
+const BALLOONS = [
+  { left: "12%", color: "#f59e0b", delay: 0 },
+  { left: "30%", color: "#2563eb", delay: 0.35 },
+  { left: "52%", color: "#ef4444", delay: 0.15 },
+  { left: "70%", color: "#22c55e", delay: 0.5 },
+  { left: "86%", color: "#a855f7", delay: 0.25 },
+];
+
+/** A short celebration on arrival; hidden for reduced motion by the stylesheet. */
+function Balloons() {
+  return <div className="arrive-balloons" aria-hidden data-testid="arrive-balloons">
+    {BALLOONS.map((b) => <span key={b.left} className="arrive-balloon" style={{ left: b.left, background: b.color, animationDelay: `${b.delay}s` }} />)}
+  </div>;
 }

@@ -5,7 +5,8 @@
  * tests. Distances are straight lines, not walking routes. Nothing here
  * tracks or estimates where you are underground.
  */
-export type Pt = [number, number];
+import { bearing, cornerOf, metres, type ExitPlace, type LandmarkCandidate, type Pt } from "@/lib/map/mapRead";
+export { bearing, cornerOf, metres, type ExitPlace, type LandmarkCandidate, type Pt };
 
 /** The slice of public/transit/subway.json this needs. */
 export interface SubwayStatic {
@@ -19,22 +20,7 @@ export interface Station {
   at: Pt;
 }
 
-/** What the basemap knew about an exit's spot while online. */
-export interface ExitPlace {
-  /** The two nearest street names: "W 42 Street", "7 Avenue". */
-  streets: [string, string] | [string] | null;
-  /** Which corner of that intersection the exit is on: "NE". */
-  corner: string | null;
-  /** Landmarks and storefronts near the exit (names and points only), to check facing by. */
-  landmarks: LandmarkCandidate[];
-}
 
-export interface LandmarkCandidate {
-  name: string;
-  at: Pt;
-  /** Tall landmarks are seen from blocks away; storefronts only from close by. */
-  tall: boolean;
-}
 
 export interface Exit extends ExitPlace {
   at: Pt;
@@ -52,28 +38,13 @@ export interface Exit extends ExitPlace {
 
 const NO_PLACE: ExitPlace = { streets: null, corner: null, landmarks: [] };
 
-export function metres(a: Pt, b: Pt): number {
-  const kx = 111_320 * Math.cos((((a[1] + b[1]) / 2) * Math.PI) / 180);
-  return Math.hypot((a[0] - b[0]) * kx, (a[1] - b[1]) * 111_320);
-}
 
-/** Compass bearing from a to b, 0 = north, clockwise, 0–359. */
-export function bearing(a: Pt, b: Pt): number {
-  const kx = Math.cos((((a[1] + b[1]) / 2) * Math.PI) / 180);
-  const deg = (Math.atan2((b[0] - a[0]) * kx, b[1] - a[1]) * 180) / Math.PI;
-  return Math.round((deg + 360) % 360);
-}
 
 const OCTANTS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 export function octant(a: Pt, b: Pt): string {
   return OCTANTS[Math.round(bearing(a, b) / 45) % 8];
 }
 
-/** The corner (NE / SE / SW / NW) of an intersection a point stands on. */
-export function cornerOf(intersection: Pt, at: Pt): string {
-  const b = bearing(intersection, at);
-  return ["NE", "SE", "SW", "NW"][Math.floor((((b % 360) + 360) % 360) / 90)];
-}
 
 /** Nearest station within `maxM` metres, or null. */
 export function nearestStation(sys: SubwayStatic, at: Pt, maxM = 350): (Station & { d: number }) | null {

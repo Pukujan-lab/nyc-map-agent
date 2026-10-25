@@ -12,7 +12,7 @@
   {
     "name": "feature: agent (lazy overlay)",
     "path": ".size-build/assets/AgentOverlay-*.js",
-    "limit": "21.2 kB"
+    "limit": "22.2 kB"
   },
   {
     "name": "lib: screen space (xstate, lazy)",
@@ -62,7 +62,7 @@
   {
     "name": "feature: transit layers (lazy)",
     "path": ".size-build/assets/layers-*.js",
-    "limit": "23 kB"
+    "limit": "23.2 kB"
   },
   {
     "name": "shared 3D layer: threeLayer + three (vehicles, hydrants, street signs, storefronts, street furniture; lazy)",
