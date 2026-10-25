@@ -16,7 +16,11 @@ const NONE: Insets = { top: 0, bottom: 0, left: 0, right: 0 };
 
 interface Box { left: number; top: number; right: number; bottom: number }
 
-/** The padding each edge needs to clear the covers, in map pixels; at most 45% of the map per edge. */
+/**
+ * The padding each edge needs to clear the covers, in map pixels. A strip of map always stays
+ * clear for the focus (you, a followed train, the answer's place): at least a quarter of the map
+ * and 160 px each way, so on a small phone the focus sits in the gap rather than under a panel.
+ */
 export function coverInsets(map: Box, covers: Box[]): Insets {
   const w = map.right - map.left, h = map.bottom - map.top;
   const pad = { ...NONE };
@@ -31,12 +35,16 @@ export function coverInsets(map: Box, covers: Box[]): Insets {
     } else if ((l + r) / 2 < w / 2) pad.left = Math.max(pad.left, r + GAP);
     else pad.right = Math.max(pad.right, w - l + GAP);
   }
-  return {
-    top: Math.round(Math.min(pad.top, h * 0.45)),
-    bottom: Math.round(Math.min(pad.bottom, h * 0.45)),
-    left: Math.round(Math.min(pad.left, w * 0.45)),
-    right: Math.round(Math.min(pad.right, w * 0.45)),
-  };
+  const [top, bottom] = fit(pad.top, pad.bottom, h);
+  const [left, right] = fit(pad.left, pad.right, w);
+  return { top, bottom, left, right };
+}
+
+/** Shrink two opposite paddings by the same share until the clear strip between them is big enough. */
+function fit(a: number, b: number, size: number): [number, number] {
+  const room = Math.max(0, size - Math.max(160, size * 0.25));
+  const k = a + b > room ? room / (a + b) : 1;
+  return [Math.round(a * k), Math.round(b * k)];
 }
 
 /** What the open panels and menus cover on this map right now. */
