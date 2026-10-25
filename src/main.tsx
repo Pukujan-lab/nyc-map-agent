@@ -10,6 +10,8 @@ import { MapStateProvider } from "@/lib/store/MapStateContext";
 import { PanelProvider } from "@/lib/store/PanelContext";
 import { keepLastData } from "@/lib/queryKeep";
 import { removeShell } from "@/lib/shellDraft";
+import { watchStaleBuild } from "@/lib/staleBuild";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import "./index.css";
 
 const queryClient = new QueryClient({
@@ -27,6 +29,7 @@ const root = document.getElementById("root");
 if (!root) throw new Error("Missing #root element");
 // The real chat bar removes the static one from index.html; this covers the agent being off.
 window.setTimeout(removeShell, 30_000);
+watchStaleBuild();
 
 ReactDOM.createRoot(root).render(
   <React.StrictMode>
@@ -36,7 +39,9 @@ ReactDOM.createRoot(root).render(
           <DataViewProvider>
             <PanelProvider>
               <TooltipProvider delayDuration={200}>
-                <App />
+                <ErrorBoundary name="app">
+                  <App />
+                </ErrorBoundary>
                 <Toaster />
               </TooltipProvider>
             </PanelProvider>

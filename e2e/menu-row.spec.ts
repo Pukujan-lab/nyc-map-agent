@@ -46,3 +46,18 @@ test("menu row: tapping an item makes it the leftmost pill and opens only its dr
   await pill.click();
   await expect(page.getByTestId("menu-dropdown")).toHaveCount(1);
 });
+
+test.describe("older build", () => {
+  // The offline worker would serve the chunk itself, out of the route's reach.
+  test.use({ serviceWorkers: "block" });
+  test("My day from an older build does not blank the page", async ({ page }) => {
+  await mockNetwork(page);
+  // A tab opened before a deploy asks for chunks that are gone. Mark a reload as just done so the guard holds.
+  await page.addInitScript(() => sessionStorage.setItem("nyc-map:reloaded-for-build", String(Date.now())));
+  await page.route(/\/assets\/MyDay-[^/]*\.js$/, (r) => r.fulfill({ status: 404, body: "" }));
+  await page.goto("/");
+  await page.getByRole("button", { name: "My day" }).click();
+  await expect(page.getByText("My day could not open")).toBeVisible();
+  await expect(page.getByTestId("agent-bar")).toBeVisible();
+});
+});

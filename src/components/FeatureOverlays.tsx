@@ -1,6 +1,7 @@
 import { lazy, Suspense, useMemo } from "react";
 import { FEATURES } from "@/features";
 import { useFlags } from "@/lib/flags";
+import { ErrorBoundary } from "./ErrorBoundary";
 
 const LAZY = new Map(
   FEATURES.filter((f) => f.overlay).map((f) => [f.id, lazy(f.overlay!.load)] as const),
@@ -11,7 +12,7 @@ export function FeatureOverlays() {
   const flags = useFlags();
   return (
     <Suspense fallback={null}>
-      {[...LAZY].map(([id, C]) => (flags[id] ? <C key={id} /> : null))}
+      {[...LAZY].map(([id, C]) => (flags[id] ? <ErrorBoundary key={id} name={id} fallback={null}><C /></ErrorBoundary> : null))}
     </Suspense>
   );
 }

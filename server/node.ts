@@ -15,6 +15,8 @@ export function createRoot(): Hono {
   root.get("/healthz", (c) => c.json({ ok: true }));
   root.route("/", api);
   root.use("/*", serveStatic({ root: "./dist" }));
+  // A build file that is not there (an older build's chunk) is a 404, not the SPA shell served as script.
+  root.get("/assets/*", (c) => c.notFound());
   // Client-side routes fall back to the SPA shell.
   root.get("*", serveStatic({ path: "./dist/index.html" }));
   return root;
