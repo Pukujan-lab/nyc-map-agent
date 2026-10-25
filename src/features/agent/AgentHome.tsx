@@ -182,11 +182,17 @@ export function AgentHome(p: AgentHomeProps) {
   const scroller = useRef<HTMLDivElement>(null);
   const { orb, answerOpen, onCloseAnswer } = p;
 
-  // Keep the newest answer in view while it streams.
+  // Keep the newest answer in view while it streams; once it is done, show it from the top,
+  // since on a small phone the box is shorter than the answer and its start was cut off.
+  const { busy } = p;
   useEffect(() => {
     const el = scroller.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el && busy) el.scrollTop = el.scrollHeight;
   });
+  useEffect(() => {
+    const el = scroller.current;
+    if (el && !busy) el.scrollTop = 0;
+  }, [busy]);
 
   // Escape stops the orb first, then closes the answer.
   useEffect(() => {
@@ -316,17 +322,19 @@ export function AgentHome(p: AgentHomeProps) {
           <VoiceOrb transcript={orb.transcript} onStop={orb.stop} />
         ) : answerOpen ? (
           <section aria-label="Assistant answer" data-testid="agent-answers" className="relative flex min-h-0 flex-col">
+            {/* Its own row: laid over the answer, the X sat on the text once the question scrolled away (320px iPhone, 2026-10-25). */}
             <Button
               type="button"
               variant="ghost"
               aria-label={t("closeAnswer")}
-              // Solid, like the task screens' close: the answer scrolls under it, and a see-through X read as "✕'ll look".
-              className="absolute left-0 top-0 z-10 h-11 w-11 rounded-full border border-slate-400/45 bg-[#0b1220] p-0 text-slate-300 shadow-[0_4px_12px_rgba(0,0,0,.35)] hover:bg-slate-800 hover:text-white"
+              // Solid, like the task screens' close, so it never reads as part of the text behind it.
+              className="-ml-2 -mt-2 h-11 w-11 self-start rounded-full border border-slate-400/45 bg-[#0b1220] p-0 text-slate-300 shadow-[0_4px_12px_rgba(0,0,0,.35)] hover:bg-slate-800 hover:text-white"
               onClick={onCloseAnswer}
             >
               <X className="!h-5 !w-5" aria-hidden="true" />
             </Button>
-            <div ref={scroller} className="max-h-[min(44dvh,520px)] min-h-11 overflow-y-auto overscroll-contain">
+            {/* A phone keeps most of the map in view: the answer scrolls inside a shorter box. */}
+            <div ref={scroller} className="max-h-[30dvh] min-h-11 overflow-y-auto overscroll-contain sm:max-h-[min(44dvh,520px)]">
               {p.answer}
             </div>
           </section>

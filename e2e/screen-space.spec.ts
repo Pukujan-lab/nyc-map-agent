@@ -50,6 +50,14 @@ for (const [width, height] of SIZES) {
     let strip = await clearStrip(page);
     expect(Math.max(strip.down, strip.across)).toBeGreaterThanOrEqual(160);
 
+    // Phones have no menu row (chat-first): closing the answer is the next step back.
+    if (width < 640) {
+      await page.keyboard.press("Escape");
+      await expect(page.getByTestId("answer-card")).toHaveCount(0);
+      await expect(page.getByTestId("agent-bar")).toBeVisible();
+      return;
+    }
+
     // A menu over the answer: the answer folds to its question chip, the map stays clear.
     await page.getByTestId("menu-pill").click();
     await expect(page.getByTestId("menu-dropdown")).toHaveCount(1);

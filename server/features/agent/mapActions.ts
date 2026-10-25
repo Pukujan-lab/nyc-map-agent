@@ -69,6 +69,11 @@ export function layerAction(layer: LayerHelpId): MapAction {
   return { kind: "showLayer", id: `layer:${layer}`, label: `Turn on ${LAYER_HELP[layer]}`, layer };
 }
 
+/** "See the 7 trains live": opens the line with its trains, notices and Follow a train. */
+export function lineAction(route: string): MapAction {
+  return { kind: "showLine", id: `line:${route}`, label: `See the ${route} trains live`, route };
+}
+
 const dedupePoints = (ps: MapPoint[]) => [...new Map(ps.map((p) => [`${p.name}|${key(p.at)}`, p])).values()];
 
 /**
@@ -111,7 +116,7 @@ export function troubleActions(troubles: LineTrouble[], stuck: StuckTrain[] = []
   return out;
 }
 
-const RANK: Record<MapAction["kind"], number> = { showRestroom: 0, showRoute: 1, remindTrip: 1, showLayer: 1, showTrouble: 2, showStops: 2, showCrashes: 2, flyTo: 3 };
+const RANK: Record<MapAction["kind"], number> = { showRestroom: 0, showRoute: 1, remindTrip: 1, showLayer: 1, showLine: 1, showTrouble: 2, showStops: 2, showCrashes: 2, flyTo: 3 };
 
 /** Collects actions across a request's tool calls: deduped by id, validated, ranked, capped. */
 const GENERIC = new Set(["show", "street", "avenue", "road", "place", "boulevard", "new", "york", "nyc", "the", "and", "east", "west", "north", "south"]);

@@ -3,7 +3,7 @@ import { CRASH_COLOR, distanceText, runMapAction, SKIP_COLOR, TROUBLE_COLOR, typ
 import { streamEvent } from "./schema";
 import { pointsToGeoJson, routeColor } from "./tripLayer";
 
-const ctx = (): MapActionContext => ({ flyTo: vi.fn(), showTrip: vi.fn(), showRestroom: vi.fn(), showPoints: vi.fn(), remind: vi.fn(), showLayer: vi.fn() });
+const ctx = (): MapActionContext => ({ flyTo: vi.fn(), showTrip: vi.fn(), showRestroom: vi.fn(), showPoints: vi.fn(), remind: vi.fn(), showLayer: vi.fn(), showLine: vi.fn() });
 const stops = [{ at: [-73.91, 40.74] as [number, number], name: "52 St" }];
 
 describe("answer map actions", () => {
@@ -11,6 +11,12 @@ describe("answer map actions", () => {
     const c = ctx();
     expect(runMapAction({ kind: "flyTo", id: "f", label: "Show Grand Central", lon: -73.977, lat: 40.752, zoom: 16 }, c, routeColor)).toEqual({ ok: true, kind: "flyTo" });
     expect(c.flyTo).toHaveBeenCalledWith(-73.977, 40.752, 16);
+  });
+
+  it("a line button opens that line", () => {
+    const c = ctx();
+    expect(runMapAction({ kind: "showLine", id: "line:7", label: "See the 7 trains live", route: "7" }, c, routeColor)).toEqual({ ok: true, kind: "showLine" });
+    expect(c.showLine).toHaveBeenCalledWith("7");
   });
 
   it("a restroom opens with its card details", () => {

@@ -10,8 +10,20 @@ const ORDER = [
   ["settings", "Settings"],
 ] as const;
 
-test("menu row: tapping an item makes it the leftmost pill and opens only its dropdown", async ({ page }) => {
+test("a phone is chat-first: no menu row, and the language is a chip in the rail", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 800 });
+  await mockNetwork(page);
+  await page.goto("/");
+  await expect(page.getByTestId("agent-bar")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("menu-row")).toHaveCount(0);
+  await expect(page.getByTestId("zoom-control")).toBeHidden();
+  const lang = page.getByTestId("lang-chip").getByLabel("Language");
+  await lang.selectOption("es");
+  await expect(page.getByTestId("lang-chip").getByLabel("Idioma")).toHaveValue("es");
+});
+
+test("menu row: tapping an item makes it the leftmost pill and opens only its dropdown", async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 900 });
   await mockNetwork(page);
   await page.goto("/");
   await expect(page.locator("canvas.maplibregl-canvas").first()).toBeVisible();
