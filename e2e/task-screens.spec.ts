@@ -93,3 +93,34 @@ for (const width of [390, 1280]) {
     await expect(page.getByTestId("agent-bar")).toBeVisible();
   });
 }
+
+// A button that hands a question to the chat ("I'm lost", "Other ways") once re-sent it forever and froze
+// the page: it must ask exactly once and leave the page answering.
+test("I'm lost asks the agent once and the page stays responsive", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await mockNetwork(page);
+  const coords = [[-73.9875, 40.7557], [-73.986, 40.757], [-73.9851, 40.758]];
+  const walk = { ...trip, id: "walk-lost", mode: "walk", origin: { label: "7 Av", at: coords[0] }, destination: { label: "Times Square", at: coords[2] }, routes: [], alternatives: [], legs: [{ kind: "walk", label: "Walk to Times Square", coords, durationS: 360, distanceM: 450, turns: [] }] };
+  const questions: string[] = [];
+  await page.route("**/api/agent", (r) => {
+    const body = r.request().postDataJSON() as { messages?: Array<{ role: string; content: string }> };
+    questions.push(body.messages?.filter((m) => m.role === "user").at(-1)?.content ?? "");
+    return r.fulfill({ contentType: "application/x-ndjson", body: stream(questions.length === 1 ? [
+      { type: "command", command: { type: "showRoute", trip: walk } },
+      { type: "command", command: { type: "openPanel", trip: walk } }, { type: "done" },
+    ] : [{ type: "text", text: "Look for the big red stairs on your left." }, { type: "done" }]) });
+  });
+  await page.route("**/routed-foot/route/**", (r) => r.fulfill({ json: { code: "Ok", routes: [{ distance: 450, duration: 360, geometry: { type: "LineString", coordinates: coords }, legs: [{ steps: coords.map((location, i) => ({ distance: 150, name: "W 42 St", maneuver: { location, type: i === 2 ? "arrive" : "depart", bearing_after: 30 } })) }] }] } }));
+  await page.goto("/");
+  await ask(page, "Walk from 7 Av to Times Square");
+  await page.getByRole("button", { name: "Use this route", exact: true }).click();
+  await page.getByRole("button", { name: "I'm lost", exact: true }).first().click();
+  await expect.poll(() => questions.length).toBe(2);
+  expect(questions[1]).toMatch(/lost/i);
+  // Still exactly two after a pause, and the page answers a script promptly.
+  await page.waitForTimeout(1500);
+  expect(questions.length).toBe(2);
+  const t0 = Date.now();
+  await page.evaluate(() => 1);
+  expect(Date.now() - t0).toBeLessThan(1000);
+});

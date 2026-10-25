@@ -387,11 +387,14 @@ export default function AgentOverlay() {
 
   // ChatPanel is unmounted while this overlay replaces it, so the top bar's
   // question has to be sent from here or Ask the map opens on the examples.
+  // Each seed sends once: send() closes the line and the follow, and those store updates re-render
+  // before clearSeed lands, so without the id check "Other ways" or "I'm lost" re-sent itself forever.
+  const sentSeed = useRef<string | null>(null);
   useEffect(() => {
-    if (!chatSeed) return;
-    const text = chatSeed.text;
+    if (!chatSeed || sentSeed.current === chatSeed.id) return;
+    sentSeed.current = chatSeed.id;
     clearSeed();
-    void send(text);
+    void send(chatSeed.text);
   }, [chatSeed, clearSeed, send]);
 
   const turnOffHandsFree = useCallback(() => setHandsFree(false), []);
