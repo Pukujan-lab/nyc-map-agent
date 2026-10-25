@@ -325,7 +325,7 @@ export interface paths {
                 query: {
                     borough?: "MANHATTAN" | "BRONX" | "BROOKLYN" | "QUEENS" | "STATEN ISLAND";
                     categories?: string;
-                    level?: "block" | "nta" | "cd" | "borough";
+                    level?: "block" | "taxblock" | "nta" | "cd" | "borough";
                     nta?: string;
                     severity?: string;
                     source: string;
@@ -2081,7 +2081,7 @@ export interface paths {
                 query: {
                     borough?: "MANHATTAN" | "BRONX" | "BROOKLYN" | "QUEENS" | "STATEN ISLAND";
                     categories?: string;
-                    level?: "block" | "nta" | "cd" | "borough";
+                    level?: "block" | "taxblock" | "nta" | "cd" | "borough";
                     nta?: string;
                     severity?: string;
                     source: string;
