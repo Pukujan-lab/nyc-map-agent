@@ -19,8 +19,8 @@ describe("landmark layer", () => {
     expect(byTierZoom(["get", "name"], "")).toEqual([
       "step", ["zoom"],
       ["case", ["==", ["get", "tier"], 1], ["get", "name"], ""],
-      12, ["case", ["<=", ["get", "tier"], 2], ["get", "name"], ""],
-      14, ["get", "name"],
+      15, ["case", ["<=", ["get", "tier"], 2], ["get", "name"], ""],
+      16, ["get", "name"],
     ]);
   });
 

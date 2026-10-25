@@ -53,6 +53,7 @@ import { NOTCH_ICON, addBulletImage, lineColor as lineColorOf, stationRowId, bul
 import { usePalette, type Palette } from "@/lib/theme";
 import { RAISED_LIFT_PX, STOP_LIFT_PX, alertCameraAction, paintAboveVehicles, trainIconOffset } from "./layerOrder";
 import { FOCUS_OPACITY, FOCUS_VEIL_ID, WORLD, focusVeil, useTransitFocus } from "@/lib/map/transitFocus";
+import { framePadding } from "@/lib/map/mapCover";
 
 /** Layers a click on the map should hand to transit instead of the area pick. */
 /** CC BY 4.0 credit for the 3D bus model (public/models/LICENSE.md), shown while it can be on screen. Trains are plain boxes (#366). */
@@ -460,7 +461,7 @@ export default function TransitLayer() {
     if (act === "fit" && alertGeo?.bounds) {
       if (!savedCam.current) { const c = map.getCenter(); savedCam.current = { center: [c.lng, c.lat], zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() }; }
       const wide = window.innerWidth >= 768;
-      map.fitBounds(alertGeo.bounds, { padding: lineSelRef.current ? (wide ? { top: 90, bottom: 120, left: 80, right: 460 } : { top: Math.round(window.innerHeight * 0.45), bottom: 110, left: 30, right: 30 }) : wide ? { top: 90, bottom: 60, left: 440, right: 80 } : { top: 90, bottom: Math.round(window.innerHeight * 0.45), left: 30, right: 30 }, maxZoom: 15.5, duration: 900, bearing: 0, pitch: 0 });
+      map.fitBounds(alertGeo.bounds, { padding: framePadding(map, lineSelRef.current ? (wide ? { top: 90, bottom: 120, left: 80, right: 460 } : { top: Math.round(window.innerHeight * 0.45), bottom: 110, left: 30, right: 30 }) : wide ? { top: 90, bottom: 60, left: 440, right: 80 } : { top: 90, bottom: Math.round(window.innerHeight * 0.45), left: 30, right: 30 }), maxZoom: 15.5, duration: 900, bearing: 0, pitch: 0 });
     } else if (act === "restore" && savedCam.current) {
       map.easeTo({ ...savedCam.current, duration: 700 });
       savedCam.current = null;
@@ -975,16 +976,17 @@ export default function TransitLayer() {
   const brightRoutes = alertFocus ? alertFocus.routes : isoRoutes.length ? [...isoRoutes] : tripRoutes;
   const bright: unknown = ["in", ["get", "route"], ["literal", brightRoutes]];
   const trainAlpha: unknown = brightRoutes.length ? ["case", bright, 1, 0.15] : 1;
-  // Zoomed out, a bullet per train buried the city in circles: small dots until z12, then
-  // bullets. A picked line, an alert's lines or the trip's lines keep their bullets throughout.
+  // Zoomed out, a bullet per train buried the city in circles, and a dot per train still did
+  // (owner canvas note, 2026-10-24): no trains until z11.5, then bullets. A picked line, an
+  // alert's lines or the trip's lines keep their trains throughout, as dots and then bullets.
   const fadeIn = (alpha: unknown) => ["interpolate", ["linear"], ["zoom"], 11.5, brightRoutes.length ? ["case", bright, alpha, 0] : 0, 12.5, alpha] as unknown as number;
   const bulletAlpha = fadeIn(trainAlpha);
-  const dotAlpha = ["interpolate", ["linear"], ["zoom"], 11.5, brightRoutes.length ? ["case", bright, 0, 0.15] : 1, 12.5, 0] as unknown as number;
+  const dotAlpha = (brightRoutes.length ? ["interpolate", ["linear"], ["zoom"], 11.5, ["case", bright, 1, 0], 12.5, 0] : 0) as unknown as number;
   const dimLines = (alertFocus ? 0.12 : lineAlpha);
   // Isolated lines: their stations stay, the rest fade.
   const stationAlpha = (isoRoutes.length ? ["case", ["any", ...isoRoutes.map((r) => ["in", ` ${r} `, ["concat", " ", ["get", "routes"], " "]])], 1, 0.15] : 1) as number;
   // Underground dashes keep their width (#336); a selected line's read solid, the others fade.
-  const underAlpha = (lineSel ? ["case", ["in", ["get", "route"], ["literal", isoRoutes]], 0.95, 0.08] : 0.45) as number;
+  const underAlpha = (lineSel ? ["case", ["in", ["get", "route"], ["literal", isoRoutes]], 0.95, 0.08] : 0.75) as number;
   // The selected line's trains read larger than the dimmed rest.
   const bulletScale = (lineSel ? ["case", ["in", ["get", "route"], ["literal", isoRoutes]], 1.3, 1] : 1) as unknown;
   // No line picked: match nothing. A legacy ["==", 1, 0] filter is a style error, and one
@@ -998,14 +1000,14 @@ export default function TransitLayer() {
       {followed ? <FollowCard vehicle={followed} /> : null}
       {lineSel && !followedKey ? <LinePanel map={map} route={lineSel} onFollow={followLine} /> : null}
       <Source id="transit-lines" type="geojson" data={lines}>
-        {/* X-ray on stays a solid glow. Off: a dash as wide as the at-grade stroke (zoom 10 → 1.5, 16 → 4), opacity 0.45. */}
+        {/* X-ray on stays a solid glow. Off: a dash nearly as wide as the at-grade stroke (zoom 10 → 2.4, 16 → 5), opacity 0.75: the lines lead the map. */}
         <Layer id="transit-line-under" type="line" filter={["==", ["get", "grade"], "underground"]}
           paint={xrayOn
             ? { "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 2, 16, 6], "line-opacity": 0.95, "line-blur": 1 }
-            : { "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1.5, 16, 4], "line-opacity": underAlpha, "line-dasharray": [2, 2] }} />
+            : { "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 2.4, 16, 5], "line-opacity": underAlpha, "line-dasharray": [2, 1.5] }} />
         <Layer id="transit-line" type="line" filter={three ? ["==", ["get", "grade"], "grade"] : ["!=", ["get", "grade"], "underground"]}
           layout={{ "line-cap": "round", "line-join": "round" }}
-          paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, focus ? 1.8 : 1.5, 16, focus ? 4.8 : 4], "line-opacity": dimLines }} />
+          paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, focus ? 3 : 2.6, 16, focus ? 5.8 : 5], "line-opacity": dimLines }} />
       </Source>
       {xrayOn && !three ? (
         // Top-down X-ray: the ground and buildings fade so the tunnels below read through.
@@ -1031,14 +1033,14 @@ export default function TransitLayer() {
           paint={{ "fill-extrusion-color": "#6b7280", "fill-extrusion-base": 0, "fill-extrusion-height": ["-", ["get", "top"], 1.2], "fill-extrusion-opacity": 0.9 }} />
       </Source>
       <Source id="transit-stations" type="geojson" data={stations}>
-        <Layer id="transit-station" type="circle" minzoom={11}
+        <Layer id="transit-station" type="circle" minzoom={14}
           {...(three ? { filter: ["!=", ["get", "raised"], true] as ["!=", ["get", "raised"], true] } : {})}
-          paint={{ "circle-color": "#ffffff", "circle-stroke-color": "#6b6a66", "circle-stroke-width": 1, "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 1.5, 16, 4], "circle-opacity": stationAlpha, "circle-stroke-opacity": stationAlpha }} />
+          paint={{ "circle-color": "#ffffff", "circle-stroke-color": "#6b6a66", "circle-stroke-width": 1, "circle-radius": ["interpolate", ["linear"], ["zoom"], 14, 2.5, 16, 4], "circle-opacity": stationAlpha, "circle-stroke-opacity": stationAlpha }} />
         {three ? (
           // The white station dot is the click target. On a viaduct it has to sit with the label, or the tap lands on the street underneath.
-          <Layer id="transit-station-raised" type="circle" minzoom={11}
+          <Layer id="transit-station-raised" type="circle" minzoom={14}
             filter={["==", ["get", "raised"], true]}
-            paint={{ "circle-color": "#ffffff", "circle-stroke-color": "#6b6a66", "circle-stroke-width": 1, "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 1.5, 16, 4], "circle-pitch-alignment": "viewport", "circle-translate-anchor": "viewport", "circle-translate": [0, -RAISED_LIFT_PX], "circle-opacity": stationAlpha, "circle-stroke-opacity": stationAlpha }} />
+            paint={{ "circle-color": "#ffffff", "circle-stroke-color": "#6b6a66", "circle-stroke-width": 1, "circle-radius": ["interpolate", ["linear"], ["zoom"], 14, 2.5, 16, 4], "circle-pitch-alignment": "viewport", "circle-translate-anchor": "viewport", "circle-translate": [0, -RAISED_LIFT_PX], "circle-opacity": stationAlpha, "circle-stroke-opacity": stationAlpha }} />
         ) : null}
         {/* Name + route bullets: every station from z15, or the hovered / open one at any zoom.
             Collision detection drops overlapping labels so they never pile up. */}
@@ -1098,8 +1100,8 @@ export default function TransitLayer() {
         </>
       ) : null}
       <Source id="transit-access" type="geojson" data={work.access}>
-        <Layer id="transit-access" type="symbol" minzoom={11}
-          layout={{ "icon-image": "transit-access", "icon-size": ["interpolate", ["linear"], ["zoom"], 11, 0.35, 16, 0.6], "icon-offset": [-18, -18], "icon-allow-overlap": true }} />
+        <Layer id="transit-access" type="symbol" minzoom={14}
+          layout={{ "icon-image": "transit-access", "icon-size": ["interpolate", ["linear"], ["zoom"], 14, 0.45, 16, 0.6], "icon-offset": [-18, -18], "icon-allow-overlap": true }} />
       </Source>
       {/* Data is written by the hit-target timer, never from render. */}
       <Source id="transit-vehicle-hits" type="geojson" data={EMPTY}>

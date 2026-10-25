@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import { lineColor } from "@/lib/transit/bullets";
 import { setSelectedLine, useSelectedLine } from "@/lib/transit/selectedLine";
 import { useMapState } from "@/lib/store/MapStateContext";
+import { framePadding } from "@/lib/map/mapCover";
 import { setAlertFocus } from "./alertFocus";
 import { useAlerts, useNow, useTransitData } from "./hooks";
 import { boardingArrivals, minutesUntil } from "./model";
@@ -38,7 +39,7 @@ function useNoticeRings(map: MaplibreMap | undefined, notice: LineNotice | null,
       const top = Math.round((panel?.getBoundingClientRect().bottom ?? 120) + 24);
       const bottom = (parseInt(getComputedStyle(document.documentElement).getPropertyValue("--chat-bar-h"), 10) || 0) + 40;
       const xs = notice.stations.map((s) => s.coord[0]), ys = notice.stations.map((s) => s.coord[1]);
-      map.fitBounds([[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]], { padding: { top, bottom, left: 40, right: 140 }, maxZoom: 15, duration: 700 });
+      map.fitBounds([[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]], { padding: framePadding(map, { top, bottom, left: 40, right: 140 }), maxZoom: 15, duration: 700 });
     }
     return () => markers.forEach((m) => m.remove());
   }, [map, notice, panel]);
@@ -82,6 +83,7 @@ export function LinePanel({ map, route, onFollow }: { map: MaplibreMap | undefin
   return (
     <div
       data-testid="line-panel"
+      data-map-cover
       className="pointer-events-none absolute left-4 right-4 z-[44] flex flex-col gap-3 font-[Inter,system-ui,sans-serif] text-[#f1f5f9] lg:left-auto lg:w-[400px]"
       style={{ top: "calc(env(safe-area-inset-top) + 16px)", maxHeight: "calc(100% - env(safe-area-inset-top) - var(--chat-bar-h, 0px) - 32px)" }}
     >
@@ -103,19 +105,25 @@ export function LinePanel({ map, route, onFollow }: { map: MaplibreMap | undefin
       </div>
       <div ref={panelRef} className="pointer-events-auto flex min-h-0 flex-col gap-2.5 rounded-[22px] border border-[rgba(148,163,184,0.16)] bg-[rgba(11,18,32,0.45)] p-2.5 backdrop-blur-[14px]">
         {board ? (
-          <div data-testid="line-board" className="rounded-[14px] border border-[rgba(148,163,184,0.16)] bg-[rgba(15,23,42,0.35)] px-3 py-2.5 text-[14px]">
-            <div className="font-semibold">Next {route} at {board.name}</div>
-            {board.toward ? <div className="truncate text-[13px] text-[#cbd5e1]">Toward {board.toward}</div> : null}
-            <div className="mt-1.5 flex gap-2" aria-live="polite">
-              {board.times.length ? board.times.map((t) => {
-                const m = minutesUntil(t, now);
-                return <span key={t} className="rounded-full bg-[rgba(37,99,235,0.28)] px-2.5 py-0.5 text-[13px] font-semibold">{m < 1 ? "Now" : `${m} min`}</span>;
-              }) : <span className="text-[13px] text-[#cbd5e1]">No live times for this stop right now.</span>}
+          <div data-testid="line-board" className="flex items-start gap-3 rounded-[14px] border border-[rgba(148,163,184,0.16)] bg-[rgba(15,23,42,0.35)] px-3 py-2.5 text-[14px]">
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold">Next {route} at {board.name}</div>
+              {board.toward ? <div className="truncate text-[13px] text-[#cbd5e1]">Toward {board.toward}</div> : null}
+              {board.times.length ? null : <div className="mt-1 text-[13px] text-[#cbd5e1]">No live times for this stop right now.</div>}
             </div>
+            {/* The next trains stack at the right, soonest on top. */}
+            {board.times.length ? (
+              <div data-testid="line-times" className="flex shrink-0 flex-col items-end gap-1" aria-live="polite">
+                {board.times.map((t) => {
+                  const m = minutesUntil(t, now);
+                  return <span key={t} className="rounded-full bg-[rgba(37,99,235,0.28)] px-2.5 py-0.5 text-[13px] font-semibold">{m < 1 ? "Now" : `${m} min`}</span>;
+                })}
+              </div>
+            ) : null}
           </div>
         ) : null}
         {count ? (
-          <ul className="flex max-h-[236px] min-h-0 flex-col gap-2 overflow-y-auto overscroll-contain pr-0.5" aria-label={`${route} line notices`}>
+          <ul className={`line-notices flex ${picked ? "max-h-[236px]" : "max-h-[104px]"} min-h-0 flex-col gap-2 overflow-y-auto overscroll-contain pr-1.5`} aria-label={`${route} line notices`}>
             {notices.map((n) => {
               const open = n.id === picked;
               const tone = TONE[n.tone];
@@ -140,11 +148,11 @@ export function LinePanel({ map, route, onFollow }: { map: MaplibreMap | undefin
         ) : null}
         <div className="grid grid-cols-2 gap-2">
           <button type="button" onClick={() => { seedChat(`What are other ways to go instead of the ${route} train right now?`); setChatOpen(true); }}
-            className="h-11 rounded-[22px] bg-[#2563eb] text-[14px] font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">
+            className="h-9 rounded-[18px] bg-[#2563eb] text-[13px] font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">
             Other ways
           </button>
           <button type="button" onClick={onFollow}
-            className="h-11 rounded-[22px] border border-[rgba(148,163,184,0.3)] bg-transparent text-[14px] font-semibold text-[#f1f5f9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]">
+            className="h-9 rounded-[18px] border border-[rgba(148,163,184,0.3)] bg-transparent text-[13px] font-semibold text-[#f1f5f9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]">
             Follow a train
           </button>
         </div>

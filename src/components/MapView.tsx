@@ -2,6 +2,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { buildStreetContext, closeAsk, openAsk } from "@/lib/agent/streetContext";
 import { followedTrain } from "@/lib/transit/follow";
 import { setMapInstance } from "@/lib/map/mapInstance";
+import { watchMapCovers } from "@/lib/map/mapCover";
 import { DirectionsFromHere } from "@/components/DirectionsFromHere";
 import { RestroomDetails } from "@/components/RestroomCard";
 import { usePanel, usePanelChip } from "@/lib/store/PanelContext";
@@ -529,6 +530,7 @@ export function MapView({
     installDataLayers(map);
     applyAtmosphere(map);
     setMapInstance(map);
+    watchMapCovers(map);
     setStyleEpoch((epoch) => epoch + 1);
     setReady(true);
     // Phones: the credits start folded behind the "i" toggle (MapLibre opens
