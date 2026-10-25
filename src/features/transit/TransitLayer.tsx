@@ -497,7 +497,7 @@ export default function TransitLayer() {
     if (content?.id === want) shownAlert.current = want;
     else if (shownAlert.current === want) setAlertFocus(null);
   }, [content?.id, alertFocus]);
-  const openLines = useCallback(() => showPanel({ id: "transit:lines", title: "Lines", subtitle: "Tap a line for its trains and notices", details: <LinesDrawer /> }), [showPanel]);
+  const openLines = useCallback(() => showPanel({ id: "transit:lines", title: "Lines", subtitle: "Tap a line for its trains and notices", details: <LinesDrawer />, snap: "half" }), [showPanel]);
   useEffect(() => {
     if (!enabled) return;
     setLinesControl(openLines);

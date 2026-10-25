@@ -212,8 +212,9 @@ export function LayersDrawer({
   const advanced = [
     { label: "Filters and settings…", onClick: () => { onOpenChange(false); onOpenControls(); } },
     ...(flags.dataLayers ? [{ label: "Data layers…", onClick: () => { onOpenChange(false); onOpenSources(); } }] : []),
-    ...(flags.city3d ? [{ label: city3d ? "Textured 3D city: on" : "Textured 3D city: off", on: city3d, onClick: () => setCity3d(!city3d) }] : []),
-    { label: eco ? "Eco mode: on" : "Eco mode: off", on: eco, onClick: () => setEco(!eco) },
+    // Home (#372): Textured city and Eco live in Settings on the menu row, so they are not repeated here.
+    ...(flags.city3d && !home ? [{ label: city3d ? "Textured 3D city: on" : "Textured 3D city: off", on: city3d, onClick: () => setCity3d(!city3d) }] : []),
+    ...(home ? [] : [{ label: eco ? "Eco mode: on" : "Eco mode: off", on: eco, onClick: () => setEco(!eco) }]),
     { label: "Face north", onClick: () => navigate("north") },
     { label: "About the data and credits", onClick: () => setCaveatsOpen(true) },
   ];
@@ -318,7 +319,8 @@ export function LayersDrawer({
             ))}
           </div>
           <div className="flex flex-wrap gap-[var(--sp-2)]">
-            <Pill on={opts.stationsOnly} onClick={() => setOptions({ stationsOnly: !opts.stationsOnly })}>Stations only (hide vehicles)</Pill>
+            {/* Home (#372): Stations only, bus stops, street names and 3D buildings are switches in the menu row's Filters. */}
+            {home ? null : <Pill on={opts.stationsOnly} onClick={() => setOptions({ stationsOnly: !opts.stationsOnly })}>Stations only (hide vehicles)</Pill>}
             {opts.routes.length ? <Pill onClick={() => setOptions({ routes: [] })}>Show all lines</Pill> : null}
           </div>
         </Section>
@@ -328,10 +330,12 @@ export function LayersDrawer({
             <Pill on={opts.streets === "simple"} onClick={() => setOptions({ streets: "simple" })}>Simple streets</Pill>
             <Pill on={opts.streets === "full"} onClick={() => setOptions({ streets: "full" })}>Detailed streets</Pill>
             <Pill on={!opts.roads} onClick={() => setOptions({ roads: !opts.roads })}>Hide roads</Pill>
+            {home ? null : <>
             <Pill on={!opts.busStops} onClick={() => setOptions({ busStops: !opts.busStops })}>Hide bus stops</Pill>
             <Pill on={opts.streetNames} onClick={() => setOptions({ streetNames: !opts.streetNames })}>Street names</Pill>
             <Pill on={opts.buildings === "flat"} onClick={() => setOptions({ buildings: "flat" })}>Flat buildings</Pill>
             <Pill on={opts.buildings === "3d"} onClick={() => setOptions({ buildings: "3d" })}>3D buildings</Pill>
+            </>}
           </div>
           {home ? null : <p className="text-[13px] text-muted-foreground">Rotate: right-drag or Ctrl+drag</p>}
           {/* Home (#370): Theme lives in Settings on the menu row. */}

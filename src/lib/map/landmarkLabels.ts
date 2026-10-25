@@ -169,3 +169,16 @@ export function installLandmarkLabels(map: MapLibreMap, color: string, halo: str
   const layers = map.getStyle()?.layers ?? [];
   if (layers[layers.length - 1]?.id !== LANDMARK_LABELS_LAYER) map.moveLayer(LANDMARK_LABELS_LAYER);
 }
+
+/** The guide landmark under a tap on its badge or name, if any. */
+export function landmarkAt(map: MapLibreMap, point: { x: number; y: number }): GuideLandmark | null {
+  if (!map.getLayer(LANDMARK_LABELS_LAYER)) return null;
+  const id: unknown = map.queryRenderedFeatures([point.x, point.y], { layers: [LANDMARK_LABELS_LAYER] })[0]?.properties?.id;
+  return typeof id === "string" ? guideLandmarks().find((l) => l.id === id) ?? null : null;
+}
+
+/** The guide entry for a hero model or eye-level pick, matched by name, so its sheet gets the picture too. */
+export function guideLandmarkNamed(name: string): GuideLandmark | null {
+  const n = name.toLowerCase();
+  return guideLandmarks().find((l) => l.name.toLowerCase() === n) ?? null;
+}
