@@ -11,11 +11,22 @@ function clock(start = Date.UTC(2026, 9, 23, 12, 0, 0)) {
 }
 
 describe("limit config", () => {
-  it("defaults to 20 per 3 hours and 5 per minute", () => {
-    expect(limitConfigFromEnv({})).toEqual({ windowMax: 20, windowMs: 3 * HOUR, burstMax: 5, burstMs: MIN });
+  const judgingEnds = Date.parse("2026-10-27T00:00:00-04:00");
+  it("defaults to 20 per 3 hours (off until judging ends) and one question per 5 seconds", () => {
+    expect(limitConfigFromEnv({})).toEqual({ windowMax: 20, windowOffUntil: judgingEnds, windowMs: 3 * HOUR, burstMax: 1, burstMs: 5000 });
   });
   it("reads overrides and ignores junk", () => {
-    expect(limitConfigFromEnv({ AGENT_RATE_WINDOW_MAX: "3", AGENT_RATE_WINDOW_HOURS: "1", AGENT_RATE_BURST_MAX: "abc", AGENT_RATE_BURST_SECONDS: "-4" })).toEqual({ windowMax: 3, windowMs: HOUR, burstMax: 5, burstMs: MIN });
+    expect(limitConfigFromEnv({ AGENT_RATE_WINDOW_MAX: "3", AGENT_RATE_WINDOW_HOURS: "1", AGENT_RATE_BURST_MAX: "abc", AGENT_RATE_BURST_SECONDS: "-4", AGENT_RATE_WINDOW_OFF_UNTIL: "junk" })).toEqual({ windowMax: 3, windowOffUntil: 0, windowMs: HOUR, burstMax: 1, burstMs: 5000 });
+  });
+  it("skips the window while it is switched off, but keeps the cooldown", () => {
+    const c = clock();
+    const l = createLimiter({ windowMax: 1, windowOffUntil: c.now() + HOUR, windowMs: 3 * HOUR, burstMax: 1, burstMs: 5000 }, c.now);
+    expect(l.take("a").ok).toBe(true);
+    expect(l.take("a")).toMatchObject({ ok: false, reason: "burst" });
+    c.advance(5000);
+    expect(l.take("a").ok).toBe(true);
+    c.advance(HOUR);
+    expect(l.take("a")).toMatchObject({ ok: false, reason: "window" });
   });
 });
 

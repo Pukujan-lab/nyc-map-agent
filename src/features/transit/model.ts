@@ -14,6 +14,8 @@ export const SYSTEM_LABELS: Record<SystemId | "bus", string> = {
 export type Grade = "underground" | "grade" | "elevated";
 /** Viaduct deck height in metres; elevated trains ride on top of it. */
 export const VIADUCT_TOP = 8;
+/** How far short of its next stop a late train waits while the feed still says it is on the way (#419). */
+const APPROACH_HOLD_M = 150;
 
 export type RouteInfo = { name: string; short: string; color: string; text: string };
 export type StaticSystem = {
@@ -110,13 +112,21 @@ export function estimateTrain(sys: StaticSystem, trip: LiveTrip, now: number, tr
   if (!mo) return null; // finished
   // The feed has not cleared the stop the vehicle reports: never draw the train past it.
   const atI = trip.at ? pts.findIndex((p) => p.id === trip.at) : -1;
-  if (atI >= 0 && mo.phase !== "origin" && (mo.phase === "moving" ? mo.i >= atI : mo.i > atI)) {
+  // Still on the way to its first remaining stop (#419): keep it moving toward that stop, not parked at it.
+  const approaching = atI === 0 && trip.st !== 1 && mo.phase !== "origin";
+  if (approaching) {
+    if (!(mo.phase === "moving" && mo.i === 0 && mo.f === 0)) {
+      // Late against the timetable: hold just short of the stop until the feed says it arrived.
+      const fwd = pts.length > 1 ? Math.sign(pts[1].m - pts[0].m) || 1 : 1;
+      mo = { phase: "moving", i: 0, m: pts[0].m - fwd * Math.min(APPROACH_HOLD_M, Math.abs((pts[1]?.m ?? pts[0].m) - pts[0].m) / 2 || APPROACH_HOLD_M), f: 0 };
+    }
+  } else if (atI >= 0 && mo.phase !== "origin" && (mo.phase === "moving" ? mo.i >= atI : mo.i > atI)) {
     mo = trip.st === 1 || atI === 0
       ? { phase: "dwell", i: atI, m: pts[atI].m, departs: Math.max(now, pts[atI].dep ?? pts[atI].arr) }
       : { phase: "moving", i: atI - 1, m: pts[atI].m, f: 1 };
   }
   let m = mo.m;
-  const nextI = mo.phase === "moving" ? (mo.f === 0 && mo.i === 0 && now < pts[0].arr ? 0 : mo.i + 1) : mo.i;
+  const nextI = mo.phase === "moving" ? (approaching || (mo.f === 0 && mo.i === 0 && now < pts[0].arr) ? 0 : mo.i + 1) : mo.i;
   const next = pts[Math.min(nextI, pts.length - 1)];
   const onward = pts[Math.min(mo.i + 1, pts.length - 1)];
   const forward = Math.sign(onward.m - pts[mo.i].m) || Math.sign(pts[mo.i].m - (pts[mo.i - 1]?.m ?? pts[mo.i].m)) || 1;

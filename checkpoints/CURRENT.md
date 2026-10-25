@@ -12,6 +12,7 @@ GitHub Issues own task scope and progress; this file is a projection of them, no
 
 ## Completed recently
 
+- **Live map fixes for judging (2026-10-25, #419):** trains on the way to their first remaining stop glide again instead of parking at it; restrooms closed by their listed hours are skipped; More scrolls what it opens into view; the locate button uses the crosshair people know from Google Maps. Every visitor now gets one question per 5 seconds, and the 20-per-3-hours window is off until the end of 26 Oct in New York, then comes back on its own.
 - **The agent-first home landed:** chat bar at the bottom, menus top-left, task screens, memory on the phone (#395), followed by fixes to the map, panels, buses, answers and voice (#396 to #407).
 - **Panels no longer hide what you are tracking:** the map moves its centre into the uncovered part of the screen, and the line panel docks to the side on tablets and desktops (#409, #410).
 - **One place now decides who gets the screen:** an XState state machine in `src/lib/screen/screenSpace.ts`. The answer folds to a chip under menus and tasks, the line panel folds to a pill on phones, and sending a question closes menus. A test covers every pair of panels in both orders, and a browser test checks six screen sizes (#412). The rules themselves are in `docs/PDD.md`, "Screen space" (#411).
