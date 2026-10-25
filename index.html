@@ -12,6 +12,11 @@
     />
     <title>NYC Map Agent</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- The basemap's style and tile index (src/lib/map/basemap.ts) download while the app's script does,
+         rather than one after another once the map starts. -->
+    <link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin />
+    <link rel="preload" href="https://tiles.openfreemap.org/styles/liberty" as="fetch" crossorigin />
+    <link rel="preload" href="https://tiles.openfreemap.org/planet" as="fetch" crossorigin />
     <style>
       /* The first screen before the app's script has run (#368): map ground and the chat bar.
          The real chat bar removes this one when it mounts and keeps anything typed into it. */
