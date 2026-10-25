@@ -8,7 +8,7 @@
 
 GitHub Issues own task scope and progress; this file is a projection of them, not task authority. No Project Continuity Modules (PCM) task file is active, so `tasks/` is still empty. The build plan is [`docs/PDD.md`](../docs/PDD.md) (the product design document): what is built, what remains, how to check it and how to ship it. The design rules every screen must follow are in [`docs/DESIGN_RULES.md`](../docs/DESIGN_RULES.md).
 
-**What the project is now.** An agent-first map of New York City: a chat and voice assistant over a clean map that helps people get around (restrooms, landmarks, subway exits, readable MTA disruptions). The realignment is described in [`PROJECT.md`](../PROJECT.md). Work from before the realignment (3D city, street view extras, datasets) is mostly in old open pull requests; see "Open pull request backlog" below.
+**What the project is now.** An agent-first map of New York City: a chat and voice assistant over a clean map that helps people get around (restrooms, landmarks, subway exits, readable MTA disruptions). The realignment is described in [`PROJECT.md`](../PROJECT.md). Work from before the realignment (3D city, street view extras, datasets) was closed on 2026-10-25; those pull requests keep their branches on GitHub if any of it comes back (#376).
 
 ## Completed recently
 
@@ -19,38 +19,38 @@ GitHub Issues own task scope and progress; this file is a projection of them, no
 
 ## In flight
 
+**The pull request backlog was sorted on 2026-10-25 (#376, closed).** 51 old pull requests were closed: 35 whose work is already on main, and 16 from the direction before the realignment. Each has a comment saying why. The ones kept were rebased onto main with auto-merge on:
+
 | Pull request | What it is | State |
 |---|---|---|
 | #415 | Held trains and feed-skipped stops from live MTA data, on the map and in the line panel; replaces #198 | Auto-merge on |
-| #408 | Street, nearby places and an arrival message in the trip preview | Auto-merge on; blocked by the bundle-size check |
-| #394 | Every agent gets the stack's boot steps and stops stale dev servers | Open, one failing check |
-| #388 | Trip previews don't auto-play; restart on another option | Open, two failing checks |
-| #378 | Docs: realign the project around the chat agent | Open; the main checkout has uncommitted edits to `PROJECT.md` and a new `docs/HACKATHON_WRITEUP.md` on this branch |
+| #359 | Live View camera and compass scaffold, behind a flag (groundwork for fixing which way you face after the subway) | Auto-merge on |
+| #378 | Docs: realign the project, hackathon writeup and research sources | Open for review |
+| #232 | The release bot's release pull request | Left to the bot |
+
+Merged from the sort: #209, #348, #349, #394, #408, #414.
+
+After pulling main, run `pnpm install`: main now needs `xstate`, and #349 changes vite and vitest.
 
 ## Next
 
 1. **Finish the remaining-work list in `docs/PDD.md`** (items 1 to 9: menu row, the dropdowns, quick bar, memory summary, task-screen restyle, dead ends). Item 10, the screen-space rules, is done.
 2. **Underground help that never lets you miss your exit or get lost inside a station:** count stops from the saved trip and timetable when there is no signal, and keep exit guidance ready before going down (#373).
 3. **Fix the conversation length limit:** the server caps chat history at 30 messages, so a question fails with an error after about 15 exchanges.
-4. **Clear the pull request backlog** (#376), below.
+4. **Save home and work** in My day for the daily explorer. The idea came from #327, which was closed because its code targets the old home screen.
 5. **Refresh the document index:** `docs/CONTINUITY_INDEX.md` marks `AGENTS.md` and `docs/ARCHITECTURE.md` as changed since their last review. Review them, then regenerate the index with the `continuity docs render` command once the tool is installed; the index is generated, so don't edit it by hand.
-
-## Open pull request backlog
-
-There are about 60 open pull requests (#183 to #408). Most predate the realignment, and #395 already brought much of their work into main. Only #408 has auto-merge on, so the rest will not merge by themselves. At least 12 conflict with main and several fail a check. Each needs one of three outcomes: rebase and merge, close as already covered by main, or close as the old direction. Issue #376 tracks this; do it before new feature work.
 
 ## Workspace
 
-Worktrees live outside the repository, as managed worktrees (`.continuity/config.json`). On 2026-10-25 the finished ones were removed; four remain:
+Worktrees live outside the repository, as managed worktrees (`.continuity/config.json`). Remove a worktree once its pull request merges. On 2026-10-25 these remained:
 
 | Worktree | Branch | Pull request |
 |---|---|---|
 | main checkout | `docs/project-realignment` | #378 |
 | `nyc-map-agent-acs-boot` | `chore/acs-boot-wiring` | #394 |
 | `nyc-map-agent-menu-contrast` | `feat/walk-orientation` | #408 |
-| `.worktrees/trip-sim` | `feat/trip-sim-restart` | #388 |
 
-Local branches whose work is already in main were deleted. Branches that existed only on the owner's machine were deleted after being kept as local `archive/<branch-name>` tags, so nothing was lost (`git tag -l 'archive/*'` lists them, and `git switch -c <name> archive/<name>` restores one). The remaining local branches each have an open pull request.
+Deleted local branches are kept as `archive/<branch-name>` tags, so nothing was lost: `git tag -l 'archive/*'` lists them, and `git switch -c <name> archive/<name>` restores one. Closed pull requests keep their branches on GitHub.
 
 ## Keeping this file current
 
