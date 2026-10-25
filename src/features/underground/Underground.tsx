@@ -324,10 +324,15 @@ export default function Underground() {
   }, [mode, online, followed, report]);
 
   // Send queued "what I see" questions when the connection is really back (online event + retry).
+  // One check at a time: the clock ticks every second while calibrating, and a check can take
+  // 6 s, so without this the same question went out once per tick.
+  const sending = useRef<string | null>(null);
   useEffect(() => {
     const due = nextDue(queue, online, now);
-    if (!due) return;
+    if (!due || sending.current) return;
+    sending.current = due.id;
     void probe().then((r) => {
+      sending.current = null;
       report(r.ok);
       if (r.ok) {
         seedChat(due.text);
