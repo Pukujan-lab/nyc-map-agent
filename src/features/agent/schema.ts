@@ -255,5 +255,7 @@ export const requestBody = z.object({
    * is on. Never a history, and never coordinates.
    */
   memory: z.string().max(240).optional(),
+  /** Where the person is in the underground helper (riding, or at a station finding an exit). Never stored. */
+  underground: z.object({ stage: z.enum(["riding", "at-station"]), station: z.string().max(200), exit: z.string().max(200).nullable() }).optional(),
 });
 export type AgentRequest = z.infer<typeof requestBody>;

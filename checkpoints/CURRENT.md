@@ -12,6 +12,7 @@ GitHub Issues own task scope and progress; this file is a projection of them, no
 
 ## Completed recently
 
+- **The agent knows where you are underground and finds events wider (2026-10-25, #418):** the agent used to answer "which exit?" without knowing you were at a station, and event search gave up after one try. Now the underground helper tells the agent the station and the exit you picked, trip answers read like directions in order and end by offering to start, and event search tries Tavily first, then TinyFish, widening the query when nothing comes back. Tavily needs `TAVILY_API_KEY` in the server's `.env`.
 - **Live map fixes for judging (2026-10-25, #419):** trains on the way to their first remaining stop glide again instead of parking at it; restrooms closed by their listed hours are skipped; More scrolls what it opens into view; the locate button uses the crosshair people know from Google Maps. Every visitor now gets one question per 5 seconds, and the 20-per-3-hours window is off until the end of 26 Oct in New York, then comes back on its own.
 - **The agent-first home landed:** chat bar at the bottom, menus top-left, task screens, memory on the phone (#395), followed by fixes to the map, panels, buses, answers and voice (#396 to #407).
 - **Panels no longer hide what you are tracking:** the map moves its centre into the uncovered part of the screen, and the line panel docks to the side on tablets and desktops (#409, #410).

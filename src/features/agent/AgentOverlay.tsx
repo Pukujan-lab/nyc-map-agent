@@ -64,6 +64,7 @@ import { needsSharedOrigin, ORIGIN_PROMPT, replyAsksForOrigin } from "./needsOri
 import { framePadding } from "@/lib/map/mapCover";
 import { useOpenMenu } from "@/lib/store/openMenu";
 import { sendScreen, useScreen } from "@/lib/screen/screenSpace";
+import { getUndergroundNow } from "@/features/underground/whereNow";
 
 interface Msg { id: string; role: "user" | "assistant"; content: string; offerLocation?: boolean; actions?: MapAction[]; sources?: AnswerSourcesLine }
 
@@ -321,7 +322,8 @@ export default function AgentOverlay() {
     const statusTimer = home && byVoice ? window.setTimeout(() => speech.speak(statusLine(stepsRef.current, sayIn), { lang: speechTag(sayIn, lang) }), STATUS_AFTER_MS) : undefined;
     try {
       const memory = home ? memorySummary() : null;
-      for await (const ev of askAgent({ messages: history.map(({ role, content }) => ({ role, content })), location, mode, now: new Date().toISOString(), ...(askReq ? { context: askReq.context } : {}), ...(home && lang ? { lang } : {}), ...(memory ? { memory } : {}) }, abort.current.signal)) {
+      const underNow = getUndergroundNow();
+      for await (const ev of askAgent({ messages: history.map(({ role, content }) => ({ role, content })), location, mode, now: new Date().toISOString(), ...(askReq ? { context: askReq.context } : {}), ...(home && lang ? { lang } : {}), ...(memory ? { memory } : {}), ...(underNow ? { underground: underNow } : {}) }, abort.current.signal)) {
         setSteps((s) => applyStep(s, ev));
         if (ev.type === "text") {
           spoken += ev.text;

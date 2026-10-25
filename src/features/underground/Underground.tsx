@@ -1,6 +1,7 @@
 import "@/components/task-screens.css";
 import { useFlag } from "@/lib/flags";
 import { ExitTask } from "./ExitTask";
+import { setUndergroundNow } from "./whereNow";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowUpFromLine, MessageSquare, TrainFront, X } from "lucide-react";
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
@@ -357,6 +358,13 @@ export default function Underground() {
 
   const pack = packFor(store, stationId);
   const exit = pack?.exits[chosen] ?? null;
+  // Tell the agent where the person is underground, so "which exit?" or "where am I?" has an answer.
+  const exitSign = exit ? signText(exit.streets, exit.corner) ?? `Exit ${chosen + 1}` : null;
+  useEffect(() => {
+    const stage = mode === "ride" ? "riding" : mode === "idle" ? null : "at-station";
+    setUndergroundNow(stage && pack ? { stage, station: pack.station.name, exit: exitSign } : null);
+  }, [mode, pack?.station.name, exitSign]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => setUndergroundNow(null), []);
   const dest = store?.destination ?? null;
   const target = exit && dest ? bearing(exit.at, dest.at) : null;
 

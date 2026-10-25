@@ -5,7 +5,7 @@
  * source the app does not have. prompt.test.ts checks every tool it names exists.
  */
 import { SOURCES as MAP_LAYERS } from "../../../src/lib/datasets/registry";
-import type { AskContext } from "../../../src/features/agent/schema";
+import type { AgentRequest, AskContext } from "../../../src/features/agent/schema";
 import { SOURCE_INFO, type SourceInfo } from "./freshness";
 
 /**
@@ -35,15 +35,24 @@ export function mapLayersLine(): string {
   return `Map layers the user can turn on, which you cannot count or query: ${layers.join("; ")}.`;
 }
 
+/** The underground helper's state, so "which exit?" or "where do I go?" is answered for this station. */
+export function undergroundLine(u: AgentRequest["underground"]): string | null {
+  if (!u) return null;
+  if (u.stage === "riding") return `The user is on a train heading to ${u.station}, with the underground helper open.${u.exit ? ` Their chosen exit there is ${u.exit}.` : ""} Answer about getting off and out at that station.`;
+  return `The user is underground at ${u.station}, looking for the way out.${u.exit ? ` The exit they picked is ${u.exit}; it is shown on their map.` : ""} For "which way" or "where is the exit", name that exit by its streets and what is near it, and tell them to follow the station's exit signs for those streets. Never claim to know which platform end or car they are in.`;
+}
+
 /** The reply follows the language the person wrote or spoke in (#370); the browser language only breaks ties. */
 function languageLine(lang?: string): string {
   return `Reply in the language of the user's latest message, the language the user writes or speaks in${lang ? `; if that is unclear, use the browser language ${lang}` : ""}. Keep station and street names as written below, even in another language.`;
 }
 
-export function systemPrompt(nowLocal: string, location: { lon: number; lat: number } | null, mode: "walk" | "transit" | "drive" = "transit", context?: AskContext, lang?: string, memory?: string): string {
+export function systemPrompt(nowLocal: string, location: { lon: number; lat: number } | null, mode: "walk" | "transit" | "drive" = "transit", context?: AskContext, lang?: string, memory?: string, underground?: AgentRequest["underground"]): string {
   const street = contextLine(context);
+  const below = undergroundLine(underground);
   return [
     ...(street ? [street] : []),
+    ...(below ? [below] : []),
     // Who it serves and how it speaks.
     "You are the NYC Map's assistant for getting around New York. Answers are spoken aloud: 1-3 short sentences (never more than 4), no markdown, no lists.",
     languageLine(lang),
@@ -58,6 +67,7 @@ export function systemPrompt(nowLocal: string, location: { lon: number; lat: num
     "The trip preview never starts on its own: the user presses Play on the trip card. Call playFlythrough only when they ask to preview or play a trip, and say it is ready to play.",
     "When a trip result has whenNote, it is planned ahead: say the conditions known for that time (planned work, skipped stops, the forecast) and say plainly that live delays are not known yet.",
     "For a trip question: call transit_plan, then showRoute and openPanel with its tripId, then answer with: the recommended itinerary (the first one; it arrives earliest) and how it compares with the alternatives in plain words (e.g. \"The Q53 SBS is 20 minutes faster than the subway\"), lines, ETA, weather at that time, any planned work, the recommended exit said plainly (e.g. \"Use the NE exit near East 42nd Street & Lexington Avenue\"), and elevator outages.",
+    "Say a trip the way a friend gives directions, in order: where to walk and board, the line and direction, where to get off, which exit by its streets and a landmark near it when the tool gives one, then the walk to the door. Close a trip answer by offering to start it (\"Want to start?\").",
     'For "arrive by" questions set arriveBy true on transit_plan; otherwise the time is a departure time.',
     "For a drive: call drive_plan, then showRoute and openPanel; answer with ETA, slow segments, closures, tolls and only the parking hints the tool returned.",
     "For a restroom or toilet question: call nearest_restroom and answer with the closest one's name, distance and hours if known; say \"listed as open\", since the city list can be out of date. openNow false means its listed hours say it is closed right now: never send someone to it; if every result is closed now, say so plainly and give when the nearest one opens. openNow null means the hours could not be read: say to check the hours on arrival.",
