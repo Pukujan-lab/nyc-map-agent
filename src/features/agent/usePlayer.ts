@@ -3,7 +3,7 @@ import { ZoomKeeper } from "@/lib/transit/follow";
 import { getMapInstance } from "@/lib/map/mapInstance";
 import { bindPreviewRelease } from "@/lib/transit/follow";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
-import { readMap } from "@/features/underground/offline";
+import { readMap } from "@/lib/map/mapRead";
 import { along, buildTimeline, calloutInfoAt, poseAt, wallSeconds, type Segment } from "./flythrough";
 import { initialPlayback, isActive, playback, type Playback } from "./playback";
 import type { PlaybackSpeed, Trip } from "./schema";

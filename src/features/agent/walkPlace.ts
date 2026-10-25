@@ -1,4 +1,4 @@
-import { metres, type ExitPlace, type Pt } from "@/features/underground/exits";
+import { metres, type ExitPlace, type Pt } from "@/lib/map/mapRead";
 
 /** What the walker sees around them: the street underfoot and a couple of things to look for. */
 export interface WalkPlace {
