@@ -1,4 +1,4 @@
-import type { Trip } from "./schema";
+import type { MapAction, Trip } from "./schema";
 
 /**
  * "Remind me" for a trip planned ahead (#418 scene 3): a calendar event at the
@@ -78,4 +78,14 @@ export function saveReminder(trip: Trip): void {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+/**
+ * The model tends to copy the English button name into an answer in another
+ * language ("Toca Remind me"). When the answer carries the button, its text
+ * uses the name the button shows in the person's language.
+ */
+export function nameRemindButton(text: string, actions: readonly MapAction[] | undefined, label: string): string {
+  if (label === "Remind me" || !actions?.some((a) => a.kind === "remindTrip")) return text;
+  return text.replace(/\bRemind me\b/gi, label);
 }
