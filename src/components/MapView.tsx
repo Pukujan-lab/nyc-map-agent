@@ -1109,7 +1109,7 @@ export function MapView({
     const map = mapRef.current?.getMap();
     if (!map) return;
     // The camera keeps whatever tilt and bearing the user chose; only a
-    // `fly_to` that names a pitch changes it.
+    // target that names a pitch or bearing changes it.
     const pitch =
       typeof cameraTarget.pitch === "number"
         ? Math.min(Math.max(cameraTarget.pitch, 0), MAX_PITCH)
@@ -1118,10 +1118,12 @@ export function MapView({
       center: [cameraTarget.lon, cameraTarget.lat] as [number, number],
       zoom: cameraTarget.zoom ?? 13,
       pitch,
-      bearing: map.getBearing(),
+      bearing: cameraTarget.bearing ?? map.getBearing(),
     };
     if (reducedMotion) {
       map.jumpTo(camera);
+    } else if (cameraTarget.glide) {
+      map.easeTo({ ...camera, duration: 1400, essential: true });
     } else {
       map.flyTo({ ...camera, duration: 1200, essential: true });
     }
