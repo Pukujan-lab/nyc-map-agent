@@ -28,7 +28,7 @@ import { useMapState } from "@/lib/store/MapStateContext";
 import { useFlag } from "@/lib/flags";
 import { usePanel, usePanelChip, usePanelMode, usePanelSearch, type SearchProvider } from "@/lib/store/PanelContext";
 import { pickRouteVehicle, registerRouteFollower } from "@/lib/transit/routeFollow";
-import { ZoomKeeper, followRig, rememberFollowOrigin, setFollowMode, setFollowed, stableHeading, takeFollowRestore, useFollowMode, useFollowed } from "./follow";
+import { ZoomKeeper, followRig, rememberFollowOrigin, setFollowMode, setFollowed, stableHeading, stopFollowing, takeFollowRestore, useFollowMode, useFollowed } from "./follow";
 import { followActionForMapClick } from "./followClick";
 import { publishSubway } from "@/lib/agent/streetContext";
 import { busesToShow, capPerLine, holdShuttle, registerBusToggle, setShuttleBuses, shownVehicles, useBusPins } from "@/lib/transit/busReveal";
@@ -901,7 +901,8 @@ export default function TransitLayer() {
         setSnap("half");
         return;
       }
-      const decision = followActionForMapClick(f?.properties ? { layerId: f.layer.id, key: f.properties.key } : null);
+      const decision = followActionForMapClick(f?.properties ? { layerId: f.layer.id, key: f.properties.key } : null, followedRef.current);
+      if (decision.action === "release") { stopFollowing(); return; }
       // Home: a subway train or a line opens that line instead of riding along.
       if (homeRef.current) {
         const key = decision.action === "start" ? decision.key : "";

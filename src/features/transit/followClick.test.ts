@@ -18,4 +18,9 @@ describe("followActionForMapClick", () => {
       expect(followActionForMapClick({ layerId, key: "subway:A" })).toEqual({ action: "clear" });
     }
   });
+
+  it("lets go of the train you already follow", () => {
+    expect(followActionForMapClick({ layerId: "transit-vehicle-hit", key: "subway:L1" }, "subway:L1")).toEqual({ action: "release" });
+    expect(followActionForMapClick({ layerId: "transit-vehicle-hit", key: "subway:L2" }, "subway:L1")).toEqual({ action: "start", key: "subway:L2" });
+  });
 });
