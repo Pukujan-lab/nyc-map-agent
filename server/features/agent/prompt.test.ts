@@ -70,3 +70,17 @@ describe("system prompt: the owner's standing rules", () => {
     expect(present).not.toMatch(/-73\.|40\.7\d/);
   });
 });
+
+describe("underground helper context", () => {
+  it("names the station and picked exit when the user is underground", () => {
+    const p = systemPrompt("now", null, "transit", undefined, undefined, undefined, { stage: "at-station", station: "Mets-Willets Point", exit: "Roosevelt Av" });
+    expect(p).toContain("underground at Mets-Willets Point");
+    expect(p).toContain("Roosevelt Av");
+  });
+  it("says nothing about underground otherwise, and trips close with an offer to start", () => {
+    const p = systemPrompt("now", null);
+    expect(p).not.toContain("underground at");
+    expect(p).toContain("Want to start?");
+    expect(p).toContain("what to bring");
+  });
+});

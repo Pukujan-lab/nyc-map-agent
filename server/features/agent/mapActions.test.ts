@@ -134,11 +134,20 @@ describe("POST /api/agent streams the actions line (mocked LLM)", () => {
       },
     });
   };
-  const run = async (toolName: string, input: unknown): Promise<StreamEvent[]> => {
+  const walk = () => Promise.resolve({ coords: [[-73.99, 40.735], [-73.9905, 40.7362]] as [number, number][], distanceM: 140, durationS: 120, turns: [{ at: [-73.99, 40.735] as [number, number], text: "Turn left onto East 14th Street" }] });
+  const run = async (toolName: string, input: unknown, m?: ReturnType<typeof model>): Promise<StreamEvent[]> => {
     const req = new Request("http://x/api/agent", { method: "POST", body: JSON.stringify({ messages: [{ role: "user", content: "nearest restroom" }], location: { lon: -73.99, lat: 40.735 } }) });
-    const res = await POST(req, { model: model(toolName, input), deps: { restrooms: () => Promise.resolve([row("Union Square Park", -73.9905, 40.7362)]) } });
+    const res = await POST(req, { model: m ?? model(toolName, input), deps: { restrooms: () => Promise.resolve([row("Union Square Park", -73.9905, 40.7362)]), walk } });
     return (await res.text()).trim().split("\n").map((l) => streamEvent.parse(JSON.parse(l)));
   };
+
+  it("nearest_restroom gives the model the walk to the nearest one, so the answer can give directions", async () => {
+    const m = model("nearest_restroom", { place: "here" });
+    await run("nearest_restroom", { place: "here" }, m);
+    const second = JSON.stringify(m.doStreamCalls[1]?.prompt);
+    expect(second).toContain("walkToNearest");
+    expect(second).toContain("Turn left onto East 14th Street");
+  });
 
   it("nearest_restroom yields one actions line, before done, with the restroom", async () => {
     const events = await run("nearest_restroom", { place: "here" });

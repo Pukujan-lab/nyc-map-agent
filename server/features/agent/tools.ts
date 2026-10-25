@@ -1,8 +1,8 @@
 import { tool } from "ai";
-import { readPage, webSearch } from "./webLookup";
+import { findEvent, readPage } from "./webLookup";
 import { z } from "zod";
 import { command, playbackSpeed, type AgentCommand, type LngLatTuple, type MapAction, type Trip } from "../../../src/features/agent/schema";
-import { elevatorStatus, geocode, hazardsAt, nearestRestrooms, publicRestrooms, routeWalk, serviceAlerts, subwayAlertEntities, subwayVehicles, troubleStations, weatherAt, type Place, type RestroomRow } from "./services";
+import { elevatorStatus, geocode, hazardsAt, nearestRestrooms, publicRestrooms, routeWalk, serviceAlerts, subwayAlertEntities, subwayVehicles, troubleStations, weatherAt, type Place, type RestroomRow, type WalkResult } from "./services";
 import { placeActions, restroomActions, troubleActions, tripActions } from "./mapActions";
 import { buildDriveTrip } from "./drive/trip";
 import type { DriveRouter } from "./drive/router";
@@ -19,6 +19,7 @@ export interface ToolContext {
   deps?: PlanDeps & {
     driveRouter?: DriveRouter;
     restrooms?: () => Promise<RestroomRow[]>;
+    walk?: typeof routeWalk;
     alerts?: typeof serviceAlerts;
     /** MTA trouble inputs (#361), injectable for tests. */
     alertEntities?: () => Promise<FeedAlert[]>;
@@ -106,16 +107,35 @@ export function makeTools(ctx: ToolContext) {
     return { ...t, scheduled: scheduleFor(t.departIso, n), alternatives: t.alternatives.map((a) => ({ ...a, scheduled: scheduleFor(a.departIso, n) })) };
   };
 
+  /** A walk as a trip, so "Want to start?" can draw it and open its card like any other route. */
+  const walkTrip = (from: Place, to: { label: string; at: LngLatTuple }, w: WalkResult): Trip => {
+    const start = now();
+    const t: Trip = {
+      id: crypto.randomUUID(), mode: "walk",
+      origin: { label: from.label, at: at(from) }, destination: { label: to.label, at: to.at },
+      departIso: toNyLocal(start), arriveIso: toNyLocal(new Date(start.getTime() + w.durationS * 1000)),
+      legs: [{ kind: "walk", label: `Walk to ${to.label}`, coords: w.coords, durationS: w.durationS, distanceM: w.distanceM, turns: w.turns }],
+      routes: [], alerts: [], elevators: [], hazards: [], weather: null, exitAdvice: null, context: [], skips: [], stubbed: [], alternatives: [],
+    };
+    trips.set(t.id, t);
+    return t;
+  };
+  const walkBrief = (t: Trip) => {
+    const l = t.legs[0];
+    return l.kind === "walk" ? { tripId: t.id, minutes: Math.max(1, Math.round(l.durationS / 60)), meters: Math.round(l.distanceM), turns: l.turns.slice(0, 8).map((x) => x.text) } : null;
+  };
+
   return {
     geocode: tool({ description: "Find an NYC address or landmark.", inputSchema: args.geocode, execute: async ({ text }) => { const p = await resolve(text); offer(placeActions(p)); return p; } }),
     route_walk: tool({
-      description: "Walking route (OSRM) between two places.",
+      description: "Walking route (OSRM) between two places: minutes, meters, the turns, and a tripId for showRoute and openPanel.",
       inputSchema: args.route_walk,
       execute: async ({ from, to }) => {
-        const dest = await resolve(to);
-        const w = await routeWalk(at(await resolve(from)), at(dest));
+        const [o, dest] = await Promise.all([resolve(from), resolve(to)]);
+        const t = walkTrip(o, { label: dest.label, at: at(dest) }, await (ctx.deps?.walk ?? routeWalk)(at(o), at(dest)));
+        offer(tripActions(t));
         offer(placeActions(dest));
-        return { minutes: Math.round(w.durationS / 60), meters: Math.round(w.distanceM), turns: w.turns.slice(0, 8).map((t) => t.text) };
+        return walkBrief(t);
       },
     }),
     transit_plan: tool({
@@ -144,13 +164,18 @@ export function makeTools(ctx: ToolContext) {
       }),
     }),
     nearest_restroom: tool({
-      description: "Closest public restrooms (NYC Open Data) to a place, skipping ones closed right now by their listed hours: name, distance in meters, status, hours, accessibility.",
+      description: "Closest public restrooms (NYC Open Data) to a place, skipping ones closed right now by their listed hours: name, distance in meters, status, hours, accessibility, and walkToNearest (minutes, turns, tripId) for the first one.",
       inputSchema: args.nearest_restroom,
       execute: sourced(async ({ place }: z.infer<typeof args.nearest_restroom>) => {
-        const spots = nearestRestrooms(await (ctx.deps?.restrooms ?? publicRestrooms)(), at(await resolve(place)), 3, now());
+        const from = await resolve(place);
+        const spots = nearestRestrooms(await (ctx.deps?.restrooms ?? publicRestrooms)(), at(from), 3, now());
         offer(restroomActions(spots));
+        // The way to the nearest one, so the answer gives directions rather than just a name.
+        const first = spots[0];
+        const w = first ? await safe((ctx.deps?.walk ?? routeWalk)(at(from), [first.lon, first.lat]), null) : null;
+        const walk = first && w ? walkBrief(walkTrip(from, { label: first.name, at: [first.lon, first.lat] }, w)) : null;
         // Coordinates stay out of the model's view; the button carries them.
-        return { restrooms: spots.map((r) => ({ name: r.name, distanceM: r.distanceM, status: r.status, hours: r.hours, openNow: r.openNow, accessibility: r.accessibility, operator: r.operator })) };
+        return { restrooms: spots.map((r) => ({ name: r.name, distanceM: r.distanceM, status: r.status, hours: r.hours, openNow: r.openNow, accessibility: r.accessibility, operator: r.operator })), walkToNearest: walk };
       }),
     }),
     line_status: tool({
@@ -190,7 +215,7 @@ export function makeTools(ctx: ToolContext) {
     }),
     weather_forecast: tool({ description: "Hourly forecast (Open-Meteo) at a place and local time, up to 7 days ahead.", inputSchema: args.weather_forecast, execute: sourced(async ({ place, time }: z.infer<typeof args.weather_forecast>) => weatherAt(at(await resolve(place)), localTime(time))) }),
     hazards: tool({ description: "Active National Weather Service alerts at a place.", inputSchema: args.hazards, execute: sourced(async ({ place }: z.infer<typeof args.hazards>) => ({ alerts: await hazardsAt(at(await resolve(place))) })) }),
-    find_event: tool({ description: "Search the web for a named event in New York (Luma, Eventbrite, the organiser's site). Only when the user asks about a specific event.", inputSchema: args.find_event, execute: sourced(async ({ query }: z.infer<typeof args.find_event>) => webSearch(/new york|nyc|brooklyn|queens|manhattan|bronx|staten/i.test(query) ? query : `${query} New York`)) }),
+    find_event: tool({ description: "Search the web for a named event in New York (Luma, Eventbrite, Meetup, Partiful, the organiser's site). Only when the user asks about a specific event or what is on at a place they name. Tries a wider search on its own when the first finds nothing.", inputSchema: args.find_event, execute: sourced(async ({ query }: z.infer<typeof args.find_event>) => findEvent(query)) }),
     read_page: tool({ description: "Read one event page from find_event to get its venue address, date and time.", inputSchema: args.read_page, execute: sourced(async ({ url }: z.infer<typeof args.read_page>) => readPage(url)) }),
     elevator_status: tool({ description: "Current MTA elevator/escalator outages at a station.", inputSchema: args.elevator_status, execute: sourced(async ({ station }: z.infer<typeof args.elevator_status>) => ({ outages: await elevatorStatus(station) })) }),
     flyTo: tool({ description: "Map: fly the camera to a place.", inputSchema: args.flyTo, execute: async ({ place, zoom }) => { const p = await resolve(place); offer(placeActions(p)); return emit({ type: "flyTo", lon: p.at[0], lat: p.at[1], zoom }); } }),
