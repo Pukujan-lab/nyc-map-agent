@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { removeShell, shellText } from "./shellDraft";
+import { removeShell, shellFocused, shellText } from "./shellDraft";
 
 const page = (value: string | null) => {
   const remove = vi.fn();
@@ -25,5 +25,11 @@ describe("the static chat bar before the app loads (#368)", () => {
     removeShell(doc);
     expect(remove).toHaveBeenCalledOnce();
     expect(() => removeShell(page(null).doc)).not.toThrow();
+  });
+
+  it("knows when it holds the cursor, so the real bar can take it over", () => {
+    expect(shellFocused({ activeElement: { id: "shell-ask" } as Element })).toBe(true);
+    expect(shellFocused({ activeElement: { id: "other" } as Element })).toBe(false);
+    expect(shellFocused({ activeElement: null })).toBe(false);
   });
 });

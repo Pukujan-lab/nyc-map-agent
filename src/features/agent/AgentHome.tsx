@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefO
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/appLang";
-import { removeShell, shellText } from "@/lib/shellDraft";
+import { removeShell, shellFocused, shellText } from "@/lib/shellDraft";
 import { stepLabel, type AgentStep } from "./agentSteps";
 
 /**
@@ -229,13 +229,17 @@ export function AgentHome(p: AgentHomeProps) {
   });
   useEffect(() => () => { document.documentElement.style.removeProperty("--chat-bar-h"); }, []);
   // The static chat bar from index.html (#368) gives way once this one shows, keeping what was typed.
-  const { setInput } = p;
+  // It hands over the cursor too: keys typed while the app was still loading are delivered after this
+  // runs, and with the static bar gone and nothing focused they were dropped.
+  const { setInput, inputRef } = p;
   useLayoutEffect(() => {
     if (hidden) return;
     const typed = shellText();
+    const focused = shellFocused();
     if (typed) setInput(typed);
     removeShell();
-  }, [hidden, setInput]);
+    if (focused) inputRef.current?.focus();
+  }, [hidden, setInput, inputRef]);
 
   if (p.hidden) return null;
 
