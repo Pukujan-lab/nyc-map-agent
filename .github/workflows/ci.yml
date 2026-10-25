@@ -253,8 +253,10 @@ jobs:
       - name: Install uv
         run: curl -LsSf https://releases.astral.sh/github/uv/releases/download/0.12.22/uv-installer.sh | env UV_INSTALL_DIR="$RUNNER_TEMP/uv" UV_NO_MODIFY_PATH=1 sh
       - name: Schemathesis against nyc.design-bakery.com
+        # Hypothesis 6.170.10 removed an internal Schemathesis 4.0.0 relies on
+        # ('many' object has no attribute 'more'); 4.32.5 misreads our 3.1 prefixItems.
         run: >
-          "$RUNNER_TEMP/uv/uvx" schemathesis@4.0.0 run openapi.json
+          "$RUNNER_TEMP/uv/uvx" --with 'hypothesis<6.170.10' schemathesis@4.0.0 run openapi.json
           --url https://nyc.design-bakery.com
           --exclude-method POST --exclude-path-regex '^/api/(?!v1/)|/vehicle-models/'
           --max-examples 2 --phases examples,fuzzing
