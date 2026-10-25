@@ -12,11 +12,13 @@ test("map loads, search opens a panel, street level toggles, no console errors",
   page.on("pageerror", (e) => errors.push(e.message));
   await mockNetwork(page);
 
+  // Neighbourhood outlines arrive early; the crime and noise summaries load only with an analytics layer on.
+  const areas = page.waitForResponse((r) => r.url().includes("/api/areas"));
   await page.goto("/?flags=-agentHome");
 
   // Map loads: the MapLibre canvas is up and our neighbourhood data arrived.
   await expect(page.locator("canvas.maplibregl-canvas").first()).toBeVisible();
-  await page.waitForResponse((r) => r.url().includes("/api/aggregate"));
+  await areas;
 
   // Search a neighbourhood and open its panel.
   const search = page.getByPlaceholder("Search neighborhoods, addresses, stations");

@@ -34,9 +34,11 @@ async function open(page: Page, size = PHONE) {
     if (!path.endsWith("/bus")) { await r.fallback(); return; }
     await r.fulfill({ contentType: "application/json", body: JSON.stringify({ at: Math.floor(Date.now() / 1000), buses: [{ ...BUS, t: Math.floor(Date.now() / 1000) }] }) });
   });
+  // Neighbourhood outlines arrive early; the crime and noise summaries load only with an analytics layer on.
+  const areas = page.waitForResponse((r) => r.url().includes("/api/areas"));
   await page.goto("/?flags=-agentHome&transit=bus&busPage=brooklyn-1");
   await expect(page.locator("canvas.maplibregl-canvas").first()).toBeVisible();
-  await page.waitForResponse((r) => r.url().includes("/api/aggregate"));
+  await areas;
 }
 
 // By text: the vaul details sheet still marks the page behind it aria-hidden.
