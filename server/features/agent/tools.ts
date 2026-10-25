@@ -87,7 +87,37 @@ export function pickStation(all: Station[], name: string, toward: LngLatTuple): 
   return nearestTo(all.filter((x) => sameStation(name, x.name)), toward) ?? null;
 }
 
+/** Within about 150 m of the user's point: close enough to be that point. */
+const NEAR = 0.0015;
+
+/**
+ * A tool result as the model sees it: any point at the user's location becomes
+ * "here", so their position never reaches the model as numbers (docs/PRIVACY.md,
+ * #374). The map still gets the exact point through emit and offer.
+ */
+export function hideHere(value: unknown, me: { lon: number; lat: number }): unknown {
+  const near = (lon: unknown, lat: unknown) => typeof lon === "number" && typeof lat === "number" && Math.abs(lon - me.lon) < NEAR && Math.abs(lat - me.lat) < NEAR;
+  if (Array.isArray(value)) return value.length === 2 && near(value[0], value[1]) ? "here" : value.map((v) => hideHere(v, me));
+  if (!value || typeof value !== "object") return value;
+  const o = value as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(o)) out[k] = hideHere(v, me);
+  if (near(o.lon, o.lat)) { delete out.lon; delete out.lat; out.at = "here"; }
+  return out;
+}
+
 export function makeTools(ctx: ToolContext) {
+  const tools = allTools(ctx);
+  const me = ctx.location;
+  if (!me) return tools;
+  for (const t of Object.values(tools) as Array<{ execute?: (...a: never[]) => unknown }>) {
+    const run = t.execute;
+    if (run) t.execute = async (...a: never[]) => hideHere(await run(...a), me);
+  }
+  return tools;
+}
+
+function allTools(ctx: ToolContext) {
   const trips = new Map<string, Trip>();
   const resolve = async (text: string): Promise<Place> => {
     if (/^(here|my location|current location|me)$/i.test(text.trim())) {

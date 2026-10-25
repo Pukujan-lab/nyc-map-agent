@@ -50,8 +50,8 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
   if (!limit.ok) return limitedResponse(limit.retryAt, limit.reason, fair.now());
   const budget = fair.budget.tier();
   const { messages, now, mode, context, lang, memory, underground } = parsed.data;
-  // Street view's spot counts as the shared location for "here".
-  const location = parsed.data.location ?? (context ? { lon: context.lon, lat: context.lat } : null);
+  // In street view, "here" is the spot on screen (the prompt says so); otherwise the shared location.
+  const location = context ? { lon: context.lon, lat: context.lat } : parsed.data.location ?? null;
   const enc = new TextEncoder();
   const modelId = budget.tier === "cheap" ? budget.model : budget.tier === "none" ? "none" : (process.env.INFERHUB_MODEL ?? DEFAULT_MODEL);
   // The asker's clock resolves "tomorrow"; a missing or broken one falls back to the server's.
