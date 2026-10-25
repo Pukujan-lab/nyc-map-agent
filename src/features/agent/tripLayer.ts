@@ -61,6 +61,12 @@ export function showTrip(map: MapLibreMap, trip: Trip, { fit = true }: { fit?: b
   map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: 80, pitch: 0, bearing: 0, duration: 800 });
 }
 
+/** Take the trip off the map: closed, replaced by a new question, or handed to walking guidance. */
+export function clearTrip(map: MapLibreMap): void {
+  const source = map.getSource(SRC);
+  if (source) void (source as GeoJSONSource).setData({ type: "FeatureCollection", features: [] });
+}
+
 export function setMarker(map: MapLibreMap, at: LngLatTuple | null, route?: string): void {
   ensure(map);
   void (map.getSource(MARKER) as GeoJSONSource).setData({
