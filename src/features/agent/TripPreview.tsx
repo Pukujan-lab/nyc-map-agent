@@ -1,6 +1,9 @@
 import "@/components/task-screens.css";
-import { Clock, MapPin, Pause, PartyPopper, Play, TriangleAlert, X } from "lucide-react";
+import { BellRing, Clock, MapPin, Pause, PartyPopper, Play, TriangleAlert, X } from "lucide-react";
+import { toast } from "sonner";
+import { useT } from "@/lib/i18n/appLang";
 import { plainAlertText } from "@/lib/transit/trouble";
+import { remindAt, saveReminder } from "./reminder";
 import { PLAYBACK_SPEEDS, type PlaybackSpeed, type Trip } from "./schema";
 import type { PlayerState } from "./usePlayer";
 
@@ -13,6 +16,7 @@ export function TripPreview(p: {
   onAlert?: (route: string) => void;
 }) {
   const { trip, state } = p;
+  const t = useT();
   const minutes = Math.max(1, Math.round((Date.parse(trip.arriveIso) - Date.parse(trip.departIso)) / 60000));
   const leave = new Date(trip.departIso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   const alert = trip.alerts[0];
@@ -57,9 +61,13 @@ export function TripPreview(p: {
         {state.where ? <p className="flex items-center gap-1.5 text-[13px] text-slate-200" data-testid="trip-where">
           <MapPin size={14} className="shrink-0" aria-hidden /><span className="truncate">{state.where}</span></p> : null}
       </>}
+      {/* A trip planned for later: the answer says "tap Remind me", so the button is here too. */}
+      {trip.scheduled?.future ? <button type="button" className="task-action task-secondary flex items-center justify-center gap-1.5" data-testid="preview-remind"
+        onClick={() => { saveReminder(trip); toast(t("remindSaved").replace("{t}", remindAt(trip))); }}>
+        <BellRing size={16} aria-hidden />{t("remindMe")}</button> : null}
       <div className="grid grid-cols-2 gap-2">
         <button type="button" className="task-action" onClick={p.onUse}>Use this route</button>
-        <button type="button" className="task-action task-secondary" onClick={p.onOther}>Other options</button>
+        <button type="button" className="task-action task-secondary" onClick={p.onOther}>{t("otherOptions")}</button>
       </div>
     </section>
     {state.status === "ended" ? <Balloons key={state.restart} /> : null}
