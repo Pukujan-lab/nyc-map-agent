@@ -35,7 +35,6 @@ import { spokenSummary } from "@/lib/voice/tts";
 import { executeCommand, type ExecutorContext } from "./executor";
 import { PLAYBACK_SPEEDS, langTag, type Leg, type MapAction, type PlaybackSpeed, type Trip, type TripMode } from "./schema";
 import { askAgent } from "./stream";
-import { TripPreview } from "./TripPreview";
 import { TripSummary, selectAlternative } from "./TripSummary";
 import { nameRemindButton, remindAt, saveReminder } from "./reminder";
 import { joinSegments, nameLocationButton } from "./answerText";
@@ -56,6 +55,8 @@ import { AgentHome, AnswerCard, WorkingPanel } from "./AgentHome";
 import { DailyCard, TaskButtons } from "./HomeTasks";
 
 const SettingsSheet = lazy(() => import("@/components/SettingsSheet"));
+// Only once a trip is previewed: keeps the overlay inside its size budget.
+const TripPreview = lazy(() => import("./TripPreview").then((m) => ({ default: m.TripPreview })));
 import { rememberCommute, useHomeWork } from "./commute";
 import { memorySummary } from "./memorySummary";
 import { recentTurns } from "./chatWindow";
@@ -838,7 +839,7 @@ export default function AgentOverlay() {
         />
         {settingsUp ? <Suspense fallback={null}><SettingsSheet onClose={() => setSettingsOpen(false)} /></Suspense> : null}
         {/* One card at a time: station help covers the same spot, so the trip waits under it. */}
-        {trip && player.state.active && !answerOpen && !stationHelpVisible ? <TripPreview
+        {trip && player.state.active && !answerOpen && !stationHelpVisible ? <Suspense fallback={null}><TripPreview
           trip={trip} state={player.state} speed={player.state.speed}
           onToggle={player.toggle} onSpeed={(s) => { setPrefSpeed(s); player.setSpeed(s); }}
           onAlert={(route) => setSelectedLine(route)}
@@ -861,7 +862,7 @@ export default function AgentOverlay() {
             void send(`Use this route to ${trip.destination.label}. Show me the ${trip.routes.join(" and ")} service for this trip.`);
           }}
           onOther={() => { player.release(); void send(`What are the other routes from ${trip.origin.label} to ${trip.destination.label}?`); }}
-        /> : null}
+        /></Suspense> : null}
       </>
     );
   }
