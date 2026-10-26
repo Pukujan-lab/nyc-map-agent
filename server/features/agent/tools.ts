@@ -35,6 +35,8 @@ export interface ToolContext {
   followedTrain?: string | null;
   /** Driving sub-module flag (agentDrive). */
   drive?: boolean;
+  /** The user's message is a short reply to the last answer ("yes", "ok, go"), not a new question. */
+  replying?: boolean;
   /** Map action buttons built from tool results (#371). */
   actions?: (a: MapAction[]) => void;
   /** The request's source ledger: every data tool's feeds and their age (#375). */
@@ -115,6 +117,14 @@ export function makeTools(ctx: ToolContext) {
     if (run) t.execute = async (...a: never[]) => hideHere(await run(...a), me);
   }
   return tools;
+}
+
+/** A short reply to the last answer ("yes", "sí, vamos", "ok go") rather than a new question: four words or fewer, no question mark. */
+export function isShortReply(messages: readonly { role: string; content: string }[]): boolean {
+  const last = messages.at(-1);
+  if (last?.role !== "user" || !messages.slice(0, -1).some((m) => m.role === "assistant")) return false;
+  const text = last.content.trim();
+  return !!text && !/[?？]/.test(text) && text.split(/\s+/).length <= 4;
 }
 
 /**
@@ -275,7 +285,8 @@ function allTools(ctx: ToolContext) {
         const t = w ? walkTrip(from, { label: dest.label, at: at(dest) }, w) : null;
         offer(exitActions({ station: st.name, exit: { at: at(from), label: exit.label, elevatorOnly: exit.elevatorOnly }, destination: { label: dest.label, at: at(dest) }, walk: w ?? straight(at(from), at(dest)) }));
         if (t) offer(tripActions(t));
-        exitShown = true;
+        // On the yes the model looks the exit up again (only text reaches it), and then the walk should open.
+        exitShown = !ctx.replying;
         return { station: st.name, exit: exit.label, elevatorOnly: exit.elevatorOnly, outage: exit.outage, elevatorOutages: outages.slice(0, 3), walkFromExit: t ? await walkBrief(t) : null };
       }),
     }),

@@ -8,7 +8,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { stepCountIs, streamText, type LanguageModel } from "ai";
 import { requestBody, type StreamEvent } from "../../../src/features/agent/schema";
 import { resolveFlags } from "../../../src/lib/flags/registry";
-import { makeTools, type ToolContext } from "./tools";
+import { isShortReply, makeTools, type ToolContext } from "./tools";
 import { toNyLocal } from "./trip";
 import { fallbackFetch, modelChain } from "./model-fallback";
 import { clientIp } from "../../lib/clientIp";
@@ -74,7 +74,7 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
       const nowLocal = toNyLocal(clock);
       // Data sources and their age, plus the "no guessing" check (#375); one "sources" line before "done".
       const audit = new AnswerAudit([nowLocal, contextLine(context) ?? "", ...messages.filter((m) => m.role === "user").map((m) => m.content)]);
-      const tools = makeTools({ location, now: clock, emit: (command) => send({ type: "command", command }), actions: (a) => actions.add(a), sources: audit.ledger, deps: opts.deps, followedTrain: context?.followedTrain ?? null, drive: resolveFlags({ env: process.env.VITE_FLAGS, advancedMode: false }).agentDrive });
+      const tools = makeTools({ location, now: clock, emit: (command) => send({ type: "command", command }), actions: (a) => actions.add(a), sources: audit.ledger, deps: opts.deps, followedTrain: context?.followedTrain ?? null, replying: isShortReply(messages), drive: resolveFlags({ env: process.env.VITE_FLAGS, advancedMode: false }).agentDrive });
       // Restrooms and line status still get a real answer with no model (#199).
       const lastAsked = messages.filter((m) => m.role === "user").at(-1)?.content ?? "";
       const answerAlone = async (): Promise<boolean> => {
