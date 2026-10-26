@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { describeStep } from "./drive/router";
 import { MTA_TOLLS, tolls } from "./drive/context";
-import { args, hideHere, makeTools, pickStation } from "./tools";
+import { args, hideHere, isShortReply, makeTools, pickStation } from "./tools";
 import { nyLocalToDate, toNyLocal } from "./trip";
 import { octant } from "./transit";
 
@@ -94,6 +94,29 @@ describe("a which-exit answer stays a small card", () => {
     expect(await call(next.openPanel, { tripId })).toEqual({ ok: true });
     expect(sent.map((c) => c.type)).toEqual(["flyTo", "showRoute", "openPanel"]);
     fetchSpy.mockRestore();
+  });
+
+  it("on the yes the model looks the exit up again, and then the walk opens", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"));
+    const sent: { type: string }[] = [];
+    const tools = makeTools({ location: { lon: -73.99, lat: 40.735 }, now: new Date(), emit: (c: { type: string }) => sent.push(c), deps: deps as never, replying: true });
+    const out = (await call(tools.station_exit, { station: "Times Sq", to: "here" })) as { walkFromExit: { tripId: string } | null };
+    await call(tools.showRoute, { tripId: out.walkFromExit?.tripId });
+    await call(tools.openPanel, { tripId: out.walkFromExit?.tripId });
+    expect(sent.map((c) => c.type)).toEqual(["showRoute", "openPanel"]);
+    fetchSpy.mockRestore();
+  });
+
+  it("a short reply to an answer is not a new question", () => {
+    const asked = { role: "user", content: "Which exit at Times Sq for Bryant Park?" };
+    const answer = { role: "assistant", content: "Take the south exit on Broadway. Want to start?" };
+    expect(isShortReply([asked, answer, { role: "user", content: "yes" }])).toBe(true);
+    expect(isShortReply([asked, answer, { role: "user", content: "sí, vamos" }])).toBe(true);
+    expect(isShortReply([asked, answer, { role: "user", content: "是的" }])).toBe(true);
+    expect(isShortReply([asked])).toBe(false);
+    expect(isShortReply([{ role: "user", content: "exit for MoMA" }])).toBe(false);
+    expect(isShortReply([asked, answer, { role: "user", content: "which exit for MoMA?" }])).toBe(false);
+    expect(isShortReply([asked, answer, { role: "user", content: "and which exit would be best for the Museum of Modern Art" }])).toBe(false);
   });
 });
 
