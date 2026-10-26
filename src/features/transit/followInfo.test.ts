@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alertTimeLabel, classifyRouteAlerts, skipNamesFor } from "./followInfo";
+import { alertTimeLabel, classifyRouteAlerts, skipNamesFor, upcomingStops } from "./followInfo";
 import type { TransitAlert } from "./hooks";
 
 const alert = (p: Partial<TransitAlert>): TransitAlert => ({ id: "a", kind: "notice", type: "", reroute: false, text: "", agency: "", routes: [], stops: [], ...p });
@@ -29,5 +29,19 @@ describe("follow card alerts", () => {
     });
     expect(skipNamesFor(a, "7")).toEqual(["52 St", "69 St"]);
     expect(skipNamesFor(a, "F")).toEqual([]);
+  });
+});
+
+describe("follow card stops", () => {
+  const trip = [["A", 100], ["B", 160], ["C", 220], ["D", 300]] as const;
+  it("starts at the next stop, even when the one just left is still within 30 s", () => {
+    expect(upcomingStops(trip, "C", 170).map(([id]) => id)).toEqual(["C", "D"]);
+  });
+  it("matches the next stop by station when the ids differ", () => {
+    expect(upcomingStops(trip, "Cn", 0, (a, b) => a[0] === b[0]).map(([id]) => id)).toEqual(["C", "D"]);
+  });
+  it("falls back to the times without a next stop", () => {
+    expect(upcomingStops(trip, undefined, 180).map(([id]) => id)).toEqual(["B", "C", "D"]);
+    expect(upcomingStops(trip, "Z", 180).map(([id]) => id)).toEqual(["B", "C", "D"]);
   });
 });
