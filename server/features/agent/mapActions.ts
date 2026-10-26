@@ -6,6 +6,7 @@
 import { formatStreetText } from "../../../src/lib/streetName";
 import { mapAction, MAX_ACTIONS, type MapAction, type MapPoint, type RestroomSpot, type Trip } from "../../../src/features/agent/schema";
 import type { LineTrouble, StuckTrain } from "../../../src/lib/transit/trouble";
+import type { StationExit } from "./exit";
 
 const key = (at: readonly [number, number]) => `${at[0].toFixed(5)},${at[1].toFixed(5)}`;
 const clip = (s: string, n = 40) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
@@ -15,6 +16,21 @@ export function placeActions(place: { label: string; at: readonly [number, numbe
   if (/^your location$/i.test(place.label)) return [];
   const [lon, lat] = place.at;
   return [{ kind: "flyTo", id: `fly:${key(place.at)}`, label: `Show ${clip(formatStreetText(place.label))}`, lon, lat, zoom: 16 }];
+}
+
+/** The exit to take for a place (drawn at once by the client), with its walk. */
+export function exitActions(x: StationExit): MapAction[] {
+  const path = x.walk.coords.length >= 2 ? x.walk.coords : [x.exit.at, x.destination.at];
+  return [{
+    kind: "showExit",
+    id: `exit:${key(x.exit.at)}`,
+    label: clip(`Show the ${x.exit.label} exit`),
+    station: clip(x.station.name, 80),
+    exit: { at: x.exit.at, label: clip(x.exit.label, 80), elevatorOnly: x.exit.elevatorOnly },
+    destination: { at: x.destination.at, label: clip(formatStreetText(x.destination.label), 80) },
+    path: path.slice(0, 2000),
+    walkMin: Math.max(1, Math.round(x.walk.durationS / 60)),
+  }];
 }
 
 /** The nearest restroom (and the next one, if any) with its card. */

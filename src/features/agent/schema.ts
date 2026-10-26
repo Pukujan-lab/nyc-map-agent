@@ -168,6 +168,20 @@ export const mapAction = z.discriminatedUnion("kind", [
    * or a train that has not moved.
    */
   z.object({ ...actionBase, kind: z.literal("showTrouble"), route: z.string(), style: z.enum(["problem", "shuttle", "switch", "stuck"]), points: z.array(mapPoint).min(1).max(200) }),
+  /**
+   * Which exit to take for a place: the station exit nearest it, said as its
+   * corner ("NE corner, West 34 Street"), and the walk from that exit. The
+   * answer draws it at once, so the reply can stay one or two lines.
+   */
+  z.object({
+    ...actionBase,
+    kind: z.literal("showExit"),
+    station: z.string().max(80),
+    exit: z.object({ at: lngLat, label: z.string().max(80), elevatorOnly: z.boolean().default(false) }),
+    destination: z.object({ at: lngLat, label: z.string().max(80) }),
+    path: z.array(lngLat).min(2).max(2000),
+    walkMin: z.number().nonnegative(),
+  }),
 ]);
 export type MapAction = z.infer<typeof mapAction>;
 /** Most buttons one answer carries. */

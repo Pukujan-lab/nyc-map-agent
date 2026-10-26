@@ -1,9 +1,9 @@
-import { ArrowLeftRight, Ban, Bus, ListOrdered, MapPin, Route, TrainFront, TriangleAlert } from "lucide-react";
+import { ArrowLeftRight, Ban, Bus, DoorOpen, ListOrdered, MapPin, Route, TrainFront, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { distanceText } from "./mapActions";
 import type { MapAction, RestroomSpot } from "./schema";
 
-const ICON: Record<MapAction["kind"], typeof MapPin> = { flyTo: MapPin, showRestroom: MapPin, showRoute: Route, showStops: ListOrdered, showCrashes: TriangleAlert, showTrouble: TriangleAlert };
+const ICON: Record<MapAction["kind"], typeof MapPin> = { flyTo: MapPin, showRestroom: MapPin, showRoute: Route, showStops: ListOrdered, showCrashes: TriangleAlert, showTrouble: TriangleAlert, showExit: DoorOpen };
 const TROUBLE_ICON: Record<Extract<MapAction, { kind: "showTrouble" }>["style"], typeof MapPin> = { problem: TriangleAlert, shuttle: Bus, switch: ArrowLeftRight, stuck: TrainFront };
 
 /** The "show it on the map" buttons under an answer (#371). */

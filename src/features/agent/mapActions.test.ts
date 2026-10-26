@@ -3,7 +3,7 @@ import { CRASH_COLOR, distanceText, runMapAction, SKIP_COLOR, TROUBLE_COLOR, typ
 import { streamEvent } from "./schema";
 import { pointsToGeoJson, routeColor } from "./tripLayer";
 
-const ctx = (): MapActionContext => ({ flyTo: vi.fn(), showTrip: vi.fn(), showRestroom: vi.fn(), showPoints: vi.fn() });
+const ctx = (): MapActionContext => ({ flyTo: vi.fn(), showTrip: vi.fn(), showRestroom: vi.fn(), showPoints: vi.fn(), showExit: vi.fn() });
 const stops = [{ at: [-73.91, 40.74] as [number, number], name: "52 St" }];
 
 describe("answer map actions", () => {

@@ -18,6 +18,7 @@ const WORDS: Record<string, string> = {
   weather_forecast: "Checking the weather",
   hazards: "Checking weather alerts",
   elevator_status: "Checking elevators",
+  station_exit: "Finding your exit",
   flyTo: "Moving the map",
   showRoute: "Drawing the route",
   openPanel: "Opening the trip card",

@@ -3,7 +3,8 @@ import { readPage, webSearch } from "./webLookup";
 import { z } from "zod";
 import { command, playbackSpeed, type AgentCommand, type LngLatTuple, type MapAction, type Trip } from "../../../src/features/agent/schema";
 import { elevatorStatus, geocode, hazardsAt, nearestRestrooms, publicRestrooms, routeWalk, serviceAlerts, subwayAlertEntities, subwayVehicles, troubleStations, weatherAt, type Place, type RestroomRow } from "./services";
-import { placeActions, restroomActions, troubleActions, tripActions } from "./mapActions";
+import { exitActions, placeActions, restroomActions, troubleActions, tripActions } from "./mapActions";
+import { stationExit } from "./exit";
 import { buildDriveTrip } from "./drive/trip";
 import type { DriveRouter } from "./drive/router";
 import { safe, toNyLocal, tripBrief } from "./trip";
@@ -56,6 +57,7 @@ export const args = {
   read_page: z.object({ url: z.string().url().describe("An event page from find_event results") }),
   nearest_restroom: z.object({ place: z.string().default("here") }),
   elevator_status: z.object({ station: z.string().min(2) }),
+  station_exit: z.object({ to: z.string().min(2).describe("The place the person is going: landmark, address or business"), station: z.string().min(2).optional().describe("The station they arrive at, when they said it") }),
   line_status: z.object({ lines: z.array(z.string().regex(/^[A-Za-z0-9]{1,3}$/)).min(1).max(6).describe("Subway lines as the MTA names them, e.g. [\"L\"] or [\"4\",\"5\",\"6\"]") }),
   flyTo: z.object({ place: z.string(), zoom: z.number().min(9).max(20).optional() }),
   tripRef: z.object({ tripId: z.string() }),
@@ -192,6 +194,16 @@ export function makeTools(ctx: ToolContext) {
     hazards: tool({ description: "Active National Weather Service alerts at a place.", inputSchema: args.hazards, execute: sourced(async ({ place }: z.infer<typeof args.hazards>) => ({ alerts: await hazardsAt(at(await resolve(place))) })) }),
     find_event: tool({ description: "Search the web for a named event in New York (Luma, Eventbrite, the organiser's site). Only when the user asks about a specific event.", inputSchema: args.find_event, execute: sourced(async ({ query }: z.infer<typeof args.find_event>) => webSearch(/new york|nyc|brooklyn|queens|manhattan|bronx|staten/i.test(query) ? query : `${query} New York`)) }),
     read_page: tool({ description: "Read one event page from find_event to get its venue address, date and time.", inputSchema: args.read_page, execute: sourced(async ({ url }: z.infer<typeof args.read_page>) => readPage(url)) }),
+    station_exit: tool({
+      description: "Which subway exit to take for a place: the station exit closest to it (as a street corner), the walk from that exit, and elevator outages. The map shows the exit and the walk by itself.",
+      inputSchema: args.station_exit,
+      execute: async ({ to, station }) => {
+        const x = await stationExit(await resolve(to), station, { entrances: ctx.deps?.entrances });
+        if (!x) return { error: "No subway station within a short walk of that place." };
+        offer(exitActions(x));
+        return { station: x.station.name, exit: x.exit.label, elevatorOnly: x.exit.elevatorOnly, outage: x.exit.outage, walkMinutes: Math.max(1, Math.round(x.walk.durationS / 60)) };
+      },
+    }),
     elevator_status: tool({ description: "Current MTA elevator/escalator outages at a station.", inputSchema: args.elevator_status, execute: sourced(async ({ station }: z.infer<typeof args.elevator_status>) => ({ outages: await elevatorStatus(station) })) }),
     flyTo: tool({ description: "Map: fly the camera to a place.", inputSchema: args.flyTo, execute: async ({ place, zoom }) => { const p = await resolve(place); offer(placeActions(p)); return emit({ type: "flyTo", lon: p.at[0], lat: p.at[1], zoom }); } }),
     showRoute: tool({ description: "Map: draw a planned trip.", inputSchema: args.tripRef, execute: ({ tripId }) => emit({ type: "showRoute", trip: tripOf(tripId) }) }),

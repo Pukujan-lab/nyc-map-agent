@@ -1,5 +1,7 @@
 import { mapAction, type MapAction, type MapPoint, type RestroomSpot, type Trip } from "./schema";
 
+export type ExitAction = Extract<MapAction, { kind: "showExit" }>;
+
 /** What a tapped answer button can do to the map. Injected, so the runner is pure. */
 export interface MapActionContext {
   flyTo: (lon: number, lat: number, zoom?: number) => void;
@@ -8,6 +10,8 @@ export interface MapActionContext {
   showRestroom: (restroom: RestroomSpot) => void;
   /** Draw named spots in one colour and fit the camera to them. */
   showPoints: (points: MapPoint[], style: { color: string; title: string }) => void;
+  /** Draw the station exit, its walk to the place and your heading arrow. */
+  showExit: (exit: ExitAction) => void;
 }
 
 /** Skipped stations and crash hotspots read as trouble; a plain stop list uses the line's colour. */
@@ -31,6 +35,7 @@ export function runMapAction(raw: unknown, ctx: MapActionContext, routeColor: (r
       case "showStops": ctx.showPoints(a.stops, { color: a.skipped ? SKIP_COLOR : a.color ?? routeColor(a.route), title: a.label }); break;
       case "showCrashes": ctx.showPoints(a.points, { color: CRASH_COLOR, title: a.label }); break;
       case "showTrouble": ctx.showPoints(a.points, { color: TROUBLE_COLOR[a.style], title: a.label }); break;
+      case "showExit": ctx.showExit(a); break;
     }
     return { ok: true, kind: a.kind };
   } catch (e) {
