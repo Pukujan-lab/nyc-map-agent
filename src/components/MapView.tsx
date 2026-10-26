@@ -557,9 +557,11 @@ export function MapView({
     };
   }, [ready, styleEpoch, transitFocus, places, businesses, health, parksPlaces, citibike, opts, t, extrude, flatBuildings, analytics]);
 
+  const loaded = useRef(false);
   const handleLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
-    if (!map) return;
+    if (!map || loaded.current) return;
+    loaded.current = true;
     installDataLayers(map);
     applyAtmosphere(map);
     // "load" waits for the first tiles; onSourceData below covers browsers that never send it.
@@ -1678,7 +1680,10 @@ export function MapView({
         touchPitch={!walking}
         onLoad={handleLoad}
         onSourceData={(e) => {
-          if (e.sourceId === VECTOR_SOURCE && e.isSourceLoaded) markBasemapReady();
+          // "load" waits for a moment when every source is loaded at once, and the live trains refresh
+          // every few seconds, so on a slow device it may never come: the first basemap tiles run the same
+          // setup, or the quick buttons never get the map and panels never move the camera off the train.
+          if (e.sourceId === VECTOR_SOURCE && e.isSourceLoaded) { markBasemapReady(); handleLoad(); }
           foldCredits(e.target);
         }}
         onError={handleError}

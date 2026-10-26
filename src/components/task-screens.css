@@ -66,6 +66,29 @@
     max-height: calc(100dvh - env(safe-area-inset-top) - 76px - var(--chat-bar-h, 96px) - 28px);
   }
 }
+/* Follow sheet: one line resting on the chat bar, pulled up for more. It never grows past the
+   point where the followed train, kept in the clear map above it, would be hidden. */
+.follow-sheet {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: calc(var(--chat-bar-h, 96px) + 6px);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  padding: 2px 8px 8px;
+  touch-action: none;
+}
+.follow-sheet[data-level="1"] { max-height: min(46dvh, calc(100dvh - var(--chat-bar-h, 96px) - 250px)); }
+.follow-sheet[data-level="2"] { max-height: calc(100dvh - var(--chat-bar-h, 96px) - 220px); }
+.follow-sheet-body { min-height: 0; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
+.follow-grip { display: flex; justify-content: center; width: 100%; height: 18px; padding: 6px 0 0; border: 0; background: transparent; }
+.follow-grip > span { width: 40px; height: 5px; border-radius: 3px; background: rgba(203, 213, 225, .55); }
+.follow-grip:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; border-radius: 8px; }
+@media (max-width: 639px) { [data-follow-sheet="open"] .follow-locate { display: none; } }
+@media (min-width: 640px) {
+  .follow-sheet { left: 12px; right: auto; width: min(380px, 42vw); bottom: calc(var(--chat-bar-h, 96px) + 16px); }
+}
 /* Arrival: a few balloons drift up once and are gone; nothing to dismiss, nothing to click. */
 .arrive-balloons { position: fixed; inset: 0; z-index: 45; pointer-events: none; overflow: hidden; }
 .arrive-balloon {
