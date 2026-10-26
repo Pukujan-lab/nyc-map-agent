@@ -2,7 +2,7 @@ import { MockLanguageModelV4, convertArrayToReadableStream } from "ai/test";
 import { describe, expect, it } from "vitest";
 import { streamEvent, trip as tripSchema, type MapAction, type StreamEvent } from "../../../src/features/agent/schema";
 import type { ServiceChange } from "../../../src/lib/transit/serviceChanges";
-import { ActionCollector, layerAction, placeActions, placeName, restroomActions, tripActions } from "./mapActions";
+import { ActionCollector, exitActions, layerAction, placeActions, placeName, restroomActions, tripActions } from "./mapActions";
 import { POST } from "./routes";
 import { nearestRestrooms, type RestroomRow } from "./services";
 import { skippedStops } from "./trip";
@@ -199,5 +199,21 @@ describe("layerAction (#313)", () => {
     const c = new ActionCollector();
     c.add([{ kind: "flyTo", id: "fly:x", label: "Show X", lon: -73.98, lat: 40.75 }, layerAction("health")]);
     expect(c.list()[0].kind).toBe("showLayer");
+  });
+});
+
+describe("exitActions", () => {
+  const base = { station: "34 St-Herald Sq", exit: { at: [-73.988, 40.749] as [number, number], label: "NE exit on West 34 Street", elevatorOnly: false }, destination: { at: [-73.9857, 40.7484] as [number, number], label: "Empire State Building" } };
+
+  it("draws the exit with its walk and minutes", () => {
+    const [a] = exitActions({ ...base, walk: { coords: [base.exit.at, [-73.987, 40.7487], base.destination.at], distanceM: 240, durationS: 190, turns: [] } });
+    expect(a).toMatchObject({ kind: "showExit", station: "34 St-Herald Sq", walkMin: 3 });
+    expect(a.kind === "showExit" && a.path).toHaveLength(3);
+  });
+
+  it("falls back to a straight line and at least a minute when the walk has no shape", () => {
+    const [a] = exitActions({ ...base, walk: { coords: [], distanceM: 20, durationS: 10, turns: [] } });
+    expect(a.kind === "showExit" && a.path).toEqual([base.exit.at, base.destination.at]);
+    expect(a).toMatchObject({ walkMin: 1 });
   });
 });

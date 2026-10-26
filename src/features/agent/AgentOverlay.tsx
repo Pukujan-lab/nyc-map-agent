@@ -1,4 +1,4 @@
-import { Bus, Car, ChevronUp, Footprints, Headphones, LocateFixed, Mic, MicOff, MoreVertical, Pause, Play, Send, SkipForward, X } from "lucide-react";
+import { Bus, Car, ChevronUp, Compass, Footprints, Headphones, LocateFixed, Mic, MicOff, MoreVertical, Pause, Play, Send, SkipForward, X } from "lucide-react";
 import { legFocus } from "./legFocus";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -40,9 +40,11 @@ import { nameRemindButton, remindAt, saveReminder } from "./reminder";
 import { joinSegments, nameLocationButton } from "./answerText";
 import { toast } from "sonner";
 import { clearPoints, clearTrip, routeColor, showPoints, showTrip } from "./tripLayer";
-import { runMapAction, TROUBLE_COLOR, type MapActionContext } from "./mapActions";
+import { runMapAction, TROUBLE_COLOR, type ExitAction, type MapActionContext } from "./mapActions";
 import { setQuickLayer } from "@/lib/quickLayers";
 import { setOptions } from "@/lib/map/mapOptions";
+import { useHeading } from "@/lib/compass/useHeading";
+import { metres } from "@/lib/map/mapRead";
 import { AnswerActions, RestroomSpotDetails } from "./AnswerActions";
 import { AnswerSources, type AnswerSourcesLine } from "./AnswerSources";
 import { formatStreetText } from "@/lib/streetName";
@@ -75,6 +77,45 @@ import { useOpenMenu } from "@/lib/store/openMenu";
 import { sendScreen, useScreen } from "@/lib/screen/screenSpace";
 import { getUndergroundNow, useUndergroundNow } from "@/lib/underground/whereNow";
 import { removeShell } from "@/lib/shellDraft";
+
+/** Draw an exit answer and frame it (and you, within a walk of it) in the map left clear by the card. */
+// Loaded on the first exit answer, so the overlay stays in its size budget.
+let exitLoaded = false;
+const exitLayer = () => import("./exitLayer").then((x) => { exitLoaded = true; return x; });
+
+async function frameExit(a: ExitAction) {
+  const { exitBounds, showExit } = await exitLayer();
+  const m = getMapInstance();
+  if (!m) return;
+  const v = { exit: a.exit, destination: a.destination, path: a.path };
+  showExit(m, v);
+  const me = sharedCoords();
+  const near = me && metres([me.lon, me.lat], a.exit.at) < 1500 ? ([me.lon, me.lat] as [number, number]) : null;
+  const phone = window.innerWidth < 640;
+  // The small exit card and the chat bar take about the lower 40% on a phone, the left column wider up.
+  // The sides leave room for half a centred label, and on the right for the round map buttons too.
+  const pad = framePadding(m, phone ? { top: 96, bottom: Math.round(window.innerHeight * 0.42), left: 88, right: 112 } : { top: 100, bottom: 120, left: Math.min(420, window.innerWidth * 0.44) + 48, right: 96 });
+  m.fitBounds(exitBounds(v, near), { padding: pad, maxZoom: 18, pitch: 0, bearing: 0, duration: 900 });
+}
+
+/** Beside More on an exit answer: turn on the arrow (iOS asks on a tap), or ask for a figure 8 when the compass is off. */
+function CompassHint({ heading }: { heading: { ask: (() => void) | null; calibrate: boolean } }) {
+  if (heading.ask) {
+    return (
+      <Button type="button" variant="ghost" onClick={heading.ask} className="h-9 gap-1.5 rounded-full px-3 text-sm font-semibold text-blue-300 hover:bg-slate-800 hover:text-white">
+        <Compass className="!h-4 !w-4" aria-hidden="true" />
+        Show my direction
+      </Button>
+    );
+  }
+  if (!heading.calibrate) return null;
+  return (
+    <p className="flex items-center gap-1.5 text-xs leading-tight text-amber-300" role="status" data-testid="compass-calibrate">
+      <Compass className="h-4 w-4 shrink-0" aria-hidden="true" />
+      Calibrate: move your phone in a figure 8
+    </p>
+  );
+}
 
 interface Msg { id: string; role: "user" | "assistant"; content: string; offerLocation?: boolean; actions?: MapAction[]; sources?: AnswerSourcesLine }
 
@@ -244,7 +285,7 @@ export default function AgentOverlay() {
     setSelectedLine(null);
     setFollowed(null);
     const m = getMapInstance();
-    if (m) clearPoints(m);
+    if (m) { clearPoints(m); if (exitLoaded) void exitLayer().then((x) => x.clearExit(m)); }
   };
   const ctx: ExecutorContext = {
     flyTo: (lon, lat, zoom) => { handoffCamera(); flyTo({ lon, lat, zoom }); },
@@ -294,6 +335,7 @@ export default function AgentOverlay() {
       const m = getMapInstance();
       if (m) showPoints(m, points, color);
     },
+    showExit: (a) => { handoffCamera(); void frameExit(a); },
     remind: (t) => {
       saveReminder(t);
       toast(tr(appLang, "remindSaved").replace("{t}", remindAt(t)));
@@ -461,6 +503,20 @@ export default function AgentOverlay() {
   // A restroom answer shows the restroom on the map at once, framed with you when your
   // location is shared, instead of leaving the whole city in view (owner report, 2026-10-24).
   const lastActions = messages.at(-1)?.role === "assistant" ? messages.at(-1)?.actions : undefined;
+  // A "which exit" answer is the map (owner report, 2026-10-25: the text answer covered a phone):
+  // the exit and its walk draw at once, north up, framed above the small card with you when near.
+  const exitAnswer = home ? (lastActions?.find((a): a is ExitAction => a.kind === "showExit") ?? null) : null;
+  const heading = useHeading(exitAnswer !== null);
+  useEffect(() => {
+    if (exitAnswer) void frameExit(exitAnswer);
+  }, [exitAnswer]);
+  useEffect(() => {
+    const m = getMapInstance();
+    if (!m) return;
+    const c = exitAnswer && shared.status === "on" ? shared.coords : null;
+    if (!exitAnswer && !exitLoaded) return;
+    void exitLayer().then((x) => x.setYou(m, c ? [c.lon, c.lat] : null, heading.heading));
+  }, [exitAnswer, shared, heading.heading]);
   useEffect(() => {
     const a = lastActions?.[0];
     if (!home || a?.kind !== "showRestroom") return;
@@ -732,7 +788,7 @@ export default function AgentOverlay() {
       flyTo({ lon: from.lon, lat: from.lat, zoom: 16 });
     };
 
-    const primary = first
+    const primary = exitAnswer ? null : first
       ? first.kind === "showRestroom"
         ? { label: tr(appLang, "walkMeThere"), run: () => { void walkTo(first.restroom); } }
         : { label: first.label, run: () => runAction(first) }
@@ -749,6 +805,7 @@ export default function AgentOverlay() {
         primary={primary}
         onNearby={onNearby}
         onOther={onOther}
+        compact={exitAnswer ? { hint: <CompassHint heading={heading} /> } : undefined}
         extra={
           <>
             {reply?.offerLocation && shared.status !== "on" ? (

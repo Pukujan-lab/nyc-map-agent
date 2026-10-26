@@ -68,6 +68,11 @@ export interface AnswerCardProps {
   onOther: () => void;
   /** Anything under the buttons: more map actions, Use my location, the trip card. */
   extra: ReactNode;
+  /**
+   * The answer is on the map (a "which exit" answer): one or two lines in a small
+   * card, with `hint` (the compass prompt) beside More; everything else waits behind More.
+   */
+  compact?: { hint: ReactNode };
 }
 
 /**
@@ -84,6 +89,24 @@ export function AnswerCard(p: AnswerCardProps) {
     if (more) moreEnd.current?.scrollIntoView({ block: "nearest", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   }, [more]);
   const done = !p.busy && !!p.text;
+  if (p.compact && !more) {
+    return (
+      <div className="flex flex-col gap-2 pl-11" data-testid="answer-card" data-compact="">
+        {p.text ? <p className="line-clamp-2 text-[15px] leading-snug text-slate-100" aria-live="polite">{p.text}</p> : null}
+        {p.busy ? <p className="text-sm text-slate-300" role="status">{t("agentsWorking")}…</p> : null}
+        {done ? (
+          <div className="flex min-h-9 items-center gap-2">
+            <div className="min-w-0 flex-1">{p.compact.hint}</div>
+            <Button type="button" variant="ghost" aria-expanded={false} onClick={() => setMore(true)}
+              className="h-9 shrink-0 rounded-full px-3 text-sm font-semibold text-slate-300 hover:bg-slate-800 hover:text-white">
+              {t("more")}
+              <ChevronDown className="!h-4 !w-4" aria-hidden="true" />
+            </Button>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col gap-3.5" data-testid="answer-card">
       {p.question ? (

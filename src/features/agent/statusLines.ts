@@ -15,6 +15,7 @@ const KIND: Record<string, StatusKind> = {
   weather_forecast: "weather",
   hazards: "weather",
   elevator_status: "elevators",
+  station_exit: "map",
   flyTo: "map",
   showRoute: "map",
   openPanel: "map",

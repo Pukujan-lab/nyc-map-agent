@@ -22,7 +22,7 @@
   {
     "name": "feature: agent (lazy overlay)",
     "path": ".size-build/assets/AgentOverlay-*.js",
-    "limit": "25 kB"
+    "limit": "25.5 kB"
   },
   {
     "name": "lib: screen space (xstate, lazy)",
@@ -87,6 +87,6 @@
   {
     "name": "all JS",
     "path": ".size-build/assets/*.js",
-    "limit": "1072 kB"
+    "limit": "1075 kB"
   }
 ]

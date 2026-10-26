@@ -3,10 +3,10 @@ import { findEvent, readPage } from "./webLookup";
 import { z } from "zod";
 import { command, LAYER_HELP_IDS, playbackSpeed, type AgentCommand, type LngLatTuple, type MapAction, type Trip } from "../../../src/features/agent/schema";
 import { elevatorStatus, geocode, hazardsAt, nearestRestrooms, publicRestrooms, routeWalk, serviceAlerts, subwayAlertEntities, subwayVehicles, troubleStations, weatherAt, type Place, type RestroomRow, type WalkResult } from "./services";
-import { LAYER_HELP, layerAction, lineAction, placeActions, restroomActions, troubleActions, tripActions } from "./mapActions";
+import { exitActions, LAYER_HELP, layerAction, lineAction, placeActions, restroomActions, troubleActions, tripActions } from "./mapActions";
 import { buildDriveTrip } from "./drive/trip";
 import type { DriveRouter } from "./drive/router";
-import { portalFor, safe, toNyLocal, tripBrief } from "./trip";
+import { portalFor, safe, straight, toNyLocal, tripBrief } from "./trip";
 import { distM, openDataEntrances, type Station } from "./transit";
 import { loadGuideLandmarks, type GuideLandmark } from "../../../src/lib/guide/landmarkGuide";
 import { landmarkAtTurn, landmarksOnWay } from "./landmarksOnWay";
@@ -248,7 +248,7 @@ function allTools(ctx: ToolContext) {
         const from: Place = { label: `${st.name}, ${exit.label}`, at: [exit.lon, exit.lat] };
         const w = await safe((ctx.deps?.walk ?? routeWalk)(at(from), at(dest)), null);
         const t = w ? walkTrip(from, { label: dest.label, at: at(dest) }, w) : null;
-        offer([{ kind: "flyTo", id: `fly:exit:${exit.lon.toFixed(5)},${exit.lat.toFixed(5)}`, label: "Show the exit", lon: exit.lon, lat: exit.lat, zoom: 18 }]);
+        offer(exitActions({ station: st.name, exit: { at: at(from), label: exit.label, elevatorOnly: exit.elevatorOnly }, destination: { label: dest.label, at: at(dest) }, walk: w ?? straight(at(from), at(dest)) }));
         if (t) offer(tripActions(t));
         return { station: st.name, exit: exit.label, elevatorOnly: exit.elevatorOnly, outage: exit.outage, elevatorOutages: outages.slice(0, 3), walkFromExit: t ? await walkBrief(t) : null };
       }),

@@ -4,8 +4,9 @@
  * button can only draw data a tool returned.
  */
 import { formatStreetText } from "../../../src/lib/streetName";
-import { mapAction, MAX_ACTIONS, type LayerHelpId, type MapAction, type MapPoint, type RestroomSpot, type Trip } from "../../../src/features/agent/schema";
+import { mapAction, MAX_ACTIONS, type LayerHelpId, type LngLatTuple, type MapAction, type MapPoint, type RestroomSpot, type Trip } from "../../../src/features/agent/schema";
 import type { LineTrouble, StuckTrain } from "../../../src/lib/transit/trouble";
+import type { WalkResult } from "./services";
 
 const key = (at: readonly [number, number]) => `${at[0].toFixed(5)},${at[1].toFixed(5)}`;
 const clip = (s: string, n = 40) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
@@ -22,6 +23,28 @@ export function placeActions(place: { label: string; at: readonly [number, numbe
   if (/^your location$/i.test(place.label)) return [];
   const [lon, lat] = place.at;
   return [{ kind: "flyTo", id: `fly:${key(place.at)}`, label: `Show ${clip(formatStreetText(placeName(place.label)))}`, lon, lat, zoom: 16 }];
+}
+
+export interface ExitShown {
+  station: string;
+  exit: { at: LngLatTuple; label: string; elevatorOnly: boolean };
+  destination: { at: LngLatTuple; label: string };
+  walk: WalkResult;
+}
+
+/** The exit to take for a place (drawn at once by the client), with its walk. */
+export function exitActions(x: ExitShown): MapAction[] {
+  const path = x.walk.coords.length >= 2 ? x.walk.coords : [x.exit.at, x.destination.at];
+  return [{
+    kind: "showExit",
+    id: `exit:${key(x.exit.at)}`,
+    label: clip(`Show the ${x.exit.label} exit`),
+    station: clip(x.station, 80),
+    exit: { at: x.exit.at, label: clip(x.exit.label, 80), elevatorOnly: x.exit.elevatorOnly },
+    destination: { at: x.destination.at, label: clip(formatStreetText(x.destination.label), 80) },
+    path: path.slice(0, 2000),
+    walkMin: Math.max(1, Math.round(x.walk.durationS / 60)),
+  }];
 }
 
 /** The nearest restroom (and the next one, if any) with its card. */
@@ -116,7 +139,7 @@ export function troubleActions(troubles: LineTrouble[], stuck: StuckTrain[] = []
   return out;
 }
 
-const RANK: Record<MapAction["kind"], number> = { showRestroom: 0, showRoute: 1, remindTrip: 1, showLayer: 1, showLine: 1, showTrouble: 2, showStops: 2, showCrashes: 2, flyTo: 3 };
+const RANK: Record<MapAction["kind"], number> = { showRestroom: 0, showExit: 0, showRoute: 1, remindTrip: 1, showLayer: 1, showLine: 1, showTrouble: 2, showStops: 2, showCrashes: 2, flyTo: 3 };
 
 /** Collects actions across a request's tool calls: deduped by id, validated, ranked, capped. */
 const GENERIC = new Set(["show", "street", "avenue", "road", "place", "boulevard", "new", "york", "nyc", "the", "and", "east", "west", "north", "south"]);
