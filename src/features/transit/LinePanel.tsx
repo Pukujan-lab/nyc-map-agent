@@ -10,7 +10,7 @@ import { heldTrains } from "@/lib/transit/holds";
 import { setAlertFocus } from "./alertFocus";
 import { useAlerts, useNow, useTransitData } from "./hooks";
 import { boardingArrivals, minutesUntil } from "./model";
-import { TONE, heldNotices, lineNotices, type LineNotice } from "./lineNotices";
+import { TONE, allLineNotices, type LineNotice } from "./lineNotices";
 import { NoticeIcon, noticeKind } from "./noticeKind";
 import { PullSheet } from "@/components/PullSheet";
 import type { SheetLevel } from "@/components/sheetSwipe";
@@ -61,7 +61,7 @@ export function LinePanel({ map, route, onFollow }: { map: MaplibreMap | undefin
   const sys = data.subway?.stat;
   const live = data.subway?.live;
   // Held trains first: they are happening now, on this line (src/lib/transit/holds.ts).
-  const notices = useMemo(() => [...heldNotices(route, heldTrains(live).values(), sys), ...lineNotices(route, alerts?.alerts ?? [], alerts?.outages ?? [], sys)], [route, alerts, sys, live]);
+  const notices = useMemo(() => allLineNotices(route, heldTrains(live).values(), alerts?.alerts ?? [], alerts?.outages ?? [], sys), [route, alerts, sys, live]);
   const [picked, setPicked] = useState<string | null>(null);
   // A new line starts with every notice closed.
   useEffect(() => setPicked(null), [route]);
