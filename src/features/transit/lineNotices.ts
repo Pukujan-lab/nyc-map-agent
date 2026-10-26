@@ -126,7 +126,9 @@ function outageNotice(list: Outage[], sys: StaticSystem): LineNotice | null {
       stations,
     };
   }
-  const days = [...new Set(list.map((x) => x.back).filter(Boolean).map(backDay))];
+  // Soonest first, so a range reads "until Oct 31 to Dec 31".
+  const backs = list.map((x) => x.back).filter(Boolean).sort((a, b) => (Date.parse(a) || 0) - (Date.parse(b) || 0));
+  const days = [...new Set(backs.map(backDay))];
   const reasons = [...new Set(list.map((x) => x.reason).filter(Boolean))];
   const alternatives = [...new Set(list.map((x) => x.alternative).filter(Boolean))];
   return {
