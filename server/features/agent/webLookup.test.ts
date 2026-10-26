@@ -68,7 +68,7 @@ describe("event lookup through Tavily first", () => {
 // Answers each provider's endpoint with its own handler and records the order they were called in.
 function route(handlers: { tavily?: () => Promise<Response>; tinyfish?: () => Promise<Response> }) {
   const calls: string[] = [];
-  const impl = ((input: string | URL | Request) => {
+  const impl = ((input: string | URL) => {
     const url = String(input);
     const which = url.startsWith("https://api.tavily.com") ? "tavily" : url.startsWith("https://api.search.tinyfish.ai") ? "tinyfish" : "other";
     calls.push(which);
