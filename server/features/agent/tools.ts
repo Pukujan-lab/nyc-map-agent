@@ -117,8 +117,29 @@ export function makeTools(ctx: ToolContext) {
   return tools;
 }
 
+/**
+ * Planned trips by id, kept for a while across requests: "Want to start?" is answered in the next request,
+ * and its showRoute and openPanel need the trip the last answer planned. Ids are random UUIDs.
+ */
+const TRIP_TTL_MS = 30 * 60_000;
+const TRIP_CAP = 2000;
+const recentTrips = new Map<string, { trip: Trip; at: number }>();
+const trips = {
+  get(id: string): Trip | undefined {
+    const hit = recentTrips.get(id);
+    if (!hit) return undefined;
+    if (Date.now() - hit.at > TRIP_TTL_MS) { recentTrips.delete(id); return undefined; }
+    return hit.trip;
+  },
+  set(id: string, trip: Trip): void {
+    recentTrips.delete(id);
+    recentTrips.set(id, { trip, at: Date.now() });
+    // Map keeps insertion order, so the first keys are the oldest.
+    for (const k of recentTrips.keys()) { if (recentTrips.size <= TRIP_CAP) break; recentTrips.delete(k); }
+  },
+};
+
 function allTools(ctx: ToolContext) {
-  const trips = new Map<string, Trip>();
   const resolve = async (text: string): Promise<Place> => {
     if (/^(here|my location|current location|me)$/i.test(text.trim())) {
       if (!ctx.location) throw new Error("Location permission not granted; ask the user where they are starting.");
@@ -130,12 +151,16 @@ function allTools(ctx: ToolContext) {
   };
   const tripOf = (id: string) => {
     const t = trips.get(id);
-    if (!t) throw new Error("Unknown tripId; call transit_plan first.");
+    if (!t) throw new Error("Unknown tripId: plan the trip again (transit_plan, route_walk or station_exit).");
     return t;
   };
   const emit = (c: AgentCommand) => { ctx.emit(command.parse(c)); return { ok: true }; };
   const at = (p: Place): LngLatTuple => p.at;
   const offer = (a: MapAction[]) => ctx.actions?.(a);
+  // A which-exit answer stays a small card over the map: the walk is drawn and opened only after "Want to start?" gets a yes,
+  // which is the next request, so in this one the trip tools hold off even if the model calls them.
+  let exitShown = false;
+  const waitForYes = { ok: false, note: "Not yet: the map already shows the exit and the walk. Ask \"Want to start?\" and call this after the user says yes." };
   /** A data tool: its result says which feeds it read and how old each is, so the model can say so (#375). */
   const sourced = <A, R extends object>(fn: (input: A) => Promise<R>) => async (input: A) => {
     const { value, sources } = await withSources(ctx.sources, () => fn(input));
@@ -250,6 +275,7 @@ function allTools(ctx: ToolContext) {
         const t = w ? walkTrip(from, { label: dest.label, at: at(dest) }, w) : null;
         offer(exitActions({ station: st.name, exit: { at: at(from), label: exit.label, elevatorOnly: exit.elevatorOnly }, destination: { label: dest.label, at: at(dest) }, walk: w ?? straight(at(from), at(dest)) }));
         if (t) offer(tripActions(t));
+        exitShown = true;
         return { station: st.name, exit: exit.label, elevatorOnly: exit.elevatorOnly, outage: exit.outage, elevatorOutages: outages.slice(0, 3), walkFromExit: t ? await walkBrief(t) : null };
       }),
     }),
@@ -295,8 +321,8 @@ function allTools(ctx: ToolContext) {
     read_page: tool({ description: "Read one event page from find_event to get its venue address, date and time.", inputSchema: args.read_page, execute: sourced(async ({ url }: z.infer<typeof args.read_page>) => readPage(url)) }),
     elevator_status: tool({ description: "Current MTA elevator/escalator outages at a station.", inputSchema: args.elevator_status, execute: sourced(async ({ station }: z.infer<typeof args.elevator_status>) => ({ outages: await elevatorStatus(station) })) }),
     flyTo: tool({ description: "Map: fly the camera to a place.", inputSchema: args.flyTo, execute: async ({ place, zoom }) => { const p = await resolve(place); offer(placeActions(p)); return emit({ type: "flyTo", lon: p.at[0], lat: p.at[1], zoom }); } }),
-    showRoute: tool({ description: "Map: draw a planned trip.", inputSchema: args.tripRef, execute: ({ tripId }) => emit({ type: "showRoute", trip: tripOf(tripId) }) }),
-    openPanel: tool({ description: "Map: open the trip summary panel (weather chip, lines, alerts, elevators, exit, ETA).", inputSchema: args.tripRef, execute: ({ tripId }) => emit({ type: "openPanel", trip: tripOf(tripId) }) }),
+    showRoute: tool({ description: "Map: draw a planned trip.", inputSchema: args.tripRef, execute: ({ tripId }) => (exitShown ? waitForYes : emit({ type: "showRoute", trip: tripOf(tripId) })) }),
+    openPanel: tool({ description: "Map: open the trip summary panel (weather chip, lines, alerts, elevators, exit, ETA).", inputSchema: args.tripRef, execute: ({ tripId }) => (exitShown ? waitForYes : emit({ type: "openPanel", trip: tripOf(tripId) })) }),
     enterStreetView: tool({ description: "Map: drop to street level at a place.", inputSchema: args.enterStreetView, execute: async ({ place }) => { const p = await resolve(place); return emit({ type: "enterStreetView", lon: p.at[0], lat: p.at[1] }); } }),
     playFlythrough: tool({ description: "Map: load the fast-forward preview of a planned trip behind a Play button. Only when the user asks to preview or play it; it never starts on its own.", inputSchema: args.playFlythrough, execute: ({ tripId, speed }) => emit({ type: "playFlythrough", trip: tripOf(tripId), speed }) }),
     suggest_layer: tool({
