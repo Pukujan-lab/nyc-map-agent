@@ -64,3 +64,61 @@ describe("event lookup through Tavily first", () => {
     expect(queries).toHaveLength(2);
   });
 });
+
+// Answers each provider's endpoint with its own handler and records the order they were called in.
+function route(handlers: { tavily?: () => Promise<Response>; tinyfish?: () => Promise<Response> }) {
+  const calls: string[] = [];
+  const impl = ((input: string | URL | Request) => {
+    const url = String(input);
+    const which = url.startsWith("https://api.tavily.com") ? "tavily" : url.startsWith("https://api.search.tinyfish.ai") ? "tinyfish" : "other";
+    calls.push(which);
+    const h = handlers[which as "tavily" | "tinyfish"];
+    return h ? h() : Promise.reject(new Error(`unexpected ${url}`));
+  }) as unknown as typeof fetch;
+  return { impl, calls };
+}
+const json = (body: unknown, status = 200) => () => Promise.resolve(new Response(JSON.stringify(body), { status }));
+const tavilyHit = json({ results: [{ title: "Bryant Park Movie Nights", url: "https://bryantpark.org/events", content: "Free outdoor film on the lawn", published_date: "2026-10-25" }] });
+const tinyfishHit = json({ results: [{ title: "Bryant Park events", url: "https://example.com/bp", snippet: "This week", site_name: "Example" }] });
+const timeout = () => Promise.reject(Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" }));
+
+describe("web search fallback, edge cases", () => {
+  afterEach(() => { vi.unstubAllEnvs(); });
+  const bothKeys = () => { vi.stubEnv("TAVILY_API_KEY", "t-key"); vi.stubEnv("TINYFISH_API_KEY", "f-key"); };
+
+  it.each([
+    ["times out", timeout],
+    ["returns nothing", json({ results: [] })],
+    ["network fails", () => Promise.reject(new TypeError("fetch failed"))],
+  ])("falls back to TinyFish when Tavily %s", async (_, tavilyAnswer) => {
+    bothKeys();
+    const { impl, calls } = route({ tavily: tavilyAnswer, tinyfish: tinyfishHit });
+    const s = await webSearch("Bryant Park tomorrow", impl);
+    expect(calls).toEqual(["tavily", "tinyfish"]);
+    expect(s).toMatchObject({ results: [{ title: "Bryant Park events", site: "Example" }] });
+  });
+
+  it("sends the Tavily key as a bearer token, not in the URL", async () => {
+    bothKeys();
+    const impl = vi.fn(tavilyHit) as unknown as typeof fetch;
+    await webSearch("Bryant Park", impl);
+    const [url, init] = (impl as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    expect(url).not.toContain("t-key");
+    expect((init.headers as Record<string, string>).authorization).toBe("Bearer t-key");
+  });
+
+  it("goes straight to TinyFish when only its key is set", async () => {
+    vi.stubEnv("TAVILY_API_KEY", "");
+    vi.stubEnv("TINYFISH_API_KEY", "f-key");
+    const { impl, calls } = route({ tavily: tavilyHit, tinyfish: tinyfishHit });
+    await webSearch("Bryant Park", impl);
+    expect(calls).toEqual(["tinyfish"]);
+  });
+
+  it("returns an honest empty list when both answer but find nothing", async () => {
+    bothKeys();
+    const { impl, calls } = route({ tavily: json({ results: [] }), tinyfish: json({ results: [] }) });
+    expect(await webSearch("no such event", impl)).toEqual({ results: [] });
+    expect(calls).toEqual(["tavily", "tinyfish"]);
+  });
+});
