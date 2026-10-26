@@ -20,10 +20,11 @@ const AERIAL_HEIGHT_M = 1100;
 const AERIAL_PITCH = 45;
 
 /**
- * Agent-first map chrome (#370, #372): the round buttons at the top right
- * (Change view, Center on my location; on a phone also the language), the view menu, and a compass that
- * shows only while the map is rotated or tilted. Layers and every other menu
- * live in the top-left menu row (MenuRow).
+ * Agent-first map chrome (#370, #372): one column of quick buttons at the top
+ * right (Change view, zoom, north; on a phone also the language until it moves
+ * into a sheet), the view menu, and Center on my location just above the chat.
+ * Everything else comes up from behind the chat (owner, 2026-10-25). Layers and
+ * every other menu live in the top-left menu row (MenuRow).
  */
 
 const ROUND = "flex h-11 w-11 shrink-0 items-center justify-center rounded-full p-0 shadow-[0_6px_18px_rgba(0,0,0,0.35)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]";
@@ -46,7 +47,7 @@ const LIVE_URL = "https://nyc.design-bakery.com";
 const QrIcon = () => <svg {...svg} width={18} height={18}><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3" /></svg>;
 
 /** A small QR button: opens a code for the live app, so someone nearby can scan it any time. */
-function QrButton() {
+export function QrButton({ wide }: { wide?: boolean } = {}) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
     if (!open) return;
@@ -55,8 +56,10 @@ function QrButton() {
     return () => window.removeEventListener("keydown", key);
   }, [open]);
   return <>
-    <button type="button" aria-label="QR code for this app" data-testid="qr-button" onClick={() => setOpen(true)}
-      className={`${ROUND} ${DARK} pointer-events-auto !h-9 !w-9`}><QrIcon /></button>
+    {wide
+      ? <button type="button" data-testid="qr-button" onClick={() => setOpen(true)} className="task-action task-secondary gap-2"><QrIcon />Show the app's QR code</button>
+      : <button type="button" aria-label="QR code for this app" data-testid="qr-button" onClick={() => setOpen(true)}
+        className={`${ROUND} ${DARK} pointer-events-auto !h-9 !w-9`}><QrIcon /></button>}
     {open ? (
       <div className="pointer-events-auto fixed inset-0 z-[60] flex items-center justify-center p-4" data-testid="qr-sheet">
         {/* A tap anywhere around the code closes it. */}
@@ -204,6 +207,19 @@ function ZoomControl({ map }: { map: MapLibreMap | null }) {
   );
 }
 
+/** Phones: just + and −, no slider; the column stays short and pinches still work. */
+function ZoomButtons({ map }: { map: MapLibreMap | null }) {
+  const step = (d: number) => { if (map) map.easeTo({ zoom: Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, map.getZoom() + d)), duration: 250 }); };
+  const btn = "flex h-11 w-11 items-center justify-center text-[22px] font-semibold leading-none text-[#f1f5f9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]";
+  return (
+    <div data-testid="zoom-buttons" className="pointer-events-auto flex w-11 flex-col items-center rounded-full border border-[#263449] bg-[rgba(15,23,42,0.92)] shadow-[0_6px_18px_rgba(0,0,0,0.35)] sm:hidden">
+      <button type="button" aria-label="Zoom in" className={btn} onClick={() => step(1)}>+</button>
+      <span className="h-px w-6 bg-[#263449]" aria-hidden />
+      <button type="button" aria-label="Zoom out" className={btn} onClick={() => step(-1)}>−</button>
+    </div>
+  );
+}
+
 function LocateButton({ map, className, style }: { map: MapLibreMap | null; className?: string; style?: React.CSSProperties }) {
   const { flyTo } = useMapState();
   const [asking, setAsking] = useState(false);
@@ -263,6 +279,7 @@ export function MapChrome() {
   // Following: the same quick bar, with the follow cameras under Change view.
   if (followed) {
     return (
+      <>
       <div ref={stack} data-testid="map-chrome" className="pointer-events-none absolute right-4 z-40 flex flex-col items-end gap-2.5" style={{ top }}>
         <div className="relative">
           <button type="button" aria-label="Change view" aria-haspopup="menu" aria-expanded={open === "view"} data-testid="view-button"
@@ -272,10 +289,12 @@ export function MapChrome() {
           {open === "view" ? <div className="pointer-events-auto absolute right-[52px] top-0"><FollowViewMenu onPick={() => setOpen(null)} /></div> : null}
         </div>
         <ZoomControl map={map} />
-        <LocateButton map={map} />
-        <LangChip />
-        <QrButton />
+        <ZoomButtons map={map} />
+        {map ? <Compass map={map} bearing={bearing} /> : null}
       </div>
+      {/* Locate rides just above the follow sheet; language and the QR code live in its Settings tab. */}
+      <LocateButton map={map} className="follow-locate absolute right-4 z-40" style={{ bottom: "calc(var(--chat-bar-h, 0px) + var(--follow-sheet-h, 0px) + 12px)" }} />
+      </>
     );
   }
   // A line is selected: its close button takes the top right; locate drops above the chat bar.
@@ -288,6 +307,7 @@ export function MapChrome() {
     );
   }
   return (
+    <>
     <div ref={stack} data-testid="map-chrome" className="pointer-events-none absolute right-4 z-40 flex flex-col items-end gap-2.5" style={{ top }}>
       <div className="relative">
         <button type="button" aria-label="Change view" aria-haspopup="menu" aria-expanded={open === "view"} data-testid="view-button"
@@ -300,12 +320,14 @@ export function MapChrome() {
           </div>
         ) : null}
       </div>
-      {/* Quick bar, top to bottom: Change view, zoom, the compass (only while rotated or tilted), Center on my location. */}
+      {/* Quick buttons, top to bottom: Change view, zoom, north. Everything else comes up from behind the chat. */}
       <ZoomControl map={map} />
-      {rotated && map ? <Compass map={map} bearing={bearing} /> : null}
-      <LocateButton map={map} />
+      <ZoomButtons map={map} />
+      {map ? <Compass map={map} bearing={bearing} /> : null}
       <LangChip />
       <QrButton />
     </div>
+    <LocateButton map={map} className="absolute right-4 z-40" style={{ bottom: "calc(var(--chat-bar-h, 0px) + 12px)" }} />
+    </>
   );
 }

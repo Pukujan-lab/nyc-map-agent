@@ -17,6 +17,12 @@ test("a phone is chat-first: no menu row, and the language is a chip in the rail
   await expect(page.getByTestId("agent-bar")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId("menu-row")).toHaveCount(0);
   await expect(page.getByTestId("zoom-control")).toBeHidden();
+  // Quick buttons at the top right (zoom as + and −); Center on my location sits just above the chat.
+  await expect(page.getByTestId("zoom-buttons")).toBeVisible();
+  const locate = (await page.getByTestId("locate-button").boundingBox())!;
+  const bar = (await page.getByTestId("agent-bar").boundingBox())!;
+  expect(locate.y + locate.height).toBeLessThanOrEqual(bar.y);
+  expect(bar.y - (locate.y + locate.height)).toBeLessThan(160);
   const lang = page.getByTestId("lang-chip").getByLabel("Language");
   await lang.selectOption("es");
   await expect(page.getByTestId("lang-chip").getByLabel("Idioma")).toHaveValue("es");
