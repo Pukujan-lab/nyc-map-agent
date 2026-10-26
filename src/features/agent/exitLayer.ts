@@ -18,12 +18,14 @@ export interface ExitView {
 }
 
 export function exitToGeoJson(v: ExitView): GeoJSON.FeatureCollection {
+  // Each label grows toward the other point, so neither runs off the screen edge or under the map buttons.
+  const exitWest = v.exit.at[0] <= v.destination.at[0];
   return {
     type: "FeatureCollection",
     features: [
       { type: "Feature", properties: { kind: "path" }, geometry: { type: "LineString", coordinates: v.path } },
-      { type: "Feature", properties: { kind: "dest", name: v.destination.label }, geometry: { type: "Point", coordinates: v.destination.at } },
-      { type: "Feature", properties: { kind: "exit", name: v.exit.label }, geometry: { type: "Point", coordinates: v.exit.at } },
+      { type: "Feature", properties: { kind: "dest", name: v.destination.label, anchor: exitWest ? "top-right" : "top-left" }, geometry: { type: "Point", coordinates: v.destination.at } },
+      { type: "Feature", properties: { kind: "exit", name: v.exit.label, anchor: exitWest ? "top-left" : "top-right" }, geometry: { type: "Point", coordinates: v.exit.at } },
     ],
   };
 }
@@ -57,7 +59,7 @@ function ensure(map: MapLibreMap): void {
   map.addLayer({ id: "agent-exit-dot", type: "circle", source: SRC, filter: ["==", ["get", "kind"], "exit"], paint: { "circle-radius": 10, "circle-color": "#16a34a", "circle-stroke-color": "#ffffff", "circle-stroke-width": 3 } });
   map.addLayer({
     id: "agent-exit-label", type: "symbol", source: SRC, filter: ["!=", ["get", "kind"], "path"],
-    layout: { "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": ["match", ["get", "kind"], "exit", 13, 11], "text-anchor": "top", "text-offset": [0, 1.1], "text-max-width": 12, "text-allow-overlap": true },
+    layout: { "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": ["match", ["get", "kind"], "exit", 13, 11], "text-anchor": ["get", "anchor"], "text-offset": [0, 1.1], "text-justify": "auto", "text-max-width": 12, "text-allow-overlap": true },
     paint: { "text-color": "#052e16", "text-halo-color": "#ffffff", "text-halo-width": 2 },
   });
   map.addLayer({ id: "agent-you-beam", type: "symbol", source: YOU, filter: ["has", "heading"], layout: { "icon-image": BEAM, "icon-rotate": ["get", "heading"], "icon-rotation-alignment": "map", "icon-allow-overlap": true, "icon-ignore-placement": true } });
