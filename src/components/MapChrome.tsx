@@ -339,10 +339,13 @@ export function MapChrome() {
       <ZoomControl map={map} />
       <ZoomButtons map={map} />
       {map ? <Compass map={map} bearing={bearing} /> : null}
-      <LangChip />
-      <QrButton />
+      {/* On a phone, language and the QR code come up from behind the chat (the Settings chip). */}
+      <div className="hidden flex-col items-end gap-2.5 sm:flex">
+        <LangChip />
+        <QrButton />
+      </div>
     </div>
-    <LocateButton map={map} className="absolute right-4 z-40" style={{ bottom: "calc(var(--chat-bar-h, 0px) + 12px)" }} />
+    <LocateButton map={map} className="sheet-locate absolute right-4 z-40" style={{ bottom: "calc(var(--chat-bar-h, 0px) + var(--pull-sheet-h, 0px) + 12px)" }} />
     </>
   );
 }

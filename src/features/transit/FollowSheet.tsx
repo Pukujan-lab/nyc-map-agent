@@ -1,10 +1,8 @@
 import { useState, type ReactNode } from "react";
 import { X } from "lucide-react";
-import { QrButton } from "@/components/MapChrome";
 import { PullSheet } from "@/components/PullSheet";
+import { SettingsBody } from "@/components/SettingsBody";
 import { nextTab, type SheetLevel } from "@/components/sheetSwipe";
-import { useMenuT } from "@/lib/i18n/menuText";
-import { APP_LANGS, LANG_LABELS, setLangPref, useLangPref, type AppLang } from "@/lib/voice/langPref";
 import { stopFollowing } from "./follow";
 
 const TABS = ["train", "notices", "settings"] as const;
@@ -35,8 +33,6 @@ export interface FollowSheetProps {
 export function FollowSheet(p: FollowSheetProps) {
   const [level, setLevel] = useState<SheetLevel>(0);
   const [tab, setTab] = useState<Tab>("train");
-  const t = useMenuT();
-  const lang = useLangPref();
   const tabLabel: Record<Tab, string> = { train: p.bus ? "Bus" : "Train", notices: p.noticeCount ? `Notices (${p.noticeCount})` : "Notices", settings: "Settings" };
   return (
     <PullSheet testId="follow-card" label={`Following ${p.route}`} level={level} onLevel={setLevel} onSide={(swipe) => setTab((at) => nextTab(TABS, at, swipe))}
@@ -61,17 +57,7 @@ export function FollowSheet(p: FollowSheetProps) {
           {p.actions}
           <div className="flex flex-col gap-0.5 px-1">{level === 2 ? p.stops : p.stops.slice(0, 2)}</div>
           {p.dest}
-        </> : tab === "notices" ? (p.notices.length ? p.notices : <p className="px-1 text-[13px] text-slate-300">No notices reported</p>) : <>
-          <label className="flex min-h-11 items-center justify-between gap-3 px-1 text-sm font-semibold">
-            {t("language")}
-            <select value={lang ?? ""} aria-label={t("language")} onChange={(e) => setLangPref((e.target.value || null) as AppLang | null)}
-              className="min-h-11 rounded-full border border-slate-400/30 bg-slate-900 px-3 text-sm font-medium text-slate-100">
-              <option value="">{t("thisPhone")}</option>
-              {APP_LANGS.map((code) => <option key={code} value={code}>{LANG_LABELS[code]}</option>)}
-            </select>
-          </label>
-          <QrButton wide />
-        </>}
+        </> : tab === "notices" ? (p.notices.length ? p.notices : <p className="px-1 text-[13px] text-slate-300">No notices reported</p>) : <SettingsBody />}
       </div>
     </PullSheet>
   );

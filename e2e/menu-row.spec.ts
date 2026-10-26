@@ -10,7 +10,7 @@ const ORDER = [
   ["settings", "Settings"],
 ] as const;
 
-test("a phone is chat-first: no menu row, and the language is a chip in the rail", async ({ page }) => {
+test("a phone is chat-first: no menu row, and language comes up from behind the chat", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 800 });
   await mockNetwork(page);
   await page.goto("/");
@@ -23,9 +23,15 @@ test("a phone is chat-first: no menu row, and the language is a chip in the rail
   const bar = (await page.getByTestId("agent-bar").boundingBox())!;
   expect(locate.y + locate.height).toBeLessThanOrEqual(bar.y);
   expect(bar.y - (locate.y + locate.height)).toBeLessThan(160);
-  const lang = page.getByTestId("lang-chip").getByLabel("Language");
-  await lang.selectOption("es");
-  await expect(page.getByTestId("lang-chip").getByLabel("Idioma")).toHaveValue("es");
+  // The top right keeps only view, zoom and north; language and the QR code are in Settings.
+  await expect(page.getByTestId("lang-chip")).toBeHidden();
+  await page.getByTestId("settings-chip").click();
+  const sheet = page.getByTestId("settings-sheet");
+  await expect(sheet.getByRole("button", { name: "Show the app's QR code" })).toBeVisible();
+  await sheet.getByLabel("Language").selectOption("es");
+  await expect(sheet.getByLabel("Idioma")).toHaveValue("es");
+  await sheet.getByRole("button", { name: /^Close/ }).click();
+  await expect(sheet).toHaveCount(0);
 });
 
 test("menu row: tapping an item makes it the leftmost pill and opens only its dropdown", async ({ page }) => {

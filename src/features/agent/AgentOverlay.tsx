@@ -1,6 +1,6 @@
 import { Bus, Car, ChevronUp, Footprints, Headphones, LocateFixed, Mic, MicOff, MoreVertical, Pause, Play, Send, SkipForward, X } from "lucide-react";
 import { legFocus } from "./legFocus";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -54,6 +54,8 @@ import { useHandsFree } from "./useHandsFree";
 import { closeAsk, useAskRequest } from "@/lib/agent/streetContext";
 import { AgentHome, AnswerCard, WorkingPanel } from "./AgentHome";
 import { DailyCard, TaskButtons } from "./HomeTasks";
+
+const SettingsSheet = lazy(() => import("@/components/SettingsSheet"));
 import { rememberCommute, useHomeWork } from "./commute";
 import { memorySummary } from "./memorySummary";
 import { recentTurns } from "./chatWindow";
@@ -131,6 +133,8 @@ export default function AgentOverlay() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [trip, setTrip] = useState<Trip | null>(null);
+  // Phones: language and the QR code, up from behind the chat over the idle home.
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [mode, setMode] = useState<TripMode>("transit");
   const [wakeClassic, setWake] = useState(false);
   // Home: voice settings live in the Settings menu (#370).
@@ -305,6 +309,7 @@ export default function AgentOverlay() {
   const stopPlayer = player.stop;
   const send = useCallback(async (text: string) => {
     closeAll();
+    setSettingsOpen(false);
     sendScreen({ type: "SEND" });
     const q = text.trim();
     const byVoice = voiceTurn.current;
@@ -771,6 +776,7 @@ export default function AgentOverlay() {
 
     const trainRoute = trip?.legs.find((l) => l.kind === "ride")?.route;
     const tasks = {
+      settings: () => setSettingsOpen(true),
       restroom: () => void send(tr(appLang, "askRestroom")),
       train: () => {
         if (trainRoute) void send(tr(appLang, "askLine").replace("{r}", trainRoute));
@@ -806,6 +812,8 @@ export default function AgentOverlay() {
         <TaskButtons on={tasks} />
       </>
     ) : null);
+    // Any other step on screen (an answer, a line, a train) puts settings away.
+    const settingsUp = settingsOpen && showIdle && !chip;
 
     return (
       <>
@@ -828,6 +836,7 @@ export default function AgentOverlay() {
           hidden={false}
           lift={!isDesktop && panelContent !== null && panelMinimized}
         />
+        {settingsUp ? <Suspense fallback={null}><SettingsSheet onClose={() => setSettingsOpen(false)} /></Suspense> : null}
         {/* One card at a time: station help covers the same spot, so the trip waits under it. */}
         {trip && player.state.active && !answerOpen && !stationHelpVisible ? <TripPreview
           trip={trip} state={player.state} speed={player.state.speed}
