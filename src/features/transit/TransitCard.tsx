@@ -369,7 +369,9 @@ export function FollowCard({ vehicle }: { vehicle: Vehicle }) {
   const head = vehicle.system === "bus" ? stops[0] : undefined;
   const headId = head?.id ?? next;
   const headName = head?.name ?? nextName;
-  const headEta = head ? head.eta : (vehicle.eta ?? null);
+  // The same stop's time as the list below it: the trip's own, when it lists the next stop first.
+  const listed = stops[0] && headId && vehicle.system !== "bus" && stationOf(vehicle.system, stops[0].id) === stationOf(vehicle.system, headId) ? stops[0] : undefined;
+  const headEta = head ? head.eta : (listed?.eta ?? vehicle.eta ?? null);
   const busCalls = busTrip.data?.calls ?? [];
   const busLast = busCalls[busCalls.length - 1];
   const busDestName = busTrip.data?.destination || busLast?.name;
