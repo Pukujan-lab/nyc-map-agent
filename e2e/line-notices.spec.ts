@@ -51,3 +51,25 @@ for (const [width, height] of [[375, 667], [320, 568]]) {
     }, { timeout: 5_000 }).toBe(true);
   });
 }
+
+test("escalators out at one station are one card, and the Lines list counts what the sheet shows", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  await mockNetwork(page);
+  // Two more units at 34 St-Penn Station: one up, one down, listed separately by the MTA.
+  const esc = (id: string, serving: string) => ({ id, station: "34 St-Penn Station", routes: ["1", "2", "3"], stops: ["128"], equipment: "Escalator", serving, reason: "Capital Replacement", since: "", back: "12/31/2099 11:00:00 PM", ada: "not-ada", alternative: "" });
+  const body = JSON.parse(liveNow()) as { alerts: { outages: unknown[] } };
+  body.alerts.outages.push(esc("ES1", "mezzanine to 7 Av & 34 St (NE corner)"), esc("ES2", "7 Av & 34 St (NE corner) to mezzanine"));
+  await page.route("**/api/transit-live*", (r) => r.fulfill({ contentType: "application/json", body: JSON.stringify(body) }));
+  await page.route("**/api/transit", (r) => r.fulfill({ contentType: "application/json", body: JSON.stringify({ bus: false }) }));
+  await page.goto("/");
+  await page.getByRole("button", { name: "My train" }).click({ timeout: 15_000 });
+  const row = page.locator('[data-line="2"] button');
+  await expect(row).toContainText("2 notices", { timeout: 15_000 });
+  await row.click();
+  const sheet = page.getByTestId("line-panel");
+  await expect(sheet.locator("[data-notice]")).toHaveCount(2);
+  const card = sheet.locator("[data-notice]", { hasText: "2 escalators out at 34 St-Penn Station" });
+  await card.scrollIntoViewIfNeeded();
+  await card.click();
+  await expect(card).toContainText("mezzanine to 7 Av & 34 St (NE corner), both ways");
+});

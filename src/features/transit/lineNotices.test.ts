@@ -42,6 +42,30 @@ describe("lineNotices", () => {
     expect(n.stations[0].label).toBe("No elevator");
   });
 
+  it("puts every unit out at one station on one card, an up and down pair as one row", () => {
+    const esc = (id: string, serving: string, back: string): Outage => ({ id, station: "14 St", routes: ["A", "C", "E"], stops: ["A31"], equipment: "Escalator", serving, reason: "Capital Replacement", since: "", back, ada: "not-ada", alternative: "" });
+    const units = [
+      esc("ES1", "mezzanine to 14 St & 8 Av (NE corner)", "10/31/2026 11:59:00 PM"),
+      esc("ES2", "14 St & 8 Av (NE corner) to mezzanine", "10/31/2026 11:59:00 PM"),
+      esc("ES3", "platform to mezzanine", "12/31/2026 11:59:00 PM"),
+    ];
+    const elevator: Outage = { ...esc("EL9", "street to mezzanine", "11/02/2026 09:00:00 PM"), equipment: "Elevator", ada: "yes" };
+    const other: Outage = { ...esc("ES7", "street to mezzanine", ""), station: "34 St-Penn Station", stops: ["A28"] };
+    const out = lineNotices("A", [], [...units, other], sys);
+    expect(out.map((n) => n.title)).toEqual(["3 escalators out at 14 St", "Escalator out at 34 St-Penn Station"]);
+    const [n] = out;
+    expect(n.meta).toBe(`until ${new Date(2026, 9, 31).toLocaleDateString([], { month: "short", day: "numeric" })} to ${new Date(2026, 11, 31).toLocaleDateString([], { month: "short", day: "numeric" })}`);
+    expect(n.body.split("\n")).toHaveLength(3);
+    expect(n.body).toContain("mezzanine to 14 St & 8 Av (NE corner), both ways");
+    expect(n.body).toContain("Out of service: capital replacement.");
+    expect(n.stations).toHaveLength(1);
+    expect(n.stations[0].label).toBe("No escalator");
+    const [mixed] = lineNotices("A", [], [units[2], elevator], sys);
+    expect(mixed.title).toBe("Elevator and escalator out at 14 St");
+    expect(mixed.body).toMatch(/^• Elevator: street to mezzanine/m);
+    expect(mixed.stations[0].label).toBe("No elevator");
+  });
+
   it("is empty without the static system", () => {
     expect(lineNotices("A", [alert({})], [], undefined)).toEqual([]);
   });

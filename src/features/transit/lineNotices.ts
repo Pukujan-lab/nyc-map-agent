@@ -74,18 +74,68 @@ function alertStations(a: TransitAlert, sys: StaticSystem, route: string, tone: 
   return geo.skipped.map((s) => ({ ...s, label }));
 }
 
-function outageNotice(o: Outage, sys: StaticSystem): LineNotice | null {
+/** "10/31/2026 11:59:00 PM" as "Oct 31"; anything else as it came. */
+function backDay(back: string): string {
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(back);
+  return m ? new Date(Number(m[3]), Number(m[1]) - 1, Number(m[2])).toLocaleDateString([], { month: "short", day: "numeric" }) : back;
+}
+
+/** "Escalator", "2 escalators", "Elevator and 3 escalators". */
+function equipmentWords(list: Outage[]): string {
+  const kinds = [...new Set(list.map((o) => o.equipment))].sort();
+  const words = kinds.map((k) => {
+    const n = list.filter((o) => o.equipment === k).length;
+    return n === 1 ? k.toLowerCase() : `${n} ${k.toLowerCase()}s`;
+  }).join(" and ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** One row per unit, an up and down pair as one row ("A to B, both ways"); dates only when they differ. */
+function outageRows(list: Outage[], dated: boolean): string[] {
+  const used = new Set<string>();
+  const rows: string[] = [];
+  const mixed = new Set(list.map((o) => o.equipment)).size > 1;
+  for (const o of list) {
+    if (used.has(o.id)) continue;
+    used.add(o.id);
+    const [a, b] = o.serving.split(/ to /);
+    const back = list.find((x) => !used.has(x.id) && x.equipment === o.equipment && b && x.serving === `${b} to ${a}`);
+    if (back) used.add(back.id);
+    const where = back ? `${o.serving}, both ways` : o.serving || o.equipment;
+    const until = dated && o.back ? ` · until ${backDay(o.back)}` : "";
+    rows.push(`• ${mixed ? `${o.equipment}: ` : ""}${where}${until}`);
+  }
+  return rows;
+}
+
+/** Every elevator and escalator out at one station as one notice; tap it for each unit. */
+function outageNotice(list: Outage[], sys: StaticSystem): LineNotice | null {
+  const o = list[0];
   const byId = new Map(sys.stations.features.map((f) => [String(f.properties.id), f]));
-  const st = o.stops.map((s) => byId.get(stationOf("subway", s))).find(Boolean);
-  const where = o.serving ? `${o.serving}` : o.equipment;
-  const until = o.back ? ` · until ${o.back}` : "";
+  const st = list.flatMap((x) => x.stops).map((s) => byId.get(stationOf("subway", s))).find(Boolean);
+  const stations = st ? [{ id: String(st.properties.id), name: String(st.properties.name), coord: st.geometry.coordinates as [number, number], label: list.some((x) => x.equipment === "Elevator") ? "No elevator" : `No ${o.equipment.toLowerCase()}` }] : [];
+  if (list.length === 1) {
+    const where = o.serving ? `${o.serving}` : o.equipment;
+    const until = o.back ? ` · until ${o.back}` : "";
+    return {
+      id: `outage:${o.id}`,
+      tone: "access",
+      title: `${o.equipment} out at ${o.station}`,
+      meta: `${where}${until}`,
+      body: [o.reason ? `${o.equipment} out of service: ${o.reason.toLowerCase()}.` : `${o.equipment} out of service.`, o.alternative].filter(Boolean).join(" "),
+      stations,
+    };
+  }
+  const days = [...new Set(list.map((x) => x.back).filter(Boolean).map(backDay))];
+  const reasons = [...new Set(list.map((x) => x.reason).filter(Boolean))];
+  const alternatives = [...new Set(list.map((x) => x.alternative).filter(Boolean))];
   return {
-    id: `outage:${o.id}`,
+    id: `outage:${o.station}:${list.map((x) => x.id).join(",")}`,
     tone: "access",
-    title: `${o.equipment} out at ${o.station}`,
-    meta: `${where}${until}`,
-    body: [o.reason ? `${o.equipment} out of service: ${o.reason.toLowerCase()}.` : `${o.equipment} out of service.`, o.alternative].filter(Boolean).join(" "),
-    stations: st ? [{ id: String(st.properties.id), name: String(st.properties.name), coord: st.geometry.coordinates as [number, number], label: `No ${o.equipment.toLowerCase()}` }] : [],
+    title: `${equipmentWords(list)} out at ${o.station}`,
+    meta: days.length === 1 ? `until ${days[0]}` : days.length ? `until ${days[0]} to ${days.at(-1)}` : "",
+    body: [...outageRows(list, days.length > 1), reasons.length === 1 ? `Out of service: ${reasons[0].toLowerCase()}.` : "", ...alternatives].filter(Boolean).join("\n"),
+    stations,
   };
 }
 
@@ -105,11 +155,16 @@ export function lineNotices(route: string, alerts: TransitAlert[], outages: Outa
     const rings = alertStations(a, sys, route, tone, stations);
     out.push({ id: a.id, tone, title, meta, body, stations: rings.length > MAX_RINGS ? [] : rings, alert: a });
   }
+  // The MTA lists every unit on its own, often one per direction; the card is per station.
   const outageSeen = new Set<string>();
+  const byStation = new Map<string, Outage[]>();
   for (const o of outages) {
     if (!o.routes.some((r) => lineOf(r) === route) || outageSeen.has(o.id)) continue;
     outageSeen.add(o.id);
-    const n = outageNotice(o, sys);
+    byStation.set(o.station, [...(byStation.get(o.station) ?? []), o]);
+  }
+  for (const list of byStation.values()) {
+    const n = outageNotice(list, sys);
     if (n) out.push(n);
   }
   return out.sort((x, y) => ORDER[x.tone] - ORDER[y.tone]);
@@ -143,4 +198,9 @@ export function heldNotices(route: string, held: Iterable<HeldTrain>, sys: Stati
     } });
   }
   return out.sort((a, b) => a.since - b.since).map((x) => x.notice);
+}
+
+/** Everything the line sheet lists for a line, held trains first; the Lines list counts the same. */
+export function allLineNotices(route: string, held: Iterable<HeldTrain>, alerts: TransitAlert[], outages: Outage[], sys: StaticSystem | undefined): LineNotice[] {
+  return [...heldNotices(route, held, sys), ...lineNotices(route, alerts, outages, sys)];
 }
