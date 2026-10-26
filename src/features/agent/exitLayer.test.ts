@@ -14,6 +14,14 @@ describe("exit on the map", () => {
     expect(g.features[2].properties?.name).toBe("NE exit on West 34 Street");
   });
 
+  it("grows each label toward the other point, away from the screen edges", () => {
+    const g = exitToGeoJson(v);
+    expect(g.features[2].properties?.anchor).toBe("top-left");
+    expect(g.features[1].properties?.anchor).toBe("top-right");
+    const flipped = exitToGeoJson({ ...v, exit: v.destination, destination: v.exit });
+    expect(flipped.features[2].properties?.anchor).toBe("top-right");
+  });
+
   it("frames you too when your location is known", () => {
     expect(exitBounds(v, null)).toEqual([[-73.988, 40.7484], [-73.9857, 40.749]]);
     expect(exitBounds(v, [-73.99, 40.75])).toEqual([[-73.99, 40.7484], [-73.9857, 40.75]]);
