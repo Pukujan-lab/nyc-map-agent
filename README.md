@@ -1,14 +1,36 @@
 # NYC Map Agent
 
-Ask anything about how loud or how dangerous a NYC street is, and watch the answer appear on the map.
+A chat and voice helper for getting around New York, with the map as its canvas. Ask a question in your own words or language. The answer shows on the map, not as a wall of text.
 
-Two datasets are joined to 2020 Neighborhood Tabulation Areas in the browser and drawn as colored columns: **311 noise complaints** (`erm2-nwe9`) and **motor vehicle crashes** (`h9gi-nx95`). A chat panel answers in plain language, and every answer moves or highlights the map.
+**Live:** https://nyc.design-bakery.com
 
-The map opens flat and north-up over a vector basemap with real extruded buildings. Pick a unit from one dropdown — **Block** (~300 m squares), **Neighborhood** (NTA 2020), **Community district** or **Borough** — and a style: **Filled areas** (default), **3D columns** or **Heatmap**, read the value off four colors — blue, green, yellow, red — whose ranges are printed in the legend, then press the box button to tilt the camera down to 62° and compare column heights. Both encodings come from the same number: color is the bucket, height is a square-root scale of the value.
+## What it is for
 
-The screen is one dock. Legend, layer switch, tilt, settings and chat sit in a single pill at the bottom; the time window, scale, neighborhood jump, zoom and data caveats live in the settings drawer, and chat and details open as sheets.
+Built first for someone new to the city, especially a newcomer who is not at home with apps, then for people who use it every day. The main jobs, in the owner's order:
 
-![one screen: full-bleed map and a single bottom dock](context/BRIEF.md)
+1. **Plan a trip** and see what you will run into: delays, planned work, weather. Play it back before you go.
+2. **Find a restroom** nearby that is listed as open, with the walk to it.
+3. **Landmarks** to guide you, so you always know where you are.
+4. **Underground and exits:** which exit to take for a place, and where you are when you come up with no signal.
+5. **Readable subway notices:** which stops are skipped, where the shuttle bus goes, and which train to switch to.
+
+On a phone the screen is the map, a chat bar and voice. Quick buttons sit top right (zoom, view, north up). Everything else pulls up from behind the chat. The app never suggests food, shops or things to do unless you ask.
+
+The original noise and crash dashboard is still here for technical users, behind Layers and settings. It is described further down.
+
+## Where the plan lives
+
+| File | What it says |
+| --- | --- |
+| [`PROJECT.md`](PROJECT.md) | What the app is for, who it serves and the jobs in priority order |
+| [`docs/DESIGN_RULES.md`](docs/DESIGN_RULES.md) | The owner's design rules (binding) |
+| [`docs/PDD.md`](docs/PDD.md) | The product design document: the screens and how to check and ship them |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | What is built, what is checked and what is next |
+| [`AGENTS.md`](AGENTS.md) | Rules for coding agents working in this repository |
+
+## For technical users: the city data layer
+
+Two datasets are joined to 2020 Neighborhood Tabulation Areas and drawn on the map: **311 noise complaints** (`erm2-nwe9`) and **motor vehicle crashes** (`h9gi-nx95`). Pick a unit (block, neighborhood, community district or borough) and a style (filled areas, 3D columns or heatmap). Color is the bucket and height is a square-root scale of the same number.
 
 ## Quick start
 
