@@ -93,7 +93,8 @@ async function frameExit(a: ExitAction) {
   const near = me && metres([me.lon, me.lat], a.exit.at) < 1500 ? ([me.lon, me.lat] as [number, number]) : null;
   const phone = window.innerWidth < 640;
   // The small exit card and the chat bar take about the lower 40% on a phone, the left column wider up.
-  const pad = framePadding(m, phone ? { top: 96, bottom: Math.round(window.innerHeight * 0.42), left: 40, right: 72 } : { top: 100, bottom: 120, left: Math.min(420, window.innerWidth * 0.44) + 48, right: 96 });
+  // The sides leave room for half a centred label, and on the right for the round map buttons too.
+  const pad = framePadding(m, phone ? { top: 96, bottom: Math.round(window.innerHeight * 0.42), left: 88, right: 112 } : { top: 100, bottom: 120, left: Math.min(420, window.innerWidth * 0.44) + 48, right: 96 });
   m.fitBounds(exitBounds(v, near), { padding: pad, maxZoom: 18, pitch: 0, bearing: 0, duration: 900 });
 }
 
