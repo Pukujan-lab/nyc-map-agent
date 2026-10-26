@@ -16,7 +16,7 @@ import { getXray, setXray, useXray } from "./xray";
 import { AlertRow, presentAlert, StationNotice } from "./AlertCard";
 import { lineOf, setSelectedLine, useSelectedLine } from "@/lib/transit/selectedLine";
 import { stationChanges } from "./alertFocus";
-import { alertTimeLabel, classifyRouteAlerts, plainAlert, skipNamesFor } from "./followInfo";
+import { alertTimeLabel, classifyRouteAlerts, plainAlert, skipNamesFor, upcomingStops } from "./followInfo";
 import { usePanel } from "@/lib/store/PanelContext";
 import { FollowSheet } from "./FollowSheet";
 
@@ -363,7 +363,7 @@ export function FollowCard({ vehicle }: { vehicle: Vehicle }) {
   const railTrip = vehicle.system === "bus" ? undefined : data[vehicle.system]?.live?.trips.find((t) => t.id === tripId);
   const stops = vehicle.system === "bus"
     ? (busTrip.data?.calls ?? []).slice(0, 6).map((c) => ({ id: c.id, name: formatStreetText(c.name), eta: c.eta }))
-    : (railTrip?.stops ?? []).filter(([, t]) => t >= now - 30).slice(0, 6).map(([id, t]) => ({ id, name: stopName(data, vehicle.system, id) ?? id, eta: t }));
+    : upcomingStops(railTrip?.stops ?? [], vehicle.stopped?.kind === "at" ? vehicle.stopped.stop : vehicle.nextStop, now, (a, b) => stationOf(vehicle.system as SystemId, a) === stationOf(vehicle.system as SystemId, b)).slice(0, 6).map(([id, t]) => ({ id, name: stopName(data, vehicle.system, id) ?? id, eta: t }));
   const next = vehicle.stopped?.kind === "at" ? vehicle.stopped.stop : vehicle.nextStop;
   const nextName = next ? (stopName(data, vehicle.system, next) ?? next) : "—";
   const head = vehicle.system === "bus" ? stops[0] : undefined;
