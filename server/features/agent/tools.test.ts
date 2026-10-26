@@ -66,6 +66,37 @@ describe("the model never sees the user's position as numbers (#374)", () => {
   });
 });
 
+describe("a which-exit answer stays a small card", () => {
+  const station = { id: "127", complexId: "611", name: "Times Sq-42 St", routes: ["1", "2", "3"], structure: "Subway", at: [-73.9873, 40.7553] as [number, number] };
+  const deps = {
+    entrances: { stations: () => Promise.resolve([station]), entrances: () => Promise.resolve([{ complexId: "611", at: [-73.9868, 40.7558] as [number, number], type: "Stair", entry: true, exit: true }]) },
+    walk: () => Promise.resolve({ coords: [[-73.9868, 40.7558], [-73.99, 40.735]] as [number, number][], durationS: 300, distanceM: 400, turns: [] }),
+  };
+  const call = (t: { execute?: unknown }, a: unknown) => (t.execute as (a: unknown, o: unknown) => Promise<unknown>)(a, { toolCallId: "e", messages: [] });
+
+  it("the route and trip sheet wait for the yes, then open from the same trip in the next request", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"));
+    const sent: { type: string }[] = [];
+    const ctx = { location: { lon: -73.99, lat: 40.735 }, now: new Date(), emit: (c: { type: string }) => sent.push(c), deps: deps as never };
+    const tools = makeTools(ctx);
+    const out = (await call(tools.station_exit, { station: "Times Sq", to: "here" })) as { walkFromExit: { tripId: string } | null };
+    const tripId = out.walkFromExit?.tripId;
+    expect(tripId).toBeTruthy();
+    expect(await call(tools.openPanel, { tripId })).toMatchObject({ ok: false });
+    expect(await call(tools.showRoute, { tripId })).toMatchObject({ ok: false });
+    expect(sent).toEqual([]);
+    // Other tools still move the map in that answer.
+    await call(tools.flyTo, { place: "here" });
+    expect(sent.map((c) => c.type)).toEqual(["flyTo"]);
+    // The yes is the next request, with new tools: the same trip draws and opens.
+    const next = makeTools(ctx);
+    expect(await call(next.showRoute, { tripId })).toEqual({ ok: true });
+    expect(await call(next.openPanel, { tripId })).toEqual({ ok: true });
+    expect(sent.map((c) => c.type)).toEqual(["flyTo", "showRoute", "openPanel"]);
+    fetchSpy.mockRestore();
+  });
+});
+
 describe("time + geometry helpers", () => {
   it("New York local time is DST-correct", () => {
     expect(nyLocalToDate("2026-10-22T09:00").toISOString()).toBe("2026-10-22T13:00:00.000Z");
