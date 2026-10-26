@@ -140,6 +140,30 @@
   }
 }
 
+/* Phones: Center on my location owns the bottom right, so the map credits move
+   to the left and ride above a pull sheet (--pull-sheet-h) like it does. */
+@media (max-width: 639px) {
+  .maplibregl-ctrl-bottom-right {
+    left: 0;
+    right: auto;
+    bottom: calc(var(--chat-bar-h, 56px) + var(--pull-sheet-h, 0px) + 8px);
+  }
+  .maplibregl-ctrl-bottom-right .maplibregl-ctrl {
+    margin: 0 0 0 var(--edge, 12px) !important;
+  }
+  /* The "i" is pinned to the box's right: closed, the box is just the button; open, the text clears it. */
+  .maplibregl-ctrl-bottom-right .maplibregl-compact {
+    width: 24px;
+    padding: 0 !important;
+  }
+  .maplibregl-ctrl-bottom-right .maplibregl-compact.maplibregl-compact-show {
+    width: auto;
+    max-width: calc(100vw - var(--edge, 12px) - 76px);
+    box-sizing: border-box;
+    padding: 2px 30px 2px 8px !important;
+  }
+}
+
 /* Layout A design tokens (#171): three near-monochrome themes, one accent each. */
 @layer base {
   html.theme-ivory {
