@@ -116,6 +116,15 @@ export function useScreen<T>(pick: (v: ScreenView) => T): T {
   );
 }
 
+/** The screen's size class: "wide" from 640 px, which docks panels to the side instead of over the chat. */
+export function useScreenSize(): ScreenSize {
+  return useSyncExternalStore(
+    (f) => { const s = actor.subscribe(f); return () => s.unsubscribe(); },
+    () => actor.getSnapshot().context.size,
+    () => actor.getSnapshot().context.size,
+  );
+}
+
 const sizeOf = (): ScreenSize =>
   window.matchMedia("(min-width: 640px)").matches ? "wide" : window.matchMedia("(max-width: 374px), (max-height: 699px)").matches ? "small" : "phone";
 

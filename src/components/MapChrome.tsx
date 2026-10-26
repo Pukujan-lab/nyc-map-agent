@@ -8,6 +8,7 @@ import { setOpenMenu, useOpenMenu } from "@/lib/store/openMenu";
 import { setFollowMode, stopFollowing, useFollowMode, useFollowed, type FollowMode } from "@/lib/transit/follow";
 import { useSelectedLine } from "@/lib/transit/selectedLine";
 import { useMenuT } from "@/lib/i18n/menuText";
+import { useScreen, useScreenSize } from "@/lib/screen/screenSpace";
 import { APP_LANGS, LANG_LABELS, setLangPref, useLangPref, type AppLang } from "@/lib/voice/langPref";
 import { MID_HEIGHT_M, levelOf, type ViewLevel } from "./ViewSwitcher";
 
@@ -261,6 +262,8 @@ export function MapChrome() {
   const setOpen = (v: "view" | null) => setOpenMenu(v);
   const stack = useRef<HTMLDivElement>(null);
   const rotated = Math.abs(bearing) > 0.5 || pitch > 0.5;
+  const wide = useScreenSize() === "wide";
+  const lineFolded = useScreen((v) => v.line === "pill");
 
   // A tap anywhere else, or Escape, closes the open panel or menu.
   useEffect(() => {
@@ -293,16 +296,29 @@ export function MapChrome() {
         {map ? <Compass map={map} bearing={bearing} /> : null}
       </div>
       {/* Locate rides just above the follow sheet; language and the QR code live in its Settings tab. */}
-      <LocateButton map={map} className="follow-locate absolute right-4 z-40" style={{ bottom: "calc(var(--chat-bar-h, 0px) + var(--follow-sheet-h, 0px) + 12px)" }} />
+      <LocateButton map={map} className="sheet-locate absolute right-4 z-40" style={{ bottom: "calc(var(--chat-bar-h, 0px) + var(--pull-sheet-h, 0px) + 12px)" }} />
       </>
     );
   }
-  // A line is selected: its close button takes the top right; locate drops above the chat bar.
+  // A line is selected. On a phone it opens as a sheet over the chat, so the quick buttons stay;
+  // folded to its pill at the top (an answer is open), or on a wider screen, its close button takes the top right.
   if (line) {
     return (
       <>
-        {rotated && map ? <Compass map={map} bearing={bearing} style={{ position: "absolute", top, right: 68, zIndex: 45 }} /> : null}
-        <LocateButton map={map} className="absolute right-4 z-40" style={{ bottom: "calc(var(--chat-bar-h, 0px) + 24px + env(safe-area-inset-bottom))" }} />
+        {!wide && !lineFolded ? (
+          <div ref={stack} data-testid="map-chrome" className="pointer-events-none absolute right-4 z-40 flex flex-col items-end gap-2.5" style={{ top }}>
+            <div className="relative">
+              <button type="button" aria-label="Change view" aria-haspopup="menu" aria-expanded={open === "view"} data-testid="view-button"
+                onClick={() => setOpen(open === "view" ? null : "view")} className={`${ROUND} ${open === "view" ? LIGHT : DARK} pointer-events-auto`}>
+                <ViewIcon />
+              </button>
+              {open === "view" ? <div className="pointer-events-auto absolute right-[52px] top-0"><ViewMenu pitch={pitch} onPick={() => setOpen(null)} /></div> : null}
+            </div>
+            <ZoomButtons map={map} />
+            {map ? <Compass map={map} bearing={bearing} /> : null}
+          </div>
+        ) : rotated && map ? <Compass map={map} bearing={bearing} style={{ position: "absolute", top, right: 68, zIndex: 45 }} /> : null}
+        <LocateButton map={map} className="sheet-locate absolute right-4 z-40" style={{ bottom: "calc(var(--chat-bar-h, 0px) + var(--pull-sheet-h, 0px) + 12px)" }} />
       </>
     );
   }
