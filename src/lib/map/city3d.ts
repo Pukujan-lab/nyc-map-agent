@@ -31,6 +31,9 @@ const STOREFRONT_M = 4.5;
 
 export const CITY3D_LAYERS = ["city3d-storefront", "city3d-walls", "city3d-roofs", "city3d-props", "city3d-bridges", "city3d-signs", "city3d-furniture", "city3d-hydrants", "city3d-landmarks", "city3d-storefront-signs"] as const;
 
+/** Source layers only three.js reads; an invisible style layer keeps them in overzoomed tiles. */
+export const KEEP_SOURCE_LAYERS = ["storefronts", "signs"] as const;
+
 async function loadFacades(map: MapLibreMap): Promise<void> {
   await Promise.all(
     FACADES.map(async (name) => {
@@ -213,6 +216,23 @@ export async function installCity3d(map: MapLibreMap): Promise<void> {
     },
     beforeId,
   );
+  // Shop signboards and corner names are drawn by three.js, which reads them with
+  // querySourceFeatures. Past the tiles' z16 MapLibre slices each tile and keeps
+  // only the source layers a style layer uses, so without these the shops right
+  // in front of you dropped out of the data. Zero-radius circles: nothing draws.
+  for (const sourceLayer of KEEP_SOURCE_LAYERS) {
+    map.addLayer(
+      {
+        id: `city3d-keep-${sourceLayer}`,
+        type: "circle",
+        source: SOURCE,
+        "source-layer": sourceLayer,
+        minzoom: CITY3D_MIN_ZOOM,
+        paint: { "circle-radius": 0, "circle-opacity": 0, "circle-stroke-width": 0 },
+      },
+      beforeId,
+    );
+  }
   // Corner street-name signs (three.js custom layer in this canvas); its own chunk.
   const { createStreetSignsLayer } = await import("./threeLayer");
   if (!map.getLayer("city3d-signs")) {
