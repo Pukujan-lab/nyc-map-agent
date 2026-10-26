@@ -72,7 +72,7 @@
   {
     "name": "feature: transit layers (lazy)",
     "path": ".size-build/assets/layers-*.js",
-    "limit": "23.8 kB"
+    "limit": "24.7 kB"
   },
   {
     "name": "feature: line panel (lazy)",
@@ -87,6 +87,6 @@
   {
     "name": "all JS",
     "path": ".size-build/assets/*.js",
-    "limit": "1075 kB"
+    "limit": "1076 kB"
   }
 ]

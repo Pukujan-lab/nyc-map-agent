@@ -58,6 +58,7 @@ import { RAISED_LIFT_PX, STOP_LIFT_PX, alertCameraAction, paintAboveVehicles, tr
 import { FOCUS_OPACITY, FOCUS_VEIL_ID, WORLD, focusVeil, useTransitFocus } from "@/lib/map/transitFocus";
 import { framePadding } from "@/lib/map/mapCover";
 import { TapCycle } from "./tapCycle";
+import { liveBranches } from "./liveBranches";
 
 /** Layers a click on the map should hand to transit instead of the area pick. */
 /** CC BY 4.0 credit for the 3D bus model (public/models/LICENSE.md), shown while it can be on screen. Trains are plain boxes (#366). */
@@ -318,7 +319,8 @@ export default function TransitLayer() {
   // The lines of the trip on screen: their trains stay bright, the others fade.
   const activeTrip = useActiveTrip();
   const tripRoutes = useMemo(() => [...new Set((activeTrip?.legs ?? []).filter((l) => l.kind === "ride" && l.route).flatMap((l) => [l.route!, `${l.route!}X`]))], [activeTrip]);
-  const lineAlpha = lineOpacity(isoRoutes, focus) as number;
+  // A picked line is drawn by its own layers (in use, faded, detour), so the shared drawing leaves it out.
+  const lineAlpha = (lineSel ? ["case", ["in", ["get", "route"], ["literal", isoRoutes]], 0, 0.12] : lineOpacity(isoRoutes, focus)) as number;
   // `on` is a new Set every render: depending on it re-registered the chip on every render,
   // which re-rendered this layer through the panel context ("Maximum update depth exceeded").
   const trainsOn = on.has("subway");
@@ -380,10 +382,24 @@ export default function TransitLayer() {
     return f ? String(f.properties.routes ?? "").split(/[\s,]+/).filter(Boolean) : [];
   }, [staticKey, stationOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   const shownRoutes = lineSel ? isoRoutes : stationRoutes;
-  const pickedLine = useMemo<GeoJSON.FeatureCollection>(() => {
+  // Which of the picked line's tracks its trains are on right now (src/features/transit/liveBranches.ts):
+  // in use bold, the rest faded, a run off the line's own track dashed as a detour.
+  const subLive = data.subway?.live;
+  const picked = useMemo(() => {
     const sub = statics.find((s) => s.system === "subway");
-    return { type: "FeatureCollection", features: shownRoutes.length && sub ? sub.lines.features.filter((f) => shownRoutes.includes(String(f.properties.route))) : [] };
-  }, [staticKey, shownRoutes]); // eslint-disable-line react-hooks/exhaustive-deps
+    const none: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
+    if (!shownRoutes.length || !sub) return { used: none, unused: none, detour: none };
+    const used: GeoJSON.Feature[] = [];
+    const unused: GeoJSON.Feature[] = [];
+    const detour: GeoJSON.Feature[] = [];
+    for (const r of [...new Set(shownRoutes.map(lineOf))]) {
+      const b = liveBranches(r, sub, subLive?.trips ?? []);
+      if (b) { used.push(...b.used); unused.push(...b.unused); detour.push(...b.detour); continue; }
+      used.push(...sub.lines.features.filter((f) => lineOf(String(f.properties.route)) === r));
+    }
+    const fc = (features: GeoJSON.Feature[]): GeoJSON.FeatureCollection => ({ type: "FeatureCollection", features });
+    return { used: fc(used), unused: fc(unused), detour: fc(detour) };
+  }, [staticKey, shownRoutes, subLive]); // eslint-disable-line react-hooks/exhaustive-deps
   const stations = useMemo<GeoJSON.FeatureCollection>(() => {
     // One name per station complex: same-name neighbours would stack the label twice (#312).
     const labelled = labelledStationIds(statics.flatMap((s) => s.system !== "subway" ? [] : s.stations.features.map((f) => ({ id: String(f.properties.id), name: String(f.properties.name ?? ""), lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1] }))));
@@ -1035,8 +1051,8 @@ export default function TransitLayer() {
   const dimLines = (alertFocus || stationRoutes.length ? 0.12 : lineAlpha);
   // Isolated lines: their stations stay, the rest fade.
   const stationAlpha = (isoRoutes.length ? ["case", ["any", ...isoRoutes.map((r) => ["in", ` ${r} `, ["concat", " ", ["get", "routes"], " "]])], 1, 0.15] : 1) as number;
-  // Underground dashes keep their width (#336); a selected line's read solid, the others fade.
-  const underAlpha = (lineSel ? ["case", ["in", ["get", "route"], ["literal", isoRoutes]], 0.95, 0.08] : stationRoutes.length ? 0.08 : 0.75) as number;
+  // Underground dashes keep their width (#336); a selected line is drawn by its own layers, the others fade.
+  const underAlpha = (lineSel ? ["case", ["in", ["get", "route"], ["literal", isoRoutes]], 0, 0.08] : stationRoutes.length ? 0.08 : 0.75) as number;
   // The selected line's trains read larger than the dimmed rest.
   const bulletScale = (lineSel ? ["case", ["in", ["get", "route"], ["literal", isoRoutes]], 1.3, 1] : 1) as unknown;
   // No line picked: match nothing. A legacy ["==", 1, 0] filter is a style error, and one
@@ -1059,9 +1075,20 @@ export default function TransitLayer() {
           layout={{ "line-cap": "round", "line-join": "round" }}
           paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, focus ? 3 : 2.6, 16, focus ? 5.8 : 5], "line-opacity": dimLines }} />
       </Source>
-      <Source id="transit-line-picked" type="geojson" data={pickedLine}>
+      <Source id="transit-line-picked-unused" type="geojson" data={picked.unused}>
+        <Layer id="transit-line-picked-unused" type="line" layout={{ "line-cap": "round", "line-join": "round" }}
+          paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 2.4, 16, 5], "line-opacity": 0.22 }} />
+      </Source>
+      <Source id="transit-line-picked" type="geojson" data={picked.used}>
         <Layer id="transit-line-picked" type="line" layout={{ "line-cap": "round", "line-join": "round" }}
           paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 3.2, 16, 6.5], "line-opacity": 1 }} />
+      </Source>
+      {/* A detour: white under the line's colour in dashes, so it reads as the same trains on another track. */}
+      <Source id="transit-line-picked-detour" type="geojson" data={picked.detour}>
+        <Layer id="transit-line-picked-detour-casing" type="line" layout={{ "line-cap": "round", "line-join": "round" }}
+          paint={{ "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 10, 5, 16, 9.5], "line-opacity": 0.95 }} />
+        <Layer id="transit-line-picked-detour" type="line" layout={{ "line-join": "round" }}
+          paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 3.2, 16, 6.5], "line-dasharray": [1.6, 1.1] }} />
       </Source>
       {xrayOn && !three ? (
         // Top-down X-ray: the ground and buildings fade so the tunnels below read through.
