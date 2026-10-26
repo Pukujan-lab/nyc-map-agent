@@ -573,8 +573,8 @@ export function MapView({
     const blockTiles = () =>
       void installBlockTiles(map).then((swapped) => swapped && setStyleEpoch((epoch) => epoch + 1));
     blockTiles();
-    // Dev-only handle for headless QA (camera placement, fps sampling).
-    if (import.meta.env.DEV) (window as unknown as { __map?: unknown }).__map = map;
+    // Handle for headless QA (camera placement, fps sampling) in dev and the e2e build only; production compiles it away.
+    if (import.meta.env.DEV || import.meta.env.VITE_E2E) (window as unknown as { __map?: unknown }).__map = map;
     // A style swap (the raster fallback) replaces every source, so the data
     // has to be re-attached and re-pushed.
     map.on("style.load", () => {
