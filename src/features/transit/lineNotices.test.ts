@@ -44,10 +44,11 @@ describe("lineNotices", () => {
 
   it("puts every unit out at one station on one card, an up and down pair as one row", () => {
     const esc = (id: string, serving: string, back: string): Outage => ({ id, station: "14 St", routes: ["A", "C", "E"], stops: ["A31"], equipment: "Escalator", serving, reason: "Capital Replacement", since: "", back, ada: "not-ada", alternative: "" });
+    // The latest one first, as the MTA feed can list them: the range still reads soonest to latest.
     const units = [
+      esc("ES3", "platform to mezzanine", "12/31/2026 11:59:00 PM"),
       esc("ES1", "mezzanine to 14 St & 8 Av (NE corner)", "10/31/2026 11:59:00 PM"),
       esc("ES2", "14 St & 8 Av (NE corner) to mezzanine", "10/31/2026 11:59:00 PM"),
-      esc("ES3", "platform to mezzanine", "12/31/2026 11:59:00 PM"),
     ];
     const elevator: Outage = { ...esc("EL9", "street to mezzanine", "11/02/2026 09:00:00 PM"), equipment: "Elevator", ada: "yes" };
     const other: Outage = { ...esc("ES7", "street to mezzanine", ""), station: "34 St-Penn Station", stops: ["A28"] };
