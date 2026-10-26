@@ -1,6 +1,6 @@
 import { Bus, Car, ChevronUp, Compass, Footprints, Headphones, LocateFixed, Mic, MicOff, MoreVertical, Pause, Play, Send, SkipForward, X } from "lucide-react";
 import { legFocus } from "./legFocus";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,11 +35,14 @@ import { spokenSummary } from "@/lib/voice/tts";
 import { executeCommand, type ExecutorContext } from "./executor";
 import { PLAYBACK_SPEEDS, langTag, type Leg, type MapAction, type PlaybackSpeed, type Trip, type TripMode } from "./schema";
 import { askAgent } from "./stream";
-import { TripPreview } from "./TripPreview";
 import { TripSummary, selectAlternative } from "./TripSummary";
-import { clearPoints, routeColor, showPoints, showTrip } from "./tripLayer";
+import { nameRemindButton, remindAt, saveReminder } from "./reminder";
+import { joinSegments, nameLocationButton } from "./answerText";
+import { toast } from "sonner";
+import { clearPoints, clearTrip, routeColor, showPoints, showTrip } from "./tripLayer";
 import { runMapAction, TROUBLE_COLOR, type ExitAction, type MapActionContext } from "./mapActions";
-import { clearExit, exitBounds, setYou, showExit } from "./exitLayer";
+import { setQuickLayer } from "@/lib/quickLayers";
+import { setOptions } from "@/lib/map/mapOptions";
 import { useHeading } from "@/lib/compass/useHeading";
 import { metres } from "@/lib/map/mapRead";
 import { AnswerActions, RestroomSpotDetails } from "./AnswerActions";
@@ -52,24 +55,36 @@ import { useHandsFree } from "./useHandsFree";
 import { closeAsk, useAskRequest } from "@/lib/agent/streetContext";
 import { AgentHome, AnswerCard, WorkingPanel } from "./AgentHome";
 import { DailyCard, TaskButtons } from "./HomeTasks";
+
+const SettingsSheet = lazy(() => import("@/components/SettingsSheet"));
+// Only once a trip is previewed: keeps the overlay inside its size budget.
+const TripPreview = lazy(() => import("./TripPreview").then((m) => ({ default: m.TripPreview })));
 import { rememberCommute, useHomeWork } from "./commute";
 import { memorySummary } from "./memorySummary";
+import { recentTurns } from "./chatWindow";
 import { rememberChat, rememberLookup } from "@/lib/memory/memory";
-import { useLangPref } from "@/lib/voice/langPref";
+import { parseLang, useLangPref, type AppLang } from "@/lib/voice/langPref";
 import { useVoicePrefs } from "@/lib/voice/voicePrefs";
 import { useFollowed } from "@/lib/transit/follow";
 import { useLinesControl } from "@/lib/transit/linesControl";
 import { useStationHelp, useStationHelpVisible } from "@/lib/underground/stationHelp";
 import { applyStep, statusLine, type AgentStep } from "./agentSteps";
 import { detectLang, speechTag, statusLang } from "./statusLines";
-import { setAskedLang, tr, useAppLang } from "@/lib/i18n/appLang";
+import { getAppLang, setAskedLang, tr, useAppLang } from "@/lib/i18n/appLang";
 import { needsSharedOrigin, ORIGIN_PROMPT, replyAsksForOrigin } from "./needsOrigin";
 import { framePadding } from "@/lib/map/mapCover";
 import { useOpenMenu } from "@/lib/store/openMenu";
 import { sendScreen, useScreen } from "@/lib/screen/screenSpace";
+import { getUndergroundNow, useUndergroundNow } from "@/lib/underground/whereNow";
+import { removeShell } from "@/lib/shellDraft";
 
 /** Draw an exit answer and frame it (and you, within a walk of it) in the map left clear by the card. */
-function frameExit(a: ExitAction) {
+// Loaded on the first exit answer, so the overlay stays in its size budget.
+let exitLoaded = false;
+const exitLayer = () => import("./exitLayer").then((x) => { exitLoaded = true; return x; });
+
+async function frameExit(a: ExitAction) {
+  const { exitBounds, showExit } = await exitLayer();
   const m = getMapInstance();
   if (!m) return;
   const v = { exit: a.exit, destination: a.destination, path: a.path };
@@ -113,10 +128,10 @@ function browserLang(): string | undefined {
   return l && langTag.safeParse(l).success ? l : undefined;
 }
 
-const MODES: Array<{ id: TripMode; label: string; Icon: typeof Bus }> = [
-  { id: "walk", label: "Walk", Icon: Footprints },
-  { id: "transit", label: "Transit", Icon: Bus },
-  { id: "drive", label: "Drive", Icon: Car },
+const MODES: Array<{ id: TripMode; Icon: typeof Bus }> = [
+  { id: "walk", Icon: Footprints },
+  { id: "transit", Icon: Bus },
+  { id: "drive", Icon: Car },
 ];
 
 export default function AgentOverlay() {
@@ -125,6 +140,10 @@ export default function AgentOverlay() {
   const { showPanel, closeAll, content: panelContent, minimized: panelMinimized, drawerOpen } = usePanel();
   // Agent-first home (#370): bottom chat bar, voice waveform, visible steps.
   const home = useFlag("agentHome");
+  // The classic Ask sheet has its own input; the early chat bar from index.html would be a second one (#368).
+  useLayoutEffect(() => {
+    if (!home) removeShell();
+  }, [home]);
   const undergroundOn = useFlag("underground");
   const places = useHomeWork();
   const followed = useFollowed();
@@ -147,12 +166,16 @@ export default function AgentOverlay() {
   // Who gets the screen is decided in one place (src/lib/screen/screenSpace.ts); this reports what is open.
   const openMenu = useOpenMenu();
   useEffect(() => sendScreen({ type: "MENU", on: openMenu !== null }), [openMenu]);
-  const onTask = followingRoute || walking || followed !== null;
+  // The exit card is a task too, so the answer and the follow card make room for it (#418).
+  const atExit = useUndergroundNow()?.stage === "at-station";
+  const onTask = followingRoute || walking || followed !== null || atExit;
   useEffect(() => sendScreen({ type: "TASK", on: onTask }), [onTask]);
   const answerView = useScreen((v) => v.answer);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [trip, setTrip] = useState<Trip | null>(null);
+  // Phones: language and the QR code, up from behind the chat over the idle home.
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [mode, setMode] = useState<TripMode>("transit");
   const [wakeClassic, setWake] = useState(false);
   // Home: voice settings live in the Settings menu (#370).
@@ -183,18 +206,23 @@ export default function AgentOverlay() {
   // The small mic dictates into the text box; the big button holds a hands-free conversation.
   const [dictating, setDictating] = useState(false);
   const dictatingRef = useRef(false);
+  // The language the server heard on the last voice turn (phones with no language picked).
+  const heardLangRef = useRef<AppLang | null>(null);
   const speech = useSpeech({
-    onFinalTranscript: (t) => {
+    onFinalTranscript: (t, heard) => {
       if (dictatingRef.current) {
         dictatingRef.current = false;
         setDictating(false);
         setInput((v) => (v.trim() ? `${v.trim()} ${t}` : t));
         return;
       }
+      heardLangRef.current = parseLang(heard);
       voiceTurn.current = true;
       void send(t);
     },
     lang: home ? lang : undefined,
+    // No language picked: detect it from the voice, so anyone can just speak (2026-10-25).
+    detectLang: home && storedLang === null,
   });
   // Dictation that ends without words (silence, an error) lets go of the mic button.
   const wasListening = useRef(false);
@@ -249,14 +277,14 @@ export default function AgentOverlay() {
     handoffCamera();
     showPoints(m, f.marks.map((x) => ({ at: x.at, name: x.name })), "#2563eb");
     const wide = window.innerWidth >= 640;
-    m.fitBounds(f.bounds, { padding: framePadding(m, wide ? { top: 100, bottom: 120, left: 460, right: 100 } : { top: 110, bottom: Math.round(window.innerHeight * 0.55), left: 40, right: 40 }), maxZoom: 17, duration: 800 });
+    m.fitBounds(f.bounds, { padding: framePadding(m, wide ? { top: 100, bottom: 120, left: 460, right: 100 } : { top: 110, bottom: Math.round(window.innerHeight * 0.55), left: 40, right: 40 }), maxZoom: 17, pitch: 0, bearing: 0, duration: 800 });
   };
   /** Close the line panel and stop following, so a new trip or answer starts on a clean map. */
   const clearMapTask = () => {
     setSelectedLine(null);
     setFollowed(null);
     const m = getMapInstance();
-    if (m) { clearPoints(m); clearExit(m); }
+    if (m) { clearPoints(m); if (exitLoaded) void exitLayer().then((x) => x.clearExit(m)); }
   };
   const ctx: ExecutorContext = {
     flyTo: (lon, lat, zoom) => { handoffCamera(); flyTo({ lon, lat, zoom }); },
@@ -306,7 +334,14 @@ export default function AgentOverlay() {
       const m = getMapInstance();
       if (m) showPoints(m, points, color);
     },
-    showExit: (a) => { handoffCamera(); frameExit(a); },
+    showExit: (a) => { handoffCamera(); void frameExit(a); },
+    remind: (t) => {
+      saveReminder(t);
+      toast(tr(appLang, "remindSaved").replace("{t}", remindAt(t)));
+    },
+    // The same switch as the Layers menu, so turning it off again is where people expect.
+    showLayer: (layer) => { if (layer === "busStops") setOptions({ busStops: true }); else setQuickLayer(layer, true); },
+    showLine: (route) => setSelectedLine(lineOf(route)),
   };
   const runAction = (a: MapAction) => {
     runMapAction(a, actionCtx, routeColor);
@@ -316,10 +351,15 @@ export default function AgentOverlay() {
   const stopPlayer = player.stop;
   const send = useCallback(async (text: string) => {
     closeAll();
+    setSettingsOpen(false);
     sendScreen({ type: "SEND" });
     const q = text.trim();
     const byVoice = voiceTurn.current;
     voiceTurn.current = false;
+    // Spoken in another language: ask, answer and speak in that one.
+    const heard = byVoice ? heardLangRef.current : null;
+    heardLangRef.current = null;
+    const askLang = heard ?? lang;
     if (!q || busy) return;
     setNotice(null);
     setInput("");
@@ -350,22 +390,31 @@ export default function AgentOverlay() {
     abort.current?.abort();
     abort.current = new AbortController();
     let spoken = "";
+    // The text written between tool calls, piece by piece (see joinSegments).
+    const segments: string[] = [""];
+    let replyActions: MapAction[] | undefined;
     // A voice question still working after ~2.5 s gets one short spoken status line.
-    const sayIn = statusLang(q, lang);
+    const sayIn = heard ?? statusLang(q, lang);
     // A question clearly in another language switches the app's own text to it (unless one is picked in the menu).
-    const asked = detectLang(q);
+    const asked = heard ?? detectLang(q);
     if (asked) setAskedLang(asked);
     const statusTimer = home && byVoice ? window.setTimeout(() => speech.speak(statusLine(stepsRef.current, sayIn), { lang: speechTag(sayIn, lang) }), STATUS_AFTER_MS) : undefined;
     try {
       const memory = home ? memorySummary() : null;
-      for await (const ev of askAgent({ messages: history.map(({ role, content }) => ({ role, content })), location, mode, now: new Date().toISOString(), ...(askReq ? { context: askReq.context } : {}), ...(home && lang ? { lang } : {}), ...(memory ? { memory } : {}) }, abort.current.signal)) {
+      const underNow = getUndergroundNow();
+      for await (const ev of askAgent({ messages: recentTurns(history), location, mode, now: new Date().toISOString(), ...(askReq ? { context: askReq.context } : {}), ...(home && askLang ? { lang: askLang } : {}), ...(memory ? { memory } : {}), ...(underNow ? { underground: underNow } : {}) }, abort.current.signal)) {
         setSteps((s) => applyStep(s, ev));
         if (ev.type === "text") {
-          spoken += ev.text;
-          setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, content: x.content + ev.text } : x)));
+          segments[segments.length - 1] += ev.text;
+          spoken = joinSegments(segments);
+          const content = spoken;
+          setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, content } : x)));
+        } else if (ev.type === "step" && ev.status === "start") {
+          if (segments[segments.length - 1].trim()) segments.push("");
         } else if (ev.type === "command") {
           executeCommand(ev.command, ctxRef.current);
         } else if (ev.type === "actions") {
+          replyActions = ev.actions;
           setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, actions: ev.actions } : x)));
         } else if (ev.type === "sources") {
           setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, sources: ev } : x)));
@@ -379,13 +428,14 @@ export default function AgentOverlay() {
       window.clearTimeout(statusTimer);
       setBusy(false);
       // The model still asked for a start: put the same button on its reply.
-      if (!askReq && spoken && !sharedCoords() && replyAsksForOrigin(spoken)) {
+      const offersLocation = !askReq && !!spoken && !sharedCoords() && replyAsksForOrigin(spoken);
+      if (offersLocation) {
         pendingQuestion.current = q;
         setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, offerLocation: true } : x)));
       }
       // Short spoken answer; the full detail stays on screen. In hands-free the
       // person can talk over it to interrupt.
-      if (spoken) speech.speak(spokenSummary(spoken), { bargeIn: handsFree });
+      if (spoken) speech.speak(spokenSummary(nameLocationButton(nameRemindButton(spoken, replyActions, tr(getAppLang(), "remindMe")), offersLocation, tr(getAppLang(), "useMyLocation"))), { bargeIn: handsFree, ...(heard ? { lang: heard } : {}) });
     }
   }, [busy, mode, setChatOpen, speech, askReq, handsFree, closeAll, home, lang, stopPlayer]);
 
@@ -402,11 +452,14 @@ export default function AgentOverlay() {
 
   // ChatPanel is unmounted while this overlay replaces it, so the top bar's
   // question has to be sent from here or Ask the map opens on the examples.
+  // Each seed sends once: send() closes the line and the follow, and those store updates re-render
+  // before clearSeed lands, so without the id check "Other ways" or "I'm lost" re-sent itself forever.
+  const sentSeed = useRef<string | null>(null);
   useEffect(() => {
-    if (!chatSeed) return;
-    const text = chatSeed.text;
+    if (!chatSeed || sentSeed.current === chatSeed.id) return;
+    sentSeed.current = chatSeed.id;
     clearSeed();
-    void send(text);
+    void send(chatSeed.text);
   }, [chatSeed, clearSeed, send]);
 
   const turnOffHandsFree = useCallback(() => setHandsFree(false), []);
@@ -430,7 +483,7 @@ export default function AgentOverlay() {
   useEffect(() => sendScreen({ type: "VOICE", on: orbShown }), [orbShown]);
   useEffect(() => () => { sendScreen({ type: "ANSWER", on: false }); sendScreen({ type: "VOICE", on: false }); sendScreen({ type: "TASK", on: false }); }, []);
   const toggleHandsFree = () => {
-    if (handsFree) { setHandsFree(false); speech.stopListening(); return; }
+    if (handsFree) { setHandsFree(false); speech.stopListening(); speech.stopSpeaking(); return; }
     speech.setMuted(false);
     speech.clearError();
     setHandsFree(true);
@@ -440,6 +493,12 @@ export default function AgentOverlay() {
   useEffect(() => () => abort.current?.abort(), []);
   // Other features (underground help) prepare for the trip on screen through core.
   useEffect(() => publishActiveTrip(trip), [trip]);
+  // No trip, no trip line: closing the card or stopping a walk used to leave the dotted route on the map.
+  useEffect(() => {
+    if (trip) return;
+    const m = getMapInstance();
+    if (m) clearTrip(m);
+  }, [trip]);
   // A restroom answer shows the restroom on the map at once, framed with you when your
   // location is shared, instead of leaving the whole city in view (owner report, 2026-10-24).
   const lastActions = messages.at(-1)?.role === "assistant" ? messages.at(-1)?.actions : undefined;
@@ -448,13 +507,14 @@ export default function AgentOverlay() {
   const exitAnswer = home ? (lastActions?.find((a): a is ExitAction => a.kind === "showExit") ?? null) : null;
   const heading = useHeading(exitAnswer !== null);
   useEffect(() => {
-    if (exitAnswer) frameExit(exitAnswer);
+    if (exitAnswer) void frameExit(exitAnswer);
   }, [exitAnswer]);
   useEffect(() => {
     const m = getMapInstance();
     if (!m) return;
     const c = exitAnswer && shared.status === "on" ? shared.coords : null;
-    setYou(m, c ? [c.lon, c.lat] : null, heading.heading);
+    if (!exitAnswer && !exitLoaded) return;
+    void exitLayer().then((x) => x.setYou(m, c ? [c.lon, c.lat] : null, heading.heading));
   }, [exitAnswer, shared, heading.heading]);
   useEffect(() => {
     const a = lastActions?.[0];
@@ -506,13 +566,13 @@ export default function AgentOverlay() {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="secondary" size="sm" className={chip} aria-label={`Trip mode: ${mode}`}>
-              <ModeIcon className="h-3.5 w-3.5" /> {MODES.find((m) => m.id === mode)!.label}
+              <ModeIcon className="h-3.5 w-3.5" /> {tr(appLang, mode)}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuRadioGroup value={mode} onValueChange={(v) => setMode(v as TripMode)}>
-              {modes.map(({ id, label, Icon }) => (
-                <DropdownMenuRadioItem key={id} value={id}><Icon className="mr-2 h-4 w-4" />{label}</DropdownMenuRadioItem>
+              {modes.map(({ id, Icon }) => (
+                <DropdownMenuRadioItem key={id} value={id}><Icon className="mr-2 h-4 w-4" />{tr(appLang, id)}</DropdownMenuRadioItem>
               ))}
             </DropdownMenuRadioGroup>
           </DropdownMenuContent>
@@ -530,7 +590,7 @@ export default function AgentOverlay() {
             <DropdownMenuSeparator />
             <p className="px-2 py-1.5 text-xs text-muted-foreground">
               {speech.sttSupported
-                ? "Hold a conversation by voice: tap the mic, or turn on “Hey map”. Your location is sent only after you tap Use my location, and only for that question."
+                ? "Hold a conversation by voice: tap the mic, or turn on “Hey map”. Your location is sent only after you tap Use my location, then with each question until you tap Stop sharing location."
                 : "Voice input is not available in this browser, so type instead. Answers can still be spoken."}
             </p>
           </DropdownMenuContent>
@@ -552,7 +612,7 @@ export default function AgentOverlay() {
             // In the home sheet the working panel stands in for the empty reply bubble.
             home && !compact && m.role === "assistant" && !m.content && !m.actions?.length && !m.offerLocation ? null : (
             <div key={m.id} className={cn("max-w-[90%] rounded-lg px-3 py-2 text-sm", m.role === "user" ? "ml-auto bg-primary text-primary-foreground" : "bg-muted")}>
-              {m.content || (busy ? "…" : "")}
+              {nameLocationButton(nameRemindButton(m.content, m.actions, tr(appLang, "remindMe")), m.offerLocation, tr(appLang, "useMyLocation")) || (busy ? "…" : "")}
               {m.actions?.length ? <AnswerActions actions={m.actions} onRun={runAction} /> : null}
               {m.sources ? <AnswerSources line={m.sources} /> : null}
               {m.offerLocation && shared.status !== "on" ? (
@@ -659,7 +719,7 @@ export default function AgentOverlay() {
         data-testid="ask-compact"
         className="pointer-events-auto absolute bottom-3 left-1/2 z-[60] flex h-[min(46vh,420px)] w-[min(440px,calc(100vw-1.5rem))] -translate-x-1/2 flex-col overflow-hidden rounded-xl border bg-card/95 shadow-xl backdrop-blur-md"
       >
-        <Button type="button" variant="ghost" size="icon" className="absolute right-1.5 top-1.5 z-10 h-8 w-8" aria-label="Close Ask" onClick={() => { setHandsFree(false); speech.stopListening(); closeAsk(); }}>
+        <Button type="button" variant="ghost" size="icon" className="absolute right-1.5 top-1.5 z-10 h-8 w-8" aria-label="Close Ask" onClick={() => { setHandsFree(false); speech.stopListening(); speech.stopSpeaking(); closeAsk(); }}>
           <X className="h-4 w-4" />
         </Button>
         {body}
@@ -700,7 +760,7 @@ export default function AgentOverlay() {
       setNotice(null);
       toggleHandsFree();
     };
-    const stopOrb = () => { setHandsFree(false); speech.stopListening(); };
+    const stopOrb = () => { setHandsFree(false); speech.stopListening(); speech.stopSpeaking(); };
 
     // The last exchange is the answer card; earlier turns stay in the history sent to the agent.
     const lastUser = [...messages].reverse().find((m) => m.role === "user") ?? null;
@@ -737,7 +797,7 @@ export default function AgentOverlay() {
     const homeAnswer = (
       <AnswerCard
         question={lastUser?.content ?? null}
-        text={reply?.content ?? ""}
+        text={nameLocationButton(nameRemindButton(reply?.content ?? "", reply?.actions, tr(appLang, "remindMe")), reply?.offerLocation, tr(appLang, "useMyLocation"))}
         busy={busy}
         working={<WorkingPanel steps={steps} />}
         sources={reply?.sources && (reply.sources.sources.length || reply.sources.unverified.length) ? <AnswerSources line={reply.sources} /> : null}
@@ -750,8 +810,12 @@ export default function AgentOverlay() {
             {reply?.offerLocation && shared.status !== "on" ? (
               <Button type="button" className="h-12 w-full gap-1.5 rounded-full" disabled={shared.status === "asking"} onClick={() => void enableLocation()}>
                 <LocateFixed className="h-4 w-4" aria-hidden="true" />
-                {shared.status === "asking" ? "Finding you…" : "Use my location"}
+                {tr(appLang, shared.status === "asking" ? "findingYou" : "useMyLocation")}
               </Button>
+            ) : null}
+            {/* A blocked or failed location used to leave the button looking untouched (owner report, 2026-10-25). */}
+            {reply?.offerLocation && (shared.status === "denied" || shared.status === "unavailable") ? (
+              <p role="status" className="px-2 text-center text-sm text-slate-300">{tr(appLang, "locationBlocked")}</p>
             ) : null}
             {trip && !busy ? (
               <div className="rounded-[18px] border border-[#22314a] bg-[#111c2f]/90 p-3 text-slate-100">
@@ -769,14 +833,15 @@ export default function AgentOverlay() {
 
     const trainRoute = trip?.legs.find((l) => l.kind === "ride")?.route;
     const tasks = {
-      restroom: () => void send("Where's the nearest public restroom that's open now?"),
+      settings: () => setSettingsOpen(true),
+      restroom: () => void send(tr(appLang, "askRestroom")),
       train: () => {
-        if (trainRoute) void send(`How is the ${trainRoute} train running right now?`);
+        if (trainRoute) void send(tr(appLang, "askLine").replace("{r}", trainRoute));
         else if (openLines) openLines();
-        else void send("How are the subway lines running right now?");
+        else void send(tr(appLang, "askLines"));
       },
       plan: () => {
-        setInput("Plan a trip to ");
+        setInput(tr(appLang, "planPrefix"));
         window.requestAnimationFrame(() => {
           const el = homeInput.current;
           el?.focus();
@@ -785,7 +850,7 @@ export default function AgentOverlay() {
       },
       exit: () => {
         if (undergroundOn && stationHelp) stationHelp();
-        else void send("Which exit should I take at the nearest subway station?");
+        else void send(tr(appLang, "askExit"));
       },
     };
     const panelUp = panelContent !== null && !panelMinimized;
@@ -804,6 +869,8 @@ export default function AgentOverlay() {
         <TaskButtons on={tasks} />
       </>
     ) : null);
+    // Any other step on screen (an answer, a line, a train) puts settings away.
+    const settingsUp = settingsOpen && showIdle && !chip;
 
     return (
       <>
@@ -826,7 +893,9 @@ export default function AgentOverlay() {
           hidden={false}
           lift={!isDesktop && panelContent !== null && panelMinimized}
         />
-        {trip && player.state.active && !answerOpen ? <TripPreview
+        {settingsUp ? <Suspense fallback={null}><SettingsSheet onClose={() => setSettingsOpen(false)} /></Suspense> : null}
+        {/* One card at a time: station help covers the same spot, so the trip waits under it. */}
+        {trip && player.state.active && !answerOpen && !stationHelpVisible ? <Suspense fallback={null}><TripPreview
           trip={trip} state={player.state} speed={player.state.speed}
           onToggle={player.toggle} onSpeed={(s) => { setPrefSpeed(s); player.setSpeed(s); }}
           onAlert={(route) => setSelectedLine(route)}
@@ -841,13 +910,15 @@ export default function AgentOverlay() {
               setRoutePoint("start", { lon: trip.origin.at[0], lat: trip.origin.at[1] });
               setRoutePoint("end", { lon: trip.destination.at[0], lat: trip.destination.at[1] });
               setFollowingRoute(true);
+              // Walking guidance draws its own route, so the trip line goes; it would stay after Stop.
+              setTrip(null);
               flyTo({ lon: trip.origin.at[0], lat: trip.origin.at[1], zoom: 16 });
               return;
             }
             void send(`Use this route to ${trip.destination.label}. Show me the ${trip.routes.join(" and ")} service for this trip.`);
           }}
           onOther={() => { player.release(); void send(`What are the other routes from ${trip.origin.label} to ${trip.destination.label}?`); }}
-        /> : null}
+        /></Suspense> : null}
       </>
     );
   }

@@ -382,9 +382,4 @@ minimumReleaseAge: 1440
 # upgrade tracked in its own issue; remove the id once fixed. Do not add new ids
 # without an issue.
 auditConfig:
-  ignoreGhsas:
-    - GHSA-5gmw-xhrv-c9v3 # tinypool via vitest (dev)
-    - GHSA-85c8-ppgw-ccpr # tinypool via vitest (dev)
-    - GHSA-6g55-p6wh-862q # postcss via vite
-    - GHSA-r28c-9q8g-f849 # postcss via vite
-    - GHSA-jrc7-96c5-q579 # maplibre-gl <=6.4.0 -> maplibre 6 (pinned 5.24 in AI_RULES; needs review)
+  ignoreGhsas: []

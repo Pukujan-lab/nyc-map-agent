@@ -15,6 +15,8 @@
 export type LimitConfig = {
   /** Questions allowed per rolling window; 0 turns the window off. */
   windowMax: number;
+  /** The window is off until this time (epoch ms), e.g. while judges test the app; 0 = always on. */
+  windowOffUntil?: number;
   windowMs: number;
   /** Questions allowed per burst period; 0 turns the burst limit off. */
   burstMax: number;
@@ -28,12 +30,18 @@ const num = (v: string | undefined, d: number): number => {
   return v !== undefined && v.trim() !== "" && Number.isFinite(n) && n >= 0 ? n : d;
 };
 
+/** Judging (3percentclub): no question window for anyone until the end of 26 Oct 2026 in New York; the cooldown stays. */
+const JUDGING_ENDS = Date.parse("2026-10-27T00:00:00-04:00");
+
 export function limitConfigFromEnv(env: Record<string, string | undefined> = process.env): LimitConfig {
+  const off = env.AGENT_RATE_WINDOW_OFF_UNTIL ? Date.parse(env.AGENT_RATE_WINDOW_OFF_UNTIL) : JUDGING_ENDS;
   return {
     windowMax: num(env.AGENT_RATE_WINDOW_MAX, 20),
+    windowOffUntil: Number.isFinite(off) ? off : 0,
     windowMs: num(env.AGENT_RATE_WINDOW_HOURS, 3) * 3_600_000,
-    burstMax: num(env.AGENT_RATE_BURST_MAX, 5),
-    burstMs: num(env.AGENT_RATE_BURST_SECONDS, 60) * 1000,
+    // Always on, against spam: one question per 5 seconds from each address.
+    burstMax: num(env.AGENT_RATE_BURST_MAX, 1),
+    burstMs: num(env.AGENT_RATE_BURST_SECONDS, 5) * 1000,
   };
 }
 
@@ -61,7 +69,7 @@ export function createLimiter(cfg: LimitConfig, now: () => number = Date.now) {
       const list = (hits.get(key) ?? []).filter((at) => t - at < keep);
       let retryAt = 0;
       let reason: "window" | "burst" = "window";
-      if (cfg.windowMax > 0) {
+      if (cfg.windowMax > 0 && t >= (cfg.windowOffUntil ?? 0)) {
         const inWindow = list.filter((at) => t - at < cfg.windowMs);
         if (inWindow.length >= cfg.windowMax) retryAt = inWindow[inWindow.length - cfg.windowMax] + cfg.windowMs;
       }
@@ -150,7 +158,7 @@ const STILL_WORKS = "The map, live transit, restrooms and the trip panel all kee
 /** The 429 the client shows as-is. Retry-After is whole seconds, rounded up. */
 export function limitedResponse(retryAt: number, reason: "window" | "burst", t: number = Date.now()): Response {
   const retryAfterSeconds = Math.max(1, Math.ceil((retryAt - t) / 1000));
-  const lead = reason === "burst" ? "That's a lot of questions in a short time." : "You've used your share of assistant questions for now, so everyone gets a turn.";
+  const lead = reason === "burst" ? "One moment between questions, please." : "You've used your share of assistant questions for now, so everyone gets a turn.";
   const when = retryAfterSeconds < 120 ? `in about ${retryAfterSeconds} seconds` : `in about ${waitWords(retryAt - t)} (around ${nyClock(retryAt)} New York time)`;
   const message = `${lead} Your next question frees up ${when}. ${STILL_WORKS}`;
   return Response.json(
@@ -163,3 +171,4 @@ export function limitedResponse(retryAt: number, reason: "window" | "burst", t: 
 export function noModelMessage(resetAt: number): string {
   return `The assistant has answered all the questions it can for today, so it is resting until about ${nyClock(resetAt)} New York time. ${STILL_WORKS}`;
 }
+

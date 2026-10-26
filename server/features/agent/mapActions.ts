@@ -4,28 +4,42 @@
  * button can only draw data a tool returned.
  */
 import { formatStreetText } from "../../../src/lib/streetName";
-import { mapAction, MAX_ACTIONS, type MapAction, type MapPoint, type RestroomSpot, type Trip } from "../../../src/features/agent/schema";
+import { mapAction, MAX_ACTIONS, type LayerHelpId, type LngLatTuple, type MapAction, type MapPoint, type RestroomSpot, type Trip } from "../../../src/features/agent/schema";
 import type { LineTrouble, StuckTrain } from "../../../src/lib/transit/trouble";
-import type { StationExit } from "./exit";
+import type { WalkResult } from "./services";
 
 const key = (at: readonly [number, number]) => `${at[0].toFixed(5)},${at[1].toFixed(5)}`;
 const clip = (s: string, n = 40) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
+
+/** The name before the address: "Bryant Park, Manhattan Community Board 5, …" → "Bryant Park"; a bare house number keeps its street. */
+export function placeName(label: string): string {
+  const parts = label.split(",").map((p) => p.trim()).filter(Boolean);
+  if (!parts.length) return label;
+  return /^\d+[a-z]?$/i.test(parts[0]) && parts[1] ? `${parts[0]} ${parts[1]}` : parts[0];
+}
 
 /** "Show Grand Central" for a place the agent looked up. The user's own spot gets no button. */
 export function placeActions(place: { label: string; at: readonly [number, number] }): MapAction[] {
   if (/^your location$/i.test(place.label)) return [];
   const [lon, lat] = place.at;
-  return [{ kind: "flyTo", id: `fly:${key(place.at)}`, label: `Show ${clip(formatStreetText(place.label))}`, lon, lat, zoom: 16 }];
+  return [{ kind: "flyTo", id: `fly:${key(place.at)}`, label: `Show ${clip(formatStreetText(placeName(place.label)))}`, lon, lat, zoom: 16 }];
+}
+
+export interface ExitShown {
+  station: string;
+  exit: { at: LngLatTuple; label: string; elevatorOnly: boolean };
+  destination: { at: LngLatTuple; label: string };
+  walk: WalkResult;
 }
 
 /** The exit to take for a place (drawn at once by the client), with its walk. */
-export function exitActions(x: StationExit): MapAction[] {
+export function exitActions(x: ExitShown): MapAction[] {
   const path = x.walk.coords.length >= 2 ? x.walk.coords : [x.exit.at, x.destination.at];
   return [{
     kind: "showExit",
     id: `exit:${key(x.exit.at)}`,
     label: clip(`Show the ${x.exit.label} exit`),
-    station: clip(x.station.name, 80),
+    station: clip(x.station, 80),
     exit: { at: x.exit.at, label: clip(x.exit.label, 80), elevatorOnly: x.exit.elevatorOnly },
     destination: { at: x.destination.at, label: clip(formatStreetText(x.destination.label), 80) },
     path: path.slice(0, 2000),
@@ -53,6 +67,8 @@ export function skipActions(skips: Trip["skips"]): MapAction[] {
 /** Route, skipped stations, crash hotspots, then each line's stops. */
 export function tripActions(trip: Trip): MapAction[] {
   const out: MapAction[] = [{ kind: "showRoute", id: `route:${trip.id}`, label: trip.mode === "drive" ? "Show the drive" : trip.mode === "walk" ? "Show the walk" : "Show the route", trip }];
+  // Second, so the button cap never drops it; only for a trip planned ahead, as one starting now needs no reminder.
+  if (trip.scheduled?.future) out.push({ kind: "remindTrip", id: `remind:${trip.id}`, label: "Remind me", trip });
   out.push(...skipActions(trip.skips));
   const crashes = trip.context.filter((c) => c.kind === "crashes" && c.at).map((c) => ({ at: c.at!, name: c.text }));
   if (crashes.length) out.push({ kind: "showCrashes", id: `crashes:${trip.id}`, label: "Show crashes on this route", points: crashes });
@@ -64,6 +80,21 @@ export function tripActions(trip: Trip): MapAction[] {
     out.push({ kind: "showStops", id: `stops:${l.route}:${key(l.coords[0])}`, label: `Show ${l.route} stops`, route: l.route, color: l.color, skipped: false, stops: stops.slice(0, 200) });
   }
   return out;
+}
+
+/** What each Layers-menu switch shows, in the words of its button. */
+export const LAYER_HELP: Record<LayerHelpId, string> = {
+  citibike: "Citi Bike docks", health: "clinics and pharmacies", parksPlaces: "parks and public places", busStops: "bus stops",
+  xray: "underground trains", streetArt: "street art", businesses: "shops and businesses",
+};
+/** "Turn on Citi Bike docks": the person taps it, so the map changes only when they ask. */
+export function layerAction(layer: LayerHelpId): MapAction {
+  return { kind: "showLayer", id: `layer:${layer}`, label: `Turn on ${LAYER_HELP[layer]}`, layer };
+}
+
+/** "See the 7 trains live": opens the line with its trains, notices and Follow a train. */
+export function lineAction(route: string): MapAction {
+  return { kind: "showLine", id: `line:${route}`, label: `See the ${route} trains live`, route };
 }
 
 const dedupePoints = (ps: MapPoint[]) => [...new Map(ps.map((p) => [`${p.name}|${key(p.at)}`, p])).values()];
@@ -108,7 +139,7 @@ export function troubleActions(troubles: LineTrouble[], stuck: StuckTrain[] = []
   return out;
 }
 
-const RANK: Record<MapAction["kind"], number> = { showRestroom: 0, showRoute: 1, showTrouble: 2, showStops: 2, showCrashes: 2, flyTo: 3 };
+const RANK: Record<MapAction["kind"], number> = { showRestroom: 0, showExit: 0, showRoute: 1, remindTrip: 1, showLayer: 1, showLine: 1, showTrouble: 2, showStops: 2, showCrashes: 2, flyTo: 3 };
 
 /** Collects actions across a request's tool calls: deduped by id, validated, ranked, capped. */
 const GENERIC = new Set(["show", "street", "avenue", "road", "place", "boulevard", "new", "york", "nyc", "the", "and", "east", "west", "north", "south"]);

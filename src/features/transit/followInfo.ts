@@ -30,3 +30,12 @@ export function skipNamesFor(a: TransitAlert | undefined, route: string): string
 
 /** Alert text without the "[F]" brackets. */
 export const plainAlert = (s: string) => s.replace(/\[([A-Z0-9]+)\]/g, "$1");
+
+/**
+ * The trip's stops from the train's next stop on. Times alone kept a stop the train had just
+ * left for 30 s, listed above the next stop. Without a known next stop, the times decide.
+ */
+export function upcomingStops<T extends readonly [string, number, ...unknown[]]>(stops: readonly T[], next: string | undefined, now: number, same: (a: string, b: string) => boolean = (a, b) => a === b): T[] {
+  const at = next ? stops.findIndex(([id]) => same(id, next)) : -1;
+  return at >= 0 ? stops.slice(at) : stops.filter(([, t]) => t >= now - 30);
+}

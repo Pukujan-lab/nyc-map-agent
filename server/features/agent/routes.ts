@@ -12,6 +12,7 @@ import { makeTools, type ToolContext } from "./tools";
 import { toNyLocal } from "./trip";
 import { fallbackFetch, modelChain } from "./model-fallback";
 import { clientIp } from "../../lib/clientIp";
+import { answerWithoutModel } from "./noModel";
 import { budgetConfigFromEnv, createDailyBudget, createLimiter, limitConfigFromEnv, limitedResponse, noModelMessage } from "./fair-use";
 import { ActionCollector } from "./mapActions";
 import { contextLine, systemPrompt } from "./prompt";
@@ -48,9 +49,9 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
   const limit = fair.limiter.take(`ip:${clientIp(request.headers)}`);
   if (!limit.ok) return limitedResponse(limit.retryAt, limit.reason, fair.now());
   const budget = fair.budget.tier();
-  const { messages, now, mode, context, lang, memory } = parsed.data;
-  // Street view's spot counts as the shared location for "here".
-  const location = parsed.data.location ?? (context ? { lon: context.lon, lat: context.lat } : null);
+  const { messages, now, mode, context, lang, memory, underground } = parsed.data;
+  // In street view, "here" is the spot on screen (the prompt says so); otherwise the shared location.
+  const location = context ? { lon: context.lon, lat: context.lat } : parsed.data.location ?? null;
   const enc = new TextEncoder();
   const modelId = budget.tier === "cheap" ? budget.model : budget.tier === "none" ? "none" : (process.env.INFERHUB_MODEL ?? DEFAULT_MODEL);
   // The asker's clock resolves "tomorrow"; a missing or broken one falls back to the server's.
@@ -60,13 +61,6 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
   const body = new ReadableStream<Uint8Array>({
     async start(controller) {
       const send = (e: StreamEvent) => controller.enqueue(enc.encode(`${JSON.stringify(e)}\n`));
-      if (budget.tier === "none") {
-        // Daily budget spent: answer without a model call so the chat still says something useful.
-        send({ type: "text", text: noModelMessage(budget.resetAt) });
-        send({ type: "done", model: modelId, usage: { inputTokens: 0, outputTokens: 0 } });
-        controller.close();
-        return;
-      }
       // Timings for this request: one log line and one core.agent_runs row (no question text).
       const run = new RunLog(modelId);
       let finished = false;
@@ -80,14 +74,35 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
       const nowLocal = toNyLocal(clock);
       // Data sources and their age, plus the "no guessing" check (#375); one "sources" line before "done".
       const audit = new AnswerAudit([nowLocal, contextLine(context) ?? "", ...messages.filter((m) => m.role === "user").map((m) => m.content)]);
+      const tools = makeTools({ location, now: clock, emit: (command) => send({ type: "command", command }), actions: (a) => actions.add(a), sources: audit.ledger, deps: opts.deps, followedTrain: context?.followedTrain ?? null, drive: resolveFlags({ env: process.env.VITE_FLAGS, advancedMode: false }).agentDrive });
+      // Restrooms and line status still get a real answer with no model (#199).
+      const lastAsked = messages.filter((m) => m.role === "user").at(-1)?.content ?? "";
+      const answerAlone = async (): Promise<boolean> => {
+        const text = await answerWithoutModel({ text: lastAsked, hasLocation: location !== null }, tools);
+        if (!text) return false;
+        answerText = text;
+        send({ type: "text", text });
+        flushActions();
+        return true;
+      };
+      if (budget.tier === "none") {
+        // Daily budget spent: answer without a model call so the chat still says something useful.
+        if (!(await answerAlone())) send({ type: "text", text: noModelMessage(budget.resetAt) });
+        run.finish("done", { inputTokens: 0, outputTokens: 0 });
+        send({ type: "done", model: modelId, usage: { inputTokens: 0, outputTokens: 0 } });
+        controller.close();
+        return;
+      }
       try {
         const model = opts.model ?? defaultModel(budget.tier === "cheap" ? budget.model : undefined, run);
         const result = streamText({
           model,
-          system: systemPrompt(nowLocal, location, mode, context, lang, memory),
+          system: systemPrompt(nowLocal, location, mode, context, lang, memory, underground),
           messages,
-          tools: makeTools({ location, now: clock, emit: (command) => send({ type: "command", command }), actions: (a) => actions.add(a), sources: audit.ledger, deps: opts.deps, followedTrain: context?.followedTrain ?? null, drive: resolveFlags({ env: process.env.VITE_FLAGS, advancedMode: false }).agentDrive }),
+          tools,
           stopWhen: stepCountIs(8),
+          // Spoken answers are 1-4 sentences; this bounds a runaway reply's cost (#199).
+          maxOutputTokens: 800,
           maxRetries: 1,
           // The default handler console.logs the raw provider error; keep logs to the request id only.
           onError: ({ error }) => {
@@ -110,7 +125,12 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
             send({ type: "step", id: part.toolCallId.slice(0, 100), name: part.toolName, status: "done" });
             run.stepEnd(part.toolCallId, true);
           } else if (part.type === "tool-error") { run.stepEnd(part.toolCallId, false); send({ type: "step", id: part.toolCallId.slice(0, 100), name: part.toolName, status: "error" }); }
-          else if (part.type === "error") { run.finish("error", null); finished = true; send({ type: "error", message: "The model call failed." }); }
+          else if (part.type === "error") {
+            run.finish("error", null);
+            finished = true;
+            if (answerText || !(await answerAlone())) send({ type: "error", message: "I couldn't answer just now. Please try again in a moment." });
+            else send({ type: "done", model: "none", usage: { inputTokens: 0, outputTokens: 0 } });
+          }
           else if (part.type === "finish") {
             fair.budget.record((part.totalUsage.inputTokens ?? 0) + (part.totalUsage.outputTokens ?? 0));
             flushActions();
@@ -126,7 +146,8 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
         run.finish("error", null);
         finished = true;
         // Never echo provider errors verbatim: they can include request headers.
-        send({ type: "error", message: err instanceof Error && /INFERHUB_API_KEY/.test(err.message) ? err.message : "The assistant is unavailable right now." });
+        if (!answerText && (await answerAlone().catch(() => false))) send({ type: "done", model: "none", usage: { inputTokens: 0, outputTokens: 0 } });
+        else send({ type: "error", message: err instanceof Error && /INFERHUB_API_KEY/.test(err.message) ? err.message : "The assistant is unavailable right now." });
       } finally {
         // The stream ended with no finish part: the person left or the provider hung up.
         if (!finished) run.finish("aborted", null);

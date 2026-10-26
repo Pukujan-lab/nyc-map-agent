@@ -15,4 +15,12 @@ describe("app language", () => {
     expect(tr("zh", "restroom")).toBe("厕所");
     expect(tr("es", "findExit")).toBe("Buscar salida");
   });
+  it("has the trip steps in every language, with the stop name kept", () => {
+    expect(tr("es", "getOffAt").replace("{s}", "Grand Central")).toBe("Bájate en Grand Central");
+    expect(tr("es", "transit")).toBe("Transporte");
+    for (const lang of ["en", "es", "zh", "ru", "bn", "ht", "fr", "ko"] as const) {
+      expect(tr(lang, "getOffAt")).toContain("{s}");
+      expect(tr(lang, "nStops")).toContain("{n}");
+    }
+  });
 });

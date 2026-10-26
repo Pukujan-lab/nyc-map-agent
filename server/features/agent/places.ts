@@ -30,13 +30,33 @@ const LANDMARKS: Landmark[] = [
   { label: "JFK Airport", at: [-73.7781, 40.6413], aliases: ["jfk", "jfk airport", "kennedy airport"] },
   { label: "Rockaway Beach (Beach 98 St boardwalk)", at: [-73.8197, 40.5833], aliases: ["rockaway beach", "rockaway beach boardwalk", "the rockaways", "rockaways", "rockaway boardwalk"] },
   { label: "LaGuardia Airport", at: [-73.8740, 40.7769], aliases: ["laguardia", "lga", "laguardia airport"] },
+  // Neighbourhoods by name. GeoSearch reads a bare "Flushing" as the venue
+  // "Flushing Bay" at LaGuardia, so each sits at its main corner and station.
+  { label: "Flushing (Main St and Roosevelt Ave)", at: [-73.8303, 40.7596], aliases: ["flushing", "downtown flushing", "flushing chinatown"] },
+  { label: "Jackson Heights (Roosevelt Ave and 74 St)", at: [-73.8913, 40.7468], aliases: ["jackson heights"] },
+  { label: "Elmhurst (Broadway and Elmhurst Ave)", at: [-73.8820, 40.7424], aliases: ["elmhurst"] },
+  { label: "Corona (Roosevelt Ave and 103 St)", at: [-73.8627, 40.7499], aliases: ["corona"] },
+  { label: "Jamaica (Parsons Blvd and Archer Ave)", at: [-73.8010, 40.7022], aliases: ["jamaica", "downtown jamaica"] },
+  { label: "Astoria (30 Ave and 31 St)", at: [-73.9216, 40.7668], aliases: ["astoria"] },
+  { label: "Long Island City (Court Sq)", at: [-73.9456, 40.7471], aliases: ["long island city", "lic"] },
+  { label: "Chinatown (Canal St and Mott St)", at: [-73.9970, 40.7158], aliases: ["chinatown", "manhattan chinatown"] },
+  { label: "Koreatown (W 32 St and Broadway)", at: [-73.9867, 40.7479], aliases: ["koreatown", "k town", "ktown"] },
+  { label: "Harlem (125 St and Lenox Ave)", at: [-73.9455, 40.8077], aliases: ["harlem"] },
+  { label: "Washington Heights (181 St and St Nicholas Ave)", at: [-73.9336, 40.8496], aliases: ["washington heights"] },
+  { label: "Downtown Brooklyn (Jay St-MetroTech)", at: [-73.9874, 40.6923], aliases: ["downtown brooklyn"] },
+  { label: "Williamsburg (Bedford Ave and N 7 St)", at: [-73.9566, 40.7172], aliases: ["williamsburg"] },
+  { label: "Bushwick (Myrtle-Wyckoff Aves)", at: [-73.9122, 40.6995], aliases: ["bushwick"] },
+  { label: "Sunset Park (8 Ave and 62 St)", at: [-74.0113, 40.6352], aliases: ["sunset park", "brooklyn chinatown"] },
+  { label: "Flatbush (Flatbush Ave and Church Ave)", at: [-73.9586, 40.6509], aliases: ["flatbush"] },
+  { label: "Brighton Beach (Brighton Beach Ave)", at: [-73.9614, 40.5777], aliases: ["brighton beach"] },
+  { label: "Coney Island (Stillwell Ave)", at: [-73.9811, 40.5773], aliases: ["coney island"] },
 ];
 
 /** Lowercase, "&"→"and", drop punctuation, collapse spaces, drop a trailing ", NY…". */
 function norm(s: string): string {
   return s
     .toLowerCase()
-    .replace(/,?\s*(new york|nyc|ny|manhattan|brooklyn)\s*$/g, "")
+    .replace(/,?\s*(new york|nyc|ny|manhattan|brooklyn|queens|bronx)\s*$/g, "")
     .replace(/&/g, " and ")
     .replace(/\bstreet\b/g, "st")
     .replace(/\bsquare\b/g, "sq")

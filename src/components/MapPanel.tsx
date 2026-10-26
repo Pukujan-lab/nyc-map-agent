@@ -17,6 +17,8 @@ import { LayersDrawer } from "./LayersDrawer";
  * home chat bar's height so the bar does not hide it.
  */
 const peekAbove = (chatBar: number) => `${92 + chatBar}px`;
+/** The grab handle above the sheet's content: 8px margin and a 6px bar. */
+const SHEET_HANDLE = 14;
 const nameOf = (point: string | number | null): SheetSnap =>
   point === 1 ? "full" : point === 0.5 ? "half" : "peek";
 
@@ -153,11 +155,13 @@ export function MapPanel({
       root.style.removeProperty("--controls-display");
     };
   }, [isDesktop, showSheet, layersOpen, snap]);
-  // No top bar: the sheet, the drawer and the status chip start at the top edge.
+  // No top bar, but the menu row (My day, layers…) sits top-left: the side sheet starts below it, or its
+  // title hides under the row (owner screenshot, 2026-10-25).
   useLayoutEffect(() => {
     if (!home) return;
     const root = document.documentElement;
-    root.style.setProperty("--topbar-h", "0px");
+    const row = document.querySelector<HTMLElement>("[data-testid='menu-row'] > *");
+    root.style.setProperty("--topbar-h", `${row ? Math.ceil(row.getBoundingClientRect().bottom) : 64}px`);
     return () => { root.style.removeProperty("--topbar-h"); };
   }, [home]);
   if (panelHidden) return null;
@@ -256,8 +260,12 @@ export function MapPanel({
           >
             <Drawer.Title className="sr-only">Map panel</Drawer.Title>
             <div className="mx-auto mt-2 h-1.5 w-10 shrink-0 rounded-full bg-muted-foreground/40" />
+            {/* The sheet is 97% of the screen tall and slides down by half for "half", so its lower part is
+                off screen and the chat bar covers its bottom edge. The list only gets the part you can see, or its
+                last rows (the J, L and SI lines) can never scroll into view (owner report, 2026-10-25). */}
             <div
               className={cn("flex min-h-0 flex-1 flex-col", snap === "full" ? "overflow-y-auto" : "overflow-hidden")}
+              style={snap === "peek" ? undefined : { maxHeight: `calc(${snap === "half" ? 47 : 97}dvh - ${SHEET_HANDLE}px - var(--chat-bar-h, 0px))` }}
             >
               {body}
             </div>

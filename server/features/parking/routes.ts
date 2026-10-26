@@ -111,13 +111,19 @@ async function osm(): Promise<Garage[]> {
   });
 }
 
+/** How long a request waits for Overpass before answering without the OSM lots. */
+export const OSM_WAIT_MS = 6000;
+
 /** DCWP licences first; an OSM feature within 40 m of one only lends its capacity. */
-export async function garages(): Promise<Garage[]> {
-  // Each source cached on its own, so a busy Overpass is retried next time.
+export async function garages(osmWaitMs = OSM_WAIT_MS): Promise<Garage[]> {
+  // Each source cached on its own, so a busy Overpass is retried next time. Overpass can take
+  // 40 s when the cache is cold (after every deploy), so the answer does not wait for it past
+  // osmWaitMs: it keeps loading into the cache and joins the next answer.
   {
+    const late = new Promise<Garage[]>((resolve) => { const t = setTimeout(() => resolve([]), osmWaitMs); (t as { unref?: () => void }).unref?.(); });
     const [a, b] = await Promise.allSettled([
       cached("parking:dcwp", 24 * 3600_000, dcwp),
-      cached("parking:osm", 24 * 3600_000, osm),
+      Promise.race([cached("parking:osm", 24 * 3600_000, osm), late]),
     ]);
     const lic = a.status === "fulfilled" ? a.value : [];
     const map = b.status === "fulfilled" ? b.value : [];

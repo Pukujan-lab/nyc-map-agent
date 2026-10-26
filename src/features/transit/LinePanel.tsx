@@ -5,13 +5,15 @@ import { lineColor } from "@/lib/transit/bullets";
 import { setSelectedLine, useSelectedLine } from "@/lib/transit/selectedLine";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { framePadding } from "@/lib/map/mapCover";
-import { sendScreen, useScreen } from "@/lib/screen/screenSpace";
+import { sendScreen, useScreen, useScreenSize } from "@/lib/screen/screenSpace";
 import { heldTrains } from "@/lib/transit/holds";
 import { setAlertFocus } from "./alertFocus";
 import { useAlerts, useNow, useTransitData } from "./hooks";
 import { boardingArrivals, minutesUntil } from "./model";
 import { TONE, heldNotices, lineNotices, type LineNotice } from "./lineNotices";
 import { NoticeIcon, noticeKind } from "./noticeKind";
+import { PullSheet } from "@/components/PullSheet";
+import type { SheetLevel } from "@/components/sheetSwipe";
 
 const GLASS = "border border-[rgba(148,163,184,0.18)] bg-[rgba(15,23,42,0.6)] backdrop-blur-[10px]";
 
@@ -38,8 +40,11 @@ function useNoticeRings(map: MaplibreMap | undefined, notice: LineNotice | null,
     const b = map.getBounds();
     // An alert's own focus already fits the affected stretch; only outages are framed here.
     if (!notice.alert && !notice.stations.every((s) => b.contains(s.coord))) {
-      const top = Math.round((panel?.getBoundingClientRect().bottom ?? 120) + 24);
-      const bottom = (parseInt(getComputedStyle(document.documentElement).getPropertyValue("--chat-bar-h"), 10) || 0) + 40;
+      // A phone's line sheet rests on the chat bar: it pads the map's bottom itself (a cover), so frame under the quick buttons.
+      const rect = panel?.getBoundingClientRect();
+      const sheet = rect ? rect.top > window.innerHeight / 2 : false;
+      const top = sheet ? 80 : Math.round((rect?.bottom ?? 120) + 24);
+      const bottom = sheet ? 40 : (parseInt(getComputedStyle(document.documentElement).getPropertyValue("--chat-bar-h"), 10) || 0) + 40;
       const xs = notice.stations.map((s) => s.coord[0]), ys = notice.stations.map((s) => s.coord[1]);
       map.fitBounds([[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]], { padding: framePadding(map, { top, bottom, left: 40, right: 140 }), maxZoom: 15, duration: 700 });
     }
@@ -64,7 +69,10 @@ export function LinePanel({ map, route, onFollow }: { map: MaplibreMap | undefin
   useEffect(() => setPicked(null), [route]);
   const panelRef = useRef<HTMLDivElement>(null);
   const [panelEl, setPanelEl] = useState<HTMLElement | null>(null);
-  useEffect(() => setPanelEl(panelRef.current), []);
+  const wide = useScreenSize() === "wide";
+  // On a phone a picked line opens as a sheet over the chat, one step up; swipe down for just its line.
+  const [level, setLevel] = useState<SheetLevel>(1);
+  useEffect(() => setLevel(1), [route]);
   const pickedNotice = notices.find((n) => n.id === picked) ?? null;
   useNoticeRings(map, pickedNotice, panelEl);
   // The picked alert draws its affected stretch, skipped stops and detour on the map, the rest dimmed.
@@ -86,6 +94,8 @@ export function LinePanel({ map, route, onFollow }: { map: MaplibreMap | undefin
   // On a phone the open answer or orb wins: the panel folds to its pill, and tapping the pill opens it again (src/lib/screen/screenSpace.ts).
   useEffect(() => { sendScreen({ type: "LINE", on: true }); return () => sendScreen({ type: "LINE", on: false }); }, []);
   const folded = useScreen((v) => v.line === "pill");
+  const sheet = !wide && !folded;
+  useEffect(() => setPanelEl(panelRef.current), [sheet, level]);
   const pillLabel = (
     <>
       <span className="flex h-8 w-8 items-center justify-center rounded-full text-[16px] font-bold" style={{ background: color, color: text }} aria-hidden>
@@ -99,6 +109,77 @@ export function LinePanel({ map, route, onFollow }: { map: MaplibreMap | undefin
     </>
   );
 
+  const boardEl = board ? (
+          <div data-testid="line-board" className="flex items-start gap-3 rounded-[14px] border border-[rgba(148,163,184,0.16)] bg-[rgba(15,23,42,0.35)] px-3 py-2.5 text-[14px]">
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold">Next {route} at {board.name}</div>
+              {board.toward ? <div className="truncate text-[13px] text-[#cbd5e1]">Toward {board.toward}</div> : null}
+              {board.times.length ? null : <div className="mt-1 text-[13px] text-[#cbd5e1]">No live times for this stop right now.</div>}
+            </div>
+            {/* The next trains stack at the right, soonest on top. */}
+            {board.times.length ? (
+              <div data-testid="line-times" className="flex shrink-0 flex-col items-end gap-1" aria-live="polite">
+                {board.times.map((t) => {
+                  const m = minutesUntil(t, now);
+                  return <span key={t} className="rounded-full bg-[rgba(37,99,235,0.28)] px-2.5 py-0.5 text-[13px] font-semibold">{m < 1 ? "Now" : `${m} min`}</span>;
+                })}
+              </div>
+            ) : null}
+          </div>
+        ) : null;
+  const noticesEl = (inSheet: boolean) => count ? (
+          <ul className={`line-notices flex ${inSheet ? "" : picked ? "max-h-[min(236px,30dvh)]" : "max-h-[104px]"} min-h-0 flex-col gap-2 ${inSheet ? "" : "overflow-y-auto overscroll-contain"} pr-1.5`} aria-label={`${route} line notices`}>
+            {notices.map((n) => {
+              const open = n.id === picked;
+              const tone = TONE[n.tone];
+              return (
+                <li key={n.id}>
+                  <button type="button" aria-expanded={open} data-notice={n.id} onClick={() => setPicked(open ? null : n.id)}
+                    className="flex w-full items-start gap-2.5 rounded-[14px] border px-3 py-2.5 text-left text-[14px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]"
+                    style={{ borderColor: open ? "rgba(96,165,250,0.6)" : "rgba(148,163,184,0.16)", background: open ? "rgba(37,99,235,0.22)" : "rgba(15,23,42,0.35)" }}>
+                    <NoticeIcon kind={noticeKind(`${n.title} ${n.body}`, { kind: n.alert?.kind ?? (n.tone === "delay" ? "delay" : undefined), reroute: n.alert?.reroute })} color={tone.dot} className="mt-[2px] h-4 w-4 shrink-0" />
+                    <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
+                      {/* Closed: one line each; the full text opens on tap. */}
+                      <span className={`font-semibold ${open ? "" : "truncate"}`}>{n.title}</span>
+                      {n.meta ? <span className={`text-[13px] text-[#cbd5e1] ${open ? "" : "truncate"}`}>{n.meta}</span> : null}
+                      {open && n.body !== n.title ? <span className="mt-1 whitespace-pre-line text-[13px] leading-[1.45] text-[#e2e8f0]">{n.body}</span> : null}
+                    </span>
+                    <span aria-hidden className="mt-0.5 text-[#a5b4cb] transition-transform" style={{ transform: `rotate(${open ? 180 : 0}deg)` }}>⌄</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        ) : null;
+  const actionsEl = (
+    <div className="grid grid-cols-2 gap-2">
+          <button type="button" onClick={() => { seedChat(`What are other ways to go instead of the ${route} train right now?`); setChatOpen(true); }}
+            className="h-9 rounded-[18px] bg-[#2563eb] text-[13px] font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">
+            Other ways
+          </button>
+          <button type="button" onClick={onFollow}
+            className="h-9 rounded-[18px] border border-[rgba(148,163,184,0.3)] bg-transparent text-[13px] font-semibold text-[#f1f5f9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]">
+            Follow a train
+          </button>
+        </div>
+  );
+
+  if (sheet) {
+    return (
+      <PullSheet testId="line-panel" label={`${route} line`} level={level} onLevel={setLevel}
+        header={<div className="flex items-center gap-2">
+          <button type="button" data-testid="line-pill" aria-expanded={level > 0} aria-label={`Show the ${route} line`} onClick={() => setLevel((l) => (l === 0 ? 1 : l))}
+            className="flex min-h-11 min-w-0 flex-1 items-center gap-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]">{pillLabel}</button>
+          <button type="button" aria-label="Close line" onClick={() => setSelectedLine(null)} className="task-action task-close"><X className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden /></button>
+        </div>}>
+        <div ref={panelRef} data-testid="line-body" className="pull-sheet-body mt-2 flex flex-col gap-2.5 text-[#f1f5f9]">
+          {actionsEl}
+          {boardEl}
+          {noticesEl(true)}
+        </div>
+      </PullSheet>
+    );
+  }
   return (
     <div
       data-testid="line-panel"
@@ -121,58 +202,9 @@ export function LinePanel({ map, route, onFollow }: { map: MaplibreMap | undefin
         </button>
       </div>
       <div ref={panelRef} data-testid="line-body" className={`pointer-events-auto ${folded ? "hidden" : "flex"} min-h-0 flex-col gap-2.5 rounded-[22px] border border-[rgba(148,163,184,0.16)] bg-[rgba(11,18,32,0.45)] p-2.5 backdrop-blur-[14px]`}>
-        {board ? (
-          <div data-testid="line-board" className="flex items-start gap-3 rounded-[14px] border border-[rgba(148,163,184,0.16)] bg-[rgba(15,23,42,0.35)] px-3 py-2.5 text-[14px]">
-            <div className="min-w-0 flex-1">
-              <div className="font-semibold">Next {route} at {board.name}</div>
-              {board.toward ? <div className="truncate text-[13px] text-[#cbd5e1]">Toward {board.toward}</div> : null}
-              {board.times.length ? null : <div className="mt-1 text-[13px] text-[#cbd5e1]">No live times for this stop right now.</div>}
-            </div>
-            {/* The next trains stack at the right, soonest on top. */}
-            {board.times.length ? (
-              <div data-testid="line-times" className="flex shrink-0 flex-col items-end gap-1" aria-live="polite">
-                {board.times.map((t) => {
-                  const m = minutesUntil(t, now);
-                  return <span key={t} className="rounded-full bg-[rgba(37,99,235,0.28)] px-2.5 py-0.5 text-[13px] font-semibold">{m < 1 ? "Now" : `${m} min`}</span>;
-                })}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-        {count ? (
-          <ul className={`line-notices flex ${picked ? "max-h-[min(236px,30dvh)]" : "max-h-[104px]"} min-h-0 flex-col gap-2 overflow-y-auto overscroll-contain pr-1.5`} aria-label={`${route} line notices`}>
-            {notices.map((n) => {
-              const open = n.id === picked;
-              const tone = TONE[n.tone];
-              return (
-                <li key={n.id}>
-                  <button type="button" aria-expanded={open} data-notice={n.id} onClick={() => setPicked(open ? null : n.id)}
-                    className="flex w-full items-start gap-2.5 rounded-[14px] border px-3 py-2.5 text-left text-[14px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]"
-                    style={{ borderColor: open ? "rgba(96,165,250,0.6)" : "rgba(148,163,184,0.16)", background: open ? "rgba(37,99,235,0.22)" : "rgba(15,23,42,0.35)" }}>
-                    <NoticeIcon kind={noticeKind(`${n.title} ${n.body}`, { kind: n.alert?.kind ?? (n.tone === "delay" ? "delay" : undefined), reroute: n.alert?.reroute })} color={tone.dot} className="mt-[2px] h-4 w-4 shrink-0" />
-                    <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
-                      {/* Closed: one line each; the full text opens on tap. */}
-                      <span className={`font-semibold ${open ? "" : "truncate"}`}>{n.title}</span>
-                      {n.meta ? <span className={`text-[13px] text-[#cbd5e1] ${open ? "" : "truncate"}`}>{n.meta}</span> : null}
-                      {open && n.body !== n.title ? <span className="mt-1 whitespace-pre-line text-[13px] leading-[1.45] text-[#e2e8f0]">{n.body}</span> : null}
-                    </span>
-                    <span aria-hidden className="mt-0.5 text-[#a5b4cb] transition-transform" style={{ transform: `rotate(${open ? 180 : 0}deg)` }}>⌄</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        ) : null}
-        <div className="grid grid-cols-2 gap-2">
-          <button type="button" onClick={() => { seedChat(`What are other ways to go instead of the ${route} train right now?`); setChatOpen(true); }}
-            className="h-9 rounded-[18px] bg-[#2563eb] text-[13px] font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">
-            Other ways
-          </button>
-          <button type="button" onClick={onFollow}
-            className="h-9 rounded-[18px] border border-[rgba(148,163,184,0.3)] bg-transparent text-[13px] font-semibold text-[#f1f5f9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]">
-            Follow a train
-          </button>
-        </div>
+        {boardEl}
+        {noticesEl(false)}
+        {actionsEl}
       </div>
     </div>
   );

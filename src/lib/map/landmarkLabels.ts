@@ -1,5 +1,6 @@
 import type { ExpressionSpecification, GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import type { FeatureCollection, Point } from "geojson";
+import { skipPlaceNames } from "./places";
 import { STREET_LEVEL_RANGE_M, TIER_MIN_ZOOM, guideLandmarks, landmarksNear, loadGuideLandmarks, type LonLat, type GuideCategory, type GuideLandmark } from "@/lib/guide/landmarkGuide";
 
 /**
@@ -117,7 +118,7 @@ export function focusLandmarks(map: MapLibreMap, at: LonLat | null): void {
   const src = map.getSource(LANDMARK_LABELS_SOURCE);
   if (!src || !("setData" in src)) return;
   const list = at ? landmarksNear(at, STREET_LEVEL_RANGE_M) : guideLandmarks();
-  (src as GeoJSONSource).setData(landmarkLabelsGeoJson(list));
+  void (src as GeoJSONSource).setData(landmarkLabelsGeoJson(list));
 }
 
 /** Adds the source and layer once per style; safe to call again (it also re-raises the layer above later symbols). */
@@ -125,12 +126,15 @@ export function installLandmarkLabels(map: MapLibreMap, color: string, halo: str
   if (!map.getSource(LANDMARK_LABELS_SOURCE)) {
     const list = guideLandmarks();
     map.addSource(LANDMARK_LABELS_SOURCE, { type: "geojson", data: landmarkLabelsGeoJson(list), attribution: "Landmarks: Wikidata (CC0)" });
+    // A landmark's name is drawn here; the basemap's own place label for it would say it twice.
+    if (list.length) skipPlaceNames(map, list.map((l) => l.name));
     // The list is a lazy chunk: fill the source when it arrives (if this style still has it).
     if (!list.length) {
       void loadGuideLandmarks()
         .then((all) => {
           const src = map.getSource(LANDMARK_LABELS_SOURCE);
-          if (src && "setData" in src) (src as GeoJSONSource).setData(landmarkLabelsGeoJson(all));
+          if (src && "setData" in src) void (src as GeoJSONSource).setData(landmarkLabelsGeoJson(all));
+          skipPlaceNames(map, all.map((l) => l.name));
         })
         .catch(() => {});
     }
@@ -158,7 +162,7 @@ export function installLandmarkLabels(map: MapLibreMap, color: string, halo: str
         "icon-pitch-alignment": "viewport",
         "symbol-sort-key": ["get", "sort"],
       },
-      paint: { "text-color": color, "text-halo-color": halo, "text-halo-width": 1.4 },
+      paint: { "text-color": color, "text-halo-color": halo, "text-halo-width": 2 },
     });
   } else {
     map.setPaintProperty(LANDMARK_LABELS_LAYER, "text-color", color);
@@ -168,4 +172,17 @@ export function installLandmarkLabels(map: MapLibreMap, color: string, halo: str
   // Only when something landed above it: each move fires a styledata event.
   const layers = map.getStyle()?.layers ?? [];
   if (layers[layers.length - 1]?.id !== LANDMARK_LABELS_LAYER) map.moveLayer(LANDMARK_LABELS_LAYER);
+}
+
+/** The guide landmark under a tap on its badge or name, if any. */
+export function landmarkAt(map: MapLibreMap, point: { x: number; y: number }): GuideLandmark | null {
+  if (!map.getLayer(LANDMARK_LABELS_LAYER)) return null;
+  const id: unknown = map.queryRenderedFeatures([point.x, point.y], { layers: [LANDMARK_LABELS_LAYER] })[0]?.properties?.id;
+  return typeof id === "string" ? guideLandmarks().find((l) => l.id === id) ?? null : null;
+}
+
+/** The guide entry for a hero model or eye-level pick, matched by name, so its sheet gets the picture too. */
+export function guideLandmarkNamed(name: string): GuideLandmark | null {
+  const n = name.toLowerCase();
+  return guideLandmarks().find((l) => l.name.toLowerCase() === n) ?? null;
 }

@@ -76,11 +76,11 @@ test("street level: Ask opens a compact sheet and sends the spot as context; han
   await expect.poll(() => bodies.length, { timeout: 10_000 }).toBeGreaterThanOrEqual(2);
   expect((bodies[1] as { messages: Array<{ content: string }> }).messages.at(-1)?.content).toBe("which exit for the 1 train");
   await expect.poll(() => page.evaluate(() => (window as unknown as { __said: string[] }).__said.length)).toBeGreaterThanOrEqual(1);
-  // It listens again after speaking, until tapped off.
-  await expect.poll(() => page.evaluate(() => (window as unknown as { __starts?: number }).__starts ?? 0), { timeout: 10_000 }).toBeGreaterThanOrEqual(2);
-  await shot(page, "4-handsfree-loop");
-  await sheet.getByRole("button", { name: "Hands-free" }).click();
+  // One question per tap: once the agent takes it, hands-free ends and the mic does not reopen.
   await expect(sheet.getByRole("button", { name: "Hands-free" })).toHaveAttribute("aria-pressed", "false");
+  await page.waitForTimeout(1500);
+  expect(await page.evaluate(() => (window as unknown as { __starts?: number }).__starts ?? 0)).toBe(1);
+  await shot(page, "4-handsfree-done");
   await sheet.getByRole("button", { name: "Close Ask" }).click();
   await expect(sheet).toBeHidden();
 });

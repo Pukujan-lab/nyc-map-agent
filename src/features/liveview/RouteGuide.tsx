@@ -10,6 +10,7 @@ import type { Map as MapLibreMap } from "maplibre-gl";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { onMapInstance } from "@/lib/map/mapInstance";
+import { keepInView } from "@/lib/map/keepInView";
 import { LOOK_CENTER_DISTANCE_M, poseAlongRoute } from "@/lib/map/walk";
 import { useDataView } from "@/lib/store/DataViewContext";
 import { appGeo } from "@/lib/geo/devGeo";
@@ -43,8 +44,8 @@ interface Fix {
 /**
  * Navigation guidance for the walking route: glowing route with chevrons and a
  * turn arrow, a compact next-turn card, and a street-name pill. In street
- * view it follows the camera; in 2D, "Navigate" follows your location
- * heading-up and tilted. Location is asked for only when you tap Navigate,
+ * view it follows the camera; in 2D, "Navigate" follows your location on a
+ * still, top-down, north-up map. Location is asked for only when you tap Navigate,
  * stays in this tab, and is never sent to our API.
  */
 export default function RouteGuide() {
@@ -137,14 +138,15 @@ export default function RouteGuide() {
     sendCamera({ type: "stop-guide" });
     setFix(null);
   };
-  const startNav = () => {
+  // Precise GPS for the walker, shared by navigation and the home screen's Live View.
+  const watchFix = () => {
     const g = appGeo();
     if (!g) {
       setGeoError("This browser has no location access.");
-      return;
+      return false;
     }
     setGeoError(null);
-    sendCamera({ type: "guide" });
+    if (watchRef.current !== null) return true;
     watchRef.current = g.watchPosition(
       (p) =>
         setFix({
@@ -156,6 +158,19 @@ export default function RouteGuide() {
       (e) => setGeoError(e.code === e.PERMISSION_DENIED ? "Location permission was declined." : "Location is unavailable."),
       { enableHighAccuracy: true, maximumAge: 1000, timeout: 20_000 },
     );
+    return true;
+  };
+  const startNav = () => {
+    if (watchFix()) sendCamera({ type: "guide" });
+  };
+  // Live View opened from the home walking card: GPS only while the camera is up.
+  const liveViewOpen = (open: boolean) => {
+    if (open) watchFix();
+    else if (!navigating) {
+      if (watchRef.current !== null) appGeo()?.clearWatch(watchRef.current);
+      watchRef.current = null;
+      setFix(null);
+    }
   };
   useEffect(() => () => {
     if (watchRef.current !== null) appGeo()?.clearWatch(watchRef.current);
@@ -188,7 +203,7 @@ export default function RouteGuide() {
     });
   });
 
-  // Heading-up, tilted camera that follows the fix until you pan away.
+  // The camera follows the fix until you pan away.
   useEffect(() => {
     if (!map || !navigating || walking) return;
     const off = () => sendCamera({ type: "pan" });
@@ -197,12 +212,25 @@ export default function RouteGuide() {
       map.off("dragstart", off);
     };
   }, [map, navigating, walking]);
-  // Heading-up and tilted until you pick a view (Top, Aerial); after that only keep you centred.
+  // Top-down and north up. The first fix frames you close (until you pick a view yourself);
+  // after that the map stays still and re-centres only when you near the edge, not on every fix.
+  const framed = useRef(false);
   useEffect(() => {
-    if (!map || camera.kind !== "guide" || !fix || !centered) return;
-    if (!tilt) { map.easeTo({ center: [fix.lon, fix.lat], duration: 600 }); return; }
-    map.easeTo({ center: [fix.lon, fix.lat], bearing: heading, pitch: 55, zoom: Math.max(map.getZoom(), 17), duration: 600 });
-  }, [map, camera.kind, fix, centered, tilt, heading]);
+    if (!map || camera.kind !== "guide" || !centered) { framed.current = false; return; }
+    if (!fix) return;
+    if (!framed.current) {
+      framed.current = true;
+      map.easeTo({ center: [fix.lon, fix.lat], pitch: 0, bearing: 0, ...(tilt ? { zoom: Math.max(map.getZoom(), 17) } : {}), duration: 600 });
+      return;
+    }
+    keepInView(map, [fix.lon, fix.lat]);
+  }, [map, camera.kind, fix, centered, tilt]);
+  // Walking guidance from the answer: your shared dot stays on screen the same way.
+  const homeWalk = home && followingRoute && !walking && !navigating && here !== null;
+  useEffect(() => {
+    if (!map || !homeWalk || !here) return;
+    keepInView(map, [here.lon, here.lat]);
+  }, [map, homeWalk, here?.lon, here?.lat]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!route) return null;
 
@@ -210,24 +238,39 @@ export default function RouteGuide() {
 
   const checkpoint = here ? nextCheckpoint(here, heading, landmarks, confirmed) : null;
   if (home && active) return chatOpen ? null : <>
-    <section className="task-panel task-top flex items-center gap-3.5 px-4 py-3.5" aria-label="Walking guidance">
+    <section className="task-panel task-top flex items-center gap-3 px-3.5 py-3 min-[380px]:gap-3.5 min-[380px]:px-4 min-[380px]:py-3.5" aria-label="Walking guidance">
       <TurnIcon step={progress?.next ?? null} />
-      <div className="min-w-0 flex-1"><h2 className="text-xl font-bold leading-tight">{checkpoint ? `Walk toward ${checkpoint.landmark.name}` : progress?.instruction ?? "Follow the walking route"}</h2>
-        <p className="mt-0.5 text-sm text-slate-300">{[progress && !checkpoint ? `In ${formatMetres(progress.metresToNext)}` : progress?.instruction, street, `${Math.max(1, Math.round(left / 80))} min left`].filter(Boolean).join(" · ")}</p></div>
+      {/* A few short lines at most, so on a small phone the walk still shows between this and the checkpoint card. */}
+      <div className="min-w-0 flex-1"><h2 className="text-base font-bold leading-tight min-[380px]:text-xl">{checkpoint ? <span className="block text-xs font-semibold text-slate-300">Walk toward</span> : null}<span className="line-clamp-3 min-[380px]:line-clamp-2">{checkpoint ? checkpoint.landmark.name : progress?.instruction ?? "Follow the walking route"}</span></h2>
+        <p className="mt-0.5 truncate text-sm text-slate-300">{[progress && !checkpoint ? `In ${formatMetres(progress.metresToNext)}` : progress?.instruction, street, `${Math.max(1, Math.round(left / 80))} min left`].filter(Boolean).join(" · ")}</p></div>
+      {arFlag && progress ? (
+        <Suspense fallback={null}>
+          <LiveViewBeta
+            compact
+            onOpenChange={liveViewOpen}
+            accuracyM={fix?.accuracy ?? null}
+            targetBearing={here ? bearingTo(here, { lon: progress.next.location[0], lat: progress.next.location[1] }) : routeBearing}
+            instruction={progress.instruction}
+            distanceLabel={formatMetres(progress.metresToNext)}
+            frame={{ route, along, next: progress.next }}
+            at={fix}
+          />
+        </Suspense>
+      ) : null}
       <button type="button" className="task-action task-secondary h-11 w-11 shrink-0 p-0" aria-label="Stop walking guidance" onClick={() => { stopNav(); stopWalk(); clearRoute(); }}><Square size={18} /></button>
     </section>
     {checkpoint?.landmark.picture ? <section className="task-panel task-bottom flex flex-col gap-2.5 p-3.5" aria-label="Landmark checkpoint">
       <div className="flex items-center gap-2.5">
         <img src={checkpoint.landmark.picture.url} alt={checkpoint.landmark.name} className="h-11 w-11 shrink-0 rounded-xl border border-slate-400/25 object-cover" />
-        <h3 className="text-base font-semibold">See {checkpoint.landmark.name} {checkpoint.direction}?</h3>
+        <h3 className="line-clamp-2 text-[15px] font-semibold leading-snug min-[380px]:text-base">See {checkpoint.landmark.name} {checkpoint.direction}?</h3>
       </div>
       {showPhoto ? <figure><img src={checkpoint.landmark.picture.url} alt={`Look for ${checkpoint.landmark.name}`} className="max-h-40 w-full rounded-xl object-contain" /><figcaption className="mt-1 text-xs text-slate-300">About {checkpoint.distanceM} m · {checkpoint.direction}</figcaption></figure> : null}
-      <div className="grid grid-cols-3 gap-2">
-        <button type="button" className="task-action min-h-12" onClick={() => { setConfirmed([...confirmed, checkpoint.landmark.id]); setShowPhoto(false); }}>Yes, I see it</button>
-        <button type="button" className="task-action task-secondary min-h-12" aria-expanded={showPhoto} onClick={() => setShowPhoto(!showPhoto)}>Not yet</button>
-        <button type="button" className="task-action task-secondary min-h-12" onClick={() => { seedChat(`I'm lost on my walk. Help me find ${checkpoint.landmark.name} using visible landmarks.`); setChatOpen(true); }}>I'm lost</button>
+      <div className="grid grid-cols-3 gap-2 text-[13px] min-[380px]:text-sm">
+        <button type="button" className="task-action min-h-11 !text-[length:inherit]" onClick={() => { setConfirmed([...confirmed, checkpoint.landmark.id]); setShowPhoto(false); }}>Yes, I see it</button>
+        <button type="button" className="task-action task-secondary min-h-11 !text-[length:inherit]" aria-expanded={showPhoto} onClick={() => setShowPhoto(!showPhoto)}>Not yet</button>
+        <button type="button" className="task-action task-secondary min-h-11 !text-[length:inherit]" onClick={() => { seedChat(`I'm lost on my walk. Help me find ${checkpoint.landmark.name} using visible landmarks.`); setChatOpen(true); }}>I'm lost</button>
       </div>
-      <a href={checkpoint.landmark.picture.page} target="_blank" rel="noreferrer" className="text-xs text-slate-300">Photo: {checkpoint.landmark.picture.artist} · {checkpoint.landmark.picture.license}</a>
+      <a href={checkpoint.landmark.picture.page} target="_blank" rel="noreferrer" className="block truncate text-xs text-slate-300">Photo: {checkpoint.landmark.picture.artist} · {checkpoint.landmark.picture.license}</a>
     </section> : <div className="task-panel task-bottom"><button type="button" className="task-action task-secondary w-full" onClick={() => { seedChat("I'm lost on my walking route. Help me find a visible landmark."); setChatOpen(true); }}>I'm lost</button></div>}
   </>;
 
@@ -273,6 +316,8 @@ export default function RouteGuide() {
                 targetBearing={fix ? bearingTo(fix, { lon: progress.next.location[0], lat: progress.next.location[1] }) : routeBearing}
                 instruction={progress.instruction}
                 distanceLabel={formatMetres(progress.metresToNext)}
+                frame={route ? { route, along, next: progress.next } : null}
+                at={fix}
               />
             </Suspense>
           ) : null}

@@ -1,8 +1,12 @@
 import { ArrowUp, Camera, X } from "lucide-react";
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { accuracyLine, accuracyTooLow, headingFromEvent, MAX_AR_ACCURACY_M, relativeBearing, smoothHeading } from "./heading";
 import { fallbackReason, initialPermissions, modeOf, permissionReducer } from "./permission";
+import type { NavFrame } from "./layers";
+
+const ArOverlay = lazy(() => import("./ArOverlay"));
 
 interface Props {
   /** GPS error in metres, null until the first fix. */
@@ -11,6 +15,14 @@ interface Props {
   targetBearing: number;
   instruction: string;
   distanceLabel: string;
+  /** The route and the walker's place on it, for the ribbon over the camera. */
+  frame?: Omit<NavFrame, "puck"> | null;
+  /** GPS position; the overlay is posed from it. */
+  at?: { lon: number; lat: number } | null;
+  /** An icon-only trigger, for the walking card on the home screen. */
+  compact?: boolean;
+  /** Told when the camera view opens and closes, so the caller can watch GPS meanwhile. */
+  onOpenChange?: (open: boolean) => void;
 }
 
 type IosOrientation = typeof DeviceOrientationEvent & { requestPermission?: () => Promise<"granted" | "denied"> };
@@ -18,12 +30,12 @@ type IosOrientation = typeof DeviceOrientationEvent & { requestPermission?: () =
 /**
  * Live View (Beta) scaffold: camera plus compass behind the `liveviewAr` flag.
  * Permissions are requested only on the tap. The camera stream never leaves
- * the page (no recording, no upload). The transparent street-pitch MapLibre
- * overlay is NOT built yet: in this slice the camera shows with the 2D arrow
- * on top, rotated by the smoothed compass heading. Without camera or compass,
- * or above 25 m of GPS error, only the 2D arrow is shown.
+ * the page (no recording, no upload). With camera, compass and a fix within
+ * 25 m, a transparent street-pitch map draws the route ribbon, chevrons and
+ * turn arrow over the picture. Without any of those, a big 2D arrow toward the
+ * next turn, rotated by the smoothed compass heading, stands in.
  */
-export default function LiveViewBeta({ accuracyM, targetBearing, instruction, distanceLabel }: Props) {
+export default function LiveViewBeta({ accuracyM, targetBearing, instruction, distanceLabel, frame = null, at = null, compact = false, onOpenChange }: Props) {
   const [perm, dispatch] = useReducer(permissionReducer, initialPermissions);
   const [open, setOpen] = useState(false);
   const [heading, setHeading] = useState<number | null>(null);
@@ -31,6 +43,11 @@ export default function LiveViewBeta({ accuracyM, targetBearing, instruction, di
   const streamRef = useRef<MediaStream | null>(null);
   const headingRef = useRef<number | null>(null);
   const listenerRef = useRef<{ type: string; fn: (e: Event) => void } | null>(null);
+  const onOpenChangeRef = useRef(onOpenChange);
+  const openRef = useRef(false);
+  useEffect(() => {
+    onOpenChangeRef.current = onOpenChange;
+  }, [onOpenChange]);
 
   const stop = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -40,6 +57,8 @@ export default function LiveViewBeta({ accuracyM, targetBearing, instruction, di
     listenerRef.current = null;
     headingRef.current = null;
     setHeading(null);
+    if (openRef.current) onOpenChangeRef.current?.(false);
+    openRef.current = false;
     setOpen(false);
     dispatch({ type: "stop" });
   }, []);
@@ -60,6 +79,8 @@ export default function LiveViewBeta({ accuracyM, targetBearing, instruction, di
     const cameraSupported = "mediaDevices" in navigator && "getUserMedia" in navigator.mediaDevices;
     const orientationSupported = typeof DeviceOrientationEvent !== "undefined";
     setOpen(true);
+    openRef.current = true;
+    onOpenChange?.(true);
     dispatch({ type: "request", cameraSupported, orientationSupported });
 
     // iOS only allows this call synchronously inside the tap.
@@ -106,23 +127,36 @@ export default function LiveViewBeta({ accuracyM, targetBearing, instruction, di
   const showCamera = mode === "ar" && !lowAccuracy;
   const reason = fallbackReason(perm);
   const rotation = heading === null ? 0 : relativeBearing(targetBearing, heading);
+  const overlay = showCamera && frame !== null && at !== null && heading !== null;
 
   if (!open) {
-    return (
+    return compact ? (
+      <button type="button" className="task-action task-secondary h-11 w-11 shrink-0 p-0" aria-label="Live View (Beta)" title="Live View (Beta)" onClick={start}>
+        <Camera size={18} />
+      </button>
+    ) : (
       <Button type="button" size="sm" variant="secondary" onClick={start}>
         <Camera className="h-4 w-4" /> Live View (Beta)
       </Button>
     );
   }
 
-  return (
+  // In the body, so a blurred card around the trigger cannot trap the full-screen view.
+  return createPortal(
     <div className="pointer-events-auto fixed inset-0 z-50 flex flex-col items-center justify-end gap-3 bg-background p-4 pb-10" role="dialog" aria-label="Live View (Beta)">
       <video ref={videoRef} autoPlay playsInline muted className={`absolute inset-0 h-full w-full object-cover ${showCamera ? "" : "hidden"}`} />
+      {overlay ? (
+        <Suspense fallback={null}>
+          <ArOverlay frame={frame} at={at} heading={heading} />
+        </Suspense>
+      ) : null}
       <div className="relative flex flex-1 flex-col items-center justify-center gap-2">
         {mode === "requesting" ? <p className="rounded bg-background/90 px-3 py-1 text-sm">Waiting for camera and compass permission…</p> : null}
         {mode !== "requesting" ? (
           <>
-            <ArrowUp className="h-32 w-32 text-primary drop-shadow-lg" style={{ transform: `rotate(${showCamera ? rotation : 0}deg)` }} aria-hidden />
+            {overlay ? null : (
+              <ArrowUp className="h-32 w-32 text-primary drop-shadow-lg" style={{ transform: `rotate(${showCamera ? rotation : 0}deg)` }} aria-hidden />
+            )}
             <p className="rounded bg-background/90 px-3 py-1 text-lg font-semibold" role="status">
               {instruction}, {distanceLabel}
             </p>
@@ -142,6 +176,7 @@ export default function LiveViewBeta({ accuracyM, targetBearing, instruction, di
       <Button type="button" size="sm" variant="outline" className="relative" onClick={stop}>
         <X className="h-4 w-4" /> Stop camera
       </Button>
-    </div>
+    </div>,
+    document.body,
   );
 }

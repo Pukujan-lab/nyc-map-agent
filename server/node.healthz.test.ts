@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { createRoot } from "./node";
 
@@ -16,5 +16,18 @@ describe("root app", () => {
     const built = existsSync("dist/index.html");
     const res = await createRoot().fetch(new Request("http://x/some/client/route"));
     expect(res.status).toBe(built ? 200 : 404);
+  });
+
+  it("answers a missing build file with 404, not the SPA shell", async () => {
+    const res = await createRoot().fetch(new Request("http://x/assets/MyDay-oldbuild.js"));
+    expect(res.status).toBe(404);
+  });
+
+  it("lets browsers keep a hashed build file for a year", async () => {
+    const file = existsSync("dist/assets") ? readdirSync("dist/assets").find((f) => f.endsWith(".js")) : undefined;
+    if (!file) return;
+    const res = await createRoot().fetch(new Request(`http://x/assets/${file}`));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
   });
 });

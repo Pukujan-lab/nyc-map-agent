@@ -40,6 +40,8 @@ export interface PackStore {
   v: 3;
   savedAt: number;
   destination: { label: string; at: Pt } | null;
+  /** The trip's last walk, from the final station to the destination (street route), when the trip has one. */
+  walkOut?: Pt[];
   packs: ExitPack[];
   status: OutageStatus | null;
 }
@@ -144,13 +146,32 @@ export function buildStore(
     if (st) stations.push({ station: { id: st.id, name: st.name, at: st.at }, line: null });
   }
   if (!stations.length) return null;
+  const lastWalk = p.trip ? [...p.trip.legs].reverse().find((l) => l.kind === "walk" && (l.coords?.length ?? 0) >= 2) : undefined;
   return {
     v: 3,
     savedAt: p.now ?? Date.now(),
     destination: dest,
+    ...(lastWalk?.coords ? { walkOut: lastWalk.coords.map((c) => [c[0], c[1]] as Pt) } : {}),
     packs: stations.map((s) => buildPack(sys, units, s.station, s.line, dest?.at ?? null, p)),
     status: p.status ?? null,
   };
+}
+
+/**
+ * The walk from the chosen exit to the destination: the trip's own street
+ * route from the point nearest the exit onward, or nothing when this station
+ * is not where the walk starts (a transfer) or there is no destination.
+ */
+export function walkFromExit(store: PackStore | null, pack: ExitPack, exitAt: Pt): Pt[] | null {
+  const dest = store?.destination;
+  if (!dest) return null;
+  const last = store.packs[store.packs.length - 1];
+  if (last?.station.id !== pack.station.id) return null;
+  const route = store.walkOut ?? [];
+  if (route.length < 2 || metres(route[0], pack.station.at) > 400) return [exitAt, dest.at];
+  let i = 0;
+  route.forEach((c, j) => { if (metres(c, exitAt) < metres(route[i], exitAt)) i = j; });
+  return [exitAt, ...route.slice(i)];
 }
 
 export function packFor(store: PackStore | null, stationId: string | null): ExitPack | null {

@@ -28,7 +28,7 @@ export const FLAGS = {
   search: { tier: "basic", default: true, label: "Search", owner: "@Pukujan", expires: "2027-04-30" },
   directions: { tier: "basic", default: true, label: "Walking directions", owner: "@Pukujan", expires: "2027-04-30" },
   liveview: { tier: "basic", default: true, label: "Navigation arrows and Live View", owner: "@Pukujan", expires: "2027-04-30" },
-  liveviewAr: { tier: "basic", default: false, label: "Live View (Beta): camera and compass scaffold", owner: "@Pukujan", expires: "2027-03-31" },
+  liveviewAr: { tier: "basic", default: false, label: "Live View (Beta): route drawn over the camera", owner: "@Pukujan", expires: "2027-03-31" },
   transit: { tier: "basic", default: true, label: "Live transit", owner: "@Pukujan", expires: "2027-04-30" },
   places: { tier: "basic", default: true, label: "Places", owner: "@Pukujan", expires: "2027-04-30" },
   restrooms: { tier: "basic", default: true, label: "Public restrooms", owner: "@Pukujan", expires: "2027-04-30" },

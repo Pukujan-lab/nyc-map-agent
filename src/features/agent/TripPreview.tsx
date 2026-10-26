@@ -1,6 +1,13 @@
 import "@/components/task-screens.css";
-import { Clock, MapPin, Pause, PartyPopper, Play, TriangleAlert, X } from "lucide-react";
+import { BellRing, Clock, MapPin, Pause, PartyPopper, Play, TriangleAlert, X } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
+import { PullSheet } from "@/components/PullSheet";
+import type { SheetLevel } from "@/components/sheetSwipe";
+import { useMediaQuery } from "@/lib/useMediaQuery";
+import { useT } from "@/lib/i18n/appLang";
 import { plainAlertText } from "@/lib/transit/trouble";
+import { remindAt, saveReminder } from "./reminder";
 import { PLAYBACK_SPEEDS, type PlaybackSpeed, type Trip } from "./schema";
 import type { PlayerState } from "./usePlayer";
 
@@ -13,6 +20,7 @@ export function TripPreview(p: {
   onAlert?: (route: string) => void;
 }) {
   const { trip, state } = p;
+  const t = useT();
   const minutes = Math.max(1, Math.round((Date.parse(trip.arriveIso) - Date.parse(trip.departIso)) / 60000));
   const leave = new Date(trip.departIso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   const alert = trip.alerts[0];
@@ -21,6 +29,60 @@ export function TripPreview(p: {
   const alertRoute = named.find((r) => trip.legs.some((l) => l.kind === "ride" && l.route === r)) ?? named[0];
   const w = trip.weather;
   const progress = state.status === "ended" ? 100 : state.segs.length ? state.seg / state.segs.length * 100 : 0;
+  const wide = useMediaQuery("(min-width: 640px)");
+  const [level, setLevel] = useState<SheetLevel>(1);
+  const close = <button type="button" className="task-action task-close" aria-label="Close trip" onClick={p.onClose}><X size={18} /></button>;
+  const playBtn = (size: string) => <button type="button" className={`task-action ${size} shrink-0 rounded-full p-0`} aria-label={state.playing ? "Pause preview" : "Play preview"} onClick={p.onToggle}>
+    {state.playing ? <Pause size={22} /> : <Play size={22} />}
+  </button>;
+  const speeds = <div className="grid flex-1 grid-cols-4 gap-1 rounded-[14px] bg-slate-900/50 p-1" role="group" aria-label="Playback speed">
+    {PLAYBACK_SPEEDS.map((s) => <button type="button" key={s} aria-pressed={s === p.speed} onClick={() => p.onSpeed(s)} className={`h-10 rounded-[10px] text-sm font-semibold ${s === p.speed ? "bg-slate-50 text-slate-900" : "text-slate-200"}`}>{s}×</button>)}
+  </div>;
+  const weather = w ? `${w.summary} · ${Math.round(w.tempC)}°C / ${Math.round(w.tempC * 9 / 5 + 32)}°F${w.precipPct >= 40 ? ` · ${w.precipPct}% rain` : ""}` : null;
+  const notice = alert ? <button type="button" disabled={!alertRoute || !p.onAlert} onClick={() => alertRoute && p.onAlert?.(alertRoute)}
+    className="task-panel flex max-w-full items-center gap-1.5 rounded-full border-amber-500/40 px-3 py-2 text-left text-[13px] text-amber-200">
+    <TriangleAlert size={14} className="shrink-0" aria-hidden /><span className="truncate">{plainAlertText(alert)}</span></button> : null;
+  const rest = <>
+    <div role="progressbar" aria-label="Preview progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)} className="h-1.5 shrink-0 overflow-hidden rounded bg-slate-400/25"><div className="h-full bg-amber-500" style={{ width: `${progress}%` }} /></div>
+    {state.status === "ended" ? <div className="flex items-start gap-2.5" data-testid="trip-arrived" role="status">
+      <PartyPopper size={22} className="mt-0.5 shrink-0 text-amber-300" aria-hidden />
+      <div className="min-w-0"><p className="text-[15px] font-semibold">You've arrived at {trip.destination.label.split(",")[0]}</p>
+        {state.where ? <p className="text-[13px] text-slate-300">{state.where}</p> : null}</div>
+    </div> : <>
+      {state.active ? <p className="text-[13px] text-slate-300" aria-live="polite">{state.callout}</p> : null}
+      {state.where ? <p className="flex items-center gap-1.5 text-[13px] text-slate-200" data-testid="trip-where">
+        <MapPin size={14} className="shrink-0" aria-hidden /><span className="truncate">{state.where}</span></p> : null}
+    </>}
+    {/* A trip planned for later: the answer says "tap Remind me", so the button is here too. */}
+    {trip.scheduled?.future ? <button type="button" className="task-action task-secondary flex items-center justify-center gap-1.5" data-testid="preview-remind"
+      onClick={() => { saveReminder(trip); toast(t("remindSaved").replace("{t}", remindAt(trip))); }}>
+      <BellRing size={16} aria-hidden />{t("remindMe")}</button> : null}
+    <div className="grid grid-cols-2 gap-2">
+      <button type="button" className="task-action" onClick={p.onUse}>Use this route</button>
+      <button type="button" className="task-action task-secondary" onClick={p.onOther}>{t("otherOptions")}</button>
+    </div>
+  </>;
+  const balloons = state.status === "ended" ? <Balloons key={state.restart} /> : null;
+  // A phone: the trip rests as one line on the chat (Play, where to, how long) and pulls up, so the route stays on the map (owner, 2026-10-25).
+  if (!wide) return <>
+    <PullSheet testId="trip-sheet" label="Trip preview" level={level} onLevel={setLevel}
+      header={<div className="flex items-center gap-2.5" data-testid="trip-heading">
+        {playBtn("h-11 w-11")}
+        <button type="button" className="flex min-h-11 min-w-0 flex-1 flex-col justify-center text-left" aria-expanded={level > 0} onClick={() => setLevel((l) => (l === 0 ? 1 : l))}>
+          <span className="truncate text-[15px] font-bold" title={`${trip.origin.label} → ${trip.destination.label}`}>To {trip.destination.label}</span>
+          <span className="truncate text-xs text-amber-200">Leave {leave} · about {minutes} min</span>
+        </button>
+        {close}
+      </div>}>
+      <div className="pull-sheet-body mt-2 flex flex-col gap-2.5">
+        {speeds}
+        {rest}
+        {notice}
+        {weather ? <p className="text-[13px] text-slate-300">{weather}</p> : null}
+      </div>
+    </PullSheet>
+    {balloons}
+  </>;
   return <>
     <div className="task-top flex flex-col gap-2" data-testid="trip-heading">
       <div className="flex items-center gap-2">
@@ -29,40 +91,21 @@ export function TripPreview(p: {
           <div className="min-w-0"><h2 className="text-[15px] font-semibold">{leave}</h2>
             <p className="text-[13px] text-slate-300">{trip.origin.label} → {trip.destination.label} · about {minutes} min</p></div>
         </div>
-        <button type="button" className="task-action task-secondary h-11 w-11 shrink-0 p-0" aria-label="Close trip" onClick={p.onClose}><X size={18} /></button>
+        {close}
       </div>
       <div className="flex flex-wrap gap-2">
-        {w ? <span className="task-panel rounded-full px-3 py-2 text-[13px]">{w.summary} · {Math.round(w.tempC)}°C / {Math.round(w.tempC * 9 / 5 + 32)}°F{w.precipPct >= 40 ? ` · ${w.precipPct}% rain` : ""}</span> : null}
-        {alert ? <button type="button" disabled={!alertRoute || !p.onAlert} onClick={() => alertRoute && p.onAlert?.(alertRoute)}
-          className="task-panel flex max-w-full items-center gap-1.5 rounded-full border-amber-500/40 px-3 py-2 text-left text-[13px] text-amber-200">
-          <TriangleAlert size={14} className="shrink-0" aria-hidden /><span className="truncate">{plainAlertText(alert)}</span></button> : null}
+        {weather ? <span className="task-panel rounded-full px-3 py-2 text-[13px]">{weather}</span> : null}
+        {notice}
       </div>
     </div>
     <section className="task-panel task-bottom flex flex-col gap-2.5" aria-label="Trip preview">
       <div className="flex items-center gap-2.5">
-        <button type="button" className="task-action h-[52px] w-[52px] shrink-0 rounded-full p-0" aria-label={state.playing ? "Pause preview" : "Play preview"} onClick={p.onToggle}>
-          {state.playing ? <Pause size={22} /> : <Play size={22} />}
-        </button>
-        <div className="grid flex-1 grid-cols-4 gap-1 rounded-[14px] bg-slate-900/50 p-1" role="group" aria-label="Playback speed">
-          {PLAYBACK_SPEEDS.map((s) => <button type="button" key={s} aria-pressed={s === p.speed} onClick={() => p.onSpeed(s)} className={`h-10 rounded-[10px] text-sm font-semibold ${s === p.speed ? "bg-slate-50 text-slate-900" : "text-slate-200"}`}>{s}×</button>)}
-        </div>
+        {playBtn("h-[52px] w-[52px]")}
+        {speeds}
       </div>
-      <div role="progressbar" aria-label="Preview progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)} className="h-1.5 overflow-hidden rounded bg-slate-400/25"><div className="h-full bg-amber-500" style={{ width: `${progress}%` }} /></div>
-      {state.status === "ended" ? <div className="flex items-start gap-2.5" data-testid="trip-arrived" role="status">
-        <PartyPopper size={22} className="mt-0.5 shrink-0 text-amber-300" aria-hidden />
-        <div className="min-w-0"><p className="text-[15px] font-semibold">You've arrived at {trip.destination.label.split(",")[0]}</p>
-          {state.where ? <p className="text-[13px] text-slate-300">{state.where}</p> : null}</div>
-      </div> : <>
-        {state.active ? <p className="text-[13px] text-slate-300" aria-live="polite">{state.callout}</p> : null}
-        {state.where ? <p className="flex items-center gap-1.5 text-[13px] text-slate-200" data-testid="trip-where">
-          <MapPin size={14} className="shrink-0" aria-hidden /><span className="truncate">{state.where}</span></p> : null}
-      </>}
-      <div className="grid grid-cols-2 gap-2">
-        <button type="button" className="task-action" onClick={p.onUse}>Use this route</button>
-        <button type="button" className="task-action task-secondary" onClick={p.onOther}>Other options</button>
-      </div>
+      {rest}
     </section>
-    {state.status === "ended" ? <Balloons key={state.restart} /> : null}
+    {balloons}
   </>;
 }
 

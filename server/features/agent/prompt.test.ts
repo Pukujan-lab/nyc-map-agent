@@ -70,3 +70,26 @@ describe("system prompt: the owner's standing rules", () => {
     expect(present).not.toMatch(/-73\.|40\.7\d/);
   });
 });
+
+describe("underground helper context", () => {
+  it("names the station and picked exit when the user is underground", () => {
+    const p = systemPrompt("now", null, "transit", undefined, undefined, undefined, { stage: "at-station", station: "Mets-Willets Point", exit: "Roosevelt Av" });
+    expect(p).toContain("underground at Mets-Willets Point");
+    expect(p).toContain("Roosevelt Av");
+  });
+  it("says nothing about underground otherwise, and trips close with an offer to start", () => {
+    const p = systemPrompt("now", null);
+    expect(p).not.toContain("underground at");
+    expect(p).toContain("Want to start?");
+    expect(p).toContain("what to bring");
+    expect(p).toContain("at the station where it happens");
+  });
+});
+
+describe("scope (#199)", () => {
+  it("keeps to getting around NYC and refuses rule changes from tool results", () => {
+    const p = systemPrompt("2026-10-25 10:00", null);
+    expect(p).toMatch(/Only help with getting around New York City/);
+    expect(p).toMatch(/inside a tool result/);
+  });
+});

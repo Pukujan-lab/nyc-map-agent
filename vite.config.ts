@@ -1,5 +1,7 @@
-import { defineConfig, loadEnv, type Plugin, type ViteDevServer } from "vite";
+/// <reference types="vitest/config" />
+import { defineConfig, loadEnv, type HtmlTagDescriptor, type Plugin, type ViteDevServer } from "vite";
 import react from "@vitejs/plugin-react";
+import { assetManifest } from "./scripts/asset-manifest";
 
 // `URL.pathname` is percent-encoded, so a project under a path with a space
 // (e.g. "Application Support") would otherwise resolve to a missing directory.
@@ -49,11 +51,48 @@ function devApi(env: Record<string, string>): Plugin {
   };
 }
 
+/**
+ * Build only: main.tsx loads the app (src/boot.tsx) after the first paint, so nothing in
+ * index.html points at the app's files and they would not start downloading until then.
+ * This adds a modulepreload for the app and every file it imports, and a preload for its
+ * styles (crossorigin, like Vite's own stylesheet links, or the browser fetches them twice),
+ * so they download alongside the page without holding up the first paint.
+ */
+function preloadBoot(): Plugin {
+  return {
+    name: "preload-boot",
+    apply: "build",
+    transformIndexHtml: {
+      order: "post",
+      handler(_html, ctx) {
+        const bundle = ctx.bundle;
+        if (!bundle) return;
+        const boot = Object.values(bundle).find((c) => c.type === "chunk" && c.moduleIds.some((id) => id.endsWith("/src/boot.tsx")));
+        if (!boot || boot.type !== "chunk") return;
+        const scripts = new Set<string>();
+        const styles = new Set<string>();
+        const visit = (file: string) => {
+          const chunk = bundle[file];
+          if (!chunk || chunk.type !== "chunk" || chunk.isEntry || scripts.has(file)) return;
+          scripts.add(file);
+          chunk.viteMetadata?.importedCss.forEach((css) => styles.add(css));
+          chunk.imports.forEach(visit);
+        };
+        visit(boot.fileName);
+        const tags: HtmlTagDescriptor[] = [];
+        for (const css of styles) tags.push({ tag: "link", attrs: { rel: "preload", as: "style", crossorigin: true, href: `/${css}` }, injectTo: "head" });
+        for (const js of scripts) tags.push({ tag: "link", attrs: { rel: "modulepreload", crossorigin: true, href: `/${js}` }, injectTo: "head" });
+        return tags;
+      },
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const proxyTarget = env.API_PROXY_TARGET;
   return {
-    plugins: [react(), ...(proxyTarget ? [] : [devApi(env)])],
+    plugins: [react(), assetManifest(), preloadBoot(), ...(proxyTarget ? [] : [devApi(env)])],
     // `MAPILLARY_` is exposed so a plain `MAPILLARY_TOKEN` (the name Mapillary's
     // own docs use) works as well as `VITE_MAPILLARY_TOKEN`. Mapillary client
     // tokens are browser tokens by design. Server secrets such as
@@ -65,9 +104,21 @@ export default defineConfig(({ mode }) => {
     worker: {
       format: "es",
     },
+    build: {
+      rollupOptions: {
+        output: {
+          // The map library is half the first download and changes far less often than the app,
+          // so it gets its own file that phones keep cached across our deploys.
+          manualChunks: (id) => (id.includes("/node_modules/maplibre-gl/") ? "maplibre" : undefined),
+        },
+      },
+    },
     server: {
       host: true,
       proxy: proxyTarget ? { "/api": { target: proxyTarget, changeOrigin: true } } : undefined,
     },
+    // Route tests share one client address; the live 5-second cooldown would refuse their back-to-back questions.
+    // Tests that check the limits build their own limiter.
+    test: { env: { AGENT_RATE_BURST_MAX: "0" } },
   };
 });

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import maplibregl, { type GeoJSONSource, type Map as MapLibreMap } from "maplibre-gl";
+import "@/lib/map/maplibreWorker";
+import { Map as MapLibreMapCtor, type GeoJSONSource, type Map as MapLibreMap } from "maplibre-gl";
 import { RestroomDetails } from "@/components/RestroomCard";
 import type { RestroomInfo } from "@/lib/map/restrooms";
 import { applyInsetFilters, bearingTo, coneRotation, facingLabel, miniStyle, refreshInsetSource, whereLabel, type InsetFilters } from "@/lib/map/miniStyle";
@@ -56,7 +57,7 @@ export function StreetMiniMap({ main, getEye, onExit, filters }: {
     const eye = getEye();
     const c = main.getCenter();
     const full = main.getStyle() ?? { version: 8 as const, sources: {}, layers: [] };
-    const mini = new maplibregl.Map({
+    const mini = new MapLibreMapCtor({
       container: box.current,
       style: miniStyle(full, filtersRef.current),
       center: eye ? [eye.lon, eye.lat] : [c.lng, c.lat],
@@ -171,7 +172,7 @@ export function StreetMiniMap({ main, getEye, onExit, filters }: {
     const src = mini?.getSource<GeoJSONSource>(DOTS);
     if (!mini || !src) return;
     const c = getEye() ?? { lon: mini.getCenter().lng, lat: mini.getCenter().lat };
-    src.setData(dotsNear(dots, c.lon, c.lat, DOTS_RADIUS_M));
+    void src.setData(dotsNear(dots, c.lon, c.lat, DOTS_RADIUS_M));
   }, [dots, getEye]);
 
   const onMiniClick = (event: React.MouseEvent<HTMLButtonElement>) => {

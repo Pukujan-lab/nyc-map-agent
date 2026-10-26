@@ -2,7 +2,7 @@ import { MockLanguageModelV4, convertArrayToReadableStream } from "ai/test";
 import { describe, expect, it } from "vitest";
 import { streamEvent, trip as tripSchema, type MapAction, type StreamEvent } from "../../../src/features/agent/schema";
 import type { ServiceChange } from "../../../src/lib/transit/serviceChanges";
-import { ActionCollector, placeActions, restroomActions, tripActions } from "./mapActions";
+import { ActionCollector, exitActions, layerAction, placeActions, placeName, restroomActions, tripActions } from "./mapActions";
 import { POST } from "./routes";
 import { nearestRestrooms, type RestroomRow } from "./services";
 import { skippedStops } from "./trip";
@@ -62,13 +62,28 @@ describe("map actions from tool results", () => {
     expect(tripActions(walk).map((x) => x.label)).toEqual(["Show the walk"]);
   });
 
+  it("a trip planned for later offers Remind me right after the route; one leaving now does not", () => {
+    const later = tripSchema.parse({ ...driveTrip, id: "w2", mode: "walk", context: [], scheduled: { future: true, note: "Planned for tomorrow" } });
+    expect(tripActions(later).map((x) => x.kind)).toEqual(["showRoute", "remindTrip"]);
+    const now = tripSchema.parse({ ...later, scheduled: { future: false, note: "Leaving now" } });
+    expect(tripActions(now).map((x) => x.kind)).toEqual(["showRoute"]);
+  });
+
   it("the nearest open restroom comes first and carries its card details", () => {
     const here: [number, number] = [-73.99, 40.735];
-    const spots = nearestRestrooms([row("Far Park", -73.95, 40.78), row("Closed Kiosk", -73.9901, 40.7351, "Not Operational"), row("Union Square Park", -73.9905, 40.7362)], here);
+    const spots = nearestRestrooms([row("Far Park", -73.95, 40.78), row("Closed Kiosk", -73.9901, 40.7351, "Not Operational"), row("Union Square Park", -73.9905, 40.7362)], here, 3, new Date("2026-10-25T12:00:00-04:00"));
     expect(spots.map((s) => s.name)).toEqual(["Union Square Park", "Far Park"]);
     const [first, second] = restroomActions(spots);
     expect(first).toMatchObject({ kind: "showRestroom", label: "Show the nearest restroom", restroom: { name: "Union Square Park", hours: "8am-8pm", accessibility: "Fully Accessible" } });
     expect(second.label).toBe("Show the next closest restroom");
+  });
+
+  it("skips a restroom that is closed right now by its listed hours (#419: 8am-4pm at 1:36 am)", () => {
+    const night = new Date("2026-10-25T01:36:00-04:00");
+    const playground = { ...row("Moore Homestead Playground", -73.8803, 40.7365), hours_of_operation: "8am-4pm, Open later seasonally" };
+    const allNight = { ...row("Elmhurst Hospital", -73.8857, 40.7448), hours_of_operation: "24 Hours" };
+    const spots = nearestRestrooms([playground, allNight], [-73.8806, 40.7366], 3, night);
+    expect(spots.map((s) => [s.name, s.openNow])).toEqual([["Elmhurst Hospital", true]]);
   });
 
   it("falls back to closed restrooms when nothing open is within 1.5 km", () => {
@@ -126,11 +141,20 @@ describe("POST /api/agent streams the actions line (mocked LLM)", () => {
       },
     });
   };
-  const run = async (toolName: string, input: unknown): Promise<StreamEvent[]> => {
+  const walk = () => Promise.resolve({ coords: [[-73.99, 40.735], [-73.9905, 40.7362]] as [number, number][], distanceM: 140, durationS: 120, turns: [{ at: [-73.99, 40.735] as [number, number], text: "Turn left onto East 14th Street" }] });
+  const run = async (toolName: string, input: unknown, m?: ReturnType<typeof model>): Promise<StreamEvent[]> => {
     const req = new Request("http://x/api/agent", { method: "POST", body: JSON.stringify({ messages: [{ role: "user", content: "nearest restroom" }], location: { lon: -73.99, lat: 40.735 } }) });
-    const res = await POST(req, { model: model(toolName, input), deps: { restrooms: () => Promise.resolve([row("Union Square Park", -73.9905, 40.7362)]) } });
+    const res = await POST(req, { model: m ?? model(toolName, input), deps: { restrooms: () => Promise.resolve([row("Union Square Park", -73.9905, 40.7362)]), walk } });
     return (await res.text()).trim().split("\n").map((l) => streamEvent.parse(JSON.parse(l)));
   };
+
+  it("nearest_restroom gives the model the walk to the nearest one, so the answer can give directions", async () => {
+    const m = model("nearest_restroom", { place: "here" });
+    await run("nearest_restroom", { place: "here" }, m);
+    const second = JSON.stringify(m.doStreamCalls[1]?.prompt);
+    expect(second).toContain("walkToNearest");
+    expect(second).toContain("Turn left onto East 14th Street");
+  });
 
   it("nearest_restroom yields one actions line, before done, with the restroom", async () => {
     const events = await run("nearest_restroom", { place: "here" });
@@ -159,5 +183,37 @@ describe("buttons only for places the answer stands behind", () => {
     c.add([{ kind: "flyTo", id: "fly:1", label: "Show 3 YACHT CLUB CV, Staten Island, NY", lon: -74.1, lat: 40.5, zoom: 16 }]);
     expect(c.list(answer)).toEqual([]);
     expect(c.list()).toHaveLength(1);
+  });
+  it("names a pinned place without its address", () => {
+    expect(placeName("Bryant Park, Manhattan Community Board 5, New York, NY")).toBe("Bryant Park");
+    expect(placeName("120, Park Avenue, New York")).toBe("120 Park Avenue");
+    expect(placeActions({ label: "Bryant Park, Manhattan, New York", at: [-73.98, 40.75] })[0].label).toBe("Show Bryant Park");
+  });
+});
+
+describe("layerAction (#313)", () => {
+  it("offers one switch as a button the person taps", () => {
+    expect(layerAction("citibike")).toEqual({ kind: "showLayer", id: "layer:citibike", label: "Turn on Citi Bike docks", layer: "citibike" });
+  });
+  it("sits with the route, ahead of stop lists", () => {
+    const c = new ActionCollector();
+    c.add([{ kind: "flyTo", id: "fly:x", label: "Show X", lon: -73.98, lat: 40.75 }, layerAction("health")]);
+    expect(c.list()[0].kind).toBe("showLayer");
+  });
+});
+
+describe("exitActions", () => {
+  const base = { station: "34 St-Herald Sq", exit: { at: [-73.988, 40.749] as [number, number], label: "NE exit on West 34 Street", elevatorOnly: false }, destination: { at: [-73.9857, 40.7484] as [number, number], label: "Empire State Building" } };
+
+  it("draws the exit with its walk and minutes", () => {
+    const [a] = exitActions({ ...base, walk: { coords: [base.exit.at, [-73.987, 40.7487], base.destination.at], distanceM: 240, durationS: 190, turns: [] } });
+    expect(a).toMatchObject({ kind: "showExit", station: "34 St-Herald Sq", walkMin: 3 });
+    expect(a.kind === "showExit" && a.path).toHaveLength(3);
+  });
+
+  it("falls back to a straight line and at least a minute when the walk has no shape", () => {
+    const [a] = exitActions({ ...base, walk: { coords: [], distanceM: 20, durationS: 10, turns: [] } });
+    expect(a.kind === "showExit" && a.path).toEqual([base.exit.at, base.destination.at]);
+    expect(a).toMatchObject({ walkMin: 1 });
   });
 });

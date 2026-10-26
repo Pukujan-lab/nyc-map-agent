@@ -3,6 +3,7 @@ import { keepPreviousData, useQueries, useQuery, useQueryClient } from "@tanstac
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useIdle } from "@/lib/idle";
+import { useBasemapReady } from "@/lib/map/basemapReady";
 import { lookupFrom, nyHourOfWeek, type SegmentLookup, type SegmentRow } from "./history";
 import type { BusHistory } from "./busEstimate";
 import { parseBusCap, parseBusLines } from "@/lib/transit/busReveal";
@@ -134,6 +135,7 @@ function useLiveBatch() {
   const key = useSyncExternalStore(subscribeDemand, () => demandKey, () => "");
   const { idle } = useIdle();
   const client = useQueryClient();
+  const mapShown = useBasemapReady();
   // Waking from idle refreshes at once rather than on the next 30 s tick.
   useEffect(() => {
     if (!idle && key) void client.refetchQueries({ queryKey: ["transit", "live-batch", key], stale: true, type: "active" });
@@ -153,7 +155,8 @@ function useLiveBatch() {
       }
       return body;
     },
-    enabled: key !== "",
+    // After the basemap, which needs the connection more on a slow phone (basemapReady.ts).
+    enabled: key !== "" && mapShown,
     staleTime: LIVE_REFRESH - 5_000,
     // Idle tab (#369): stop polling until the next interaction.
     refetchInterval: idle ? false : LIVE_REFRESH,
@@ -163,12 +166,14 @@ function useLiveBatch() {
 }
 
 export function useTransitData(systems: SystemId[]) {
+  const mapShown = useBasemapReady();
   const statics = useQueries({
     queries: RAIL_SYSTEMS.map((s) => ({
       queryKey: ["transit", "static", s],
       queryFn: () => getJson<StaticSystem>(`/transit/${s}.json`),
       staleTime: Infinity,
-      enabled: systems.includes(s),
+      // The subway file is 220 kB; it waits for the basemap (basemapReady.ts). A kept copy still shows at once.
+      enabled: systems.includes(s) && mapShown,
     })),
   });
   useLiveDemand(systems, false);
@@ -256,10 +261,12 @@ export function useBusStopsNear(point: { lon: number; lat: number } | undefined)
 }
 /** Next buses at one stop, refreshed while its sheet is open. */
 export function useBusArrivals(stop: string | undefined) {
+  const { idle } = useIdle();
   return useQuery({
     queryKey: ["transit", "bus-arrivals", stop],
     queryFn: () => getJson<{ arrivals: BusArrival[] }>(`${API_BASE}/api/transit/bus-arrivals?${new URLSearchParams({ stop: stop ?? "" })}`),
-    refetchInterval: REFRESH,
+    // Paused with the rest of live data on an idle tab (#369).
+    refetchInterval: idle ? false : REFRESH,
     enabled: Boolean(stop),
     retry: false,
   });

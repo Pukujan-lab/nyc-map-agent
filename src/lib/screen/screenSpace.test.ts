@@ -102,6 +102,13 @@ describe("screen space: chips, pills and stepping back", () => {
     expect(run("phone", OPEN.answer, OPEN.task, { type: "SHOW_ANSWER" }, OPEN.menu).shown("answer")).toBe("chip");
   });
 
+  it("a question sent during a task opens its answer instead of folding it at once", () => {
+    for (const size of ALL) {
+      expect(run(size, OPEN.task, { type: "SEND" }, OPEN.answer).shown("answer")).toBe("open");
+      expect(run(size, OPEN.task, { type: "SEND" }, OPEN.answer, OPEN.menu).shown("answer")).toBe("chip");
+    }
+  });
+
   it("on a phone the line pill opens the panel beside the answer", () => {
     const r = run("phone", OPEN.answer, OPEN.line, { type: "SHOW_LINE" });
     expect(r.shown("line")).toBe("open");

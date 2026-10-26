@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
   CHATS_KEY, COMMUTE_KEY, HOME_WORK_KEY, LOOKED_UP_KEY, MEMORY_KINDS, forgetEverything, listStored, readChats, readLookedUp,
-  rememberedCount, rememberChat, rememberLookup, remembers, setRemembering,
+  rememberedCount, rememberChat, rememberLookup, remembers, saveHomeWork, setRemembering,
 } from "./memory";
 
 function fakeStorage(init: Record<string, string> = {}) {
@@ -78,5 +78,19 @@ describe("what we remember", () => {
     forgetEverything(s);
     for (const k of [COMMUTE_KEY, HOME_WORK_KEY, CHATS_KEY, LOOKED_UP_KEY]) expect(s.has(k)).toBe(false);
     expect(listStored(5, s)).toEqual([]);
+  });
+});
+
+describe("saving Home and Work", () => {
+  it("saves a place as Home and keeps Work alongside it, in the shape the daily card reads", () => {
+    const s = fakeStorage({ [HOME_WORK_KEY]: JSON.stringify({ work: { label: "Office", lon: -73.98, lat: 40.75 } }) });
+    expect(saveHomeWork("home", { label: "Empire State Building", lon: -73.9857, lat: 40.7484 }, s)).toBe(true);
+    expect(JSON.parse(s.getItem(HOME_WORK_KEY)!)).toEqual({ work: { label: "Office", lon: -73.98, lat: 40.75 }, home: { label: "Empire State Building", lon: -73.9857, lat: 40.7484 } });
+  });
+  it("keeps nothing while Home & Work is switched off", () => {
+    const s = fakeStorage();
+    setRemembering("homeWork", false, s);
+    expect(saveHomeWork("work", { label: "Office", lon: -73.98, lat: 40.75 }, s)).toBe(false);
+    expect(s.has(HOME_WORK_KEY)).toBe(false);
   });
 });

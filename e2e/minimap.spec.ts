@@ -4,9 +4,11 @@ import { mockNetwork } from "./mocks";
 test("street level shows a mini map whose heading cone turns with the camera", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockNetwork(page);
+  // Neighbourhood outlines arrive early; the crime and noise summaries load only with an analytics layer on.
+  const areas = page.waitForResponse((r) => r.url().includes("/api/areas"));
   await page.goto("/?flags=-agentHome");
   await expect(page.locator("canvas.maplibregl-canvas").first()).toBeVisible();
-  await page.waitForResponse((r) => r.url().includes("/api/aggregate"));
+  await areas;
   await page.getByTestId("view-switcher").getByRole("button", { name: "Street", exact: true }).click();
   const mini = page.getByTestId("street-minimap");
   await expect(mini).toBeVisible({ timeout: 15_000 });
@@ -36,9 +38,11 @@ test("street level mini map points to the nearest restroom and the card offers d
       }),
     }),
   );
+  // Neighbourhood outlines arrive early; the crime and noise summaries load only with an analytics layer on.
+  const areas = page.waitForResponse((r) => r.url().includes("/api/areas"));
   await page.goto("/?flags=-agentHome");
   await expect(page.locator("canvas.maplibregl-canvas").first()).toBeVisible();
-  await page.waitForResponse((r) => r.url().includes("/api/aggregate"));
+  await areas;
   await page.getByTestId("view-switcher").getByRole("button", { name: "Street", exact: true }).click();
   const chip = page.getByTestId("minimap-nearest-restroom");
   await expect(chip).toBeVisible({ timeout: 20_000 });

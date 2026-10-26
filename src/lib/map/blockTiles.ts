@@ -71,7 +71,7 @@ export function pushBlocks(map: MapLibreMap, blocks: BlockDatum[], geojson: Feat
   const source = map.getSource(SOURCE_IDS.blocks);
   if (!source) return;
   if (source.type !== "vector") {
-    (source as GeoJSONSource).setData(geojson);
+    void (source as GeoJSONSource).setData(geojson);
     return;
   }
   map.removeFeatureState({ source: SOURCE_IDS.blocks, sourceLayer: SOURCE_LAYER });

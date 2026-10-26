@@ -1,4 +1,5 @@
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
+import { api } from "@/lib/api/client";
 
 /**
  * Traffic speeds as a line layer under the labels: green / yellow / red by
@@ -42,8 +43,8 @@ export function mount(map: MapLibreMap): () => void {
   );
   const load = async () => {
     try {
-      const res = await fetch("/api/traffic");
-      if (res.ok) map.getSource<GeoJSONSource>(SRC)?.setData((await res.json()) as Parameters<GeoJSONSource["setData"]>[0]);
+      const { data } = await api.GET("/api/traffic");
+      if (data) void map.getSource<GeoJSONSource>(SRC)?.setData(data as unknown as Parameters<GeoJSONSource["setData"]>[0]);
     } catch {
       /* keep the last snapshot */
     }

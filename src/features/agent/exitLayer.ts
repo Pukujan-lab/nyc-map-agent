@@ -67,7 +67,7 @@ function ensure(map: MapLibreMap): void {
 /** Draw the exit, its walk and the place; replaces the previous exit answer. */
 export function showExit(map: MapLibreMap, v: ExitView): void {
   ensure(map);
-  (map.getSource(SRC) as GeoJSONSource).setData(exitToGeoJson(v));
+  void (map.getSource(SRC) as GeoJSONSource).setData(exitToGeoJson(v));
 }
 
 /** Your dot, with the heading wedge when the heading is known. */
@@ -76,7 +76,7 @@ export function setYou(map: MapLibreMap, at: LngLatTuple | null, heading: number
     if (!at) return;
     ensure(map);
   }
-  (map.getSource(YOU) as GeoJSONSource).setData({
+  void (map.getSource(YOU) as GeoJSONSource).setData({
     type: "FeatureCollection",
     features: at ? [{ type: "Feature", properties: heading === null ? {} : { heading }, geometry: { type: "Point", coordinates: at } }] : [],
   });
@@ -85,7 +85,7 @@ export function setYou(map: MapLibreMap, at: LngLatTuple | null, heading: number
 export function clearExit(map: MapLibreMap): void {
   for (const id of [SRC, YOU]) {
     const s = map.getSource(id);
-    if (s) (s as GeoJSONSource).setData({ type: "FeatureCollection", features: [] });
+    if (s) void (s as GeoJSONSource).setData({ type: "FeatureCollection", features: [] });
   }
 }
 

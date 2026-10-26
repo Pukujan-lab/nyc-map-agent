@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MAX_BYTES, transcribe, whisperLang } from "./stt";
+import { MAX_BYTES, detectedLang, transcribe, whisperLang } from "./stt";
 
 const form = (bytes: number, lang?: string) => {
   const f = new FormData();
@@ -30,6 +30,24 @@ describe("server speech-to-text", () => {
     expect(await r.json()).toEqual({ text: "Where is the nearest restroom?" });
     expect(sent!.get("language")).toBe("es");
     expect(sent!.get("model")).toBe("whisper-large-v3-turbo");
+  });
+
+  it("with lang=auto lets Whisper detect the language and returns it", async () => {
+    vi.stubEnv("GROQ_API_KEY", "k");
+    let sent: FormData | null = null;
+    const fake = ((_url: string, init: RequestInit) => { sent = init.body as FormData; return Promise.resolve(Response.json({ text: "¿Dónde está el baño?", language: "Spanish" })); }) as unknown as typeof fetch;
+    const r = await transcribe(form(100, "auto"), new Headers({ "cf-connecting-ip": "203.0.113.8" }), fake);
+    expect(await r.json()).toEqual({ text: "¿Dónde está el baño?", lang: "es" });
+    expect(sent!.get("language")).toBeNull();
+    expect(sent!.get("response_format")).toBe("verbose_json");
+  });
+
+  it("reads Whisper's language as a name or a code", () => {
+    expect(detectedLang("bengali")).toBe("bn");
+    expect(detectedLang("Haitian Creole")).toBe("ht");
+    expect(detectedLang("ko")).toBe("ko");
+    expect(detectedLang("klingon")).toBeNull();
+    expect(detectedLang(undefined)).toBeNull();
   });
 
   it("maps a browser language to Whisper's two-letter code", () => {

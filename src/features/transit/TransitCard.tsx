@@ -3,21 +3,22 @@ import { NoticeIcon, noticeKind } from "./noticeKind";
 import { useFlag } from "@/lib/flags";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { useStationHelp } from "@/lib/underground/stationHelp";
-import { X } from "lucide-react";
 import { formatStreetText } from "@/lib/streetName";
 import { liveProgress } from "./monotonic";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Accessibility, Crosshair, ScanEye, Star, Wrench } from "lucide-react";
+import { Accessibility, ChevronDown, Crosshair, ScanEye, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { arrivalsAt, directionLabel, estimateTrain, minutesUntil, stationOf, SYSTEM_LABELS, type LiveSystem, type StaticSystem, type SystemId, type Vehicle } from "./model";
 import { useAlerts, useBusRoute, useBusTrip, useNow, useStarred, useTransitData, type Outage, type TransitAlert } from "./hooks";
 import { setFollowed, stopFollowing, useFollowed } from "./follow";
 import { useSharedLocation } from "@/lib/geo/sharedLocation";
 import { getXray, setXray, useXray } from "./xray";
-import { AlertRow, presentAlert } from "./AlertCard";
+import { AlertRow, presentAlert, StationNotice } from "./AlertCard";
+import { lineOf, setSelectedLine, useSelectedLine } from "@/lib/transit/selectedLine";
 import { stationChanges } from "./alertFocus";
-import { alertTimeLabel, classifyRouteAlerts, plainAlert, skipNamesFor } from "./followInfo";
+import { alertTimeLabel, classifyRouteAlerts, plainAlert, skipNamesFor, upcomingStops } from "./followInfo";
 import { usePanel } from "@/lib/store/PanelContext";
+import { FollowSheet } from "./FollowSheet";
 
 type Data = Partial<Record<SystemId, { stat?: StaticSystem; live?: LiveSystem }>>;
 
@@ -78,26 +79,53 @@ export function StationDetails({ system, id }: { system: SystemId; id: string })
   const alerts = useAlerts(true).data;
   const now = useNow();
   const { isStarred, toggle } = useStarred();
-  const rows = arrivalsAt(system, data[system]?.live, id, now);
   const starKey = `${system}:station:${id}`;
   const xray = useXray();
   // Leaving the station panel turns x-ray off.
   useEffect(() => () => { if (getXray() === id) setXray(null); }, [id]);
   const st = data[system]?.stat;
   const routes = [...new Set(String(st?.stations.features.find((f) => f.properties.id === id)?.properties.routes ?? "").split(/[\s,]+/).filter(Boolean))];
+  // A line picked here (or on the map) narrows the panel to it; no pick shows every line at the station.
+  const picked = useSelectedLine();
+  const only = system === "subway" && picked && routes.includes(lineOf(picked.route)) ? lineOf(picked.route) : null;
+  const forLine = (rs: readonly string[]) => !only || rs.some((r) => lineOf(r) === only);
+  const rows = arrivalsAt(system, data[system]?.live, id, now).filter((a) => forLine([a.route]));
   const doors = system === "subway" ? (st?.entrances?.features ?? []).filter((f) => f.properties.id === id) : [];
-  const lineAlerts = (alerts?.alerts ?? []).filter((a) => a.kind === "delay" && a.routes.some((r) => routes.includes(r)));
+  const lineAlerts = (alerts?.alerts ?? []).filter((a) => a.kind === "delay" && a.routes.some((r) => routes.includes(r)) && forLine(a.routes));
   const change = system === "subway" && st ? stationChanges(alerts?.alerts ?? [], st).get(id) : undefined;
+  const skips = (change?.skips ?? []).filter((k) => forLine([k.route]));
+  const platforms = (change?.platform ?? []).filter((p) => forLine([p.route]));
   const [openSkip, setOpenSkip] = useState<string | null>(null);
   const alertById = new Map((alerts?.alerts ?? []).map((a) => [a.id, a]));
+  // Notices that name this station come first: a skipped or closed station must say so when tapped (#419).
+  const skipIds = new Set(skips.map((k) => k.alertId));
+  const stationNotices = (alerts?.alerts ?? []).filter((a) => (a.kind === "planned" || a.reroute) && !skipIds.has(a.id) && a.stops.some((s) => stationOf(system, s) === id) && forLine(a.routes));
+  const outages = system === "subway" ? (alerts?.outages ?? []).filter((o) => o.stops.some((s) => stationOf("subway", s) === id)) : [];
+  // "Stair" ×5 reads better than five identical rows.
+  const doorKinds = [...doors.reduce((m, d) => m.set(d.properties.kind || "Entrance", (m.get(d.properties.kind || "Entrance") ?? 0) + 1), new Map<string, number>())];
   return (
     <div className="space-y-3 text-sm">
       {routes.length ? (
-        <div className="flex flex-wrap gap-1" aria-label="Lines at this station">
-          {routes.map((r) => <RouteBullet key={r} system={system} route={r} data={data} />)}
-        </div>
+        system === "subway" ? (
+          // Every line here is highlighted on the map; tap one to show only it and its notices, tap again for all (owner, 2026-10-25).
+          <div className="flex flex-wrap items-center gap-1.5" aria-label="Lines at this station">
+            {routes.filter((r) => !r.endsWith("X")).map((r) => (
+              <button key={r} type="button" aria-pressed={only === r} aria-label={only === r ? `Show every line at this station` : `Show only the ${r} line`}
+                onClick={() => setSelectedLine(only === r ? null : lineOf(r))}
+                className={`rounded-full p-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${only === r ? "ring-2 ring-white" : only ? "opacity-50" : "hover:ring-2 hover:ring-white/60"}`}>
+                <RouteBullet system={system} route={r} data={data} />
+              </button>
+            ))}
+            <span className="text-xs text-muted-foreground">{only ? `Only the ${only} · tap it again for all lines` : "Tap a line to show only it"}</span>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-1" aria-label="Lines at this station">
+            {routes.map((r) => <RouteBullet key={r} system={system} route={r} data={data} />)}
+          </div>
+        )
       ) : null}
-      {change?.skips.map((k) => {
+      {stationNotices.map((a) => <StationNotice key={a.id} alert={a} />)}
+      {skips.map((k) => {
         const key = `${k.alertId}|${k.route}`;
         const open = openSkip === key;
         return (
@@ -111,22 +139,12 @@ export function StationDetails({ system, id }: { system: SystemId; id: string })
           </div>
         );
       })}
-      {change?.platform.map((p) => (
+      {platforms.map((p) => (
         <div key={`${p.alertId}|${p.route}`} data-testid="station-platform" className="flex items-center gap-2 rounded-md border-2 border-[hsl(var(--acc))] bg-[hsl(var(--acc)/0.2)] px-2 py-1.5 text-xs font-semibold">
           <RouteBullet system={system} route={p.route} data={data} />
           <span>Platform change: {p.notice}</span>
         </div>
       ))}
-      <Button size="sm" variant="outline" aria-pressed={isStarred(starKey)} onClick={() => toggle(starKey)}>
-        <Star className="mr-1.5 h-4 w-4" fill={isStarred(starKey) ? "currentColor" : "none"} />
-        {isStarred(starKey) ? "Starred" : "Star station"}
-      </Button>
-      {system === "subway" ? (
-        <Button size="sm" variant="outline" className="ml-2" aria-pressed={xray === id} onClick={() => setXray(xray === id ? null : id)}>
-          <ScanEye className="mr-1.5 h-4 w-4" />
-          X-ray
-        </Button>
-      ) : null}
       <ul className="space-y-2">
         {rows.map((a) => (
           <li key={`${a.route}|${a.direction}`} className="flex items-center gap-2">
@@ -141,26 +159,42 @@ export function StationDetails({ system, id }: { system: SystemId; id: string })
         ))}
         {rows.length === 0 ? <li className="text-muted-foreground">No live arrivals right now.</li> : null}
       </ul>
-      {system === "subway"
-        ? alerts?.outages.filter((o) => o.stops.some((s) => stationOf("subway", s) === id)).map((o) => <OutageRow key={o.id} o={o} />)
-        : null}
-      {alerts?.alerts
-        .filter((a) => (a.kind === "planned" || a.reroute) && a.stops.some((s) => stationOf(system, s) === id))
-        .map((a) => (
-          <div key={a.id} className="flex gap-2">
-            <Wrench className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-            <p><span className="text-xs text-muted-foreground">{a.type}</span> {a.text}</p>
-          </div>
-        ))}
       {lineAlerts.map((a) => (
         <div key={a.id} className="rounded-md border px-2 py-1.5 text-xs"><span className="mr-1 font-semibold">Delay</span>{a.text}</div>
       ))}
-      {doors.length ? (
-        <div>
-          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Entrances</div>
-          <ul className="mt-1 space-y-0.5">{doors.slice(0, 8).map((d, i) => <li key={i}>{d.properties.name || "Entrance"}{d.properties.kind ? <span className="text-muted-foreground"> · {d.properties.kind}</span> : null}</li>)}</ul>
-        </div>
+      {/* The rest waits behind a tap: a short summary first, detail on request. */}
+      {outages.length ? (
+        <details className="group rounded-md border px-2 py-1.5">
+          <summary className="flex cursor-pointer list-none items-center gap-2 font-medium">
+            <Accessibility className="h-4 w-4 shrink-0 text-blue-600" />
+            {outages.length === 1 ? `${outages[0].equipment} out` : `${outages.length} elevators or escalators out`}
+            {outages.some((o) => o.ada === "no") ? <span className="text-xs text-muted-foreground">· not step-free now</span> : null}
+            <ChevronDown className="ml-auto h-4 w-4 transition-transform group-open:rotate-180" aria-hidden />
+          </summary>
+          <div className="mt-2 space-y-2">{outages.map((o) => <OutageRow key={o.id} o={o} />)}</div>
+        </details>
       ) : null}
+      {doors.length ? (
+        <details className="group rounded-md border px-2 py-1.5">
+          <summary className="flex cursor-pointer list-none items-center gap-2 font-medium">
+            Entrances <span className="text-xs font-normal text-muted-foreground">{doorKinds.map(([k, n]) => (n > 1 ? `${k} ×${n}` : k)).join(" · ")}</span>
+            <ChevronDown className="ml-auto h-4 w-4 transition-transform group-open:rotate-180" aria-hidden />
+          </summary>
+          <ul className="mt-1 space-y-0.5">{doors.map((d, i) => <li key={i}>{d.properties.name || "Entrance"}{d.properties.kind ? <span className="text-muted-foreground"> · {d.properties.kind}</span> : null}</li>)}</ul>
+        </details>
+      ) : null}
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="outline" aria-pressed={isStarred(starKey)} onClick={() => toggle(starKey)}>
+          <Star className="mr-1.5 h-4 w-4" fill={isStarred(starKey) ? "currentColor" : "none"} />
+          {isStarred(starKey) ? "Starred" : "Star station"}
+        </Button>
+        {system === "subway" ? (
+          <Button size="sm" variant="outline" aria-pressed={xray === id} onClick={() => setXray(xray === id ? null : id)}>
+            <ScanEye className="mr-1.5 h-4 w-4" />
+            X-ray
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -329,13 +363,15 @@ export function FollowCard({ vehicle }: { vehicle: Vehicle }) {
   const railTrip = vehicle.system === "bus" ? undefined : data[vehicle.system]?.live?.trips.find((t) => t.id === tripId);
   const stops = vehicle.system === "bus"
     ? (busTrip.data?.calls ?? []).slice(0, 6).map((c) => ({ id: c.id, name: formatStreetText(c.name), eta: c.eta }))
-    : (railTrip?.stops ?? []).filter(([, t]) => t >= now - 30).slice(0, 6).map(([id, t]) => ({ id, name: stopName(data, vehicle.system, id) ?? id, eta: t }));
+    : upcomingStops(railTrip?.stops ?? [], vehicle.stopped?.kind === "at" ? vehicle.stopped.stop : vehicle.nextStop, now, (a, b) => stationOf(vehicle.system as SystemId, a) === stationOf(vehicle.system as SystemId, b)).slice(0, 6).map(([id, t]) => ({ id, name: stopName(data, vehicle.system, id) ?? id, eta: t }));
   const next = vehicle.stopped?.kind === "at" ? vehicle.stopped.stop : vehicle.nextStop;
   const nextName = next ? (stopName(data, vehicle.system, next) ?? next) : "—";
   const head = vehicle.system === "bus" ? stops[0] : undefined;
   const headId = head?.id ?? next;
   const headName = head?.name ?? nextName;
-  const headEta = head ? head.eta : (vehicle.eta ?? null);
+  // The same stop's time as the list below it: the trip's own, when it lists the next stop first.
+  const listed = stops[0] && headId && vehicle.system !== "bus" && stationOf(vehicle.system, stops[0].id) === stationOf(vehicle.system, headId) ? stops[0] : undefined;
+  const headEta = head ? head.eta : (listed?.eta ?? vehicle.eta ?? null);
   const busCalls = busTrip.data?.calls ?? [];
   const busLast = busCalls[busCalls.length - 1];
   const busDestName = busTrip.data?.destination || busLast?.name;
@@ -391,35 +427,28 @@ export function FollowCard({ vehicle }: { vehicle: Vehicle }) {
   }, []);
   if (home) {
     const ask = (text: string) => { setFollowed(null); seedChat(text); setChatOpen(true); };
-    return <>
-      <div className="task-top flex items-center gap-2" style={{ top: "calc(env(safe-area-inset-top) + 16px)" }} ref={ref} data-testid="follow-heading">
-        <div className="task-panel flex min-w-0 flex-1 items-center gap-2.5 rounded-full py-1.5 pl-1.5 pr-3">
-          <span className={`flex h-8 min-w-8 shrink-0 items-center justify-center px-2 text-[13px] font-extrabold ${vehicle.system === "bus" ? "rounded-[10px]" : "rounded-full"}`} style={{ background: vehicle.system === "bus" ? "#0ea5e9" : vehicle.color }}>{vehicle.route}</span>
-          <div className="min-w-0"><h2 className="text-sm font-bold">Following your {vehicle.route}</h2><p className="text-xs text-amber-200">{vehicle.system === "bus" ? "Bus" : vehicle.grade === "underground" ? "Underground" : "Train"} · {grouped.delays.length ? "Delays reported" : "No delay reported"}</p></div>
-        </div>
-        <button type="button" className="task-action task-secondary h-11 w-11 shrink-0 p-0" aria-label="Stop following" onClick={stopFollowing}><X size={18} /></button>
-      </div>
-      {!chatOpen ? <section className="task-panel task-bottom flex flex-col gap-2.5 p-2.5" data-testid="follow-card" aria-label={`Following ${vehicle.route}`}>
-        <div className="flex flex-col gap-1.5 px-1 py-1">
-          {headId ? <button type="button" onClick={() => openStop(headId, headName, headEta)} className="flex min-h-11 items-center justify-between gap-2 text-left text-[17px] font-bold"><span>Next: {headName}</span><span className="shrink-0 text-[15px] text-amber-200">{headEta ? `${minutesUntil(headEta, now)} min` : "—"}</span></button> : <p>No upcoming stop reported</p>}
-          {stops.filter((s) => s.id !== headId).slice(0, 2).map((s) => <button key={s.id} type="button" data-testid="follow-stop" onClick={() => openStop(s.id, s.name, s.eta)} className="flex min-h-8 items-center justify-between gap-2 text-left text-[13px] text-slate-300"><span>{s.name}</span><span>{s.eta ? `${minutesUntil(s.eta, now)} min` : "—"}</span></button>)}
-          {dest ? <p data-testid="follow-dest" className="text-[13px] text-slate-300">To {dest.name}</p> : destLoading ? <p>Loading destination…</p> : null}
-        </div>
-        <h3 className="task-caption px-1">Notices on the {vehicle.route}</h3>
-        <div className="flex max-h-[150px] flex-col gap-2 overflow-y-auto">
-          {[...grouped.delays, ...grouped.notices].map((a) => <button key={a.id} type="button" data-testid={grouped.delays.includes(a) ? "follow-delay" : "follow-notice"} onClick={() => openAlert(a)} className="flex items-center gap-2.5 rounded-[14px] border border-slate-400/15 bg-slate-900/35 px-3 py-2 text-left text-sm">
-            <NoticeIcon kind={noticeKind(a.text, { kind: a.kind, reroute: a.reroute })} color="#fcd34d" />
-            {/* One line each; tapping opens the full notice and frames it on the map. */}
-            <span className="flex min-w-0 flex-1 flex-col"><span className="truncate font-semibold">{plainAlert(a.text)}</span><span className="truncate text-[12px] text-slate-300">{alertTimeLabel(a) ?? "No time given"}</span></span>
-          </button>)}
-          {!grouped.delays.length && !grouped.notices.length ? <p className="px-1 text-[13px] text-slate-300">No notices reported</p> : null}
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          {vehicle.system === "bus" ? <button type="button" className="task-action bg-sky-500" onClick={() => ask(`Where should I get off the ${vehicle.route} bus for my trip?`)}>Where to get off</button> : <button type="button" className="task-action" onClick={() => { if (stationHelp) { setFollowed(null); stationHelp(headId ? stationOf(vehicle.system === "bus" ? "subway" : vehicle.system, headId) : undefined); } else ask(`Which exit should I take at ${headName}?`); }}>Exit help</button>}
-          <button type="button" className="task-action task-secondary" onClick={() => ask(`What are the other ways to make my ${vehicle.route} trip?`)}>Other ways</button>
-        </div>
-      </section> : null}
-    </>;
+    const notices = [...grouped.delays, ...grouped.notices].map((a) => <button key={a.id} type="button" data-testid={grouped.delays.includes(a) ? "follow-delay" : "follow-notice"} onClick={() => openAlert(a)} className="flex items-center gap-2.5 rounded-[14px] border border-slate-400/15 bg-slate-900/35 px-3 py-2 text-left text-sm">
+      <NoticeIcon kind={noticeKind(a.text, { kind: a.kind, reroute: a.reroute })} color="#fcd34d" />
+      {/* One line each; tapping opens the full notice and frames it on the map. */}
+      <span className="flex min-w-0 flex-1 flex-col"><span className="truncate font-semibold">{plainAlert(a.text)}</span><span className="truncate text-[12px] text-slate-300">{alertTimeLabel(a) ?? "No time given"}</span></span>
+    </button>);
+    // The stops list starts with the next stop too, so it can be opened from the sheet; the trip's own times win.
+    const stopRows = [...(headId && !stops.some((s) => s.id === headId) ? [{ id: headId, name: headName, eta: headEta }] : []), ...stops].slice(0, 6).map((s) => <button key={s.id} type="button" data-testid="follow-stop" onClick={() => openStop(s.id, s.name, s.eta)} className="flex min-h-9 items-center justify-between gap-2 text-left text-[13px] text-slate-300"><span className="truncate">{s.name}</span><span className="shrink-0">{s.eta ? `${minutesUntil(s.eta, now)} min` : "—"}</span></button>);
+    return chatOpen ? null : <FollowSheet
+      route={vehicle.route}
+      color={vehicle.color}
+      bus={vehicle.system === "bus"}
+      status={`${vehicle.system === "bus" ? "Bus" : vehicle.grade === "underground" ? "Underground" : "Train"} · ${grouped.delays.length ? "Delays reported" : "No delay reported"}`}
+      next={headId ? { name: headName, eta: headEta ? `${minutesUntil(headEta, now)} min` : "—" } : null}
+      stops={stopRows}
+      dest={dest ? <p data-testid="follow-dest" className="px-1 text-[13px] text-slate-300">To {dest.name}</p> : destLoading ? <p className="px-1 text-[13px]">Loading destination…</p> : null}
+      notices={notices}
+      noticeCount={notices.length}
+      actions={<div className="grid grid-cols-2 gap-2">
+        {vehicle.system === "bus" ? <button type="button" className="task-action bg-sky-500" onClick={() => ask(`Where should I get off the ${vehicle.route} bus for my trip?`)}>Where to get off</button> : <button type="button" className="task-action" onClick={() => { if (stationHelp) { setFollowed(null); stationHelp(headId ? stationOf(vehicle.system === "bus" ? "subway" : vehicle.system, headId) : undefined); } else ask(`Which exit should I take at ${headName}?`); }}>Exit help</button>}
+        <button type="button" className="task-action task-secondary" onClick={() => ask(`What are the other ways to make my ${vehicle.route} trip?`)}>Other ways</button>
+      </div>}
+    />;
   }
   return (
     <div className="pointer-events-none absolute z-30 flex justify-center top-[calc(env(safe-area-inset-top)+var(--edge)+var(--topbar-h)+var(--sp-2))] left-[max(var(--edge),var(--sheet-left,0px))] right-[var(--edge)] lg:right-[calc(var(--edge)+13rem+var(--sp-3))]">

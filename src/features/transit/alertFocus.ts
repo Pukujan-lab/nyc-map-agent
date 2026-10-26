@@ -29,7 +29,17 @@ export type AlertGeometry = {
   reroute: Array<{ route: string; coords: Pos[] }>;
   /** [[west, south], [east, north]] around everything above, or null. */
   bounds: [Pos, Pos] | null;
+  /** "No [M] between A and B": no trains run on `affected`, so it is drawn broken, not highlighted. */
+  suspended: boolean;
+  /** The two ends of a suspension, where a replacement shuttle picks people up. */
+  ends: Array<{ name: string; coord: Pos }>;
 };
+
+/** "No [M] between Myrtle Av (Broadway) and Delancey St-Essex St" -> the two end names. */
+export function suspendedBetween(text: string): [string, string] | null {
+  const m = /^No \[?[\w-]+\]? (?:trains? )?between (.+?) and (.+?)(?:\n|$)/i.exec(text.trim());
+  return m ? [m[1].trim(), m[2].trim()] : null;
+}
 
 /** Metres between two lon/lat points (equirectangular; fine at city scale). */
 function dist(a: Pos, b: Pos): number {
@@ -148,10 +158,12 @@ export function namedStations(text: string, sys: StaticSystem, route: string): s
 }
 
 export function alertGeometry(a: TransitAlert, sys: StaticSystem): AlertGeometry {
-  const g: AlertGeometry = { affected: [], skipped: [], reroute: [], bounds: null };
+  const g: AlertGeometry = { affected: [], skipped: [], reroute: [], bounds: null, suspended: false, ends: [] };
   const byId = new Map(sys.stations.features.map((f) => [f.properties.id, f]));
   const seen = new Set<string>();
+  const between = suspendedBetween(a.text);
   for (const route of a.routes) {
+    if (between && suspension(g, sys, route, between)) continue;
     const shape = sys.shapes[route], sm = sys.stopM[route];
     if (!shape || !sm) continue;
     const c = shape.c as Pos[];
@@ -186,6 +198,32 @@ export function alertGeometry(a: TransitAlert, sys: StaticSystem): AlertGeometry
     g.bounds = [[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]];
   }
   return g;
+}
+
+/**
+ * A suspension on one line: exactly the stretch between the two named ends, the
+ * stations strictly inside it skipped, the ends kept (trains still turn there).
+ * False when either end is not on this line, so the general rules apply.
+ */
+function suspension(g: AlertGeometry, sys: StaticSystem, route: string, [from, to]: [string, string]): boolean {
+  const shape = sys.shapes[route], sm = sys.stopM[route];
+  if (!shape || !sm) return false;
+  const on = sys.stations.features.filter((f) => f.properties.id in sm);
+  const find = (n: string) => on.find((f) => sameStation(n, f.properties.name));
+  const fa = find(from), fb = find(to);
+  if (!fa || !fb || fa === fb) return false;
+  const lo = Math.min(sm[fa.properties.id], sm[fb.properties.id]), hi = Math.max(sm[fa.properties.id], sm[fb.properties.id]);
+  const c = shape.c as Pos[];
+  const coords = c.filter((_, i) => shape.m[i] >= lo && shape.m[i] <= hi);
+  if (coords.length < 2) return false;
+  g.suspended = true;
+  g.affected.push({ route, coords });
+  for (const f of on) {
+    const m = sm[f.properties.id];
+    if (m > lo && m < hi && !g.skipped.some((s) => s.id === f.properties.id)) g.skipped.push({ id: f.properties.id, name: f.properties.name, coord: f.geometry.coordinates as Pos });
+  }
+  for (const f of [fa, fb]) if (!g.ends.some((e) => e.name === f.properties.name)) g.ends.push({ name: f.properties.name, coord: f.geometry.coordinates as Pos });
+  return true;
 }
 
 /** Line status for the Lines drawer badge. */

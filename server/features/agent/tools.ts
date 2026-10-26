@@ -1,14 +1,16 @@
 import { tool } from "ai";
-import { readPage, webSearch } from "./webLookup";
+import { findEvent, readPage } from "./webLookup";
 import { z } from "zod";
-import { command, playbackSpeed, type AgentCommand, type LngLatTuple, type MapAction, type Trip } from "../../../src/features/agent/schema";
-import { elevatorStatus, geocode, hazardsAt, nearestRestrooms, publicRestrooms, routeWalk, serviceAlerts, subwayAlertEntities, subwayVehicles, troubleStations, weatherAt, type Place, type RestroomRow } from "./services";
-import { exitActions, placeActions, restroomActions, troubleActions, tripActions } from "./mapActions";
-import { stationExit } from "./exit";
+import { command, LAYER_HELP_IDS, playbackSpeed, type AgentCommand, type LngLatTuple, type MapAction, type Trip } from "../../../src/features/agent/schema";
+import { elevatorStatus, geocode, hazardsAt, nearestRestrooms, publicRestrooms, routeWalk, serviceAlerts, subwayAlertEntities, subwayVehicles, troubleStations, weatherAt, type Place, type RestroomRow, type WalkResult } from "./services";
+import { exitActions, LAYER_HELP, layerAction, lineAction, placeActions, restroomActions, troubleActions, tripActions } from "./mapActions";
 import { buildDriveTrip } from "./drive/trip";
 import type { DriveRouter } from "./drive/router";
-import { safe, toNyLocal, tripBrief } from "./trip";
-import { openDataEntrances, type Station } from "./transit";
+import { portalFor, safe, straight, toNyLocal, tripBrief } from "./trip";
+import { distM, openDataEntrances, type Station } from "./transit";
+import { loadGuideLandmarks, type GuideLandmark } from "../../../src/lib/guide/landmarkGuide";
+import { landmarkAtTurn, landmarksOnWay } from "./landmarksOnWay";
+import { sameStation } from "../../../src/lib/transit/serviceChanges";
 import { lineTroubles, otherLinesAt, stuckTrains, troubleSummary, type FeedAlert, type LiveVehicle } from "../../../src/lib/transit/trouble";
 import { planTrip, type PlanDeps } from "./plan";
 import { withSources, type SourceLedger } from "./freshness";
@@ -20,11 +22,14 @@ export interface ToolContext {
   deps?: PlanDeps & {
     driveRouter?: DriveRouter;
     restrooms?: () => Promise<RestroomRow[]>;
+    walk?: typeof routeWalk;
     alerts?: typeof serviceAlerts;
     /** MTA trouble inputs (#361), injectable for tests. */
     alertEntities?: () => Promise<FeedAlert[]>;
     vehicles?: (routes: string[]) => Promise<LiveVehicle[]>;
     now?: () => number;
+    /** The guide landmarks, injectable for tests. */
+    landmarks?: () => Promise<readonly GuideLandmark[]>;
   };
   /** The followed vehicle key from street view ("subway:<trip id>"), to say whether that train is the stuck one. */
   followedTrain?: string | null;
@@ -56,8 +61,11 @@ export const args = {
   find_event: z.object({ query: z.string().min(3).max(160).describe("The event's name and anything known: organiser, date, \"Luma\" or \"Eventbrite\" (e.g. \"3 Percent Club event New York October 24 2026\")") }),
   read_page: z.object({ url: z.string().url().describe("An event page from find_event results") }),
   nearest_restroom: z.object({ place: z.string().default("here") }),
+  station_exit: z.object({
+    station: z.string().min(2).default("here").describe("The subway station as the user names it (\"Herald Sq\", \"34 St-Herald Sq\"), or \"here\" for the one they are at"),
+    to: z.string().min(2).describe("Where they are going once out: a landmark or address"),
+  }),
   elevator_status: z.object({ station: z.string().min(2) }),
-  station_exit: z.object({ to: z.string().min(2).describe("The place the person is going: landmark, address or business"), station: z.string().min(2).optional().describe("The station they arrive at, when they said it") }),
   line_status: z.object({ lines: z.array(z.string().regex(/^[A-Za-z0-9]{1,3}$/)).min(1).max(6).describe("Subway lines as the MTA names them, e.g. [\"L\"] or [\"4\",\"5\",\"6\"]") }),
   flyTo: z.object({ place: z.string(), zoom: z.number().min(9).max(20).optional() }),
   tripRef: z.object({ tripId: z.string() }),
@@ -69,9 +77,47 @@ export const args = {
     depart: when.describe("When to leave: the user's own words (\"tomorrow 9am\", \"now\") or a New York time 2026-10-22T09:00"),
   }),
   setTime: z.object({ iso: z.string().regex(/^\d{4}-\d\d-\d\dT\d\d:\d\d/) }),
+  suggest_layer: z.object({ layer: z.enum(LAYER_HELP_IDS) }),
 };
 
+const nearestTo = (all: Station[], p: LngLatTuple): Station | undefined => [...all].sort((a, b) => distM(a.at, p) - distM(b.at, p))[0];
+
+/** The station a rider names. Several share a name ("Times Sq", "86 St"), so the one nearest where they are going wins. */
+export function pickStation(all: Station[], name: string, toward: LngLatTuple): Station | null {
+  return nearestTo(all.filter((x) => sameStation(name, x.name)), toward) ?? null;
+}
+
+/** Within about 150 m of the user's point: close enough to be that point. */
+const NEAR = 0.0015;
+
+/**
+ * A tool result as the model sees it: any point at the user's location becomes
+ * "here", so their position never reaches the model as numbers (docs/PRIVACY.md,
+ * #374). The map still gets the exact point through emit and offer.
+ */
+export function hideHere(value: unknown, me: { lon: number; lat: number }): unknown {
+  const near = (lon: unknown, lat: unknown) => typeof lon === "number" && typeof lat === "number" && Math.abs(lon - me.lon) < NEAR && Math.abs(lat - me.lat) < NEAR;
+  if (Array.isArray(value)) return value.length === 2 && near(value[0], value[1]) ? "here" : value.map((v) => hideHere(v, me));
+  if (!value || typeof value !== "object") return value;
+  const o = value as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(o)) out[k] = hideHere(v, me);
+  if (near(o.lon, o.lat)) { delete out.lon; delete out.lat; out.at = "here"; }
+  return out;
+}
+
 export function makeTools(ctx: ToolContext) {
+  const tools = allTools(ctx);
+  const me = ctx.location;
+  if (!me) return tools;
+  for (const t of Object.values(tools) as Array<{ execute?: (...a: never[]) => unknown }>) {
+    const run = t.execute;
+    if (run) t.execute = async (...a: never[]) => hideHere(await run(...a), me);
+  }
+  return tools;
+}
+
+function allTools(ctx: ToolContext) {
   const trips = new Map<string, Trip>();
   const resolve = async (text: string): Promise<Place> => {
     if (/^(here|my location|current location|me)$/i.test(text.trim())) {
@@ -108,16 +154,44 @@ export function makeTools(ctx: ToolContext) {
     return { ...t, scheduled: scheduleFor(t.departIso, n), alternatives: t.alternatives.map((a) => ({ ...a, scheduled: scheduleFor(a.departIso, n) })) };
   };
 
+  /** A walk as a trip, so "Want to start?" can draw it and open its card like any other route. */
+  const walkTrip = (from: Place, to: { label: string; at: LngLatTuple }, w: WalkResult): Trip => {
+    const start = now();
+    const t: Trip = {
+      id: crypto.randomUUID(), mode: "walk",
+      origin: { label: from.label, at: at(from) }, destination: { label: to.label, at: to.at },
+      departIso: toNyLocal(start), arriveIso: toNyLocal(new Date(start.getTime() + w.durationS * 1000)),
+      legs: [{ kind: "walk", label: `Walk to ${to.label}`, coords: w.coords, durationS: w.durationS, distanceM: w.distanceM, turns: w.turns }],
+      routes: [], alerts: [], elevators: [], hazards: [], weather: null, exitAdvice: null, context: [], skips: [], stubbed: [], alternatives: [],
+    };
+    trips.set(t.id, t);
+    return t;
+  };
+  // A turn onto an unnamed footpath ("Turn right onto the path") tells a walker nothing, so the model never gets one.
+  // Turns name the landmark beside them, and `passes` lists what you walk by on which hand,
+  // so the answer can say "on your left, next to the library" (#418 scene 4).
+  const walkBrief = async (t: Trip) => {
+    const l = t.legs[0];
+    if (l.kind !== "walk") return null;
+    const marks = await (ctx.deps?.landmarks ?? loadGuideLandmarks)().catch(() => [] as readonly GuideLandmark[]);
+    const turns = l.turns.filter((x) => !/onto the path$/i.test(x.text)).slice(0, 8).map((x) => {
+      const near = landmarkAtTurn(x.at, marks);
+      return near ? `${x.text} (by ${near})` : x.text;
+    });
+    return { tripId: t.id, minutes: Math.max(1, Math.round(l.durationS / 60)), meters: Math.round(l.distanceM), turns, passes: landmarksOnWay(l.coords, marks) };
+  };
+
   return {
     geocode: tool({ description: "Find an NYC address or landmark.", inputSchema: args.geocode, execute: async ({ text }) => { const p = await resolve(text); offer(placeActions(p)); return p; } }),
     route_walk: tool({
-      description: "Walking route (OSRM) between two places.",
+      description: "Walking route (OSRM) between two places: minutes, meters, the turns, and a tripId for showRoute and openPanel.",
       inputSchema: args.route_walk,
       execute: async ({ from, to }) => {
-        const dest = await resolve(to);
-        const w = await routeWalk(at(await resolve(from)), at(dest));
+        const [o, dest] = await Promise.all([resolve(from), resolve(to)]);
+        const t = walkTrip(o, { label: dest.label, at: at(dest) }, await (ctx.deps?.walk ?? routeWalk)(at(o), at(dest)));
+        offer(tripActions(t));
         offer(placeActions(dest));
-        return { minutes: Math.round(w.durationS / 60), meters: Math.round(w.distanceM), turns: w.turns.slice(0, 8).map((t) => t.text) };
+        return await walkBrief(t);
       },
     }),
     transit_plan: tool({
@@ -146,13 +220,37 @@ export function makeTools(ctx: ToolContext) {
       }),
     }),
     nearest_restroom: tool({
-      description: "Closest public restrooms (NYC Open Data) to a place, open ones first: name, distance in meters, status, hours, accessibility.",
+      description: "Closest public restrooms (NYC Open Data) to a place, skipping ones closed right now by their listed hours: name, distance in meters, status, hours, accessibility, and walkToNearest (minutes, turns, tripId) for the first one.",
       inputSchema: args.nearest_restroom,
       execute: sourced(async ({ place }: z.infer<typeof args.nearest_restroom>) => {
-        const spots = nearestRestrooms(await (ctx.deps?.restrooms ?? publicRestrooms)(), at(await resolve(place)));
+        const from = await resolve(place);
+        const spots = nearestRestrooms(await (ctx.deps?.restrooms ?? publicRestrooms)(), at(from), 3, now());
         offer(restroomActions(spots));
+        // The way to the nearest one, so the answer gives directions rather than just a name.
+        const first = spots[0];
+        const w = first ? await safe((ctx.deps?.walk ?? routeWalk)(at(from), [first.lon, first.lat]), null) : null;
+        const walk = first && w ? await walkBrief(walkTrip(from, { label: first.name, at: [first.lon, first.lat] }, w)) : null;
         // Coordinates stay out of the model's view; the button carries them.
-        return { restrooms: spots.map((r) => ({ name: r.name, distanceM: r.distanceM, status: r.status, hours: r.hours, accessibility: r.accessibility, operator: r.operator })) };
+        return { restrooms: spots.map((r) => ({ name: r.name, distanceM: r.distanceM, status: r.status, hours: r.hours, openNow: r.openNow, accessibility: r.accessibility, operator: r.operator })), walkToNearest: walk };
+      }),
+    }),
+    station_exit: tool({
+      description: "Which exit to take at a subway station for a place: the exit by its corner and street, elevator notes, and the walk from that exit (minutes, turns, tripId for showRoute and openPanel). Use for \"which way out\" and \"which exit for X\".",
+      inputSchema: args.station_exit,
+      execute: sourced(async ({ station, to }: z.infer<typeof args.station_exit>) => {
+        const src = ctx.deps?.entrances ?? openDataEntrances;
+        const [all, dest] = await Promise.all([src.stations(), resolve(to)]);
+        const here = /^(here|my station|this station)$/i.test(station.trim());
+        const st = (here ? null : pickStation(all, station, at(dest))) ?? nearestTo(all, at(await resolve(here ? "here" : station)));
+        if (!st) throw new Error(`Could not find the station "${station}".`);
+        const outages = await safe(elevatorStatus(st.name), [] as string[]);
+        const exit = await portalFor(st, await safe(src.entrances(st.complexId), []), at(dest), "exit", outages);
+        const from: Place = { label: `${st.name}, ${exit.label}`, at: [exit.lon, exit.lat] };
+        const w = await safe((ctx.deps?.walk ?? routeWalk)(at(from), at(dest)), null);
+        const t = w ? walkTrip(from, { label: dest.label, at: at(dest) }, w) : null;
+        offer(exitActions({ station: st.name, exit: { at: at(from), label: exit.label, elevatorOnly: exit.elevatorOnly }, destination: { label: dest.label, at: at(dest) }, walk: w ?? straight(at(from), at(dest)) }));
+        if (t) offer(tripActions(t));
+        return { station: st.name, exit: exit.label, elevatorOnly: exit.elevatorOnly, outage: exit.outage, elevatorOutages: outages.slice(0, 3), walkFromExit: t ? await walkBrief(t) : null };
       }),
     }),
     line_status: tool({
@@ -173,6 +271,7 @@ export function makeTools(ctx: ToolContext) {
         const vehicles = delayed.length ? await safe((ctx.deps?.vehicles ?? subwayVehicles)(delayed), [] as LiveVehicle[]) : [];
         const stuck = stuckTrains(vehicles, troubles, stations, nowS);
         offer(troubleActions(troubles, stuck));
+        offer(routes.slice(0, 2).map(lineAction));
         const followed = ctx.followedTrain?.replace(/^subway:/, "") ?? null;
         const followedSeen = followed ? vehicles.find((v) => v.tripId === followed) : undefined;
         return {
@@ -192,24 +291,19 @@ export function makeTools(ctx: ToolContext) {
     }),
     weather_forecast: tool({ description: "Hourly forecast (Open-Meteo) at a place and local time, up to 7 days ahead.", inputSchema: args.weather_forecast, execute: sourced(async ({ place, time }: z.infer<typeof args.weather_forecast>) => weatherAt(at(await resolve(place)), localTime(time))) }),
     hazards: tool({ description: "Active National Weather Service alerts at a place.", inputSchema: args.hazards, execute: sourced(async ({ place }: z.infer<typeof args.hazards>) => ({ alerts: await hazardsAt(at(await resolve(place))) })) }),
-    find_event: tool({ description: "Search the web for a named event in New York (Luma, Eventbrite, the organiser's site). Only when the user asks about a specific event.", inputSchema: args.find_event, execute: sourced(async ({ query }: z.infer<typeof args.find_event>) => webSearch(/new york|nyc|brooklyn|queens|manhattan|bronx|staten/i.test(query) ? query : `${query} New York`)) }),
+    find_event: tool({ description: "Search the web for a named event in New York (Luma, Eventbrite, Meetup, Partiful, the organiser's site). Only when the user asks about a specific event or what is on at a place they name. Tries a wider search on its own when the first finds nothing.", inputSchema: args.find_event, execute: sourced(async ({ query }: z.infer<typeof args.find_event>) => findEvent(query)) }),
     read_page: tool({ description: "Read one event page from find_event to get its venue address, date and time.", inputSchema: args.read_page, execute: sourced(async ({ url }: z.infer<typeof args.read_page>) => readPage(url)) }),
-    station_exit: tool({
-      description: "Which subway exit to take for a place: the station exit closest to it (as a street corner), the walk from that exit, and elevator outages. The map shows the exit and the walk by itself.",
-      inputSchema: args.station_exit,
-      execute: async ({ to, station }) => {
-        const x = await stationExit(await resolve(to), station, { entrances: ctx.deps?.entrances });
-        if (!x) return { error: "No subway station within a short walk of that place." };
-        offer(exitActions(x));
-        return { station: x.station.name, exit: x.exit.label, elevatorOnly: x.exit.elevatorOnly, outage: x.exit.outage, walkMinutes: Math.max(1, Math.round(x.walk.durationS / 60)) };
-      },
-    }),
     elevator_status: tool({ description: "Current MTA elevator/escalator outages at a station.", inputSchema: args.elevator_status, execute: sourced(async ({ station }: z.infer<typeof args.elevator_status>) => ({ outages: await elevatorStatus(station) })) }),
     flyTo: tool({ description: "Map: fly the camera to a place.", inputSchema: args.flyTo, execute: async ({ place, zoom }) => { const p = await resolve(place); offer(placeActions(p)); return emit({ type: "flyTo", lon: p.at[0], lat: p.at[1], zoom }); } }),
     showRoute: tool({ description: "Map: draw a planned trip.", inputSchema: args.tripRef, execute: ({ tripId }) => emit({ type: "showRoute", trip: tripOf(tripId) }) }),
     openPanel: tool({ description: "Map: open the trip summary panel (weather chip, lines, alerts, elevators, exit, ETA).", inputSchema: args.tripRef, execute: ({ tripId }) => emit({ type: "openPanel", trip: tripOf(tripId) }) }),
     enterStreetView: tool({ description: "Map: drop to street level at a place.", inputSchema: args.enterStreetView, execute: async ({ place }) => { const p = await resolve(place); return emit({ type: "enterStreetView", lon: p.at[0], lat: p.at[1] }); } }),
     playFlythrough: tool({ description: "Map: load the fast-forward preview of a planned trip behind a Play button. Only when the user asks to preview or play it; it never starts on its own.", inputSchema: args.playFlythrough, execute: ({ tripId, speed }) => emit({ type: "playFlythrough", trip: tripOf(tripId), speed }) }),
+    suggest_layer: tool({
+      description: `Map: offer a button that turns on the map layer answering the question (#313). The person taps it; you never switch layers yourself. Layers: ${Object.entries(LAYER_HELP).map(([id, what]) => `${id} (${what})`).join(", ")}.`,
+      inputSchema: args.suggest_layer,
+      execute: ({ layer }) => { offer([layerAction(layer)]); return { button: layerAction(layer).label }; },
+    }),
     setTime: tool({ description: "Map: set the time the map shows (for forecasts/planned work).", inputSchema: args.setTime, execute: ({ iso }) => emit({ type: "setTime", iso }) }),
   };
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { isBrave, recordTurn, serverSttAvailable, transcribeTurn, type Recording } from "./serverStt";
+import { isBrave, isPhone, recordTurn, serverSttAvailable, transcribeTurn, type Recording } from "./serverStt";
 import { startBargeIn } from "./bargeIn";
 import { speakQueued } from "./tts";
 
@@ -56,9 +56,11 @@ function getRecognitionCtor(): SpeechRecognitionCtor | null {
 }
 
 export interface UseSpeechOptions {
-  onFinalTranscript: (text: string) => void;
+  onFinalTranscript: (text: string, heardLang?: string) => void;
   /** Recognition and spoken-answer language (BCP 47); default "en-US". */
   lang?: string;
+  /** Let the server detect the spoken language (no language picked); the transcript callback gets it. */
+  detectLang?: boolean;
 }
 
 export interface UseSpeechResult {
@@ -79,11 +81,13 @@ export interface UseSpeechResult {
 export function useSpeech({
   onFinalTranscript,
   lang = "en-US",
+  detectLang = false,
 }: UseSpeechOptions): UseSpeechResult {
   const [sttSupported] = useState(() => getRecognitionCtor() !== null || serverSttAvailable());
   // Brave (and any browser whose recognizer fails with "network") records the turn and
   // transcribes it on our server instead.
-  const serverModeRef = useRef(isBrave() || (getRecognitionCtor() === null && serverSttAvailable()));
+  // Phones too: their recognizer only hears the app's language, so someone speaking another one got nonsense (2026-10-25).
+  const serverModeRef = useRef(serverSttAvailable() && (isBrave() || isPhone() || getRecognitionCtor() === null));
   const recordingRef = useRef<Recording | null>(null);
   const retryOnServerRef = useRef(false);
   const [listening, setListening] = useState(false);
@@ -116,10 +120,10 @@ export function useSpeech({
           return;
         }
         setInterim("…");
-        const out = await transcribeTurn(blob, lang);
+        const out = await transcribeTurn(blob, detectLang ? null : lang);
         setListening(false);
         setInterim("");
-        if ("text" in out) { if (out.text) callbackRef.current(out.text); return; }
+        if ("text" in out) { if (out.text) callbackRef.current(out.text, out.lang); return; }
         setError(out.error === "unavailable" ? "Voice isn't set up on this server yet. Type your question instead."
           : out.error === "busy" ? "Too many voice requests just now. Try again in a minute."
           : "I couldn't make that out. Try again, or type it.");
@@ -128,7 +132,7 @@ export function useSpeech({
       setListening(false);
       setError("Microphone access is blocked. Type your question instead.");
     });
-  }, [lang]);
+  }, [lang, detectLang]);
 
   const startListening = useCallback(() => {
     if (serverModeRef.current) { startServerTurn(); return; }

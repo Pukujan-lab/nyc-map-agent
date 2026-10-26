@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Briefcase, ChevronDown, House, Route, TrainFront } from "lucide-react";
+import { Briefcase, ChevronDown, House, Route, Settings, TrainFront } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -8,20 +8,24 @@ import { useCommuteFocus } from "./commuteFocus";
 import type { MapPoint } from "./schema";
 import { ExitStairsIcon, RestroomIcon } from "./homeIcons";
 import { useT } from "@/lib/i18n/appLang";
+import { useMenuT } from "@/lib/i18n/menuText";
 
 export interface TaskHandlers {
   restroom: () => void;
   train: () => void;
   plan: () => void;
   exit: () => void;
+  /** Phones only: language and the QR code come up from behind the chat. */
+  settings?: () => void;
 }
 
-// Phone: four 72px tiles for thumbs. Wide screens: small pills in one row, so they don't cover the map.
-const TASK = "h-[72px] flex-col gap-1.5 rounded-[18px] border border-slate-700 bg-slate-900/90 p-0 text-[13px] font-semibold text-slate-100 shadow-lg backdrop-blur-md hover:bg-slate-800/95 hover:text-white lg:h-10 lg:flex-row lg:gap-2 lg:rounded-full lg:px-4 lg:[&_svg]:!h-[18px] lg:[&_svg]:!w-[18px]";
+// Small pills in one row everywhere: on a phone the tasks are suggestions over the chat, not tiles that cover the map (owner, 2026-10-25).
+const TASK = "h-10 shrink-0 gap-2 rounded-full border border-slate-700 bg-slate-900/90 px-3.5 text-[13px] font-semibold text-slate-100 shadow-lg backdrop-blur-md hover:bg-slate-800/95 hover:text-white [&_svg]:!h-[18px] [&_svg]:!w-[18px]";
 
 /** The four task buttons above the chat bar on the idle home (#370). */
 export function TaskButtons({ on }: { on: TaskHandlers }) {
   const t = useT();
+  const menuT = useMenuT();
   const tasks: Array<[string, ReactNode, () => void]> = [
     [t("restroom"), <RestroomIcon key="i" className="!h-6 !w-6" />, on.restroom],
     [t("myTrain"), <TrainFront key="i" className="!h-[22px] !w-[22px]" aria-hidden="true" />, on.train],
@@ -29,13 +33,19 @@ export function TaskButtons({ on }: { on: TaskHandlers }) {
     [t("findExit"), <ExitStairsIcon key="i" className="!h-[22px] !w-[22px]" />, on.exit],
   ];
   return (
-    <div className="pointer-events-auto grid grid-cols-4 gap-2 lg:flex lg:justify-center" data-testid="home-tasks">
+    <div className="pointer-events-auto -mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] lg:justify-center" data-testid="home-tasks">
       {tasks.map(([label, icon, run]) => (
         <Button key={label} type="button" variant="ghost" className={TASK} onClick={run}>
           {icon}
-          <span>{label}</span>
+          <span className="whitespace-nowrap">{label}</span>
         </Button>
       ))}
+      {on.settings ? (
+        <Button type="button" variant="ghost" className={cn(TASK, "sm:hidden")} onClick={on.settings} data-testid="settings-chip">
+          <Settings className="!h-[22px] !w-[22px]" aria-hidden="true" />
+          <span className="whitespace-nowrap">{menuT("settings")}</span>
+        </Button>
+      ) : null}
     </div>
   );
 }

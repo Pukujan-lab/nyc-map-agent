@@ -28,11 +28,9 @@ describe("paintAboveVehicles", () => {
 });
 
 describe("trainIconOffset", () => {
-  it("flat map: only dwelling trains lift", () => {
-    const e = trainIconOffset(false, 0) as unknown as unknown[];
-    expect(e[0]).toBe("case");
-    expect(e[2]).toEqual(["literal", [0, -STOP_LIFT_PX]]);
-    expect(e[3]).toEqual(["literal", [0, -0]]);
+  it("flat map: every train stays on its track, dwelling or not", () => {
+    expect(trainIconOffset(false, 0)).toEqual(["literal", [0, -0]]);
+    expect(trainIconOffset(false, 26)).toEqual(["literal", [0, -26]]);
   });
   it("3D: elevated dwelling trains lift by both, and the notch rides above the bullet", () => {
     const e = trainIconOffset(true, 26) as unknown as unknown[];

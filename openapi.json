@@ -1026,13 +1026,25 @@
                   "type": "string",
                   "format": "binary"
                 }
+              },
+              "application/vnd.pmtiles": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
               }
             }
           },
           "206": {
-            "description": "PMTiles byte range (Range header)",
+            "description": "Byte range (Range header)",
             "content": {
               "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/vnd.pmtiles": {
                 "schema": {
                   "type": "string",
                   "format": "binary"
@@ -1076,13 +1088,25 @@
                   "type": "string",
                   "format": "binary"
                 }
+              },
+              "application/vnd.pmtiles": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
               }
             }
           },
           "206": {
-            "description": "PMTiles byte range (Range header)",
+            "description": "Byte range (Range header)",
             "content": {
               "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/vnd.pmtiles": {
                 "schema": {
                   "type": "string",
                   "format": "binary"
@@ -1144,6 +1168,7 @@
               "type": "string",
               "enum": [
                 "block",
+                "taxblock",
                 "nta",
                 "cd",
                 "borough"
@@ -1263,6 +1288,7 @@
               "type": "string",
               "enum": [
                 "block",
+                "taxblock",
                 "nta",
                 "cd",
                 "borough"
@@ -1362,13 +1388,25 @@
                   "type": "string",
                   "format": "binary"
                 }
+              },
+              "application/vnd.pmtiles": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
               }
             }
           },
           "206": {
-            "description": "PMTiles byte range (Range header)",
+            "description": "Byte range (Range header)",
             "content": {
               "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/vnd.pmtiles": {
                 "schema": {
                   "type": "string",
                   "format": "binary"
@@ -1412,13 +1450,25 @@
                   "type": "string",
                   "format": "binary"
                 }
+              },
+              "application/vnd.pmtiles": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
               }
             }
           },
           "206": {
-            "description": "PMTiles byte range (Range header)",
+            "description": "Byte range (Range header)",
             "content": {
               "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/vnd.pmtiles": {
                 "schema": {
                   "type": "string",
                   "format": "binary"
@@ -1740,13 +1790,25 @@
                   "type": "string",
                   "format": "binary"
                 }
+              },
+              "model/gltf-binary": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
               }
             }
           },
           "206": {
-            "description": "PMTiles byte range (Range header)",
+            "description": "Byte range (Range header)",
             "content": {
               "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "model/gltf-binary": {
                 "schema": {
                   "type": "string",
                   "format": "binary"
@@ -1790,13 +1852,25 @@
                   "type": "string",
                   "format": "binary"
                 }
+              },
+              "model/gltf-binary": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
               }
             }
           },
           "206": {
-            "description": "PMTiles byte range (Range header)",
+            "description": "Byte range (Range header)",
             "content": {
               "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "model/gltf-binary": {
                 "schema": {
                   "type": "string",
                   "format": "binary"

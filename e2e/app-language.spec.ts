@@ -12,7 +12,8 @@ for (const [width, height] of [[375, 667], [320, 568]]) {
       { type: "text", text: "最近的厕所在中央公园的 Heckscher 运动场。" }, { type: "done" },
     ]) }));
     await page.goto("/");
-    await expect(page.getByRole("button", { name: "Restroom" })).toBeVisible();
+    // The agent overlay loads lazily; a busy machine can take a few seconds.
+    await expect(page.getByRole("button", { name: "Restroom" })).toBeVisible({ timeout: 15_000 });
     await page.getByLabel("Ask the assistant").fill("我要上厕所");
     await page.getByRole("button", { name: "Send", exact: true }).click();
     const ask = page.getByLabel("问助手");
@@ -24,5 +25,14 @@ for (const [width, height] of [[375, 667], [320, 568]]) {
     const box = await restroom.boundingBox();
     expect(box!.x + box!.width).toBeLessThanOrEqual(width);
     if (SHOTS) await page.screenshot({ path: `${SHOTS}/zh-home-${width}.png` });
+
+    // A phone has no menu row; language comes up from behind the chat in Settings, and follows too.
+    await expect(page.getByTestId("menu-row")).toHaveCount(0);
+    await expect(page.getByTestId("lang-chip")).toBeHidden();
+    await page.getByTestId("settings-chip").click();
+    const sheet = page.getByTestId("settings-sheet");
+    await expect(sheet.getByLabel("语言")).toBeVisible();
+    const box2 = (await sheet.boundingBox())!;
+    expect(box2.x + box2.width).toBeLessThanOrEqual(width);
   });
 }

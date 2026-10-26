@@ -14,6 +14,7 @@ import { setOpenMenu } from "@/lib/store/openMenu";
  *   open; from 640 px it docks to the side and both stay.
  * - A task, the orb or a line opening closes an open menu; so does sending.
  * - Tapping a chip or pill opens that surface again until something new opens.
+ * - A question the person sends opens its answer, even during a task ("I'm lost").
  */
 export type ScreenSize = "small" | "phone" | "wide";
 
@@ -73,7 +74,8 @@ export const screenMachine = setup({
       { guard: rising("menu"), actions: assign({ menu: true, answerReveal: false }) },
       { actions: assign({ menu: ({ event }) => event.on }) },
     ],
-    ANSWER: { guard: ({ context, event }) => event.on !== context.answer, actions: assign({ answer: ({ event }) => event.on, answerReveal: false, lineReveal: false }) },
+    // A question the person just sent (SEND) opens its answer even over a task: only a closing answer forgets that.
+    ANSWER: { guard: ({ context, event }) => event.on !== context.answer, actions: assign({ answer: ({ event }) => event.on, answerReveal: ({ context, event }) => event.on && context.answerReveal, lineReveal: false }) },
     SEND: { actions: [assign({ answerReveal: true, lineReveal: false }), "menuShut", "closeMenu"] },
     SHOW_ANSWER: { actions: [assign({ answerReveal: true, lineReveal: false }), "menuShut", "closeMenu"] },
     SHOW_LINE: { actions: assign({ lineReveal: true, answerReveal: false }) },
@@ -111,6 +113,15 @@ export function useScreen<T>(pick: (v: ScreenView) => T): T {
     (f) => { const s = actor.subscribe(f); return () => s.unsubscribe(); },
     () => pick(actor.getSnapshot().value as ScreenView),
     () => pick(actor.getSnapshot().value as ScreenView),
+  );
+}
+
+/** The screen's size class: "wide" from 640 px, which docks panels to the side instead of over the chat. */
+export function useScreenSize(): ScreenSize {
+  return useSyncExternalStore(
+    (f) => { const s = actor.subscribe(f); return () => s.unsubscribe(); },
+    () => actor.getSnapshot().context.size,
+    () => actor.getSnapshot().context.size,
   );
 }
 

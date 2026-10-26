@@ -30,6 +30,10 @@
 - An alternative ("Take the C instead") is clickable too: it shows where to transfer, which platform, and the new arrival time on the map.
 - Tapping a line shows which line it is and its station names, and opens the line panel with its notices.
 - Trains move smoothly between updates. Their path along the track is worked out in advance from the timetable shapes and arrival predictions, and the live feed is synced every 30 seconds to correct it. A train never jumps backwards (`src/features/transit/model.ts`, `dwell.ts`, `monotonic.ts`).
+- Repeated taps on the same spot cycle through what is there (owner, 2026-10-25). One train in a station: the first tap picks the train, the second picks the station. Three trains in a station: taps one, two and three pick each train in turn, the fourth picks the station.
+- Tapping the train you are following again, when nothing else is on that spot, lets go of it and eases the camera back, like Stop following (#297).
+- A station served by several lines highlights all of them when picked, and its panel offers each line's bullet. Tapping a bullet (say the Q) isolates that line on the map and narrows the station panel to the Q's notices, skips and arrivals; tapping it again brings every line back. Tapping a running train isolates its line too.
+- A focused line is drawn solid end to end, underground included, and only that line's station repairs and skips show.
 - Trains are drawn as simple boxes; the detailed 3D city is optional and off by default. The Top view is a flat 2D map.
 
 ## Guidance
@@ -41,7 +45,8 @@
 - Never suggest food, cafés, shops, events or other things to do unless the person asks.
 - Unasked help is limited to their own trip: delays, planned work, skipped stops, elevator outages, weather that affects the trip.
 - Never tell people how to manage their time ("leave 8 min later"). Show the facts; they plan their own day.
-- Updates appear inside the app only. No push notifications.
+- One exception, decided by the owner on 2026-10-25 to match the demo video: a trip planned for later has a Remind me button. Tapping it puts the trip in the phone's own calendar with an alert 10 minutes before the time they chose. The agent may offer it for those trips; it never sets one by itself or picks a different time.
+- Updates appear inside the app only. No push notifications from the app; the reminder above is the phone calendar's.
 
 ## Memory and data
 - What the app learns (daily rides, Home and Work, past conversations, trips looked up) stays on the phone by default.

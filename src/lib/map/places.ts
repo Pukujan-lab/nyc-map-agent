@@ -105,7 +105,21 @@ export function placesStale(map: MapLibreMap, chosen: ReadonlySet<string>): bool
   const want = classesFor(chosen).length ? "visible" : "none";
   return (map.getStyle()?.layers ?? []).some((l) => POI_LAYERS.test(l.id) && (map.getLayoutProperty(l.id, "visibility") ?? "visible") !== want);
 }
+/** Names another layer already labels (the landmark guide), lowercased, so a basemap place never repeats one (#312). */
+let skipNames: string[] = [];
+const lastChosen = new WeakMap<MapLibreMap, ReadonlySet<string>>();
+export function skipPlaceNames(map: MapLibreMap, names: readonly string[]): void {
+  skipNames = [...new Set(names.map((n) => n.toLowerCase()))].sort();
+  const chosen = lastChosen.get(map);
+  if (chosen) applyPlaces(map, chosen);
+}
+/** The basemap POI filter for these classes, minus names drawn elsewhere. Pure, for tests. */
+export function placeFilter(classes: string[], skip: readonly string[] = skipNames): FilterSpecification {
+  const match: FilterSpecification = ["match", ["get", "class"], classes, true, false];
+  return skip.length ? ["all", match, ["!", ["in", ["downcase", ["to-string", ["get", "name"]]], ["literal", skip]]]] : match;
+}
 export function applyPlaces(map: MapLibreMap, chosen: ReadonlySet<string>): void {
+  lastChosen.set(map, chosen);
   const classes = classesFor(chosen);
   let store = original.get(map);
   if (!store) { store = new Map<string, FilterSpecification | undefined>(); original.set(map, store); }
@@ -117,7 +131,7 @@ export function applyPlaces(map: MapLibreMap, chosen: ReadonlySet<string>): void
       continue;
     }
     const base = store.get(l.id);
-    const match: FilterSpecification = ["match", ["get", "class"], classes, true, false];
+    const match = placeFilter(classes);
     map.setFilter(l.id, (base ? ["all", base, match] : match) as FilterSpecification);
     map.setLayoutProperty(l.id, "visibility", "visible");
   }

@@ -146,6 +146,8 @@ export const restroomSpot = z.object({
   hours: z.string().nullable().default(null),
   accessibility: z.string().nullable().default(null),
   operator: z.string().nullable().default(null),
+  /** Open at the time asked, from the listed hours; null when the hours can't be read. */
+  openNow: z.boolean().nullable().default(null),
 });
 export type RestroomSpot = z.infer<typeof restroomSpot>;
 
@@ -155,6 +157,9 @@ export type RestroomSpot = z.infer<typeof restroomSpot>;
  * so a button only ever draws data a tool returned. `id` dedupes repeats.
  */
 const actionBase = { id: z.string().max(200), label: z.string().max(80) };
+/** Layers the agent may offer as a button: the plain on/off ones in the Layers menu. */
+export const LAYER_HELP_IDS = ["citibike", "health", "parksPlaces", "busStops", "xray", "streetArt", "businesses"] as const;
+export type LayerHelpId = (typeof LAYER_HELP_IDS)[number];
 export const mapAction = z.discriminatedUnion("kind", [
   z.object({ ...actionBase, kind: z.literal("flyTo"), lon: z.number().min(-180).max(180), lat: z.number().min(-90).max(90), zoom: z.number().min(9).max(20).optional() }),
   z.object({ ...actionBase, kind: z.literal("showRestroom"), restroom: restroomSpot }),
@@ -182,6 +187,12 @@ export const mapAction = z.discriminatedUnion("kind", [
     path: z.array(lngLat).min(2).max(2000),
     walkMin: z.number().nonnegative(),
   }),
+  /** A trip planned ahead: the person taps it to put a reminder in their phone's calendar. */
+  z.object({ ...actionBase, kind: z.literal("remindTrip"), trip }),
+  /** A map layer that answers the question (#313). The person taps it; the agent never switches layers itself. */
+  z.object({ ...actionBase, kind: z.literal("showLayer"), layer: z.enum(LAYER_HELP_IDS) }),
+  /** A subway line's live trains and notices, where Follow a train is: on a phone the chat is the way there. */
+  z.object({ ...actionBase, kind: z.literal("showLine"), route: z.string().min(1).max(4) }),
 ]);
 export type MapAction = z.infer<typeof mapAction>;
 /** Most buttons one answer carries. */
@@ -248,11 +259,14 @@ export type AskContext = z.infer<typeof askContext>;
 /** A BCP 47 language tag as browsers report it ("en-US", "zh-Hans-CN"). */
 export const langTag = z.string().max(35).regex(/^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8}){0,3}$/);
 
+/** Most chat messages one question may carry; the app sends only the latest ones. */
+export const MAX_MESSAGES = 30;
+
 export const requestBody = z.object({
   messages: z
     .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().max(4000) }))
     .min(1)
-    .max(30),
+    .max(MAX_MESSAGES),
   /** Browser geolocation, only when the user granted it. */
   location: z.object({ lon: z.number(), lat: z.number() }).nullable().default(null),
   /** The mode chip (Walk / Transit / Drive); the model treats it as a preference. */
@@ -267,5 +281,7 @@ export const requestBody = z.object({
    * is on. Never a history, and never coordinates.
    */
   memory: z.string().max(240).optional(),
+  /** Where the person is in the underground helper (riding, or at a station finding an exit). Never stored. */
+  underground: z.object({ stage: z.enum(["riding", "at-station"]), station: z.string().max(200), exit: z.string().max(200).nullable() }).optional(),
 });
 export type AgentRequest = z.infer<typeof requestBody>;

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Search, TrainFront, TriangleAlert } from "lucide-react";
+import { Briefcase, ChevronRight, House, Search, TrainFront, TriangleAlert } from "lucide-react";
+import { useMenuT } from "@/lib/i18n/menuText";
 import { useState, type ReactNode } from "react";
 import { useLookedUp, useMemoryPrefs, type LookedUp } from "@/lib/memory/memory";
 import { useMapState } from "@/lib/store/MapStateContext";
@@ -39,11 +40,12 @@ const at = (e: LookedUp["from"]) => (e.at ? ` (${e.at[1].toFixed(4)}, ${e.at[0].
 
 export default function MyDay({ onClose }: { onClose: () => void }) {
   const [open, setOpen] = useState<SectionId | null>("today");
+  const t = useMenuT();
   const toggle = (id: SectionId) => setOpen(open === id ? null : id);
   const memory = useMemoryPrefs();
   const places = useHomeWork();
   const looked = useLookedUp();
-  const { seedChat } = useMapState();
+  const { seedChat, flyTo } = useMapState();
   const usual: Array<[CommuteTo, UsualTrip]> = (["work", "home"] as const).flatMap((to) => {
     const u = readUsual(to);
     return u ? [[to, u] as [CommuteTo, UsualTrip]] : [];
@@ -66,7 +68,7 @@ export default function MyDay({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="flex flex-col" data-testid="my-day">
-      <Section id="today" icon={<TriangleAlert className="h-5 w-5 text-[#fcd34d]" aria-hidden />} label="Today" badge={notices?.length || undefined} open={open === "today"} onToggle={toggle}>
+      <Section id="today" icon={<TriangleAlert className="h-5 w-5 text-[#fcd34d]" aria-hidden />} label={t("today")} badge={notices?.length || undefined} open={open === "today"} onToggle={toggle}>
         {notices?.length ? notices.map((row) => (
           <button key={row.id} type="button" className={ROW} onClick={() => openNotice(row)} data-testid="my-day-line" data-open={row.open}>
             {row.elevator ? <TriangleAlert className="h-6 w-6 shrink-0 text-[#fcd34d]" aria-hidden /> : <Bullet ride={{ route: row.route, color: row.color ?? routeColor(row.route) }} size="xs" />}
@@ -76,10 +78,21 @@ export default function MyDay({ onClose }: { onClose: () => void }) {
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-[#a5b4cb]" aria-hidden />
           </button>
-        )) : <p className={EMPTY}>{!memory.rides ? "Daily rides are paused" : !lines.length ? "No usual line yet" : notices ? "No notices" : "Checking…"}</p>}
+        )) : <p className={EMPTY}>{!memory.rides ? t("ridesPaused") : !lines.length ? t("noUsualLine") : notices ? t("noNotices") : t("checking")}</p>}
       </Section>
       <div className={RULE} />
-      <Section id="rides" icon={<TrainFront className="h-5 w-5 text-[#93c5fd]" aria-hidden />} label="Your rides" open={open === "rides"} onToggle={toggle}>
+      <Section id="rides" icon={<TrainFront className="h-5 w-5 text-[#93c5fd]" aria-hidden />} label={t("yourRides")} open={open === "rides"} onToggle={toggle}>
+        {places.home || places.work ? (
+          // Saved places (#313): one tap flies the map back to them.
+          <div className="flex flex-wrap gap-1.5 px-2 pb-1">
+            {([["home", places.home, House], ["work", places.work, Briefcase]] as const).map(([k, spot, Icon]) => spot ? (
+              <button key={k} type="button" data-testid={`saved-${k}`} onClick={() => { flyTo({ lon: spot.lon, lat: spot.lat, zoom: 16 }); onClose(); }}
+                className="flex h-9 max-w-full items-center gap-1.5 rounded-full border border-[rgba(148,163,184,0.25)] px-3 text-[13px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]">
+                <Icon className="h-4 w-4 shrink-0" aria-hidden /><span className="truncate">{t(k)} · {spot.label}</span>
+              </button>
+            ) : null)}
+          </div>
+        ) : null}
         {chips.length && places.home && places.work ? (
           <div className="flex flex-wrap gap-1.5 px-2 pb-1">
             {chips.map((c) => (
@@ -90,10 +103,10 @@ export default function MyDay({ onClose }: { onClose: () => void }) {
               </button>
             ))}
           </div>
-        ) : <p className={EMPTY}>{places.home && places.work ? "Plan a trip between Home and Work" : "Save Home and Work to see them here"}</p>}
+        ) : <p className={EMPTY}>{places.home && places.work ? t("planHomeWork") : t("saveHomeWork")}</p>}
       </Section>
       <div className={RULE} />
-      <Section id="looked" icon={<Search className="h-5 w-5 text-[#93c5fd]" aria-hidden />} label="Looked up" open={open === "looked"} onToggle={toggle}>
+      <Section id="looked" icon={<Search className="h-5 w-5 text-[#93c5fd]" aria-hidden />} label={t("lookedUp")} open={open === "looked"} onToggle={toggle}>
         {looked.length ? looked.map((t) => (
           <button key={`${t.t}:${t.from.label}>${t.to.label}`} type="button" className={`${ROW} bg-[rgba(15,23,42,0.5)]`} data-testid="looked-up"
             onClick={() => ask(`Plan my trip from ${t.from.label}${at(t.from)} to ${t.to.label}${at(t.to)}, leaving now.`)}>
@@ -101,7 +114,7 @@ export default function MyDay({ onClose }: { onClose: () => void }) {
             <span className="min-w-0 flex-1 truncate">{lookedUpWhen(t.t, t.from.label, t.to.label)}</span>
             <ChevronRight className="h-4 w-4 shrink-0 text-[#a5b4cb]" aria-hidden />
           </button>
-        )) : <p className={EMPTY}>{memory.trips ? "Trips you plan show here" : "Trips looked up are paused"}</p>}
+        )) : <p className={EMPTY}>{memory.trips ? t("tripsShowHere") : t("tripsPaused")}</p>}
       </Section>
     </div>
   );

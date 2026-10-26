@@ -18,7 +18,9 @@ import { applyPlaces, classesFor, placesStale, usePlaces, withQuickPlaces } from
 import { insetFilters } from "@/lib/map/miniStyle";
 import { useMapOptions } from "@/lib/map/mapOptions";
 import { applyBuildings, cityDetail, mapLevel, wantsFlatBuildings } from "@/lib/map/buildings";
-import { focusLandmarks, installLandmarkLabels, isLandmarkLayer } from "@/lib/map/landmarkLabels";
+import { focusLandmarks, guideLandmarkNamed, installLandmarkLabels, isLandmarkLayer, landmarkAt } from "@/lib/map/landmarkLabels";
+import { landmarkAt as landmarkModelAt } from "@/lib/map/landmarks";
+import { LandmarkDetails } from "@/components/LandmarkDetails";
 import { STREET_LEVEL_RANGE_M, describeGuide, pickGuideLandmarks } from "@/lib/guide/landmarkGuide";
 import { setWalkEye } from "@/lib/map/walkEye";
 import { applyMapTheme, buildingEdge, setThemeCoords, usePalette } from "@/lib/theme";
@@ -33,11 +35,14 @@ import MapLibreMap, {
 } from "react-map-gl/maplibre";
 import { LngLat, type GeoJSONSource } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import "@/lib/map/maplibreWorker";
+import { cameraTransform } from "@/lib/map/cameraTransform";
 import type { NtaBoundary } from "@/lib/api/nta";
 import { formatCount, formatPercent } from "@/lib/format";
 import { blockContaining, blockKey } from "@/lib/geo/blocks";
 import { eyePick } from "@/lib/map/eyePick";
 import { boroughOutlinesToGeoJson } from "@/lib/geo/boroughs";
+import { boroughAt } from "@/lib/geo/boroughAt";
 import { NtaIndex } from "@/lib/geo/ntaIndex";
 import { areasToGeoJson, blockPointsToGeoJson, type AreaDatum } from "@/lib/geo/areas";
 import {
@@ -53,8 +58,11 @@ import {
   applyStreetPalette,
   loadStreetTextures,
   BASEMAP_STYLE_URL,
+  VECTOR_SOURCE,
   installDataLayers,
+  warmBasemapFonts,
 } from "@/lib/map/basemap";
+import { markBasemapReady } from "@/lib/map/basemapReady";
 import {
   blockSelectionToGeoJson,
   blocksToGeoJson,
@@ -165,6 +173,8 @@ import { parseAt, streetLabel, streetPosition, type NamedLine } from "@/lib/map/
 import { MAX_HEIGHT_M, pitchForHeight, STREET_LEVEL_M } from "@/lib/map/cameraHeight";
 import { hoverBlocked } from "@/lib/map/hover";
 import { FEATURES } from "@/features";
+import { hasMapillaryToken, MAPILLARY_TOKEN } from "@/lib/api/mapillary";
+import { showCoverage } from "@/lib/map/mapillaryCoverage";
 
 /**
  * How far the camera may tilt — MapLibre's own ceiling. Anything less and walk
@@ -217,6 +227,20 @@ function detailForBlock(datum: BlockDatum, layer: MapModel["layer"]): string {
   return `${formatCount(datum.noiseCount)} noise · ${formatCount(datum.crashCount)} crashes`;
 }
 
+/**
+ * Phones: the credits start folded behind the "i" toggle; one tap shows them, as the licence asks.
+ * MapLibre unfolds them when the first credits arrive, which can be before or long after "load",
+ * so every source event checks until they have been folded once (the way a drag of the map does).
+ */
+let creditsFolded = false;
+function foldCredits(map: MaplibreMapInstance) {
+  if (creditsFolded || window.innerWidth >= 768) return;
+  const attrib = map.getContainer().querySelector(".maplibregl-ctrl-attrib");
+  if (!attrib?.classList.contains("maplibregl-compact")) return;
+  attrib.classList.remove("maplibregl-compact-show");
+  creditsFolded = true;
+}
+
 export function MapView({
   model,
   boundaries,
@@ -261,6 +285,8 @@ export function MapView({
   const [corner, setCorner] = useState<string | null>(null);
   /** "Grand Street & Essex Street": street underfoot and nearest cross street, throttled. */
   const [streetHere, setStreetHere] = useState<string | null>(null);
+  /** The street alone and its borough, for the walk card's noise and crash dots. */
+  const [levelsFor, setLevelsFor] = useState<{ street: string; borough: string | null } | null>(null);
   const { showPanel, emptyMapTap, content: panelContent, minimized: panelMinimized, drawerOpen } = usePanel();
   // The hover card is a mouse affordance; on touch / narrow screens the sheet
   // already shows the same numbers.
@@ -309,6 +335,7 @@ export function MapView({
     selectedBlockKey,
     selectNta,
     selectBlock,
+    streetViewOpen,
   } = useMapState();
   const businesses = businessesPicked || walking;
   const storefrontsOn = storefrontsFlag && businesses;
@@ -438,6 +465,11 @@ export function MapView({
   useEffect(() => {
     describeAtRef.current = describeAt;
   }, [describeAt]);
+  /** The borough lookup for the walk card, read from the walking loop. */
+  const ntaIndexRef = useRef(ntaIndex);
+  useEffect(() => {
+    ntaIndexRef.current = ntaIndex;
+  }, [ntaIndex]);
 
   /** The block grid, held in a ref for the same reason as `describeAt`. */
   const blocksRef = useRef(model.blocks);
@@ -525,22 +557,19 @@ export function MapView({
     };
   }, [ready, styleEpoch, transitFocus, places, businesses, health, parksPlaces, citibike, opts, t, extrude, flatBuildings, analytics]);
 
+  const loaded = useRef(false);
   const handleLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
-    if (!map) return;
+    if (!map || loaded.current) return;
+    loaded.current = true;
     installDataLayers(map);
     applyAtmosphere(map);
+    // "load" waits for the first tiles; onSourceData below covers browsers that never send it.
+    markBasemapReady();
     setMapInstance(map);
     watchMapCovers(map);
     setStyleEpoch((epoch) => epoch + 1);
     setReady(true);
-    // Phones: the credits start folded behind the "i" toggle (MapLibre opens
-    // compact attribution on load); one tap shows them, as the licence asks.
-    if (window.innerWidth < 768) {
-      const attrib = map.getContainer().querySelector(".maplibregl-ctrl-attrib");
-      attrib?.classList.remove("maplibregl-compact-show");
-      attrib?.removeAttribute("open");
-    }
     const blockTiles = () =>
       void installBlockTiles(map).then((swapped) => swapped && setStyleEpoch((epoch) => epoch + 1));
     blockTiles();
@@ -700,6 +729,19 @@ export function MapView({
         });
         return;
       }
+      // A landmark badge or name (#325): its picture, so someone can tell where they are.
+      const mark = clicked ? landmarkAt(clicked, event.point) : null;
+      if (mark) {
+        showPanel({ id: `landmark:${mark.id}`, title: mark.name, subtitle: `Landmark · ${mark.borough}`, details: <LandmarkDetails landmark={mark} /> });
+        return;
+      }
+      // The building itself from above (#311): a tap on a landmark model's footprint opens it too.
+      const model = walking ? undefined : landmarkModelAt(event.lngLat.lng, event.lngLat.lat);
+      const modelGuide = model ? guideLandmarkNamed(model.name) : null;
+      if (model && modelGuide) {
+        showPanel({ id: `landmark:${model.id}`, title: model.name, subtitle: `Landmark · ${modelGuide.borough}`, details: <LandmarkDetails landmark={modelGuide} /> });
+        return;
+      }
       const dir = city3d ? signsMod.current?.directoryAt(event.target, event.lngLat.lng, event.lngLat.lat) : null;
       if (dir) {
         const shops = (dir.dir ?? "").split("|").filter(Boolean);
@@ -712,7 +754,7 @@ export function MapView({
               <ul className="space-y-1 text-sm">
                 {shops.map((name) => <li key={name}>{name}</li>)}
               </ul>
-              <DirectionsFromHere lon={dir.lng} lat={dir.lat} />
+              <DirectionsFromHere lon={dir.lng} lat={dir.lat} label={dir.name} />
             </div>
           ),
         });
@@ -725,11 +767,12 @@ export function MapView({
       if (walking) {
         const hit = eyePick(event.target, event.point.x, event.point.y);
         if (hit?.kind === "landmark") {
+          const guide = guideLandmarkNamed(hit.landmark.name);
           showPanel({
             id: `landmark:${hit.landmark.id}`,
             title: hit.landmark.name,
             subtitle: "Landmark",
-            details: <DirectionsFromHere lon={hit.landmark.lon} lat={hit.landmark.lat} />,
+            details: guide ? <LandmarkDetails landmark={guide} /> : <DirectionsFromHere lon={hit.landmark.lon} lat={hit.landmark.lat} label={hit.landmark.name} />,
           });
           return;
         }
@@ -739,7 +782,7 @@ export function MapView({
               id: `school:${hit.props.school}`,
               title: hit.props.school,
               subtitle: "School · NYC DOE (LCGMS)",
-              details: <DirectionsFromHere lon={hit.lng} lat={hit.lat} />,
+              details: <DirectionsFromHere lon={hit.lng} lat={hit.lat} label={hit.props.school} />,
             });
             return;
           }
@@ -753,7 +796,7 @@ export function MapView({
               details: (
                 <div className="space-y-2">
                   {shops.length ? <ul className="space-y-1 text-sm">{shops.map((name) => <li key={name}>{name}</li>)}</ul> : null}
-                  <DirectionsFromHere lon={shop.lng} lat={shop.lat} />
+                  <DirectionsFromHere lon={shop.lng} lat={shop.lat} label={shop.name} />
                 </div>
               ),
             });
@@ -809,10 +852,10 @@ export function MapView({
     if (!map) return;
     const showBlocks = scale === "blocks";
 
-    (map.getSource(SOURCE_IDS.neighborhoods) as GeoJSONSource | undefined)
+    void (map.getSource(SOURCE_IDS.neighborhoods) as GeoJSONSource | undefined)
       ?.setData(neighborhoodGeoJson);
     pushBlocks(map, model.blocks, blockGeoJson);
-    (map.getSource(SOURCE_IDS.boroughs) as GeoJSONSource | undefined)?.setData(
+    void (map.getSource(SOURCE_IDS.boroughs) as GeoJSONSource | undefined)?.setData(
       boroughGeoJson,
     );
 
@@ -898,8 +941,8 @@ export function MapView({
     // Unit + style: the classic glass columns cover blocks and neighborhoods;
     // everything else (filled areas, district/borough columns, heatmap) reads
     // from the areas / block-points sources.
-    (map.getSource(SOURCE_IDS.areas) as GeoJSONSource | undefined)?.setData(areaGeoJson);
-    (map.getSource(SOURCE_IDS.blockPoints) as GeoJSONSource | undefined)?.setData(blockPointGeoJson);
+    void (map.getSource(SOURCE_IDS.areas) as GeoJSONSource | undefined)?.setData(areaGeoJson);
+    void (map.getSource(SOURCE_IDS.blockPoints) as GeoJSONSource | undefined)?.setData(blockPointGeoJson);
     const coarse = scale === "districts" || scale === "boroughs";
     const classic = walking || (mapStyle === "columns" && !coarse);
     const vis = (on: boolean) => (on ? "visible" : "none");
@@ -1070,20 +1113,27 @@ export function MapView({
     if (!ready) return;
     const map = mapRef.current?.getMap();
     if (!map) return;
-    (map.getSource(SOURCE_IDS.emphasis) as GeoJSONSource | undefined)?.setData(
+    void (map.getSource(SOURCE_IDS.emphasis) as GeoJSONSource | undefined)?.setData(
       emphasisGeoJson,
     );
-    (
+    void (
       map.getSource(SOURCE_IDS.blockSelection) as GeoJSONSource | undefined
     )?.setData(selectionGeoJson);
   }, [ready, styleEpoch, emphasisGeoJson, selectionGeoJson]);
+
+  // Where street photos exist, while the photo sheet is open (#10).
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!ready || !map || !streetViewOpen || !hasMapillaryToken) return;
+    return showCoverage(map, MAPILLARY_TOKEN);
+  }, [ready, styleEpoch, streetViewOpen]);
 
   useEffect(() => {
     if (!ready || !cameraTarget) return;
     const map = mapRef.current?.getMap();
     if (!map) return;
     // The camera keeps whatever tilt and bearing the user chose; only a
-    // `fly_to` that names a pitch changes it.
+    // target that names a pitch or bearing changes it.
     const pitch =
       typeof cameraTarget.pitch === "number"
         ? Math.min(Math.max(cameraTarget.pitch, 0), MAX_PITCH)
@@ -1092,10 +1142,12 @@ export function MapView({
       center: [cameraTarget.lon, cameraTarget.lat] as [number, number],
       zoom: cameraTarget.zoom ?? 13,
       pitch,
-      bearing: map.getBearing(),
+      bearing: cameraTarget.bearing ?? map.getBearing(),
     };
     if (reducedMotion) {
       map.jumpTo(camera);
+    } else if (cameraTarget.glide) {
+      map.easeTo({ ...camera, duration: 1400, essential: true });
     } else {
       map.flyTo({ ...camera, duration: 1200, essential: true });
     }
@@ -1205,6 +1257,7 @@ export function MapView({
     const map = mapRef.current?.getMap();
     if (!ready || !walking || !map) {
       setStreetHere(null);
+      setLevelsFor(null);
       return;
     }
     let lines: ReturnType<typeof namedStreetLines> = [];
@@ -1222,7 +1275,12 @@ export function MapView({
         focusLandmarks(map, { lon: c.lng, lat: c.lat });
       }
       // Street, then the landmark you can see: "Grand St & Essex St · Empire State Building ahead".
-      const street = streetLabel(streetPosition(lines, c.lng, c.lat));
+      const pos = streetPosition(lines, c.lng, c.lat);
+      const street = streetLabel(pos);
+      const borough = pos ? boroughAt(c.lat, c.lng, ntaIndexRef.current) : null;
+      setLevelsFor((prev) =>
+        prev?.street === pos?.street && prev?.borough === borough ? prev : pos ? { street: pos.street, borough } : null,
+      );
       const guide = describeGuide(
         pickGuideLandmarks({ lon: c.lng, lat: c.lat }, eye ? eye.bearing : map.getBearing(), { max: 1, maxDistanceM: STREET_LEVEL_RANGE_M }),
       );
@@ -1489,7 +1547,7 @@ export function MapView({
         geometry: { type: "Point", coordinates: [routeEnd.lon, routeEnd.lat] },
       });
     }
-    source.setData({ type: "FeatureCollection", features });
+    void source.setData({ type: "FeatureCollection", features });
   }, [ready, styleEpoch, route, routeStart, routeEnd]);
 
   // A crosshair cursor says "the next click drops a route point".
@@ -1570,13 +1628,18 @@ export function MapView({
     if (!ready) return;
     const map = mapRef.current?.getMap();
     if (!map) return;
-    const report = () => reportCameraHeight(map.transform.getCameraAltitude());
+    const report = () => {
+      const t = cameraTransform(map);
+      if (t) reportCameraHeight(t.getCameraAltitude());
+    };
     report();
     map.on("moveend", report);
     return () => {
       map.off("moveend", report);
     };
   }, [ready, reportCameraHeight]);
+
+  useEffect(warmBasemapFonts, []);
 
   // Eco mode: render at 1x instead of the device pixel ratio.
   useEffect(() => {
@@ -1616,6 +1679,13 @@ export function MapView({
         dragRotate={!walking}
         touchPitch={!walking}
         onLoad={handleLoad}
+        onSourceData={(e) => {
+          // "load" waits for a moment when every source is loaded at once, and the live trains refresh
+          // every few seconds, so on a slow device it may never come: the first basemap tiles run the same
+          // setup, or the quick buttons never get the map and panels never move the camera off the train.
+          if (e.sourceId === VECTOR_SOURCE && e.isSourceLoaded) { markBasemapReady(); handleLoad(); }
+          foldCredits(e.target);
+        }}
         onError={handleError}
         onMouseMove={handleMouseMove}
         onMoveStart={handleMoveStart}
@@ -1638,6 +1708,7 @@ export function MapView({
           place={walkPlace}
           street={streetHere}
           corner={corner}
+          levelsFor={levelsFor}
           onInput={(input) => {
             walkPad.current = input;
           }}

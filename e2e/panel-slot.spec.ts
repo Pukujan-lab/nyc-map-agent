@@ -34,9 +34,11 @@ async function open(page: Page, size = PHONE) {
     if (!path.endsWith("/bus")) { await r.fallback(); return; }
     await r.fulfill({ contentType: "application/json", body: JSON.stringify({ at: Math.floor(Date.now() / 1000), buses: [{ ...BUS, t: Math.floor(Date.now() / 1000) }] }) });
   });
+  // Neighbourhood outlines arrive early; the crime and noise summaries load only with an analytics layer on.
+  const areas = page.waitForResponse((r) => r.url().includes("/api/areas"));
   await page.goto("/?flags=-agentHome&transit=bus&busPage=brooklyn-1");
   await expect(page.locator("canvas.maplibregl-canvas").first()).toBeVisible();
-  await page.waitForResponse((r) => r.url().includes("/api/aggregate"));
+  await areas;
 }
 
 // By text: the vaul details sheet still marks the page behind it aria-hidden.
@@ -80,6 +82,13 @@ test("a vehicle tap closes the drawer and follows it with a slim card", async ({
   }, { timeout: 30_000 }).toBeGreaterThan(0);
   await expect(drawer(page)).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Stop following" }).first()).toBeVisible();
+  // The follow camera is top-down and north up. On a phone the orientation control
+  // only appears once the map is tilted or turned, so it must stay away while following.
+  const orientation = page.getByRole("group", { name: "Map orientation" });
+  for (let i = 0; i < 6; i++) {
+    await page.waitForTimeout(500);
+    await expect(orientation).toHaveCount(0);
+  }
 });
 
 test("minimize turns the sheet into a labelled peek chip that restores", async ({ page }) => {

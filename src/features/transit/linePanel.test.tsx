@@ -20,8 +20,11 @@ describe("line panel and the answer (docs/PDD.md, Screen space)", () => {
     expect(html).toContain('aria-label="Show the A line"');
   });
 
-  it("stays open on a phone with no answer", () => {
-    expect(render()).toMatch(/data-testid="line-body" class="pointer-events-auto flex/);
+  it("opens as a sheet over the chat on a phone with no answer", () => {
+    const html = render();
+    expect(html).toMatch(/<section data-testid="line-panel" data-level="1"[^>]*class="task-panel pull-sheet"/);
+    expect(html).toMatch(/data-testid="line-body" class="pull-sheet-body/);
+    expect(html).toContain("Follow a train");
   });
 
   it("stays open beside the answer from 640 px, docked to the side", () => {

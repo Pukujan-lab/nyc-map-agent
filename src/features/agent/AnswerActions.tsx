@@ -1,13 +1,15 @@
-import { ArrowLeftRight, Ban, Bus, DoorOpen, ListOrdered, MapPin, Route, TrainFront, TriangleAlert } from "lucide-react";
+import { ArrowLeftRight, Ban, BellRing, Bus, DoorOpen, Layers, ListOrdered, MapPin, Route, TrainFront, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/lib/i18n/appLang";
 import { distanceText } from "./mapActions";
 import type { MapAction, RestroomSpot } from "./schema";
 
-const ICON: Record<MapAction["kind"], typeof MapPin> = { flyTo: MapPin, showRestroom: MapPin, showRoute: Route, showStops: ListOrdered, showCrashes: TriangleAlert, showTrouble: TriangleAlert, showExit: DoorOpen };
+const ICON: Record<MapAction["kind"], typeof MapPin> = { flyTo: MapPin, showRestroom: MapPin, showRoute: Route, showStops: ListOrdered, showCrashes: TriangleAlert, showTrouble: TriangleAlert, remindTrip: BellRing, showLayer: Layers, showLine: TrainFront, showExit: DoorOpen };
 const TROUBLE_ICON: Record<Extract<MapAction, { kind: "showTrouble" }>["style"], typeof MapPin> = { problem: TriangleAlert, shuttle: Bus, switch: ArrowLeftRight, stuck: TrainFront };
 
 /** The "show it on the map" buttons under an answer (#371). */
 export function AnswerActions({ actions, onRun }: { actions: MapAction[]; onRun: (a: MapAction) => void }) {
+  const t = useT();
   if (!actions.length) return null;
   return (
     <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Show on the map" data-testid="answer-actions">
@@ -16,7 +18,7 @@ export function AnswerActions({ actions, onRun }: { actions: MapAction[]; onRun:
         return (
           <Button key={a.id} type="button" size="sm" variant="outline" className="h-11 min-h-11 gap-1.5 rounded-full bg-background px-3.5 text-sm" onClick={() => onRun(a)}>
             <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-            {a.label}
+            {a.kind === "remindTrip" ? t("remindMe") : a.label}
           </Button>
         );
       })}

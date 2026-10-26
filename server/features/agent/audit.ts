@@ -7,7 +7,7 @@ import type { StreamEvent } from "../../../src/features/agent/schema";
 import { inventedNumbers, SourceLedger } from "./freshness";
 
 /** Tools that only move the map or find a place: they return no figures a reply may cite. */
-export const NON_DATA_TOOLS = new Set(["geocode", "flyTo", "showRoute", "openPanel", "enterStreetView", "playFlythrough", "setTime"]);
+export const NON_DATA_TOOLS = new Set(["geocode", "flyTo", "showRoute", "openPanel", "enterStreetView", "playFlythrough", "setTime", "suggest_layer"]);
 
 export class AnswerAudit {
   readonly ledger = new SourceLedger();

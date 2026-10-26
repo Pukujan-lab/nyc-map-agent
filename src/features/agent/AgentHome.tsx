@@ -3,7 +3,9 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefO
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/appLang";
+import { removeShell, shellFocused, shellText } from "@/lib/shellDraft";
 import { stepLabel, type AgentStep } from "./agentSteps";
+import { plainText } from "./plainText";
 
 /**
  * "Agents working" (#370): what the agent is doing right now, from the stream's
@@ -81,6 +83,11 @@ export function AnswerCard(p: AnswerCardProps) {
   const t = useT();
   const [more, setMore] = useState(false);
   useEffect(() => setMore(false), [p.question]);
+  // What More opens sits below the fold of the scrolling answer area: bring it into view.
+  const moreEnd = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (more) moreEnd.current?.scrollIntoView({ block: "nearest", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  }, [more]);
   const done = !p.busy && !!p.text;
   if (p.compact && !more) {
     return (
@@ -107,7 +114,7 @@ export function AnswerCard(p: AnswerCardProps) {
       ) : null}
       {p.text ? (
         <div className="flex flex-col gap-3 rounded-[18px] border border-[#22314a] bg-[#111c2f]/90 p-3.5">
-          <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-slate-100" aria-live="polite">{p.text}</p>
+          <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-slate-100" aria-live="polite">{plainText(p.text)}</p>
           {done ? (
             <div className="flex flex-col gap-2">
               {p.primary ? (
@@ -127,6 +134,7 @@ export function AnswerCard(p: AnswerCardProps) {
                     <Button type="button" variant="ghost" className={SECONDARY} onClick={p.onNearby}>{t("nearby")}</Button>
                     <Button type="button" variant="ghost" className={SECONDARY} onClick={p.onOther}>{t("otherOptions")}</Button>
                   </div>
+                  <div ref={moreEnd} aria-hidden="true" />
                 </>
               ) : null}
             </div>
@@ -197,11 +205,17 @@ export function AgentHome(p: AgentHomeProps) {
   const scroller = useRef<HTMLDivElement>(null);
   const { orb, answerOpen, onCloseAnswer } = p;
 
-  // Keep the newest answer in view while it streams.
+  // Keep the newest answer in view while it streams; once it is done, show it from the top,
+  // since on a small phone the box is shorter than the answer and its start was cut off.
+  const { busy } = p;
   useEffect(() => {
     const el = scroller.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el && busy) el.scrollTop = el.scrollHeight;
   });
+  useEffect(() => {
+    const el = scroller.current;
+    if (el && !busy) el.scrollTop = 0;
+  }, [busy]);
 
   // Escape stops the orb first, then closes the answer.
   useEffect(() => {
@@ -244,6 +258,18 @@ export function AgentHome(p: AgentHomeProps) {
     if (!hidden && el) document.documentElement.style.setProperty("--chat-bar-h", `${Math.max(0, Math.ceil(window.innerHeight - el.getBoundingClientRect().top))}px`);
   });
   useEffect(() => () => { document.documentElement.style.removeProperty("--chat-bar-h"); }, []);
+  // The static chat bar from index.html (#368) gives way once this one shows, keeping what was typed.
+  // It hands over the cursor too: keys typed while the app was still loading are delivered after this
+  // runs, and with the static bar gone and nothing focused they were dropped.
+  const { setInput, inputRef } = p;
+  useLayoutEffect(() => {
+    if (hidden) return;
+    const typed = shellText();
+    const focused = shellFocused();
+    if (typed) setInput(typed);
+    removeShell();
+    if (focused) inputRef.current?.focus();
+  }, [hidden, setInput, inputRef]);
 
   if (p.hidden) return null;
 
@@ -319,16 +345,19 @@ export function AgentHome(p: AgentHomeProps) {
           <VoiceOrb transcript={orb.transcript} onStop={orb.stop} />
         ) : answerOpen ? (
           <section aria-label="Assistant answer" data-testid="agent-answers" className="relative flex min-h-0 flex-col">
+            {/* Its own row: laid over the answer, the X sat on the text once the question scrolled away (320px iPhone, 2026-10-25). */}
             <Button
               type="button"
               variant="ghost"
               aria-label={t("closeAnswer")}
-              className="absolute left-0 top-0 z-10 h-11 w-11 rounded-full p-0 text-slate-300 hover:bg-slate-800 hover:text-white"
+              // Solid, like the task screens' close, so it never reads as part of the text behind it.
+              className="-ml-2 -mt-2 h-11 w-11 self-start rounded-full border border-slate-400/45 bg-[#0b1220] p-0 text-slate-300 shadow-[0_4px_12px_rgba(0,0,0,.35)] hover:bg-slate-800 hover:text-white"
               onClick={onCloseAnswer}
             >
               <X className="!h-5 !w-5" aria-hidden="true" />
             </Button>
-            <div ref={scroller} className="max-h-[min(44dvh,520px)] min-h-11 overflow-y-auto overscroll-contain">
+            {/* A phone keeps most of the map in view: the answer scrolls inside a shorter box. */}
+            <div ref={scroller} className="max-h-[30dvh] min-h-11 overflow-y-auto overscroll-contain sm:max-h-[min(44dvh,520px)]">
               {p.answer}
             </div>
           </section>
