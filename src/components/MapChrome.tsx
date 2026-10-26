@@ -8,7 +8,7 @@ import { setOpenMenu, useOpenMenu } from "@/lib/store/openMenu";
 import { setFollowMode, stopFollowing, useFollowMode, useFollowed, type FollowMode } from "@/lib/transit/follow";
 import { useSelectedLine } from "@/lib/transit/selectedLine";
 import { useMenuT } from "@/lib/i18n/menuText";
-import { useScreen, useScreenSize } from "@/lib/screen/screenSpace";
+import { usePullSheetUp } from "@/lib/store/pullSheet";
 import { APP_LANGS, LANG_LABELS, setLangPref, useLangPref, type AppLang } from "@/lib/voice/langPref";
 import { MID_HEIGHT_M, levelOf, type ViewLevel } from "./ViewSwitcher";
 
@@ -262,8 +262,7 @@ export function MapChrome() {
   const setOpen = (v: "view" | null) => setOpenMenu(v);
   const stack = useRef<HTMLDivElement>(null);
   const rotated = Math.abs(bearing) > 0.5 || pitch > 0.5;
-  const wide = useScreenSize() === "wide";
-  const lineFolded = useScreen((v) => v.line === "pill");
+  const lineSheet = usePullSheetUp();
 
   // A tap anywhere else, or Escape, closes the open panel or menu.
   useEffect(() => {
@@ -305,7 +304,7 @@ export function MapChrome() {
   if (line) {
     return (
       <>
-        {!wide && !lineFolded ? (
+        {lineSheet ? (
           <div ref={stack} data-testid="map-chrome" className="pointer-events-none absolute right-4 z-40 flex flex-col items-end gap-2.5" style={{ top }}>
             <div className="relative">
               <button type="button" aria-label="Change view" aria-haspopup="menu" aria-expanded={open === "view"} data-testid="view-button"

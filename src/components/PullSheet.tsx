@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import "@/components/task-screens.css";
+import { pullSheetMounted } from "@/lib/store/pullSheet";
 import { nextLevel, swipeOf, type SheetLevel } from "./sheetSwipe";
 
 export interface PullSheetProps {
@@ -30,6 +31,7 @@ export function PullSheet({ level, onLevel, onSide, header, children, testId, la
   const levelRef = useRef(level);
   levelRef.current = level;
 
+  useLayoutEffect(() => pullSheetMounted(), []);
   // On a phone the sheet spans the width: publish its height so Center on my location rides above it.
   useLayoutEffect(() => {
     const el = ref.current;
