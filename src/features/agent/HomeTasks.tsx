@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Briefcase, ChevronDown, House, Route, TrainFront } from "lucide-react";
+import { Briefcase, ChevronDown, House, Route, Settings, TrainFront } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -8,12 +8,15 @@ import { useCommuteFocus } from "./commuteFocus";
 import type { MapPoint } from "./schema";
 import { ExitStairsIcon, RestroomIcon } from "./homeIcons";
 import { useT } from "@/lib/i18n/appLang";
+import { useMenuT } from "@/lib/i18n/menuText";
 
 export interface TaskHandlers {
   restroom: () => void;
   train: () => void;
   plan: () => void;
   exit: () => void;
+  /** Phones only: language and the QR code come up from behind the chat. */
+  settings?: () => void;
 }
 
 // Small pills in one row everywhere: on a phone the tasks are suggestions over the chat, not tiles that cover the map (owner, 2026-10-25).
@@ -22,6 +25,7 @@ const TASK = "h-10 shrink-0 gap-2 rounded-full border border-slate-700 bg-slate-
 /** The four task buttons above the chat bar on the idle home (#370). */
 export function TaskButtons({ on }: { on: TaskHandlers }) {
   const t = useT();
+  const menuT = useMenuT();
   const tasks: Array<[string, ReactNode, () => void]> = [
     [t("restroom"), <RestroomIcon key="i" className="!h-6 !w-6" />, on.restroom],
     [t("myTrain"), <TrainFront key="i" className="!h-[22px] !w-[22px]" aria-hidden="true" />, on.train],
@@ -36,6 +40,12 @@ export function TaskButtons({ on }: { on: TaskHandlers }) {
           <span className="whitespace-nowrap">{label}</span>
         </Button>
       ))}
+      {on.settings ? (
+        <Button type="button" variant="ghost" className={cn(TASK, "sm:hidden")} onClick={on.settings} data-testid="settings-chip">
+          <Settings className="!h-[22px] !w-[22px]" aria-hidden="true" />
+          <span className="whitespace-nowrap">{menuT("settings")}</span>
+        </Button>
+      ) : null}
     </div>
   );
 }
