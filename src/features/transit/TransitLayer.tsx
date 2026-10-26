@@ -489,7 +489,8 @@ export default function TransitLayer() {
     if (act === "fit" && alertGeo?.bounds) {
       if (!savedCam.current) { const c = map.getCenter(); savedCam.current = { center: [c.lng, c.lat], zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() }; }
       const wide = window.innerWidth >= 768;
-      map.fitBounds(alertGeo.bounds, { padding: framePadding(map, lineSelRef.current ? (wide ? { top: 90, bottom: 120, left: 80, right: 460 } : { top: Math.round(window.innerHeight * 0.45), bottom: 110, left: 30, right: 30 }) : wide ? { top: 90, bottom: 60, left: 440, right: 80 } : { top: 90, bottom: Math.round(window.innerHeight * 0.45), left: 30, right: 30 }), maxZoom: 15.5, duration: 900, bearing: 0, pitch: 0 });
+      // A phone's line sheet sits at the bottom and is a map cover, so the map's own padding already clears it.
+      map.fitBounds(alertGeo.bounds, { padding: framePadding(map, lineSelRef.current ? (wide ? { top: 90, bottom: 120, left: 80, right: 460 } : { top: 90, bottom: 24, left: 30, right: 72 }) : wide ? { top: 90, bottom: 60, left: 440, right: 80 } : { top: 90, bottom: Math.round(window.innerHeight * 0.45), left: 30, right: 30 }), maxZoom: 15.5, duration: 900, bearing: 0, pitch: 0 });
     } else if (act === "restore" && savedCam.current) {
       map.easeTo({ ...savedCam.current, duration: 700 });
       savedCam.current = null;

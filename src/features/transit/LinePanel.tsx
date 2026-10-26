@@ -31,25 +31,23 @@ function ringMarker(color: string, glow: string, label: string): HTMLElement {
   return el;
 }
 
-/** Ring the picked notice's stations; bring them into view when they are off screen. */
-function useNoticeRings(map: MaplibreMap | undefined, notice: LineNotice | null, panel: HTMLElement | null) {
+/** Ring the picked notice's stations and take the map to them: tapping a notice is asking where it is. */
+function useNoticeRings(map: MaplibreMap | undefined, notice: LineNotice | null, panel: HTMLElement | null, sheet: boolean) {
   useEffect(() => {
     if (!map || !notice?.stations.length) return;
     const tone = TONE[notice.tone];
     const markers = notice.stations.map((s) => new Marker({ element: ringMarker(tone.color, tone.glow, s.label) }).setLngLat(s.coord).addTo(map));
-    const b = map.getBounds();
-    // An alert's own focus already fits the affected stretch; only outages are framed here.
-    if (!notice.alert && !notice.stations.every((s) => b.contains(s.coord))) {
-      // A phone's line sheet rests on the chat bar: it pads the map's bottom itself (a cover), so frame under the quick buttons.
-      const rect = panel?.getBoundingClientRect();
-      const sheet = rect ? rect.top > window.innerHeight / 2 : false;
-      const top = sheet ? 80 : Math.round((rect?.bottom ?? 120) + 24);
-      const bottom = sheet ? 40 : (parseInt(getComputedStyle(document.documentElement).getPropertyValue("--chat-bar-h"), 10) || 0) + 40;
+    // An alert's own focus already fits the affected stretch (TransitLayer); only outages are framed here.
+    if (!notice.alert) {
+      // A phone's line sheet is a map cover at the bottom (the map's padding clears it): frame under the quick buttons.
+      // The side panel on wider screens sits at the top: frame below it, above the chat bar.
+      const top = sheet ? 80 : Math.round((panel?.getBoundingClientRect().bottom ?? 120) + 24);
+      const bottom = sheet ? 24 : (parseInt(getComputedStyle(document.documentElement).getPropertyValue("--chat-bar-h"), 10) || 0) + 40;
       const xs = notice.stations.map((s) => s.coord[0]), ys = notice.stations.map((s) => s.coord[1]);
-      map.fitBounds([[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]], { padding: framePadding(map, { top, bottom, left: 40, right: 140 }), maxZoom: 15, duration: 700 });
+      map.fitBounds([[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]], { padding: framePadding(map, { top, bottom, left: 40, right: sheet ? 72 : 140 }), maxZoom: 15, duration: 700 });
     }
     return () => markers.forEach((m) => m.remove());
-  }, [map, notice, panel]);
+  }, [map, notice, panel, sheet]);
 }
 
 /**
@@ -74,7 +72,7 @@ export function LinePanel({ map, route, onFollow }: { map: MaplibreMap | undefin
   const [level, setLevel] = useState<SheetLevel>(1);
   useEffect(() => setLevel(1), [route]);
   const pickedNotice = notices.find((n) => n.id === picked) ?? null;
-  useNoticeRings(map, pickedNotice, panelEl);
+  useNoticeRings(map, pickedNotice, panelEl, !wide);
   // The picked alert draws its affected stretch, skipped stops and detour on the map, the rest dimmed.
   const pickedAlert = pickedNotice?.alert ?? null;
   useEffect(() => {
