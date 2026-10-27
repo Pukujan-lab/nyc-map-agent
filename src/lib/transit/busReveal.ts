@@ -124,3 +124,29 @@ export function busesToShow(pageRoutes: string[], pins: { trip: string[] | null;
 export function useBusPins(): { trip: string[] | null; shuttle: string[] | null } {
   return useSyncExternalStore((f) => (subs.add(f), () => subs.delete(f)), () => snap, () => snap);
 }
+
+/** Out of focus, a bus shows only this close to you (or the map centre, or the bus you follow). */
+export const NEAR_BUS_RADIUS_M = 1200;
+
+const metres = (a: { lon: number; lat: number }, b: { lon: number; lat: number }) =>
+  Math.hypot((a.lon - b.lon) * 111_320 * Math.cos((a.lat * Math.PI) / 180), (a.lat - b.lat) * 111_320);
+
+/**
+ * Which buses draw (owner, 2026-10-27: buses stayed citywide after a follow).
+ * A bus is in focus when you follow it or picked its route: picked routes show up to
+ * `cap` per line nearest `near`. Routes that only came from a "buses near you" lookup
+ * are out of focus and show only within `radiusM` of `near`. While you follow a bus,
+ * every other bus is out of focus and `near` should be that bus.
+ */
+export function busesInFocus<T extends { id: string; route: string; lon: number; lat: number }>(
+  buses: readonly T[],
+  o: { routes: readonly string[]; nearOnly: boolean; cap: number; near: { lon: number; lat: number } | null; keep?: ReadonlySet<string>; radiusM?: number },
+): T[] {
+  const allow = new Set(o.routes.map((r) => r.toUpperCase()));
+  const radius = o.radiusM ?? NEAR_BUS_RADIUS_M;
+  const near = o.near;
+  const inRoutes = buses.filter((b) => allow.has(b.route.toUpperCase()));
+  const pool = o.nearOnly ? (near ? inRoutes.filter((b) => metres(near, b) <= radius) : []) : inRoutes;
+  const kept = new Set(capPerLine(pool, o.cap, near).map((b) => b.id));
+  return inRoutes.filter((b) => kept.has(b.id) || o.keep?.has(b.id));
+}
