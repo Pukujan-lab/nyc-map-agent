@@ -16,7 +16,13 @@ async function tapMyrtle(page: Page) {
   await page.goto("/");
   await page.waitForFunction(() => Boolean((window as unknown as { __map?: TestMap }).__map?.getLayer("transit-line")), null, { timeout: 20_000 });
   await page.evaluate((c) => (window as unknown as { __map: TestMap }).__map.jumpTo({ center: c, zoom: 13.5, bearing: 0, pitch: 0 }), MYRTLE);
-  await page.waitForTimeout(800);
+  // Wait until the J, M and Z are drawn around the station: tapping before they are lands on the dot instead.
+  await page.waitForFunction((c) => {
+    const m = (window as unknown as { __map: TestMap }).__map;
+    const p = m.project(c);
+    const routes = new Set(m.queryRenderedFeatures([[p.x - 30, p.y - 30], [p.x + 30, p.y + 30]], { layers: ["transit-line"] }).map((f) => String(f.properties?.route)));
+    return ["J", "M", "Z"].every((r) => routes.has(r));
+  }, MYRTLE, { timeout: 15_000 });
   // A tap on the white dot opens the station card as before; the chooser is for the shared track beside it,
   // so tap the J/M/Z line about 8 px from the dot.
   const at = await page.evaluate((c) => {
