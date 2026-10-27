@@ -26,7 +26,8 @@ function openRestroom(info: RestroomInfo, distanceLabel?: string): void {
 
 /**
  * Street-level mini map: a small north-up inset (140 px phone, 200 px desktop)
- * in the bottom-right corner, above the credits and clear of the walk pad on
+ * in the bottom-right corner, left of the Map · 3D · Street and locate stack on wider
+ * screens (owner, 2026-10-27), above the credits and clear of the walk pad on
  * the left. Flat building footprints, streets, a "You" dot and a heading cone
  * that turns with the camera. Live trains and buses show as line-coloured dots.
  * Point layers for Layers switches that are on are copied from the main map
@@ -196,13 +197,13 @@ export function StreetMiniMap({ main, getEye, onExit, onMap, filters }: {
 
   if (hidden) {
     return (
-      <button type="button" onClick={() => { setFollowed(null); setHidden(false); }} className="absolute bottom-[calc(var(--edge)+168px)] lg:bottom-[calc(var(--edge)+36px)] right-[var(--edge)] z-20 h-8 rounded-full border border-border bg-card px-[var(--sp-3)] text-[12px] font-semibold text-foreground shadow-md">
+      <button type="button" onClick={() => { setFollowed(null); setHidden(false); }} className="absolute bottom-[calc(var(--edge)+168px)] lg:bottom-[calc(var(--edge)+36px)] right-[var(--edge)] sm:right-[calc(var(--edge)+68px)] z-20 h-8 rounded-full border border-border bg-card px-[var(--sp-3)] text-[12px] font-semibold text-foreground shadow-md">
         Show map
       </button>
     );
   }
   return (
-    <div data-testid="street-minimap" data-vehicles={dots.length} className="absolute bottom-[calc(var(--edge)+168px)] lg:bottom-[calc(var(--edge)+36px)] right-[var(--edge)] z-20 flex flex-col items-end gap-[var(--sp-1)]">
+    <div data-testid="street-minimap" data-vehicles={dots.length} className="absolute bottom-[calc(var(--edge)+168px)] lg:bottom-[calc(var(--edge)+36px)] right-[var(--edge)] sm:right-[calc(var(--edge)+68px)] z-20 flex flex-col items-end gap-[var(--sp-1)]">
       <div className="flex gap-[var(--sp-1)]">
         <button type="button" onClick={() => setHidden(true)} className="h-7 rounded-full border border-border bg-card px-[var(--sp-3)] text-[12px] font-semibold text-foreground shadow-md">
           Hide map
