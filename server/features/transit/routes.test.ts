@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { GET, decodePolyline, loadBusArrivals, loadBusStops } from "./routes";
+import { GET, decodePolyline, loadBusArrivals, loadBusStops, towards } from "./routes";
 
 describe("bus sheet endpoints", () => {
   afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
@@ -59,7 +59,18 @@ describe("bus-stops", () => {
     vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(
       new Response(JSON.stringify({ data: { list: [{ id: "MTA_1", name: "GRAND ST/ESSEX ST", lat: 40.718, lon: -73.988, direction: "W", routeIds: ["MTA NYCT_M14D+", "MTA NYCT_B39"] }], references: { routes: [{ id: "MTA NYCT_M14D+", shortName: "M14D-SBS" }, { id: "MTA NYCT_B39", shortName: "B39" }] } } })))));
     const { stops } = await loadBusStops("k", 40.718, -73.988);
-    expect(stops).toEqual([{ id: "MTA_1", name: "GRAND ST/ESSEX ST", lat: 40.718, lon: -73.988, dir: "W", routes: ["B39", "M14D-SBS"] }]);
+    expect(stops).toEqual([{ id: "MTA_1", name: "GRAND ST/ESSEX ST", lat: 40.718, lon: -73.988, dir: "W", routes: ["B39", "M14D-SBS"], heads: {} }]);
+  });
+  it("says where each route goes from the stop", async () => {
+    vi.stubGlobal("fetch", vi.fn((url: string) => Promise.resolve(new Response(JSON.stringify(url.includes("stops-for-route")
+      ? { data: { entry: { stopGroupings: [{ stopGroups: [{ name: { name: "GREENPOINT MANHATTAN AV via GRAHAM AV" }, stopIds: ["MTA_9"] }, { name: { name: "PROSPECT LEFFERTS GARDENS" }, stopIds: ["MTA_8"] }] }] } } }
+      : { data: { list: [{ id: "MTA_9", name: "NASSAU AV/MANHATTAN AV", lat: 40.7238, lon: -73.951, direction: "N", routeIds: ["MTA NYCT_B43X"] }], references: { routes: [{ id: "MTA NYCT_B43X", shortName: "B43" }] } } })))));
+    const { stops } = await loadBusStops("k", 40.7238, -73.951);
+    expect(stops[0].heads).toEqual({ B43: "Greenpoint Manhattan Av" });
+  });
+  it("words a destination the way a pole sign does", () => {
+    expect(towards("DOWNTOWN BKLYN FULTON MALL via 3 AV")).toBe("Downtown Brooklyn Fulton Mall");
+    expect(towards("SELECT BUS EAST HARLEM 125 ST")).toBe("East Harlem 125 St");
   });
 });
 

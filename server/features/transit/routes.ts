@@ -252,20 +252,51 @@ async function loadBusRoute(key: string, route: string) {
 
 type ObaStop = { id: string; name: string; lat: number; lon: number; direction?: string; routeIds?: string[] };
 type ObaRoute = { id: string; shortName?: string };
-/** Bus stops around a point with the route numbers that serve each, for the street-level pole signs. */
+type ObaStopGroup = { name?: string | { name?: string }; stopIds?: string[] };
+
+const SIGN_WORDS: Record<string, string> = { BKLYN: "Brooklyn", JCT: "Jct", HTS: "Hts", STA: "Sta", CTR: "Ctr", LIRR: "LIRR", SBS: "SBS", JFK: "JFK", LGA: "LGA" };
+/** "GREENPOINT MANHATTAN AV via GRAHAM AV" → "Greenpoint Manhattan Av": where the bus is going, as a pole sign says it. */
+export function towards(raw: string): string {
+  const place = raw.replace(/\s+via\s.*$/i, "").replace(/^(SELECT BUS|LIMITED|LTD)\s+/i, "").trim();
+  return place.split(/\s+/).map((w) => SIGN_WORDS[w.toUpperCase()] ?? (/^\d/.test(w) ? w.toLowerCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())).join(" ");
+}
+
+/** Each stop's destination on one route, from its stop groupings (one group per direction). */
+async function routeHeadings(key: string, routeId: string): Promise<Record<string, string>> {
+  const r = await fetch(`${BUSTIME}where/stops-for-route/${encodeURIComponent(routeId)}.json?${new URLSearchParams({ key, includePolylines: "false", version: "2" })}`, { signal: AbortSignal.timeout(10_000) });
+  if (!r.ok) return {};
+  const d = (await r.json()) as { data?: { entry?: { stopGroupings?: Array<{ stopGroups?: ObaStopGroup[] }> } } };
+  const out: Record<string, string> = {};
+  for (const g of (d.data?.entry?.stopGroupings ?? []).flatMap((x) => x.stopGroups ?? [])) {
+    const name = typeof g.name === "string" ? g.name : g.name?.name;
+    if (name) for (const id of g.stopIds ?? []) out[id] ??= towards(name);
+  }
+  return out;
+}
+
+/**
+ * Bus stops around a point with the route numbers that serve each, for the street-level pole signs,
+ * and where each route's buses go from that stop (owner, 2026-10-27: "say which direction the buses are heading").
+ */
 export async function loadBusStops(key: string, lat: number, lon: number) {
   const qs = new URLSearchParams({ key, lat: String(lat), lon: String(lon), latSpan: "0.006", lonSpan: "0.008", version: "2" });
   const r = await fetch(`${BUSTIME}where/stops-for-location.json?${qs}`, { signal: AbortSignal.timeout(10_000) });
   if (!r.ok) throw new Error(`bus-stops upstream ${r.status}`);
   const d = (await r.json()) as { data?: { list?: ObaStop[]; references?: { routes?: ObaRoute[] } } };
   const names = new Map((d.data?.references?.routes ?? []).map((x) => [x.id, x.shortName ?? x.id.replace(/^[^_]*_/, "")]));
-  const stops = (d.data?.list ?? []).map((s) => ({
+  const list = d.data?.list ?? [];
+  const routeIds = [...new Set(list.flatMap((s) => s.routeIds ?? []))].slice(0, 24);
+  const heads = new Map(await Promise.all(routeIds.map(async (id) =>
+    [id, await (cached(`bus-heads:${id}`, () => routeHeadings(key, id), 24 * 3600_000) as Promise<Record<string, string>>).catch((): Record<string, string> => ({}))] as const)));
+  const short = (id: string) => names.get(id) ?? id.replace(/^[^_]*_/, "");
+  const stops = list.map((s) => ({
     id: s.id,
     name: s.name,
     lat: s.lat,
     lon: s.lon,
     dir: s.direction ?? "",
-    routes: [...new Set((s.routeIds ?? []).map((id) => names.get(id) ?? id.replace(/^[^_]*_/, "")))].sort((a, b) => a.localeCompare(b, "en", { numeric: true })),
+    routes: [...new Set((s.routeIds ?? []).map(short))].sort((a, b) => a.localeCompare(b, "en", { numeric: true })),
+    heads: Object.fromEntries((s.routeIds ?? []).flatMap((id) => { const to = heads.get(id)?.[s.id]; return to ? [[short(id), to]] : []; })),
   }));
   return { stops };
 }

@@ -22,7 +22,7 @@ const BUS_COLS = 8;
 const BUS_ROWS = 3; // 2048 x 1536: 24 portrait slots of 256 x 512
 const API = (import.meta.env?.VITE_API_BASE ?? "").replace(/\/$/, "");
 
-interface BusStop { id: string; name: string; lat: number; lon: number; dir: string; routes: string[] }
+interface BusStop { id: string; name: string; lat: number; lon: number; dir: string; routes: string[]; heads?: Record<string, string> }
 
 /** Instanced plane material sampling cell (slot.x, slot.y) of a cols x rows atlas. */
 function gridMaterial(tex: THREE.Texture, cols: number, rows: number, opts: THREE.MeshBasicMaterialParameters = {}): THREE.MeshBasicMaterial {
@@ -36,8 +36,29 @@ function gridMaterial(tex: THREE.Texture, cols: number, rows: number, opts: THRE
   return m;
 }
 
-/** MTA bus stop flag: white on MTA blue, "BUS" pictogram line, then each route in a white tile. */
-function drawBusPlate(g: CanvasRenderingContext2D, slot: number, routes: string[]) {
+/** Words into at most `max` lines of `width` px at the current font; the last one ends in "…" when cut. */
+function wrapWords(g: CanvasRenderingContext2D, text: string, width: number, max: number): string[] {
+  const lines: string[] = [];
+  let line = "";
+  for (const w of text.split(" ")) {
+    const next = line ? `${line} ${w}` : w;
+    if (g.measureText(next).width <= width || !line) { line = next; continue; }
+    lines.push(line);
+    line = w;
+  }
+  if (line) lines.push(line);
+  if (lines.length <= max) return lines;
+  const cut = lines.slice(0, max);
+  cut[max - 1] = `${cut[max - 1]}…`;
+  return cut;
+}
+
+/**
+ * MTA bus stop flag: white on MTA blue, "BUS" pictogram line, then each route in a white tile. Up to three
+ * routes also say where they go from this stop ("to Greenpoint Manhattan Av"), so you know you are on the
+ * right side of the street (owner, 2026-10-27).
+ */
+function drawBusPlate(g: CanvasRenderingContext2D, slot: number, routes: string[], heads: Record<string, string> = {}) {
   const W = 256, H = 512;
   const x = (slot % BUS_COLS) * W, y = Math.floor(slot / BUS_COLS) * H;
   g.fillStyle = "#0039a6";
@@ -49,16 +70,22 @@ function drawBusPlate(g: CanvasRenderingContext2D, slot: number, routes: string[
   g.fillText("BUS", x + W / 2, y + 48);
   g.fillRect(x + 22, y + 86, W - 44, 4);
   const shown = routes.slice(0, 6);
-  const rowH = Math.min(64, (H - 120) / Math.max(1, shown.length));
+  const withHeads = shown.length <= 3 && shown.some((r) => heads[r]);
+  const rowH = withHeads ? Math.min(150, (H - 120) / shown.length) : Math.min(64, (H - 120) / Math.max(1, shown.length));
   shown.forEach((r, i) => {
-    const cy = y + 112 + i * rowH + rowH / 2;
+    const top = y + 112 + i * rowH;
+    const to = withHeads ? heads[r] : undefined;
+    const tileH = to ? rowH - 10 : Math.min(64, rowH) - 10;
     g.fillStyle = "#ffffff";
-    g.fillRect(x + 26, cy - rowH / 2 + 5, W - 52, rowH - 10);
+    g.fillRect(x + 26, top + 5, W - 52, tileH);
     g.fillStyle = "#0039a6";
-    let size = Math.min(46, rowH - 16);
+    let size = Math.min(46, (to ? 56 : rowH) - 16);
     do g.font = `700 ${size}px "Helvetica Neue", Arial, sans-serif`;
     while (g.measureText(r).width > W - 70 && (size -= 2) > 14);
-    g.fillText(r, x + W / 2, cy + 2);
+    g.fillText(r, x + W / 2, top + (to ? 30 : tileH / 2 + 7));
+    if (!to) return;
+    g.font = '600 24px "Helvetica Neue", Arial, sans-serif';
+    wrapWords(g, `to ${to}`, W - 70, Math.max(1, Math.floor((tileH - 56) / 28))).forEach((line, j) => g.fillText(line, x + W / 2, top + 72 + j * 28));
   });
   if (routes.length > shown.length) {
     g.fillStyle = "#ffffff";
@@ -289,7 +316,7 @@ export function createFurnitureLayer(): CustomLayerInterface {
     bg.clearRect(0, 0, busCanvas.width, busCanvas.height);
     let nf = 0;
     near.forEach((s, i) => {
-      drawBusPlate(bg, i, s.routes);
+      drawBusPlate(bg, i, s.routes, s.heads);
       const [x, y] = toLocal(s.lon, s.lat, eye);
       const brg = streetBearingAt(lines, s.lon, s.lat, 40) ?? 0;
       const [ux, uy] = dirOf(brg);
