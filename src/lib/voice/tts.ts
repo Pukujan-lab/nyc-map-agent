@@ -20,7 +20,10 @@ export function spokenSummary(text: string, max = 240): string {
     if (out && out.length + p.length > max) break;
     out = out ? `${out} ${p}` : p;
   }
-  return out.length < plain.length - 5 ? `${out} The details are on screen.` : out;
+  // The pointer to the screen is English: a Nepali or Arabic answer read by a borrowed voice would end in
+  // English it cannot say, so those answers stop at the summary (owner report, 2026-10-27).
+  const otherScript = SCRIPTS.some((s) => s.re.test(out));
+  return out.length < plain.length - 5 && !otherScript ? `${out} The details are on screen.` : out;
 }
 
 /** A voice for `lang` (BCP 47); English keeps the preferred natural US voices. */
