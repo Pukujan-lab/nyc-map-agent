@@ -27,14 +27,14 @@ test("street level shows a mini map whose heading cone turns with the camera", a
 test("street level mini map points to the nearest restroom and the card offers directions", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockNetwork(page);
-  // One restroom somewhere in the city: the chip must show even when it is past the inset's edge.
+  // One restroom about 700 m away: the chip must show even when it is past the inset's edge.
   await page.route("**/api/restrooms", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
         type: "FeatureCollection",
-        features: [{ type: "Feature", geometry: { type: "Point", coordinates: [-73.9832, 40.7536] }, properties: { name: "Bryant Park", status: "Operational" } }],
+        features: [{ type: "Feature", geometry: { type: "Point", coordinates: [-73.9335, 40.7038] }, properties: { name: "Bryant Park", status: "Operational" } }],
       }),
     }),
   );
@@ -49,6 +49,8 @@ test("street level mini map points to the nearest restroom and the card offers d
   await expect(chip).toContainText("Nearest restroom");
   await chip.click();
   await expect(page.getByText("Bryant Park").first()).toBeVisible();
+  // About 700 m from where street view starts: past the inset's edge, and close enough that Directions
+  // from here draws the walk (a farther place asks the trip planner; see directionsFromHere.test.ts).
   await page.getByRole("button", { name: "Directions from here" }).click();
   await expect(page.getByText("Walking directions")).toBeVisible();
 });

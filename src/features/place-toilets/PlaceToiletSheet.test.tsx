@@ -4,6 +4,7 @@ import type { PlaceToiletProps } from "./data";
 import { PlaceToiletSheet } from "./PlaceToiletSheet";
 
 vi.mock("@/lib/store/DataViewContext", () => ({ useDataView: () => ({ setRoutePoint: vi.fn(), setRoutePicking: vi.fn() }) }));
+vi.mock("@/lib/store/MapStateContext", () => ({ useMapState: () => ({ seedChat: vi.fn(), setChatOpen: vi.fn() }) }));
 
 const base: PlaceToiletProps = {
   id: "osm:node/1",

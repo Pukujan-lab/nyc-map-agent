@@ -75,6 +75,24 @@ export function setFollowMode(m: FollowMode) {
 export function useFollowMode(): FollowMode {
   return useSyncExternalStore((f) => (modeSubs.add(f), () => modeSubs.delete(f)), () => mode);
 }
+/** Non-hook read, for the trip preview's frame loop. */
+export const followMode = (): FollowMode => mode;
+
+/**
+ * True while a trip preview is on the map. Its marker then takes the same follow
+ * cameras as a train (Map, Chase, Side, Overhead, Street), so a view picked from
+ * Change view stays put for the whole preview instead of resetting each leg.
+ */
+let previewing = false;
+const previewSubs = new Set<() => void>();
+export function setPreviewing(on: boolean) {
+  if (previewing === on) return;
+  previewing = on;
+  previewSubs.forEach((f) => f());
+}
+export function usePreviewing(): boolean {
+  return useSyncExternalStore((f) => (previewSubs.add(f), () => previewSubs.delete(f)), () => previewing);
+}
 
 /**
  * Keeps the person's own zoom while a camera drives the map every frame: a
