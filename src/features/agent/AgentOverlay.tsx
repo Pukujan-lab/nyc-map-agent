@@ -539,15 +539,19 @@ export default function AgentOverlay() {
     if (!home || a?.kind !== "showRestroom") return;
     const m = getMapInstance();
     if (!m) return;
-    const r = a.restroom;
-    showPoints(m, [{ at: [r.lon, r.lat], name: formatStreetText(r.name) }], "#2563eb");
+    // Every restroom the answer names, and the restroom layer on so the others nearby show too
+    // (owner, 2026-10-27: asked near the Natural History Museum, only one pin appeared).
+    const spots = (lastActions ?? []).flatMap((x) => (x.kind === "showRestroom" ? [x.restroom] : []));
+    setRestrooms(true);
+    showPoints(m, spots.map((r) => ({ at: [r.lon, r.lat], name: formatStreetText(r.name) })), "#2563eb");
     const me = sharedCoords();
+    const pts: Array<[number, number]> = [...spots.map((r): [number, number] => [r.lon, r.lat]), ...(me ? [[me.lon, me.lat] as [number, number]] : [])];
     // The answer covers the lower ~60% on phones and the left column on desktop; the quick bar the right edge.
     const phone = window.innerWidth < 640;
     const bottom = Math.round(window.innerHeight * (phone ? 0.62 : 0.2));
-    if (me) m.fitBounds([[Math.min(me.lon, r.lon), Math.min(me.lat, r.lat)], [Math.max(me.lon, r.lon), Math.max(me.lat, r.lat)]], { padding: framePadding(m, { top: 110, bottom, left: phone ? 40 : Math.min(420, window.innerWidth * 0.44) + 48, right: phone ? 84 : 96 }), maxZoom: 17, duration: 900 });
-    else m.flyTo({ center: [r.lon, r.lat], zoom: 16, duration: 900, offset: [0, -Math.round(bottom / 2)] });
-  }, [lastActions, home]);
+    const lons = pts.map((p) => p[0]), lats = pts.map((p) => p[1]);
+    m.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: framePadding(m, { top: 110, bottom, left: phone ? 40 : Math.min(420, window.innerWidth * 0.44) + 48, right: phone ? 84 : 96 }), maxZoom: 16.5, duration: 900 });
+  }, [lastActions, home]); // eslint-disable-line react-hooks/exhaustive-deps -- setRestrooms changes with the URL it writes; once per answer is enough
   // A trip planned between saved Home and Work becomes the daily card's usual line (kept on this device).
   useEffect(() => {
     if (trip) rememberCommute(trip);

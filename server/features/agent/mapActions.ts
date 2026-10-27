@@ -49,10 +49,10 @@ export function exitActions(x: ExitShown): MapAction[] {
 
 /** The nearest restroom (and the next one, if any) with its card. */
 export function restroomActions(spots: RestroomSpot[]): MapAction[] {
-  return spots.slice(0, 2).map((r, i) => ({
+  return spots.slice(0, 3).map((r, i) => ({
     kind: "showRestroom",
     id: `restroom:${key([r.lon, r.lat])}`,
-    label: i === 0 ? "Show the nearest restroom" : "Show the next closest restroom",
+    label: i === 0 ? "Show the nearest restroom" : i === 1 ? "Show the next closest restroom" : "Show the third closest restroom",
     restroom: r,
   }));
 }
