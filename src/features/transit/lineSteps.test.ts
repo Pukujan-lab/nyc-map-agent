@@ -39,8 +39,17 @@ describe("lineSteps", () => {
   });
 
   it("cycles the other lines at a station, and none where there is one", () => {
-    expect(otherLine(sys, "S2", "N", 1)).toBe("Q");
-    expect(otherLine(sys, "S2", "N", -1)).toBe("R");
+    expect(otherLine(sys, "S2", "N", 1)).toEqual({ route: "Q", station: "S2" });
+    expect(otherLine(sys, "S2", "N", -1)).toEqual({ route: "R", station: "S2" });
     expect(otherLine(sys, "S1", "N", 1)).toBeNull();
+  });
+
+  it("counts the other platforms of a complex", () => {
+    const complex = structuredClone(sys) as unknown as StaticSystem;
+    complex.stations.features.push({ type: "Feature", properties: { id: "X1", name: "S1", routes: "2 3" }, geometry: { type: "Point", coordinates: [-74.001, 40.7005] } });
+    complex.stopM["2"] = { X1: 0 };
+    complex.stopM["3"] = { X1: 0 };
+    expect(otherLine(complex, "S1", "N", 1)).toEqual({ route: "2", station: "X1" });
+    expect(otherLine(complex, "S1", "N", -1)).toEqual({ route: "3", station: "X1" });
   });
 });

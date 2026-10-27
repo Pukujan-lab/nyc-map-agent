@@ -52,11 +52,26 @@ export function stepAlong(stops: LineStop[], at: { id?: string | null; m: number
   return dir > 0 ? stops.find((s) => s.m > at.m) ?? null : [...stops].reverse().find((s) => s.m < at.m) ?? null;
 }
 
-/** The next (or previous) other line serving a station, in its own order; null when it has just the one. */
-export function otherLine(sys: StaticSystem, station: string, route: string, dir: 1 | -1): string | null {
+/**
+ * The next (or previous) other line at a station, counting the whole complex: platforms within
+ * 300 m (Atlantic Av-Barclays Ctr is four station ids). Null when the line is the only one there.
+ */
+export function otherLine(sys: StaticSystem, station: string, route: string, dir: 1 | -1): { route: string; station: string } | null {
   const f = sys.stations.features.find((s) => s.properties.id === station);
-  const routes = (f?.properties.routes ?? "").split(" ").filter((r) => r && sys.stopM[r]?.[station] !== undefined);
-  if (routes.length < 2) return null;
-  const i = routes.indexOf(route);
-  return routes[(Math.max(0, i) + dir + routes.length) % routes.length];
+  if (!f) return null;
+  const [x, y] = f.geometry.coordinates;
+  const k = Math.cos((y * Math.PI) / 180);
+  const near = sys.stations.features
+    .map((s) => ({ s, d: Math.hypot((s.geometry.coordinates[0] - x) * k, s.geometry.coordinates[1] - y) * 111_320 }))
+    .filter((n) => n.d <= 300)
+    .sort((a, z) => a.d - z.d);
+  const lines: Array<{ route: string; station: string }> = [];
+  for (const { s } of near) {
+    for (const r of s.properties.routes.split(" ")) {
+      if (r && sys.stopM[r]?.[s.properties.id] !== undefined && !lines.some((l) => l.route === r)) lines.push({ route: r, station: s.properties.id });
+    }
+  }
+  if (lines.length < 2) return null;
+  const i = Math.max(0, lines.findIndex((l) => l.route === route));
+  return lines[(i + dir + lines.length) % lines.length];
 }
