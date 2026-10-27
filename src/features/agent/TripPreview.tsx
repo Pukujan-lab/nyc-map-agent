@@ -10,12 +10,15 @@ import { plainAlertText } from "@/lib/transit/trouble";
 import { remindAt, saveReminder } from "./reminder";
 import { PLAYBACK_SPEEDS, type PlaybackSpeed, type Trip } from "./schema";
 import type { PlayerState } from "./usePlayer";
+import { TRIP_CHOICES, type TripChoice } from "./tripChoices";
 
 /** The frame's preview controls; the existing player owns all playback state. */
 export function TripPreview(p: {
   trip: Trip; state: PlayerState; speed: PlaybackSpeed;
   onToggle: () => void; onSpeed: (s: PlaybackSpeed) => void;
   onClose: () => void; onUse: () => void; onOther: () => void;
+  /** Ask again by subway, by bus, on foot or with the least walking (src/features/agent/tripChoices.ts). */
+  onChoice?: (c: TripChoice) => void;
   /** Open the line a notice is about, e.g. "N" for "[N][R] trains are delayed". */
   onAlert?: (route: string) => void;
 }) {
@@ -57,6 +60,12 @@ export function TripPreview(p: {
     {trip.scheduled?.future ? <button type="button" className="task-action task-secondary flex items-center justify-center gap-1.5" data-testid="preview-remind"
       onClick={() => { saveReminder(trip); toast(t("remindSaved").replace("{t}", remindAt(trip))); }}>
       <BellRing size={16} aria-hidden />{t("remindMe")}</button> : null}
+    {/* The trip card hides the chat answer, so the ways to go live here too (owner, 2026-10-26). */}
+    {p.onChoice ? <div role="group" aria-label="Other ways to go" data-testid="trip-choices" className="flex gap-1.5 overflow-x-auto">
+      {TRIP_CHOICES.map((c) => <button type="button" key={c} onClick={() => p.onChoice?.(c)}
+        className="h-9 shrink-0 rounded-full border border-slate-500/40 px-3 text-[13px] font-semibold text-slate-100 hover:bg-slate-800">
+        {t(c === "subway" ? "bySubway" : c === "bus" ? "byBus" : c === "walk" ? "byWalk" : "lessWalking")}</button>)}
+    </div> : null}
     <div className="grid grid-cols-2 gap-2">
       <button type="button" className="task-action" onClick={p.onUse}>Use this route</button>
       <button type="button" className="task-action task-secondary" onClick={p.onOther}>{t("otherOptions")}</button>

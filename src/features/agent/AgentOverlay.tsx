@@ -933,6 +933,7 @@ export default function AgentOverlay() {
             void send(`Use this route to ${trip.destination.label}. Show me the ${trip.routes.join(" and ")} service for this trip.`);
           }}
           onOther={() => { player.release(); void send(`What are the other routes from ${trip.origin.label} to ${trip.destination.label}?`); }}
+          onChoice={(c) => { player.release(); void send(tripChoiceQuestion(trip, c)); }}
         /></Suspense> : null}
       </>
     );
