@@ -89,30 +89,34 @@
 @media (min-width: 640px) {
   .pull-sheet { left: 12px; right: auto; width: min(380px, 42vw); bottom: calc(var(--chat-bar-h, 96px) + 16px); }
 }
-/* Arrival: a few balloons drift up once and are gone; nothing to dismiss, nothing to click. */
-.arrive-balloons { position: fixed; inset: 0; z-index: 45; pointer-events: none; overflow: hidden; }
-.arrive-balloon {
-  position: absolute;
-  bottom: -90px;
-  width: 38px;
-  height: 46px;
-  border-radius: 50% 50% 48% 48%;
-  opacity: .9;
-  animation: arrive-rise 3.6s ease-in forwards;
+/* Arrival: a speech bubble just above the chat bar, where every answer lands (owner, 2026-10-26); it points down at the chat. */
+.arrive-bubble {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--chat-bar-h, 56px) + var(--pull-sheet-h, 0px) + 18px);
+  z-index: 45;
+  width: max-content;
+  max-width: min(420px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  border-radius: 20px;
+  padding: 10px 16px;
+  background: #f8fafc;
+  color: #0f172a;
+  box-shadow: 0 10px 30px rgba(2, 6, 23, .45);
+  animation: arrive-pop .35s cubic-bezier(.2, 1.4, .4, 1) both;
 }
-.arrive-balloon::after {
+.arrive-bubble::after {
   content: "";
   position: absolute;
   left: 50%;
   top: 100%;
-  width: 1px;
-  height: 34px;
-  background: rgba(241, 245, 249, .55);
+  border: 9px solid transparent;
+  border-top-color: #f8fafc;
+  transform: translateX(-50%);
 }
-@keyframes arrive-rise {
-  0% { transform: translate(0, 0) rotate(-4deg); opacity: 0; }
-  10% { opacity: .9; }
-  50% { transform: translate(14px, -55vh) rotate(4deg); }
-  100% { transform: translate(-8px, -115vh) rotate(-3deg); opacity: .9; }
+@media (min-width: 640px) { .arrive-bubble { bottom: calc(var(--chat-bar-h, 96px) + 18px); } }
+@keyframes arrive-pop {
+  from { opacity: 0; transform: translate(-50%, 10px) scale(.9); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
 }
-@media (prefers-reduced-motion: reduce) { .arrive-balloons { display: none; } }
+@media (prefers-reduced-motion: reduce) { .arrive-bubble { animation: none; } }
