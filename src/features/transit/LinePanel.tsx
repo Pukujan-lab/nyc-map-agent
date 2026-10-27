@@ -14,6 +14,8 @@ import { boardingArrivals, minutesUntil } from "./model";
 import { TONE, allLineNotices, type LineNotice } from "./lineNotices";
 import { NoticeIcon, noticeKind } from "./noticeKind";
 import { PullSheet } from "@/components/PullSheet";
+import { useLineKeys } from "./useLineKeys";
+import type { Vehicle } from "./model";
 import type { SheetLevel } from "@/components/sheetSwipe";
 
 const GLASS = "border border-[rgba(148,163,184,0.18)] bg-[rgba(15,23,42,0.6)] backdrop-blur-[10px]";
@@ -68,7 +70,7 @@ function useNoticeRings(map: MaplibreMap | undefined, notice: LineNotice | null,
  * and a close button, listing the line's notices; folded, just the pill.
  * Tapping a notice opens its full text and rings its stations on the map.
  */
-export function LinePanel({ map, route, onFollow }: { map: MaplibreMap | undefined; route: string; onFollow: () => void }) {
+export function LinePanel({ map, route, onFollow, trains = () => [] }: { map: MaplibreMap | undefined; route: string; onFollow: () => void; trains?: () => Vehicle[] }) {
   const data = useTransitData(["subway"]);
   const alerts = useAlerts(true).data;
   const sys = data.subway?.stat;
@@ -96,7 +98,9 @@ export function LinePanel({ map, route, onFollow }: { map: MaplibreMap | undefin
   const ride = useSelectedLine()?.ride;
   const now = useNow(Boolean(ride));
   const board = ride && sys ? boardingArrivals(sys, data.subway?.live, route, ride.from, ride.to, now) : null;
-  const { seedChat, setChatOpen } = useMapState();
+  const { seedChat, setChatOpen, walking } = useMapState();
+  // Arrows step along the line, train or station, and across to another line; Escape leaves it.
+  useLineKeys(map, route, useSelectedLine()?.train ?? null, sys, trains, walking);
   const info = sys?.routes[route];
   const color = info?.color ?? lineColor(route);
   const text = info?.text ?? "#ffffff";
