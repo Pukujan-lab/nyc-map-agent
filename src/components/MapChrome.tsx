@@ -240,6 +240,7 @@ const LayersIcon = () => <svg {...svg} width={20} height={20}><path d="m12 2 10 
 /**
  * Phones: Live trains, Live buses (and which routes) and Restrooms, one tap from the map.
  * They were only in the Settings sheet, where nobody found them (owner, 2026-10-27).
+ * The bus route groups make it tall: it scrolls instead of running under the buttons and chat at the bottom.
  */
 function PhoneLayers({ open, onOpen }: { open: boolean; onOpen: (open: boolean) => void }) {
   return (
@@ -250,7 +251,7 @@ function PhoneLayers({ open, onOpen }: { open: boolean; onOpen: (open: boolean) 
       </button>
       {open ? (
         <div role="dialog" aria-label="Layers" data-testid="phone-layers-menu" data-map-cover
-          className={`pointer-events-auto absolute right-[52px] top-0 w-[min(300px,calc(100vw-88px))] ${FLOAT}`}>
+          className={`pointer-events-auto absolute right-[52px] top-0 max-h-[max(220px,calc(100dvh-380px))] w-[min(300px,calc(100vw-88px))] overflow-y-auto overscroll-contain ${FLOAT}`}>
           <LiveLayerRows />
         </div>
       ) : null}
