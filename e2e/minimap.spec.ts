@@ -24,7 +24,7 @@ test("street level shows a mini map whose heading cone turns with the camera", a
   await expect(page.getByRole("button", { name: "Show map" })).toBeVisible();
 });
 
-test("street level mini map points to the nearest restroom and the card offers directions", async ({ page }) => {
+test("street level mini map points to the nearest restroom, and directions to a far one go to the trip planner", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockNetwork(page);
   // One restroom somewhere in the city: the chip must show even when it is past the inset's edge.
@@ -49,6 +49,7 @@ test("street level mini map points to the nearest restroom and the card offers d
   await expect(chip).toContainText("Nearest restroom");
   await chip.click();
   await expect(page.getByText("Bryant Park").first()).toBeVisible();
+  // This restroom is across the city, so Directions from here asks the trip planner in chat instead of drawing a walk.
   await page.getByRole("button", { name: "Directions from here" }).click();
-  await expect(page.getByText("Walking directions")).toBeVisible();
+  await expect(page.getByText(/How do I get to Bryant Park/).first()).toBeVisible();
 });
