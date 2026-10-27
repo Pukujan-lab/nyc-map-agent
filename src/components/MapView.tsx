@@ -167,7 +167,7 @@ import { QuickLayers } from "./QuickLayers";
 import { MapChrome } from "./MapChrome";
 import { StreetMiniMap } from "./StreetMiniMap";
 import { nearestCorner, type CornerSign } from "@/lib/map/corner";
-import { kioskSources, pickAt as pickFurniture } from "@/lib/map/streetPick";
+import { pickAt as pickFurniture } from "@/lib/map/streetPick";
 import { formatStreetPair, formatStreetText } from "@/lib/streetName";
 import { parseAt, streetLabel, streetPosition, type NamedLine } from "@/lib/map/streetPos";
 import { MAX_HEIGHT_M, pitchForHeight, STREET_LEVEL_M } from "@/lib/map/cameraHeight";
@@ -1047,7 +1047,6 @@ export function MapView({
         restroomsMod.current = mod;
         if (restrooms) mod.installRestrooms(map);
         mod.setRestroomsVisible(map, restrooms);
-        kioskSources.restrooms = restrooms;
       })
       .catch((err) => console.warn("restrooms failed to load", err));
   }, [ready, styleEpoch, restrooms]);

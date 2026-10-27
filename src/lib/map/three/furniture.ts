@@ -206,21 +206,21 @@ export function createFurnitureLayer(): CustomLayerInterface {
     return out;
   };
 
-  // Restroom points come from the GeoJSON sources' data, not rendered tiles:
-  // at street level the 2D icon layers are hidden, so their tiles never load.
+  // Restroom points come from data, not rendered tiles: at street level the 2D
+  // icon layers are hidden, so their tiles never load. Public restrooms use the
+  // city-wide list, like the mini map and its "Nearest restroom" pill, so the
+  // kiosk stands there even when the overhead Restrooms switch is off.
   let kioskData: Array<{ kind: PickTarget["kind"]; f: GeoJSON.Feature }> = [];
   let kioskStamp = "";
   const loadKiosks = () => {
-    const want = (["restrooms", "place-toilets"] as const).filter((id) => (id === "restrooms" ? kioskSources.restrooms : kioskSources.places) && map.getSource(id));
-    void Promise.all(
-      want.map((id) =>
-        (map.getSource(id) as unknown as { getData?: () => Promise<GeoJSON.GeoJSON> }).getData?.().then((d) => ({ id, d })).catch(() => null) ?? Promise.resolve(null),
-      ),
-    ).then((rows) => {
+    const places = kioskSources.places ? (map.getSource("place-toilets") as unknown as { getData?: () => Promise<GeoJSON.GeoJSON> } | undefined) : undefined;
+    void Promise.all([
+      import("../restrooms").then((mod) => mod.loadRestrooms()).catch(() => null),
+      places?.getData?.().catch(() => null) ?? null,
+    ]).then(([city, shops]) => {
       const next: typeof kioskData = [];
-      for (const r of rows) {
-        if (!r || r.d.type !== "FeatureCollection") continue;
-        for (const f of r.d.features) next.push({ kind: r.id === "restrooms" ? "restroom" : "place", f });
+      for (const [kind, d] of [["restroom", city], ["place", shops]] as const) {
+        if (d?.type === "FeatureCollection") for (const f of d.features) next.push({ kind, f });
       }
       const stamp = next
         .map(({ kind, f }) => {
@@ -242,7 +242,7 @@ export function createFurnitureLayer(): CustomLayerInterface {
     const out: Array<PickTarget & { d: number }> = [];
     for (const { kind, f } of kioskData) {
       if (f.geometry?.type !== "Point") continue;
-      if (kind === "restroom" ? !kioskSources.restrooms : !kioskSources.places) continue;
+      if (kind === "place" && !kioskSources.places) continue;
       const [lng, lat] = f.geometry.coordinates;
       const d = Math.hypot(...toLocal(lng, lat, eye));
       if (d > KIOSK_RADIUS_M) continue;
