@@ -1,6 +1,6 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buildStreetContext, closeAsk, openAsk } from "@/lib/agent/streetContext";
-import { followedTrain, useFollowed } from "@/lib/transit/follow";
+import { followedTrain } from "@/lib/transit/follow";
 import { setMapInstance } from "@/lib/map/mapInstance";
 import { watchMapCovers } from "@/lib/map/mapCover";
 import { DirectionsFromHere } from "@/components/DirectionsFromHere";
@@ -348,7 +348,6 @@ export function MapView({
     selectBlock,
     streetViewOpen,
   } = useMapState();
-  const followingNow = useFollowed() !== null;
   const businesses = businessesPicked || walking;
   const storefrontsOn = storefrontsFlag && businesses;
   const reducedMotion = usePrefersReducedMotion();
@@ -1777,7 +1776,7 @@ export function MapView({
 
 
       {agentHome ? <MapChrome /> : <QuickLayers />}
-      {agentHome && !followingNow ? <MapViewSwitch /> : null}
+      {agentHome ? <MapViewSwitch /> : null}
       {agentHome ? <BackToStreet /> : null}
       {walking ? (
         <WalkControls

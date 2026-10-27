@@ -95,15 +95,34 @@ export class ZoomKeeper {
 /**
  * Camera eye and look-at (metres east/north of the vehicle, and height) for a
  * follow mode; `bearing` is the vehicle's heading in degrees, `z` its height.
+ * Side and Chase stand well back so you can see what is around the train
+ * (owner, 2026-10-26: "a bit further"); a phone's narrow screen gets a higher,
+ * more top-down angle so the train stays clear of the card and the buttons.
  */
-export function followRig(m: FollowMode, bearing: number, z: number): { eye: [number, number, number]; look: [number, number, number] } {
+export function followRig(m: FollowMode, bearing: number, z: number, phone = false): { eye: [number, number, number]; look: [number, number, number] } {
   const r = (bearing * Math.PI) / 180, fx = Math.sin(r), fy = Math.cos(r); // forward
   const rx = fy, ry = -fx; // right-hand side
   const at = Math.max(z, 0);
   switch (m) {
-    case "side": return { eye: [rx * 70, ry * 70, at + 18], look: [0, 0, at] };
+    case "side": return phone
+      ? { eye: [rx * 150, ry * 150, at + 120], look: [fx * 30, fy * 30, at] }
+      : { eye: [rx * 170, ry * 170, at + 75], look: [fx * 40, fy * 40, at] };
     case "overhead": return { eye: [-fx * 20, -fy * 20, at + 320], look: [0, 0, at] };
     case "cab": return { eye: [fx * 9, fy * 9, at + 3.2], look: [fx * 120, fy * 120, at + 2] };
-    default: return { eye: [-fx * 70, -fy * 70, at + 28], look: [fx * 20, fy * 20, at] };
+    default: return phone
+      ? { eye: [-fx * 120, -fy * 120, at + 120], look: [fx * 20, fy * 20, at] }
+      : { eye: [-fx * 140, -fy * 140, at + 70], look: [fx * 30, fy * 30, at] };
   }
+}
+
+/** Where the followed vehicle is now (~2 Hz), for the follow mini map. */
+export type FollowPos = { lon: number; lat: number; bearing: number };
+let pos: FollowPos | null = null;
+const posSubs = new Set<() => void>();
+export function publishFollowPos(next: FollowPos | null) {
+  pos = next;
+  posSubs.forEach((f) => f());
+}
+export function useFollowPos(): FollowPos | null {
+  return useSyncExternalStore((f) => (posSubs.add(f), () => posSubs.delete(f)), () => pos);
 }
