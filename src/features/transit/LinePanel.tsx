@@ -5,6 +5,7 @@ import { lineColor } from "@/lib/transit/bullets";
 import { setSelectedLine, useSelectedLine } from "@/lib/transit/selectedLine";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { framePadding } from "@/lib/map/mapCover";
+import { showView } from "@/lib/map/viewChange";
 import { sendScreen, useScreen, useScreenSize } from "@/lib/screen/screenSpace";
 import { heldTrains } from "@/lib/transit/holds";
 import { setAlertFocus } from "./alertFocus";
@@ -33,7 +34,13 @@ function ringMarker(color: string, glow: string, label: string): HTMLElement {
 
 /** Ring the picked notice's stations and take the map to them: tapping a notice is asking where it is. */
 function useNoticeRings(map: MaplibreMap | undefined, notice: LineNotice | null, panel: HTMLElement | null, sheet: boolean) {
+  const { walking } = useMapState();
+  const walkingRef = useRef(walking);
+  walkingRef.current = walking;
+  // The notice already taken out of street view: the sheet moving must not take you out again.
+  const leftFor = useRef<string | null>(null);
   useEffect(() => {
+    if (!notice) leftFor.current = null;
     if (!map || !notice?.stations.length) return;
     const tone = TONE[notice.tone];
     const markers = notice.stations.map((s) => new Marker({ element: ringMarker(tone.color, tone.glow, s.label) }).setLngLat(s.coord).addTo(map));
@@ -44,7 +51,13 @@ function useNoticeRings(map: MaplibreMap | undefined, notice: LineNotice | null,
       const top = sheet ? 80 : Math.round((panel?.getBoundingClientRect().bottom ?? 120) + 24);
       const bottom = sheet ? 24 : (parseInt(getComputedStyle(document.documentElement).getPropertyValue("--chat-bar-h"), 10) || 0) + 40;
       const xs = notice.stations.map((s) => s.coord[0]), ys = notice.stations.map((s) => s.coord[1]);
-      map.fitBounds([[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]], { padding: framePadding(map, { top, bottom, left: 40, right: sheet ? 72 : 140 }), maxZoom: 15, duration: 700 });
+      const bounds: [[number, number], [number, number]] = [[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]];
+      const padding = framePadding(map, { top, bottom, left: 40, right: sheet ? 72 : 140 });
+      // Street view: the flat map framed on it; "Back to street view" resumes the walk.
+      if (walkingRef.current) {
+        if (leftFor.current !== notice.id) showView("map", null, null, { frame: { bounds, padding, maxZoom: 15 } });
+      } else map.fitBounds(bounds, { padding, maxZoom: 15, duration: 700 });
+      leftFor.current = notice.id;
     }
     return () => markers.forEach((m) => m.remove());
   }, [map, notice, panel, sheet]);

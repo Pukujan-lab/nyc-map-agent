@@ -264,7 +264,13 @@ export function MapChrome() {
   }, [open]);
   // A newly picked line closes the menu; while following, the followed train's line is always
   // selected, so that rule would shut the follow view menu the moment it opened.
-  useEffect(() => { if (line && open && !followed) setOpenMenu(null); }, [line, open, followed]);
+  // Only a change of line counts: with a line already open, the cube menu has to stay open on a phone.
+  const lastLine = useRef(line);
+  useEffect(() => {
+    const changed = lastLine.current !== line;
+    lastLine.current = line;
+    if (changed && line && !followed) setOpenMenu(null);
+  }, [line, followed]);
 
   const top = "calc(env(safe-area-inset-top) + 16px)";
   // Following: the same quick bar, with the follow cameras under Change view.

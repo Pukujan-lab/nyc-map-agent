@@ -19,4 +19,9 @@ describe("showView", () => {
     backToStreet();
     expect(viewRequest()).toMatchObject({ view: "street", place: { lon: -73.98, lat: 40.75 }, heading: 120, exact: true });
   });
+
+  it("carries a frame for the map (a notice's stretch of line)", () => {
+    showView("map", null, null, { frame: { bounds: [[-74, 40.7], [-73.9, 40.8]], maxZoom: 15 } });
+    expect(viewRequest()).toMatchObject({ view: "map", place: null, frame: { bounds: [[-74, 40.7], [-73.9, 40.8]], maxZoom: 15 } });
+  });
 });

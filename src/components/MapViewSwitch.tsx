@@ -4,6 +4,8 @@ import { onMapInstance } from "@/lib/map/mapInstance";
 import { metresBetween } from "@/lib/map/walk";
 import { backToStreet, setStreetSpot, showView, useStreetSpot, type ViewName } from "@/lib/map/viewChange";
 import { useMapState } from "@/lib/store/MapStateContext";
+import { usePullSheetUp } from "@/lib/store/pullSheet";
+import { useSelectedLine } from "@/lib/transit/selectedLine";
 
 /** Tilted past this, the map counts as 3D. */
 const TILTED_DEG = 20;
@@ -34,6 +36,23 @@ function useTilted(map: MapLibreMap | null): boolean {
   return tilted;
 }
 
+/**
+ * Where the switch and "Back to street view" stand. A line panel docked at the top
+ * (right side on wider screens, the whole top on a phone) pushes them below its
+ * pill and centres them in the map left beside it, clear of the menu row too.
+ * `--lp` is the docked panel's width plus its margins.
+ */
+function usePlace(): { docked: boolean; left: string; cls: string } {
+  const line = useSelectedLine();
+  const sheet = usePullSheetUp();
+  const docked = Boolean(line) && !sheet;
+  return {
+    docked,
+    left: docked ? "max(131px, calc((100% - var(--lp)) / 2))" : "50%",
+    cls: "[--lp:392px] md:[--lp:412px] lg:[--lp:432px]",
+  };
+}
+
 /** Map, 3D or Street for the spot you are looking at, keeping the heading. */
 export function pickView(map: MapLibreMap | null, view: ViewName, walking: boolean, spot: ReturnType<typeof useStreetSpot>): void {
   if (!map) return;
@@ -61,10 +80,11 @@ export function useCurrentView(): { map: MapLibreMap | null; current: ViewName; 
  */
 export function MapViewSwitch() {
   const { map, current, walking, spot } = useCurrentView();
+  const place = usePlace();
   return (
     <div role="radiogroup" aria-label="View" data-testid="map-view-switch"
-      className="pointer-events-auto absolute left-1/2 z-40 hidden -translate-x-1/2 gap-0.5 rounded-full border border-[#263449] bg-[rgba(15,23,42,0.92)] p-1 text-[#f1f5f9] shadow-[0_6px_18px_rgba(0,0,0,0.35)] sm:flex"
-      style={{ top: "calc(env(safe-area-inset-top) + 16px)" }}>
+      className={`pointer-events-auto absolute z-40 hidden -translate-x-1/2 gap-0.5 rounded-full border border-[#263449] bg-[rgba(15,23,42,0.92)] p-1 text-[#f1f5f9] shadow-[0_6px_18px_rgba(0,0,0,0.35)] sm:flex ${place.cls}`}
+      style={{ top: `calc(env(safe-area-inset-top) + ${place.docked ? 72 : 16}px)`, left: place.left }}>
       {VIEWS.map((v) => {
         const on = current === v.id;
         return (
@@ -88,6 +108,7 @@ export function BackToStreet() {
   const { walking } = useMapState();
   const spot = useStreetSpot();
   const show = !walking && spot !== null;
+  const place = usePlace();
 
   useEffect(() => {
     if (!map || !show || !spot) return;
@@ -105,7 +126,8 @@ export function BackToStreet() {
   if (!show) return null;
   return (
     <div data-testid="back-to-street"
-      className="pointer-events-auto absolute left-1/2 z-40 flex -translate-x-1/2 items-center gap-1 rounded-full border border-[#263449] bg-[rgba(15,23,42,0.92)] p-1 text-[#f1f5f9] shadow-[0_6px_18px_rgba(0,0,0,0.35)] top-[calc(env(safe-area-inset-top)+72px)] max-sm:top-[calc(env(safe-area-inset-top)+16px)]">
+      className={`pointer-events-auto absolute left-1/2 top-[calc(env(safe-area-inset-top)+var(--bt))] z-40 flex -translate-x-1/2 items-center gap-1 rounded-full border border-[#263449] bg-[rgba(15,23,42,0.92)] p-1 text-[#f1f5f9] shadow-[0_6px_18px_rgba(0,0,0,0.35)] sm:left-[var(--bl)] sm:top-[calc(env(safe-area-inset-top)+var(--bt)+56px)] ${place.cls}`}
+      style={{ ["--bl" as string]: place.left, ["--bt" as string]: `${place.docked ? 72 : 16}px` }}>
       <button type="button" onClick={backToStreet}
         className="h-9 whitespace-nowrap rounded-full bg-[#2563eb] px-4 text-[14px] font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]">
         Back to street view

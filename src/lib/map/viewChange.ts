@@ -11,6 +11,13 @@ export type ViewName = "map" | "3d" | "street";
 
 export interface ViewPlace { lon: number; lat: number }
 
+/** Map only: fit these bounds instead of centring on a place (a notice's stretch of line). */
+export interface ViewFrame {
+  bounds: [[number, number], [number, number]];
+  padding?: number | { top: number; bottom: number; left: number; right: number };
+  maxZoom?: number;
+}
+
 export interface ViewRequest {
   view: ViewName;
   /** Where to look; the current spot when left out. */
@@ -19,6 +26,7 @@ export interface ViewRequest {
   heading: number | null;
   /** Stand exactly on `place` in street view (going back to where you stood). */
   exact: boolean;
+  frame: ViewFrame | null;
   nonce: number;
 }
 
@@ -35,8 +43,8 @@ const subscribe = (f: () => void) => {
   return () => { subs.delete(f); };
 };
 
-export function showView(view: ViewName, place?: ViewPlace | null, heading?: number | null, opts: { exact?: boolean } = {}): void {
-  request = { view, place: place ?? null, heading: heading ?? null, exact: opts.exact ?? false, nonce: ++nonce };
+export function showView(view: ViewName, place?: ViewPlace | null, heading?: number | null, opts: { exact?: boolean; frame?: ViewFrame } = {}): void {
+  request = { view, place: place ?? null, heading: heading ?? null, exact: opts.exact ?? false, frame: opts.frame ?? null, nonce: ++nonce };
   notify();
 }
 
