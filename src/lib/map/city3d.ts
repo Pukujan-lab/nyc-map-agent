@@ -188,7 +188,10 @@ export async function installCity3d(map: MapLibreMap): Promise<void> {
     beforeId,
   );
   // Bridge decks, railings and piers (scripts/bridges.ts): visible from z14,
-  // since a bridge is a landmark from afar, unlike street props.
+  // since a bridge is a landmark from afar, unlike street props. Decks no
+  // higher than 8 m (overpasses, the BQE and other viaducts) get no piers in
+  // the tiles and cut off square at the ends, so from the street they read as
+  // grey slabs floating overhead; only piers and the tall spans are drawn.
   map.addLayer(
     {
       ...common,
@@ -196,6 +199,7 @@ export async function installCity3d(map: MapLibreMap): Promise<void> {
       type: "fill-extrusion",
       "source-layer": "bridges",
       minzoom: 14,
+      filter: ["any", ["==", ["get", "kind"], "pier"], [">", ["to-number", ["get", "height"]], 8.5]],
       paint: {
         "fill-extrusion-color": ["match", ["get", "kind"], "rail", "#b9bcc0", "pier", "#7b7e82", "#8e9196"],
         "fill-extrusion-base": ["get", "base"],

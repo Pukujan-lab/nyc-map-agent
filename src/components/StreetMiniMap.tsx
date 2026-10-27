@@ -188,13 +188,18 @@ export function StreetMiniMap({ main, getEye, onExit, onMap, filters }: {
       const halo = main.getLayer(LANDMARK_LABELS_LAYER) ? main.getPaintProperty(LANDMARK_LABELS_LAYER, "text-halo-color") : undefined;
       installLandmarkLabels(mini, typeof color === "string" ? color : "#1f2937", typeof halo === "string" ? halo : "#ffffff");
       mini.addSource(DOTS, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      // Trains are bullets with their letter, so you can tell which line is passing.
       mini.addLayer({ id: DOTS, type: "circle", source: DOTS, paint: {
-        "circle-radius": ["case", ["get", "bus"], 3, 4],
+        "circle-radius": ["case", ["get", "bus"], 3, 7],
         "circle-color": ["get", "color"],
-        "circle-opacity": ["case", ["get", "under"], 0, 1],
-        "circle-stroke-color": ["get", "color"],
-        "circle-stroke-width": 2,
+        "circle-opacity": ["case", ["get", "bus"], ["case", ["get", "under"], 0, 1], ["case", ["get", "under"], 0.6, 1]],
+        "circle-stroke-color": ["case", ["get", "bus"], ["get", "color"], "#ffffff"],
+        "circle-stroke-width": ["case", ["get", "bus"], 2, 1.5],
       } });
+      mini.addLayer({ id: `${DOTS}-label`, type: "symbol", source: DOTS, filter: ["!", ["get", "bus"]], layout: {
+        "text-field": ["get", "label"], "text-font": ["Noto Sans Bold"], "text-size": 9,
+        "text-allow-overlap": true, "text-ignore-placement": true,
+      }, paint: { "text-color": ["case", ["in", ["get", "label"], ["literal", ["N", "Q", "R", "W"]]], "#111111", "#ffffff"] } });
       void import("@/lib/map/restrooms").then((mod) => {
         if (!alive) return;
         mod.mountMiniRestrooms(mini);

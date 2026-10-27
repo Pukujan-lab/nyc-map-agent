@@ -5,6 +5,7 @@ import { cornerLine, entranceKind, entranceLabels, shortStreet } from "./entranc
 
 const ent = (id: string, kind: string, at: Pt) => ({ type: "Feature" as const, properties: { id, name: "47-50 Sts-Rockefeller Ctr", kind }, geometry: { type: "Point" as const, coordinates: at } });
 const sys = {
+  stations: { type: "FeatureCollection", features: [{ type: "Feature", properties: { id: "D15", name: "47-50 Sts-Rockefeller Ctr", routes: "B D F M" }, geometry: { type: "Point", coordinates: [-73.9812, 40.7587] } }] },
   entrances: {
     type: "FeatureCollection",
     features: [
@@ -35,15 +36,15 @@ describe("entrance labels", () => {
   it("labels only the nearest entrances, one per corner and kind", () => {
     const fc = entranceLabels(sys, new Set(["D15"]), [-73.9814, 40.7586], place, { max: 2, phone: false });
     expect(fc.features.map((f) => f.properties.label)).toEqual([
-      "47-50 Sts-Rockefeller Ctr · Stairs\n6 Av & W 47 St · SE corner",
-      "47-50 Sts-Rockefeller Ctr · Elevator · out of service\n6 Av & W 47 St · NE corner",
+      "47-50 Sts-Rockefeller Ctr · B D F M\nStairs · 6 Av & W 47 St · SE corner",
+      "47-50 Sts-Rockefeller Ctr · B D F M\nElevator · out of service · 6 Av & W 47 St · NE corner",
     ]);
   });
 
   it("keeps a far entrance to the station name on a phone", () => {
-    const fc = entranceLabels(sys, new Set(), [-73.9814, 40.7586], place, { max: 6, phone: true });
+    const fc = entranceLabels(sys, new Set(), [-73.9814, 40.7586], place, { max: 6, phone: true, radiusM: 300 });
     const labels = fc.features.map((f) => f.properties.label);
-    expect(labels[0]).toBe("47-50 Sts-Rockefeller Ctr · Stairs\n6 Av & W 47 St · SE corner");
-    expect(labels.at(-1)).toBe("47-50 Sts-Rockefeller Ctr");
+    expect(labels[0]).toBe("47-50 Sts-Rockefeller Ctr · B D F M\nStairs · 6 Av & W 47 St · SE corner");
+    expect(labels.at(-1)).toBe("47-50 Sts-Rockefeller Ctr · B D F M");
   });
 });
