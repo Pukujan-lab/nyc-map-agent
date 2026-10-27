@@ -101,6 +101,13 @@ function onRaisedTrack(cells: Set<string>, p: GeoJSON.Position): boolean {
 const STREET_RADIUS_M = 600;
 /** Street level: station names show within this distance of the walker. */
 const STREET_LABEL_M = 220;
+/** Street level: trains within this distance of the walker show their route bullet. */
+const STREET_TRAIN_M = 300;
+
+function metresBetween(a: { lon: number; lat: number }, b: number[]): number {
+  const kx = 111_320 * Math.cos((a.lat * Math.PI) / 180);
+  return Math.hypot((b[0] - a.lon) * kx, (b[1] - a.lat) * 111_320);
+}
 /** X-ray draws underground trains this far below the ground plane. */
 const XRAY_DEPTH_M = -12;
 /** Where the walker stands: at street level the map centre sits at most ~10 m ahead of the eye. */
@@ -216,6 +223,8 @@ type FrameInputs = {
   followMode: Parameters<typeof followRig>[0];
   reducedMotion: boolean;
   hide: boolean;
+  /** Street level: only the subway trains near the walker keep their bullets. */
+  walking: boolean;
   alerted: Set<string>;
   theme: Palette;
 };
@@ -760,8 +769,11 @@ export default function TransitLayer() {
     if (!f || !m) return;
     const src = m.getSource<GeoJSONSource>("transit-vehicles");
     const fc = vehicleCollection(list, f.alerted, f.theme, f.followedKey);
-    void src?.setData(f.hide ? EMPTY : fc);
-    // Street level empties the vehicle source; the followed bus keeps its badge in its own source.
+    // Street level keeps only the nearby trains' bullets, so you can tell which line is passing.
+    const walker = f.walking ? streetEye(m) : null;
+    const near = walker ? { ...fc, features: fc.features.filter((x) => x.properties?.system === "subway" && x.geometry.type === "Point" && metresBetween(walker, x.geometry.coordinates) < STREET_TRAIN_M) } : fc;
+    void src?.setData(f.hide ? EMPTY : near);
+    // Street level empties the vehicle source of buses; the followed bus keeps its badge in its own source.
     void m.getSource<GeoJSONSource>("transit-followed-bus")?.setData({ type: "FeatureCollection", features: fc.features.filter((x) => x.properties?.followed === 1 && x.properties?.system === "bus") });
     if (f.three) {
       v3d.current?.update(
@@ -854,7 +866,7 @@ export default function TransitLayer() {
   // Street level: publish the drawn vehicles once a second for the mini map.
   useEffect(() => {
     if (!walking) { publishLiveDots([]); return; }
-    const push = () => publishLiveDots(shownVehicles([...display.current.values()], busRoutesRef.current).map((v) => ({ key: v.key, lon: v.lon, lat: v.lat, color: v.system === "bus" ? theme.bus : v.color, bus: v.system === "bus", underground: v.grade === "underground" })));
+    const push = () => publishLiveDots(shownVehicles([...display.current.values()], busRoutesRef.current).map((v) => ({ key: v.key, lon: v.lon, lat: v.lat, color: v.system === "bus" ? theme.bus : v.color, bus: v.system === "bus", underground: v.grade === "underground", label: v.label })));
     push();
     const id = window.setInterval(push, 1000);
     return () => { window.clearInterval(id); publishLiveDots([]); };
@@ -944,7 +956,7 @@ export default function TransitLayer() {
       setPickTargets(entr.current.map((e) => ({ kind: "entrance" as const, id: e.id, lng: e.lon, lat: e.lat, h: 3, props: { name: e.name } })), "entrances");
       // Each nearby entrance's corner and kind.
       const phone = window.matchMedia("(max-width: 639px)").matches;
-      setEntrLabels(walking && sub ? entranceLabels(sub, outStations, [c.lng, c.lat], (read ?? readMap(map)).placeAt, { max: phone ? 3 : 6, phone }) : EMPTY_FC);
+      setEntrLabels(walking && sub ? entranceLabels(sub, outStations, [c.lng, c.lat], (read ?? readMap(map)).placeAt, { max: phone ? 2 : 4, phone }) : EMPTY_FC);
       // Over the 3D storefronts and kiosks, which are added after it and would hide it.
       if (walking && map.getLayer("transit-entrance-label")) map.moveLayer("transit-entrance-label");
     };
@@ -1232,7 +1244,7 @@ export default function TransitLayer() {
 
   // Route bullets stay on in every view but street level: symbols draw above the 3D
   // buildings, so a train is never lost behind a tower or under the ground when tilted.
-  frame.current = { map, three, xrayOn, followedKey, followMode, reducedMotion, hide: walking || Boolean(opts.stationsOnly), alerted, theme };
+  frame.current = { map, three, xrayOn, followedKey, followMode, reducedMotion, hide: Boolean(opts.stationsOnly), walking, alerted, theme };
 
   if (!enabled || (!rail.length && !busOn)) return null;
 
@@ -1353,7 +1365,9 @@ export default function TransitLayer() {
       <Source id="transit-entrance-labels" type="geojson" data={entrLabels}>
         {/* Street level: the corner first, then stairs, elevator or escalator, over the nearest entrances. */}
         <Layer id="transit-entrance-label" type="symbol"
-          layout={{ "text-field": ["get", "label"], "text-font": ["Noto Sans Bold"], "text-size": 14, "text-anchor": "bottom", "text-offset": [0, -2.2],
+          layout={{ "text-field": ["get", "label"], "text-font": ["Noto Sans Bold"], "text-size": 14, "text-anchor": "bottom",
+            // Above the stair's railing: a near stair stands tall on screen, a far one short.
+            "text-offset": ["interpolate", ["linear"], ["get", "d"], 5, ["literal", [0, -7]], 20, ["literal", [0, -4]], 60, ["literal", [0, -2]], 180, ["literal", [0, -1]]] as unknown as [number, number],
             "text-max-width": 16, "text-line-height": 1.25, "text-pitch-alignment": "viewport", "text-allow-overlap": true, "symbol-sort-key": ["get", "d"] }}
           paint={{ "text-color": "#ffffff", "text-halo-color": "rgba(14,23,38,0.95)", "text-halo-width": 3 }} />
       </Source>
