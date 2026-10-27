@@ -32,12 +32,14 @@ function openRestroom(info: RestroomInfo, distanceLabel?: string): void {
  * Point layers for Layers switches that are on are copied from the main map
  * and dropped again when the switch goes off. Public restrooms are one tappable
  * layer of its own (`mini-restrooms`). "Hide map" folds it away; "Leave street
- * view" stands you back up.
+ * view" stands you back up; a tap on the map opens the flat map centred on you.
  */
-export function StreetMiniMap({ main, getEye, onExit, filters }: {
+export function StreetMiniMap({ main, getEye, onExit, onMap, filters }: {
   main: MapLibreMap;
   getEye: () => { lon: number; lat: number; bearing: number } | null;
   onExit: () => void;
+  /** A tap on the map itself: the flat map, centred on you, with a way back. */
+  onMap: () => void;
   filters: InsetFilters;
 }) {
   const box = useRef<HTMLDivElement>(null);
@@ -183,8 +185,8 @@ export function StreetMiniMap({ main, getEye, onExit, filters }: {
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
     const f = mini.getLayer("mini-restrooms") ? mini.queryRenderedFeatures([[x - 24, y - 24], [x + 24, y + 24]], { layers: ["mini-restrooms"] })[0] : undefined;
-    // A tap on the map itself (not a restroom) leaves street view for the overview.
-    if (!f) { onExit(); return; }
+    // A tap on the map itself (not a restroom) opens the flat map centred on you.
+    if (!f) { onMap(); return; }
     void import("@/lib/map/restrooms").then((mod) => {
       const info = mod.restroomInfo(f);
       if (!info) return;

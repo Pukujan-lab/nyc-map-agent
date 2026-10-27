@@ -63,11 +63,18 @@ function nyIso(local: string): string {
 }
 
 const RAIL_ONLY = { transit: { transit: [{ mode: "SUBWAY" }, { mode: "RAIL" }, { mode: "FERRY" }, { mode: "TRAM" }] } };
+const BUS_ONLY = { transit: { transit: [{ mode: "BUS" }] } };
 
-export interface OtpClient { plan(o: LngLatTuple, d: LngLatTuple, local: string, arriveBy: boolean): Promise<OtpItinerary[]> }
+/**
+ * What the rider asked for (owner, 2026-10-26): the fastest way (any mode), the subway or the bus
+ * only, or the least walking.
+ */
+export type TripPrefer = "fastest" | "subway" | "bus" | "less-walking";
+
+export interface OtpClient { plan(o: LngLatTuple, d: LngLatTuple, local: string, arriveBy: boolean, prefer?: TripPrefer): Promise<OtpItinerary[]> }
 
 export const httpOtp: OtpClient = {
-  async plan(o, d, local, arriveBy) {
+  async plan(o, d, local, arriveBy, prefer = "fastest") {
     const loc = ([lon, lat]: LngLatTuple) => ({ location: { coordinate: { latitude: lat, longitude: lon } } });
     const dt = arriveBy ? { latestArrival: nyIso(local) } : { earliestDeparture: nyIso(local) };
     const ask = async (modes?: unknown) => {
@@ -78,6 +85,8 @@ export const httpOtp: OtpClient = {
       if (!res.ok) throw new Error(`OTP returned ${res.status}`);
       return response.parse(await res.json()).data.planConnection.edges.map((e) => e.node);
     };
+    if (prefer === "subway") return ask(RAIL_ONLY);
+    if (prefer === "bus") return ask(BUS_ONLY);
     // All modes, plus a rail-only search so a strong bus option cannot crowd the
     // subway/LIRR alternative out of the result page.
     const [all, rail] = await Promise.all([ask(), ask(RAIL_ONLY).catch(() => [])]);
@@ -99,11 +108,16 @@ const signature = (i: OtpItinerary) => transit(i).map(bullet).join(">") || "walk
 /**
  * Top N itineraries: earliest arrival (latest departure for arrive-by), then
  * fewer transfers, then less walking. One per distinct route sequence.
+ * "less-walking" puts the shortest walk first; "subway" and "bus" keep only rides on those.
  */
-export function rankItineraries(items: OtpItinerary[], n = 3, arriveBy = false): OtpItinerary[] {
+export function rankItineraries(items: OtpItinerary[], n = 3, arriveBy = false, prefer: TripPrefer = "fastest"): OtpItinerary[] {
   const t = (s: string) => new Date(s).getTime();
-  const sorted = [...items].sort((a, b) =>
-    (arriveBy ? t(b.start) - t(a.start) : t(a.end) - t(b.end)) || a.numberOfTransfers - b.numberOfTransfers || a.walkDistance - b.walkDistance);
+  const fits = (i: OtpItinerary) => prefer === "bus" ? transit(i).every((l) => l.mode === "BUS")
+    : prefer === "subway" ? transit(i).every((l) => l.mode !== "BUS") : true;
+  const time = (a: OtpItinerary, b: OtpItinerary) => (arriveBy ? t(b.start) - t(a.start) : t(a.end) - t(b.end));
+  const sorted = items.filter(fits).sort((a, b) => prefer === "less-walking"
+    ? a.walkDistance - b.walkDistance || time(a, b) || a.numberOfTransfers - b.numberOfTransfers
+    : time(a, b) || a.numberOfTransfers - b.numberOfTransfers || a.walkDistance - b.walkDistance);
   const seen = new Set<string>(); const out: OtpItinerary[] = [];
   for (const i of sorted) { const k = signature(i); if (seen.has(k)) continue; seen.add(k); out.push(i); if (out.length === n) break; }
   return out;

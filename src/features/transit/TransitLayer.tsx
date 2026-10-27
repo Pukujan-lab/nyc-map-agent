@@ -28,7 +28,7 @@ import { useMapState } from "@/lib/store/MapStateContext";
 import { useFlag } from "@/lib/flags";
 import { usePanel, usePanelChip, usePanelMode, usePanelSearch, type SearchProvider } from "@/lib/store/PanelContext";
 import { pickRouteVehicle, registerRouteFollower } from "@/lib/transit/routeFollow";
-import { ZoomKeeper, followRig, rememberFollowOrigin, setFollowMode, setFollowed, stableHeading, stopFollowing, takeFollowRestore, useFollowMode, useFollowed } from "./follow";
+import { ZoomKeeper, followRig, publishFollowPos, rememberFollowOrigin, setFollowMode, setFollowed, stableHeading, stopFollowing, takeFollowRestore, useFollowMode, useFollowed } from "./follow";
 import { followActionForMapClick } from "./followClick";
 import { publishSubway } from "@/lib/agent/streetContext";
 import { busesToShow, capPerLine, holdShuttle, registerBusToggle, setShuttleBuses, shownVehicles, useBusPins } from "@/lib/transit/busReveal";
@@ -46,7 +46,9 @@ const stopFollow = () => setFollowed(null);
 import { SYSTEM_LABELS, cellKey } from "./model";
 import { entranceLabels } from "./entranceLabels";
 import { readMap } from "@/lib/map/mapRead";
-import { FollowCard, SkipDetails, StationDetails } from "./TransitCard";
+import { showView } from "@/lib/map/viewChange";
+import { FollowCard, SkipDetails, StationDetails, stopName } from "./TransitCard";
+import { FollowMiniMap } from "./FollowMiniMap";
 import { TransitStatusDetails } from "./TransitStatus";
 import { alertGeometry, setAlertFocus, stationChanges, useAlertFocus } from "./alertFocus";
 import { LinesDrawer } from "./LinesDrawer";
@@ -501,12 +503,18 @@ export default function TransitLayer() {
   // A selected line's panel covers the top (phone) or right (desktop): frame alerts around it.
   const lineSelRef = useRef(false);
   lineSelRef.current = Boolean(lineSel);
+  const walkingRef = useRef(walking);
+  walkingRef.current = walking;
   followedRef.current = followedKey;
   const savedCam = useRef<{ center: [number, number]; zoom: number; bearing: number; pitch: number } | null>(null);
   useEffect(() => {
     if (!map) return;
     const act = alertCameraAction({ hasBounds: Boolean(alertGeo?.bounds), hasFocus: Boolean(alertFocus), hasSaved: Boolean(savedCam.current), following: Boolean(followedRef.current) });
-    if (act === "fit" && alertGeo?.bounds) {
+    if (act === "fit" && alertGeo?.bounds && walkingRef.current) {
+      // Street view: the flat map framed on the notice; "Back to street view" resumes the walk.
+      const wide = window.innerWidth >= 768;
+      showView("map", null, null, { frame: { bounds: alertGeo.bounds, maxZoom: 15.5, padding: framePadding(map, lineSelRef.current ? (wide ? { top: 90, bottom: 120, left: 80, right: 460 } : { top: 140, bottom: 24, left: 30, right: 72 }) : wide ? { top: 90, bottom: 60, left: 440, right: 80 } : { top: 90, bottom: Math.round(window.innerHeight * 0.45), left: 30, right: 30 }) } });
+    } else if (act === "fit" && alertGeo?.bounds) {
       if (!savedCam.current) { const c = map.getCenter(); savedCam.current = { center: [c.lng, c.lat], zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() }; }
       const wide = window.innerWidth >= 768;
       // A phone's line sheet sits at the bottom and is a map cover, so the map's own padding already clears it.
@@ -611,6 +619,7 @@ export default function TransitLayer() {
   // fought the trip preview. A heading that flips almost backward waits out.
   const headingKey = useRef<string | null>(null);
   const headingHold = useRef({ bearing: 0, streak: 0 });
+  const lastPosAt = useRef(0);
   /** The vehicle the flat follow camera has already framed once. */
   const followFramed = useRef<string | null>(null);
   // Positions go straight to MapLibre (GeoJSON source) and the three.js layer, never through
@@ -642,13 +651,15 @@ export default function TransitLayer() {
       followSig.current = sig;
       setFollowedVehicle(fv);
     }
-    if (!fv) return;
+    if (!fv) { if (lastPosAt.current) { lastPosAt.current = 0; publishFollowPos(null); } return; }
     if (headingKey.current !== fv.key) {
       headingKey.current = fv.key;
       headingHold.current = stableHeading(null, fv.bearing, 0);
     } else {
       headingHold.current = stableHeading(headingHold.current.bearing, fv.bearing, headingHold.current.streak);
     }
+    const nowMs = performance.now();
+    if (nowMs - lastPosAt.current > 500) { lastPosAt.current = nowMs; publishFollowPos({ lon: fv.lon, lat: fv.lat, bearing: headingHold.current.bearing }); }
     // Your own zoom stays on top of the follow camera, in every mode.
     if (followZoomKey.current !== fv.key) { followZoomKey.current = fv.key; followZoom.current.reset(); }
     if (f.followMode === "map") {
@@ -663,7 +674,7 @@ export default function TransitLayer() {
       return;
     }
     followFramed.current = null;
-    const { eye, look } = followRig(f.followMode, headingHold.current.bearing, fv.z ?? 0);
+    const { eye, look } = followRig(f.followMode, headingHold.current.bearing, fv.z ?? 0, window.innerWidth < 640);
     const at = (dx: number, dy: number) => new LngLat(fv.lon + dx / (111_320 * Math.cos((fv.lat * Math.PI) / 180)), fv.lat + dy / 111_320);
     const cam = m.calculateCameraOptionsFromTo(at(eye[0], eye[1]), eye[2], at(look[0], look[1]), look[2]);
     m.jumpTo(cam.zoom === undefined ? cam : { ...cam, zoom: followZoom.current.next(cam.zoom, m.getZoom()) });
@@ -867,6 +878,15 @@ export default function TransitLayer() {
 
   // Follow mode: tap a train or bus (map or street level) and the camera rides along.
   const followMode = useFollowMode();
+  // The follow mini map: the followed route's own track, and its next station.
+  const followRoute = followed && followed.system !== "bus" ? `${followed.system}:${followed.route}` : "";
+  const followTrack = useMemo<GeoJSON.FeatureCollection>(() => {
+    const [sys, route] = followRoute.split(":");
+    const st = statics.find((s) => s.system === sys);
+    return { type: "FeatureCollection", features: st ? st.lines.features.filter((f) => String(f.properties.route) === route) : [] };
+  }, [followRoute, staticKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const followStop = followed?.stopped?.kind === "at" ? followed.stopped.stop : followed?.nextStop;
+  const followNext = followed ? (stopName(data, followed.system, followStop) ?? null) : null;
   const following = Boolean(followedKey);
   // X-ray matches the track under the train you boarded, and turns off when you step off.
   const followedUnder = followed ? followed.grade === "underground" : null;
@@ -1074,6 +1094,7 @@ export default function TransitLayer() {
   return (
     <>
       {followed ? <FollowCard vehicle={followed} /> : null}
+      {followed && followMode !== "map" && map ? <FollowMiniMap main={map} vehicle={followed} line={followTrack} nextName={followNext} /> : null}
       {lineSel && !followedKey ? <Suspense fallback={null}><LinePanel map={map} route={lineSel} onFollow={followLine} /></Suspense> : null}
       <Source id="transit-lines" type="geojson" data={lines}>
         {/* X-ray on stays a solid glow. Off: solid too (owner, 2026-10-25: dashes read as a broken line), nearly as wide as the at-grade stroke, opacity 0.75. */}

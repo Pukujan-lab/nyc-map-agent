@@ -57,6 +57,7 @@ export const args = {
     to: z.string().min(2),
     depart: when.describe("When to leave (or arrive by, with arriveBy): the user's own words, e.g. \"tomorrow 9am\", \"now\", or a New York time 2026-10-22T09:00"),
     arriveBy: z.boolean().default(false).describe("true when the user must arrive by that time"),
+    prefer: z.enum(["fastest", "subway", "bus", "less-walking"]).default("fastest").describe("fastest (any mode), subway only, bus only, or the least walking"),
   }),
   weather_forecast: z.object({ place: z.string().default("here"), time: when }),
   hazards: z.object({ place: z.string().default("here") }),
@@ -155,6 +156,9 @@ function allTools(ctx: ToolContext) {
       if (!ctx.location) throw new Error("Location permission not granted; ask the user where they are starting.");
       return { label: "your location", at: [ctx.location.lon, ctx.location.lat] };
     }
+    // A place picked on the map arrives as "Rockefeller Center (40.75874, -73.97870)": go to that exact spot.
+    const pin = /^(.*?)\s*\((-?\d{1,2}\.\d+),\s*(-?\d{1,3}\.\d+)\)$/.exec(text.trim());
+    if (pin) return { label: pin[1] || "the spot on the map", at: [Number(pin[3]), Number(pin[2])] };
     const p = await geocode(text);
     if (!p) throw new Error(`Could not find "${text}" in NYC.`);
     return p;
@@ -232,9 +236,9 @@ function allTools(ctx: ToolContext) {
     transit_plan: tool({
       description: "Door-to-door public transit search across subway, bus (incl. SBS), LIRR, Metro-North, ferry and SIR: the best itinerary plus up to 2 alternatives (each with depart/arrive, legs, stops), weather, planned work, elevator outages, recommended exit. Returns a tripId for map tools.",
       inputSchema: args.transit_plan,
-      execute: sourced(async ({ from, to, depart, arriveBy }: z.infer<typeof args.transit_plan>) => {
+      execute: sourced(async ({ from, to, depart, arriveBy, prefer }: z.infer<typeof args.transit_plan>) => {
         const [o, d] = await Promise.all([resolve(from), resolve(to)]);
-        const t = schedule(await planTrip(o, d, localTime(depart), arriveBy, ctx.deps));
+        const t = schedule(await planTrip(o, d, localTime(depart), arriveBy, ctx.deps, prefer));
         trips.set(t.id, t);
         for (const a of t.alternatives) trips.set(a.id, { ...a, alternatives: [] });
         offer(tripActions(t));

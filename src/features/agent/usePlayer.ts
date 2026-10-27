@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import type { Map as MapLibreMap } from "maplibre-gl";
+import { LngLat, type Map as MapLibreMap } from "maplibre-gl";
 import { getMapInstance } from "@/lib/map/mapInstance";
 import { keepInView } from "@/lib/map/keepInView";
 import { framePadding } from "@/lib/map/mapCover";
-import { bindPreviewRelease } from "@/lib/transit/follow";
+import { ZoomKeeper, bindPreviewRelease, followMode, followRig, setFollowMode, setPreviewing, stableHeading, type FollowMode } from "@/lib/transit/follow";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 import { readMap } from "@/lib/map/mapRead";
 import { along, buildTimeline, calloutInfoAt, poseAt, wallSeconds, type Segment } from "./flythrough";
@@ -39,6 +39,21 @@ function frameLeg(map: MapLibreMap, coords: Array<[number, number]>, reduced: bo
   });
 }
 
+/** Underground legs ride at the X-ray track depth, as followed trains do. */
+const UNDERGROUND_M = -12;
+
+/**
+ * Ride the marker with a follow camera (Chase, Side, Overhead, Street), the same
+ * rig a followed train uses (src/lib/transit/follow.ts). Your own zoom stays on top.
+ */
+function rideAlong(map: MapLibreMap, mode: FollowMode, at: [number, number], bearing: number, z: number, zoom: ZoomKeeper) {
+  const { eye, look } = followRig(mode, bearing, z);
+  const k = 111_320 * Math.cos((at[1] * Math.PI) / 180);
+  const pt = (dx: number, dy: number) => new LngLat(at[0] + dx / k, at[1] + dy / 111_320);
+  const cam = map.calculateCameraOptionsFromTo(pt(eye[0], eye[1]), eye[2], pt(look[0], look[1]), look[2]);
+  map.jumpTo(cam.zoom === undefined ? cam : { ...cam, zoom: zoom.next(cam.zoom, map.getZoom()) });
+}
+
 export function usePlayer(onCallout?: (text: string) => void) {
   const reduced = usePrefersReducedMotion();
   const [pb, dispatch] = useReducer(playback, initialPlayback);
@@ -63,6 +78,10 @@ export function usePlayer(onCallout?: (text: string) => void) {
   const say = useRef(onCallout);
   say.current = onCallout;
   const rafId = useRef(0);
+  /** The follow camera last drawn, and the steadied heading and zoom it rides with. */
+  const camMode = useRef<FollowMode>("map");
+  const heading = useRef<{ bearing: number; streak: number } | null>(null);
+  const zoomKeep = useRef(new ZoomKeeper());
 
   const clearLayers = useCallback(() => {
     const map = getMapInstance();
@@ -79,6 +98,8 @@ export function usePlayer(onCallout?: (text: string) => void) {
     setSegs(t);
     setCallout(t[0]?.label ?? "");
     setWhere(null);
+    // A new preview starts on the calm map; a view picked during it then stays until it ends.
+    setFollowMode("map");
     dispatch({ type: "load", tripId: trip.id, segCount: t.length, speed });
   }, []);
   /** Load and play at once, for the Play button. */
@@ -112,6 +133,10 @@ export function usePlayer(onCallout?: (text: string) => void) {
   const toggle = useCallback(() => dispatch({ type: "toggle" }), []);
   const setSpeed = useCallback((speed: Speed) => dispatch({ type: "speed", speed }), []);
   const skip = useCallback(() => dispatch({ type: "skip" }), []);
+
+  const on = isActive(pb);
+  useEffect(() => { setPreviewing(on); }, [on]);
+  useEffect(() => () => setPreviewing(false), []);
 
   useEffect(() => {
     bindPreviewRelease(release);
@@ -155,17 +180,27 @@ export function usePlayer(onCallout?: (text: string) => void) {
       const f = reduced ? 1 : Math.min(1, elapsed.current / total);
       const pose = poseAt(seg, f);
       const mark = seg.kind === "ride" ? along(seg.coords, f) : pose.center;
-      if (styledSeg.current !== s.seg) {
+      const mode = followMode();
+      const newLeg = styledSeg.current !== s.seg;
+      if (newLeg) {
         // getStyle() serialises the whole style: once per leg, never per frame.
         styledSeg.current = s.seg;
         setPreviewDim(map, true);
         setXray(map, seg.underground && seg.kind !== "walk");
+      }
+      if (mode !== "map") {
+        // A view picked from Change view: the camera rides the marker, leg after leg, until you pick Map.
+        if (camMode.current !== mode) { heading.current = null; zoomKeep.current.reset(); }
+        heading.current = stableHeading(heading.current?.bearing ?? null, pose.bearing, heading.current?.streak ?? 0);
+        rideAlong(map, mode, mark, heading.current.bearing, seg.underground && seg.kind !== "walk" ? UNDERGROUND_M : 0, zoomKeep.current);
+      } else if (newLeg || camMode.current !== "map") {
         // Each leg is framed once, top-down and north up, clear of the open panels.
         frameLeg(map, seg.coords, reduced);
       } else {
         // Then the map stays still while the marker moves, and glides only when it nears the edge.
         keepInView(map, mark);
       }
+      camMode.current = mode;
       setMarker(map, mark, seg.route);
       if (seg.kind === "walk" && !seg.underground && now - place.current.at >= PLACE_MS) {
         place.current.at = now;

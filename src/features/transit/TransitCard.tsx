@@ -32,7 +32,7 @@ export function RouteBullet({ system, route, data }: { system: SystemId | "bus";
   );
 }
 
-const stopName = (data: Data, system: SystemId | "bus", stop?: string) => {
+export const stopName = (data: Data, system: SystemId | "bus", stop?: string) => {
   if (!stop || system === "bus") return stop;
   const id = stationOf(system, stop);
   return data[system]?.stat?.stations.features.find((f) => f.properties.id === id)?.properties.name ?? stop;

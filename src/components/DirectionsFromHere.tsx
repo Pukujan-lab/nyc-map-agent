@@ -1,15 +1,19 @@
 import { useState } from "react";
-import { currentOrigin, directionsPair } from "@/lib/geo/directionsFromHere";
+import { currentOrigin, directionsPair, directionsQuestion, walkOnly } from "@/lib/geo/directionsFromHere";
+import { useMapState } from "@/lib/store/MapStateContext";
 import { startSharing } from "@/lib/geo/sharedLocation";
 import { useDataView } from "@/lib/store/DataViewContext";
 import { saveHomeWork, useMemoryPrefs } from "@/lib/memory/memory";
 
 /**
- * Sets a walking route from the current location to this point. Labelled; no popup. With a place
+ * A short walk (under WALK_ONLY_M) is drawn straight away. Anything farther asks the trip planner in chat
+ * (owner, 2026-10-26), which offers subway and bus with Subway, Bus, Walk and Least walking to pick from;
+ * it used to draw a walk however far it was. Labelled; no popup. With a place
  * name, it also offers Save as Home / Save as Work (#313), kept on this device only.
  */
 export function DirectionsFromHere({ lon, lat, label }: { lon: number; lat: number; label?: string }) {
-  const { setRoutePoint } = useDataView();
+  const { setRoutePoint, setFollowingRoute } = useDataView();
+  const { seedChat, setChatOpen } = useMapState();
   const [note, setNote] = useState<string | null>(null);
   const keepsHomeWork = useMemoryPrefs().homeWork;
   const save = (which: "home" | "work") => setNote(saveHomeWork(which, { label: label ?? "", lon, lat }) ? `Saved as ${which === "home" ? "Home" : "Work"} on this phone.` : "Couldn't save it here.");
@@ -19,8 +23,14 @@ export function DirectionsFromHere({ lon, lat, label }: { lon: number; lat: numb
         type="button"
         className="h-9 rounded-full bg-acc px-4 text-[13px] font-semibold text-acc-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         onClick={() => {
+          const near = currentOrigin();
+          if (!walkOnly(near, { lon, lat })) {
+            seedChat(directionsQuestion({ lon, lat }, label));
+            setChatOpen(true);
+            return;
+          }
           void (async () => {
-            const here = currentOrigin() ?? (await startSharing());
+            const here = near ?? (await startSharing());
             const pair = directionsPair(here, { lon, lat });
             if (!pair) {
               setNote("Location isn't shared. Allow it, or use My location, then try again.");
@@ -29,6 +39,8 @@ export function DirectionsFromHere({ lon, lat, label }: { lon: number; lat: numb
             setNote(null);
             setRoutePoint("start", pair.start);
             setRoutePoint("end", pair.end);
+            // The walk card owns the line and its close, as with Walk me there; a bare line had no way to clear it.
+            setFollowingRoute(true);
           })();
         }}
       >

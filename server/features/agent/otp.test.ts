@@ -41,6 +41,12 @@ describe("OTP glue", () => {
     expect(rankItineraries([subIt, busIt, { ...busIt }]).map((i) => i.end)).toEqual([busIt.end, subIt.end]);
     expect(rankItineraries([sameArrival, busIt])[0]).toBe(busIt);
   });
+  it("keeps only the subway or the bus when asked, and puts the shortest walk first for least walking", () => {
+    expect(rankItineraries([subIt, busIt], 3, false, "subway")).toEqual([subIt]);
+    expect(rankItineraries([subIt, busIt], 3, false, "bus")).toEqual([busIt]);
+    const shortWalk = { ...subIt, walkDistance: 200 };
+    expect(rankItineraries([busIt, shortWalk], 3, false, "less-walking")[0]).toBe(shortWalk);
+  });
   it("maps a bus leg with bullet, stops and a final walk FROM the stop", async () => {
     const trip = await itineraryToTrip(busIt, { label: "Elmhurst Av", at: [-73.882, 40.742] }, { label: "Rockaway Beach", at: [-73.8197, 40.5833] }, noStations);
     const r = trip.legs.find((l) => l.kind === "ride");
