@@ -82,7 +82,8 @@
 .pull-sheet[data-level="1"] { max-height: min(46dvh, calc(100dvh - var(--chat-bar-h, 96px) - 250px)); }
 .pull-sheet[data-level="2"] { max-height: calc(100dvh - var(--chat-bar-h, 96px) - 220px); }
 .pull-sheet-body { min-height: 0; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
-.pull-grip { display: flex; justify-content: center; width: 100%; height: 18px; padding: 6px 0 0; border: 0; background: transparent; }
+/* A 24 px tap target (WCAG 2.2) that never shrinks in a full sheet; the bar itself stays a thin line near the top. */
+.pull-grip { display: flex; flex: 0 0 auto; justify-content: center; width: 100%; height: 24px; min-height: 24px; padding: 6px 0 0; border: 0; background: transparent; }
 .pull-grip > span { width: 40px; height: 5px; border-radius: 3px; background: rgba(203, 213, 225, .55); }
 .pull-grip:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; border-radius: 8px; }
 @media (max-width: 639px) { [data-pull-sheet="open"] .sheet-locate { display: none; } }

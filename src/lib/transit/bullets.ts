@@ -81,6 +81,13 @@ export function busPrefix(route: string): { text: string; express: boolean } {
   const text = raw === "BX" ? "Bx" : raw === "BXM" ? "BxM" : raw;
   return { text, express: /M$|^X$|^SIM$/.test(raw) && raw !== "M" };
 }
+/** Which MTA paint a bus wears: local (2016 navy), Select Bus Service (white, light-blue wrap), express (white, blue stripe). */
+export type BusLivery = "local" | "sbs" | "express";
+/** SBS routes end in "+"; express are the QM, BM, BxM, X and SIM routes. */
+export function busLivery(route: string): BusLivery {
+  if (route.endsWith("+")) return "sbs";
+  return busPrefix(route).express ? "express" : "local";
+}
 export function busBadgeId(text: string, color: string, alert = false): string {
   return `${BUS_PREFIX}${text}|${color.replace("#", "")}|${alert ? 1 : 0}`;
 }

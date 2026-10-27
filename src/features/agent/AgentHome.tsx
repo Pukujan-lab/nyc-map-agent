@@ -234,11 +234,14 @@ export function AgentHome(p: AgentHomeProps) {
     if (el && !busy) el.scrollTop = 0;
   }, [busy]);
 
-  // Escape stops the orb first, then closes the answer.
+  // Escape stops the orb first, then closes the answer. Not while someone is
+  // part-way through typing: the first Escape there is theirs, not the answer's.
   useEffect(() => {
     if (!orb.show && !answerOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
+      const field = e.target as HTMLInputElement | null;
+      if (field && (field.tagName === "INPUT" || field.tagName === "TEXTAREA") && field.value) return;
       if (orb.show) orb.stop();
       else onCloseAnswer();
     };

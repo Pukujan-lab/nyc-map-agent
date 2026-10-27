@@ -14,20 +14,37 @@ import { boardingArrivals, minutesUntil } from "./model";
 import { TONE, allLineNotices, type LineNotice } from "./lineNotices";
 import { NoticeIcon, noticeKind } from "./noticeKind";
 import { PullSheet } from "@/components/PullSheet";
+import { useLineKeys } from "./useLineKeys";
+import type { Vehicle } from "./model";
 import type { SheetLevel } from "@/components/sheetSwipe";
 
 const GLASS = "border border-[rgba(148,163,184,0.18)] bg-[rgba(15,23,42,0.6)] backdrop-blur-[10px]";
 
+const SVG = (body: string) => `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+/** An elevator (a cab with up and down arrows) or an escalator (a rising step line) ahead of an outage tag (owner, 2026-10-27). */
+export function tagIcon(label: string): string | null {
+  if (/elevator/i.test(label)) return SVG('<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 10l3-3 3 3M9 14l3 3 3-3"/>');
+  if (/escalator/i.test(label)) return SVG('<path d="M3 19h5l8-12h5"/><path d="M8 19l8-12"/><circle cx="17" cy="4" r="1.2" fill="currentColor"/>');
+  return null;
+}
+
+/** A skipped stop reads as trouble: red ring, red tag, white words (owner, 2026-10-27: the grey tag was barely visible). */
+const SKIP = { color: "#dc2626", glow: "rgba(220,38,38,0.28)" };
+
 /** The ring and label for one affected station, as plain DOM so it matches the design exactly. */
 function ringMarker(color: string, glow: string, label: string): HTMLElement {
+  const skip = /skipped/i.test(label);
+  if (skip) ({ color, glow } = SKIP);
   const el = document.createElement("div");
   // No `position` here: MapLibre's marker class places the element absolutely, which also anchors the label.
   el.style.cssText = "width:34px;height:34px;pointer-events:none";
   const ring = document.createElement("div");
   ring.style.cssText = `width:34px;height:34px;box-sizing:border-box;border-radius:17px;border:3px solid ${color};box-shadow:0 0 0 6px ${glow}`;
   const tag = document.createElement("div");
-  tag.textContent = label;
-  tag.style.cssText = `position:absolute;left:39px;top:5px;padding:4px 8px;border-radius:8px;background:${color};color:#111827;font:700 12px Inter,system-ui,sans-serif;white-space:nowrap`;
+  const icon = tagIcon(label);
+  if (icon) tag.innerHTML = icon;
+  tag.append(label);
+  tag.style.cssText = `position:absolute;left:39px;top:5px;display:flex;align-items:center;gap:5px;padding:4px 8px;border-radius:8px;background:${color};color:${skip ? "#ffffff" : "#111827"};font:700 12px Inter,system-ui,sans-serif;white-space:nowrap;border:1.5px solid rgba(17,24,39,0.55);box-shadow:0 1px 4px rgba(0,0,0,0.35)`;
   el.append(ring, tag);
   return el;
 }
@@ -44,6 +61,9 @@ function useNoticeRings(map: MaplibreMap | undefined, notice: LineNotice | null,
     if (!map || !notice?.stations.length) return;
     const tone = TONE[notice.tone];
     const markers = notice.stations.map((s) => new Marker({ element: ringMarker(tone.color, tone.glow, s.label) }).setLngLat(s.coord).addTo(map));
+    // The ring's tag names each skip and its direction: the station's own "Skipped …-bound" words would print under it.
+    const quiet = map.getLayer("transit-skip") ? "transit-skip" : null;
+    if (quiet) map.setPaintProperty(quiet, "text-opacity", 0);
     // An alert's own focus already fits the affected stretch (TransitLayer); only outages are framed here.
     if (!notice.alert) {
       // A phone's line sheet is a map cover at the bottom (the map's padding clears it): frame under the quick buttons.
@@ -59,7 +79,10 @@ function useNoticeRings(map: MaplibreMap | undefined, notice: LineNotice | null,
       } else map.fitBounds(bounds, { padding, maxZoom: 15, duration: 700 });
       leftFor.current = notice.id;
     }
-    return () => markers.forEach((m) => m.remove());
+    return () => {
+      markers.forEach((m) => m.remove());
+      if (quiet && map.getLayer(quiet)) map.setPaintProperty(quiet, "text-opacity", 1);
+    };
   }, [map, notice, panel, sheet]);
 }
 
@@ -68,7 +91,7 @@ function useNoticeRings(map: MaplibreMap | undefined, notice: LineNotice | null,
  * and a close button, listing the line's notices; folded, just the pill.
  * Tapping a notice opens its full text and rings its stations on the map.
  */
-export function LinePanel({ map, route, onFollow }: { map: MaplibreMap | undefined; route: string; onFollow: () => void }) {
+export function LinePanel({ map, route, onFollow, trains = () => [] }: { map: MaplibreMap | undefined; route: string; onFollow: () => void; trains?: () => Vehicle[] }) {
   const data = useTransitData(["subway"]);
   const alerts = useAlerts(true).data;
   const sys = data.subway?.stat;
@@ -96,7 +119,9 @@ export function LinePanel({ map, route, onFollow }: { map: MaplibreMap | undefin
   const ride = useSelectedLine()?.ride;
   const now = useNow(Boolean(ride));
   const board = ride && sys ? boardingArrivals(sys, data.subway?.live, route, ride.from, ride.to, now) : null;
-  const { seedChat, setChatOpen } = useMapState();
+  const { seedChat, setChatOpen, walking } = useMapState();
+  // Arrows step along the line, train or station, and across to another line; Escape leaves it.
+  useLineKeys(map, route, useSelectedLine()?.train ?? null, sys, trains, walking);
   const info = sys?.routes[route];
   const color = info?.color ?? lineColor(route);
   const text = info?.text ?? "#ffffff";

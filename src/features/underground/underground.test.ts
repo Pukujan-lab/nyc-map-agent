@@ -252,10 +252,11 @@ describe('"Are you in the station?"', () => {
     expect(accuracyWorsened(8, 30)).toBe(false);
   });
 
-  it("asks when the trip boards, unless a shared position is far away", () => {
+  it("asks when the trip boards and the shared position is at that station, not while it is only planned", () => {
     const b = boardingStation(trip)!;
     expect(b.id).toBe("629");
-    expect(stationToAsk({ ...base, boarding: b })?.id).toBe("629");
+    expect(stationToAsk({ ...base, boarding: b, here: b.at })?.id).toBe("629");
+    expect(stationToAsk({ ...base, boarding: b })).toBeNull();
     expect(stationToAsk({ ...base, boarding: b, here: [-73.9, 40.8] })).toBeNull();
   });
 
@@ -333,5 +334,14 @@ describe("offline cache list (public/sw.js)", () => {
     expect(how("/assets/index-abc123.js")).toBe("cache-first");
     expect(how("/transit/subway.json")).toBe("network-first");
     expect(how("/transit/equipment.json")).toBe("network-first");
+  });
+});
+
+describe("the way up a stair", () => {
+  it("carries the mapped way up for stairs, not elevators", () => {
+    const st = { id: "X1", name: "Test St", at: [-73.98, 40.76] as [number, number] };
+    const exits = rankExits(st, [{ at: [-73.9801, 40.7601], kind: "Stair", up: 30 }, { at: [-73.9799, 40.7599], kind: "Elevator", up: 30 }], null);
+    expect(exits.find((e) => e.kind === "Stair")?.up).toBe(30);
+    expect(exits.find((e) => e.kind === "Elevator")?.up).toBeNull();
   });
 });

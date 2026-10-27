@@ -49,7 +49,7 @@ const Osm = z.object({
 async function brands(b: z.infer<typeof BrandsQuery>): Promise<Brand[]> {
   let res: Response | null = null;
   for (const host of OVERPASS) {
-    res = await fetch(host, { method: "POST", headers: { ...UA, "content-type": "application/x-www-form-urlencoded" }, body: `data=${encodeURIComponent(brandsQuery(b))}`, signal: AbortSignal.timeout(25_000) }).catch(() => null);
+    res = await fetch(host, { method: "POST", headers: { ...UA, "content-type": "application/x-www-form-urlencoded" }, body: `data=${encodeURIComponent(brandsQuery(b))}`, signal: AbortSignal.timeout(8_000) }).catch(() => null);
     if (res?.ok) break;
   }
   if (!res?.ok) throw new Error(`overpass ${res?.status ?? "unreachable"}`);
@@ -127,11 +127,26 @@ async function resolveLogo(qid: string): Promise<string | null> {
   return url;
 }
 
+/**
+ * Cells whose Overpass lookup just failed, and when. A street of signs asks the
+ * same cell a dozen times; without this each one waited on every Overpass host
+ * again until Cloudflare gave up (502 after ~50 s, owner's phone, 2026-10-27).
+ */
+const downCells = new Map<string, number>();
+const RETRY_MS = 10 * 60_000;
+
 /** The brand id for a sign: same name within 60 m among the cell's brand POIs. */
 async function qidFor(name: string, lon: number, lat: number): Promise<string | null> {
   const box = snapBbox({ west: lon - 0.003, south: lat - 0.003, east: lon + 0.003, north: lat + 0.003 });
-  const list = await cached(`brands:${box.west},${box.south},${box.east},${box.north}`, DAY, () => brands(box));
-  return matchBrand({ name, lon, lat }, list);
+  const key = `brands:${box.west},${box.south},${box.east},${box.north}`;
+  if (Date.now() - (downCells.get(key) ?? 0) < RETRY_MS) return null;
+  try {
+    return matchBrand({ name, lon, lat }, await cached(key, DAY, () => brands(box)));
+  } catch {
+    // No brand list right now: the sign shows its name, as with no logo.
+    downCells.set(key, Date.now());
+    return null;
+  }
 }
 
 export async function GET_LOGO(request: Request): Promise<Response> {

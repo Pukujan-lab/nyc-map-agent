@@ -21,7 +21,7 @@ import {
   type SystemId,
   type Vehicle,
 } from "./model";
-import { alertedRoutes, fetchBusRoutesNear, routesForPage, useAlerts, useBusLines, useBusRoute, useBusSegmentHistory, useBusShapes, useBuses, useStarred, useTransitData, useTransitMeta, useTransitToggles, useXrayData, useSegmentHistory } from "./hooks";
+import { alertedRoutes, type BusArrival, fetchBusCatalog, fetchBusRoutesNear, routesForPage, useAlerts, useBusLines, useBusRoute, useBusSegmentHistory, useBusShapes, useBuses, useStarred, useTransitData, useTransitMeta, useTransitToggles, useXrayData, useSegmentHistory } from "./hooks";
 import { sharedCoords } from "@/lib/geo/sharedLocation";
 import { useXray, xrayPrims } from "./xray";
 import { useMapState } from "@/lib/store/MapStateContext";
@@ -31,7 +31,7 @@ import { pickRouteVehicle, registerRouteFollower } from "@/lib/transit/routeFoll
 import { ZoomKeeper, followRig, publishFollowPos, rememberFollowOrigin, setBoardedOnFoot, setFollowMode, setFollowed, stableHeading, stopFollowing, takeFollowRestore, useFollowMode, useFollowed } from "./follow";
 import { followActionForMapClick } from "./followClick";
 import { publishSubway } from "@/lib/agent/streetContext";
-import { busesToShow, capPerLine, holdShuttle, registerBusToggle, setShuttleBuses, shownVehicles, useBusPins } from "@/lib/transit/busReveal";
+import { busesInFocus, busesToShow, clearStopWatch, holdShuttle, watchStopBuses, registerBusToggle, setShuttleBuses, shownVehicles, useBusPins } from "@/lib/transit/busReveal";
 import { publishLiveDots } from "@/lib/transit/liveVehicles";
 import { heldTrains } from "@/lib/transit/holds";
 import { setLinesControl } from "@/lib/transit/linesControl";
@@ -57,7 +57,7 @@ import { busStopAt } from "@/lib/map/busStops";
 import { pickAt as pickStreet, setPickTargets } from "@/lib/map/streetPick";
 import { keepInView } from "@/lib/map/keepInView";
 import { lineOpacity, useMapOptions } from "@/lib/map/mapOptions";
-import { NOTCH_ICON, addBulletImage, lineColor as lineColorOf, stationRowId, bulletId, busBadgeId, busIconSize, busPrefix } from "@/lib/transit/bullets";
+import { NOTCH_ICON, addBulletImage, lineColor as lineColorOf, stationRowId, bulletId, busBadgeId, busIconSize, busLivery, busPrefix } from "@/lib/transit/bullets";
 import { usePalette, type Palette } from "@/lib/theme";
 import { RAISED_LIFT_PX, STOP_LIFT_PX, alertCameraAction, paintAboveVehicles, trainIconOffset } from "./layerOrder";
 import { FOCUS_OPACITY, FOCUS_VEIL_ID, WORLD, focusVeil, useTransitFocus } from "@/lib/map/transitFocus";
@@ -69,8 +69,6 @@ import { lineChoice, type LineChoice } from "./lineChoice";
 import { LineChooser } from "./LineChooser";
 
 /** Layers a click on the map should hand to transit instead of the area pick. */
-/** CC BY 4.0 credit for the 3D bus model (public/models/LICENSE.md), shown while it can be on screen. Trains are plain boxes (#366). */
-const VEHICLE_CREDITS = "3D buses: XD40 by kieranfarr (Sketchfab, CC BY 4.0)";
 const TRANSIT_CLICK_LAYERS = ["transit-skip", "transit-alert-skipped", "transit-bus-badge-follow", "transit-bullet", "transit-bus-badge", "transit-bus-badge-full", "transit-bus-badge-selected", "transit-vehicle-2d", "transit-vehicle-hit", "transit-vehicle-hit-stop", "transit-vehicle-hit-raised", "transit-access", "transit-entrance", "transit-line-stop", "transit-line-stop-name", "transit-station-label", "transit-station-raised", "transit-station"];
 
 const MAX_VEHICLES = 400;
@@ -101,6 +99,13 @@ function onRaisedTrack(cells: Set<string>, p: GeoJSON.Position): boolean {
 const STREET_RADIUS_M = 600;
 /** Street level: station names show within this distance of the walker. */
 const STREET_LABEL_M = 220;
+/** Street level: trains within this distance of the walker show their route bullet. */
+const STREET_TRAIN_M = 300;
+
+function metresBetween(a: { lon: number; lat: number }, b: number[]): number {
+  const kx = 111_320 * Math.cos((a.lat * Math.PI) / 180);
+  return Math.hypot((b[0] - a.lon) * kx, (b[1] - a.lat) * 111_320);
+}
 /** X-ray draws underground trains this far below the ground plane. */
 const XRAY_DEPTH_M = -12;
 /** Where the walker stands: at street level the map centre sits at most ~10 m ahead of the eye. */
@@ -152,6 +157,33 @@ function addSkipIcons(map: MaplibreMap) {
   }
 }
 
+/** Overhead subway entrances (owner, 2026-10-27): a green badge with what it is, not a bare dot. */
+function addEntranceIcons(map: MaplibreMap) {
+  for (const id of ["transit-entr-stair", "transit-entr-elevator", "transit-entr-escalator", "transit-entr-elevator-out"] as const) {
+    if (map.hasImage(id)) continue;
+    const ctx = document.createElement("canvas").getContext("2d");
+    if (!ctx) return;
+    ctx.canvas.width = ctx.canvas.height = 48;
+    ctx.beginPath(); ctx.roundRect(4, 4, 40, 40, 10);
+    ctx.fillStyle = id.endsWith("-out") ? "#6b7280" : "#15803d"; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = "#ffffff"; ctx.stroke();
+    ctx.strokeStyle = "#ffffff"; ctx.fillStyle = "#ffffff"; ctx.lineWidth = 3.5; ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.beginPath();
+    if (id === "transit-entr-stair") {
+      // Three steps going down to the right.
+      ctx.moveTo(12, 15); ctx.lineTo(19, 15); ctx.lineTo(19, 22); ctx.lineTo(26, 22); ctx.lineTo(26, 29); ctx.lineTo(33, 29); ctx.lineTo(33, 35);
+    } else if (id === "transit-entr-escalator") {
+      ctx.moveTo(11, 34); ctx.lineTo(18, 34); ctx.lineTo(30, 16); ctx.lineTo(37, 16);
+    } else {
+      // A cab with up and down arrows.
+      ctx.moveTo(19, 21); ctx.lineTo(24, 15); ctx.lineTo(29, 21); ctx.moveTo(19, 27); ctx.lineTo(24, 33); ctx.lineTo(29, 27);
+      if (id.endsWith("-out")) { ctx.moveTo(13, 35); ctx.lineTo(35, 13); }
+    }
+    ctx.stroke();
+    map.addImage(id, ctx.getImageData(0, 0, 48, 48), { pixelRatio: 2 });
+  }
+}
+
 /** SVG markup per icon, rendered once (no server renderer in the bundle). */
 const ICON_SVG = new Map<string, string>();
 function iconSvg(id: string, node: JSX.Element): string {
@@ -189,6 +221,8 @@ type FrameInputs = {
   followMode: Parameters<typeof followRig>[0];
   reducedMotion: boolean;
   hide: boolean;
+  /** Street level: only the subway trains near the walker keep their bullets. */
+  walking: boolean;
   alerted: Set<string>;
   theme: Palette;
 };
@@ -257,7 +291,7 @@ export default function TransitLayer() {
   useEffect(() => {
     if (import.meta.env.DEV) (window as unknown as { __walk?: unknown }).__walk = startWalk;
   }, [startWalk]);
-  const { on, set, panelOpen, setPanelOpen, busPage, busLines: pickedLines, busCap, setBusLines } = useTransitToggles();
+  const { on, set, panelOpen, setPanelOpen, busPage, busLines: pickedLines, busNear, busCap, setBusLines } = useTransitToggles();
   const { content, showPanel, setDrawerOpen, setSnap, drawerOpen } = usePanel();
   const meta = useTransitMeta();
   const rail = (["subway", "lirr", "mnr"] as SystemId[]).filter((s) => on.has(s));
@@ -293,30 +327,63 @@ export default function TransitLayer() {
   const busShapes = useBusShapes(show.routes);
   const busHistory = useBusSegmentHistory(show.routes);
   useEffect(() => busEst.current.setHistory(busHistory), [busHistory]);
+  // Lines found around you (not picked), and every bus but the one you follow, are out of
+  // focus: only their buses near you draw. Picked lines, a trip and a shuttle are in focus.
+  const busNearOnly = (busNear && show.why === "page") || Boolean(followedKey?.startsWith("bus:"));
+  // A watched stop shows a few more buses per line, nearest the stop: the ones coming to it.
+  const busFocusRef = useRef({ busNearOnly, busCap, followedKey, walking, watchAt: pins.watch?.at });
+  busFocusRef.current = { busNearOnly, busCap: show.why === "watch" ? Math.max(busCap, 5) : busCap, followedKey, walking, watchAt: show.why === "watch" ? pins.watch?.at : undefined };
+  /** Where "near" is: the bus you follow, else you, else where you stand in street view, else the map centre. */
+  const busNearPoint = useCallback((list: readonly { id: string; lon: number; lat: number }[]) => {
+    const { followedKey: fk, walking: w, watchAt } = busFocusRef.current;
+    const fb = fk?.startsWith("bus:") ? list.find((b) => b.id === fk.slice(4)) : undefined;
+    if (fb) return { lon: fb.lon, lat: fb.lat };
+    if (watchAt) return watchAt;
+    if (!map) return sharedCoords();
+    const c = map.getCenter();
+    return sharedCoords() ?? (w ? streetEye(map) : { lon: c.lng, lat: c.lat });
+  }, [map]);
+  const focusedBuses = useCallback(<T extends { id: string; route: string; lon: number; lat: number }>(list: readonly T[], keep: (string | undefined)[]) => {
+    const f = busFocusRef.current;
+    const ids = new Set(keep.filter((k): k is string => Boolean(k?.startsWith("bus:"))).map((k) => k.slice(4)));
+    return busesInFocus(list, { routes: busRoutesRef.current, nearOnly: f.busNearOnly, cap: f.busCap, near: busNearPoint(list), keep: ids });
+  }, [busNearPoint]);
   useEffect(() => {
     for (const g of busShapes) busEst.current.setRoute(g);
-    const allow = new Set(show.routes.map((r) => r.toUpperCase()));
-    const inRoutes = (buses.data?.buses ?? []).filter((b) => allow.has(b.route.toUpperCase()));
-    // Buses per line: the nearest to the map, plus the one being followed so Follow never loses its bus.
-    const c = map?.getCenter();
-    const kept = new Set(capPerLine(inRoutes, busCap, c ? { lon: c.lng, lat: c.lat } : null).map((b) => b.id));
-    const list = inRoutes.filter((b) => kept.has(b.id) || `bus:${b.id}` === followedKey);
+    // Buses per line: the nearest, plus the one being followed so Follow never loses its bus.
+    const list = focusedBuses(buses.data?.buses ?? [], [followedKey ?? undefined]);
     for (const b of list) busEst.current.report(b);
     busEst.current.retain(new Set(list.map((b) => b.id)));
     // The map is read once per refresh, not on every move: re-running on `map` would reshuffle buses as you pan.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [buses.data, busShapes, show.routes, busCap]);
+  }, [buses.data, busShapes, show.routes, show.why, busCap, busNearOnly]);
   // The followed vehicle as React sees it: refreshed only when what its card shows changes.
   const [followed, setFollowedVehicle] = useState<Vehicle | undefined>(undefined);
 
   // A bus stop's next buses, and a way to watch them come on the map from above.
+  // Both put the stop's routes in focus around the stop until its card closes; your own lines come back after.
   const openBusStop = useCallback((lon: number, lat: number, name: string) => {
+    const panelId = `busstop:${lon.toFixed(5)},${lat.toFixed(5)}`;
     const watch = (routes: string[]) => {
-      if (routes.length) setBusLines(routes);
+      if (!routes.length) return;
+      setFollowed(null);
+      watchStopBuses({ routes, at: { lon, lat }, panelId });
       showView("map", { lon, lat });
     };
-    showPanel({ id: `busstop:${lon.toFixed(5)},${lat.toFixed(5)}`, title: formatStreetText(name), subtitle: "Bus stop", details: <BusStopDetails lon={lon} lat={lat} onWatch={watch} /> });
-  }, [showPanel, setBusLines]);
+    const follow = (a: BusArrival) => {
+      watchStopBuses({ routes: [a.route], at: { lon, lat }, panelId });
+      if (a.vehicle) setFollowed(`bus:${a.vehicle}`); else showView("map", { lon, lat });
+    };
+    showPanel({ id: panelId, title: formatStreetText(name), subtitle: "Bus stop", details: <BusStopDetails lon={lon} lat={lat} onWatch={watch} onFollow={follow} /> });
+  }, [showPanel]);
+  // Closing the stop's card (or opening anything but a vehicle) ends the watch.
+  const watchPanel = pins.watch?.panelId;
+  const watchShown = useRef(false);
+  useEffect(() => {
+    if (!watchPanel) { watchShown.current = false; return; }
+    if (content?.id === watchPanel) watchShown.current = true;
+    else if (watchShown.current && !content?.id.startsWith("transit:vehicle:")) { watchShown.current = false; clearStopWatch(); }
+  }, [content?.id, watchPanel]);
   const openStation = useCallback(
     (system: SystemId, id: string, name: string) =>
       showPanel({ id: `transit:station:${system}:${id}`, title: name, subtitle: `${SYSTEM_LABELS[system]} station`, details: <StationDetails system={system} id={id} /> }),
@@ -369,7 +436,7 @@ export default function TransitLayer() {
     if (home && point) {
       setBusNote(null);
       void fetchBusRoutesNear(point)
-        .then((routes) => { if (routes.length) setBusLines(routes); else setBusNote("No buses near here. Pick a route below."); })
+        .then((routes) => { if (routes.length) setBusLines(routes, { near: true }); else setBusNote("No buses near here. Pick a route below."); })
         .catch(() => setBusNote("Couldn't load buses. Try again, or pick a route below."));
       return;
     }
@@ -408,13 +475,13 @@ export default function TransitLayer() {
       void fetchBusRoutesNear({ lon: e.lon, lat: e.lat }).then((routes) => {
         if (streetAuto.current !== auto || !routes.length || autoState.current.routes.length) return;
         auto.buses = routes;
-        autoState.current.setBusLines(routes);
+        autoState.current.setBusLines(routes, { near: true });
       }).catch(() => {});
     };
     if (map.isMoving()) map.once("moveend", pick); else pick();
   }, [map, walking]);
   usePanelChip({ id: "liveTrains", label: "Live trains", active: trainsOn, onToggle: toggleTrains });
-  usePanelChip(meta.data?.bus === true ? { id: "liveBuses", label: "Live buses", active: show.routes.length > 0, onToggle: toggleBuses, routes: show.routes, setRoutes: setBusLines, suggest: suggestBuses, note: busNote } : null);
+  usePanelChip(meta.data?.bus === true ? { id: "liveBuses", label: "Live buses", active: show.routes.length > 0, onToggle: toggleBuses, routes: show.routes, setRoutes: setBusLines, suggest: suggestBuses, catalog: fetchBusCatalog, note: busNote } : null);
   usePanelChip({ id: "transitFocus", label: "Transit Focus", active: focus && anyOn, onToggle: toggleFocus });
 
   // Icons, including after a style swap.
@@ -422,7 +489,7 @@ export default function TransitLayer() {
     if (!map) return;
     const missing = (e: { id: string }) => { addIcon(map, e.id); addBulletImage(map, e.id); };
     Object.keys(ICONS).forEach((id) => addIcon(map, id));
-    const skipIcons = () => addSkipIcons(map);
+    const skipIcons = () => { addSkipIcons(map); addEntranceIcons(map); };
     skipIcons();
     map.on("styleimagemissing", missing);
     map.on("styledata", skipIcons);
@@ -669,9 +736,7 @@ export default function TransitLayer() {
           if (v && (inView(v) || v.key === selectedKey || v.key === followedKey)) out.push(v);
         }
       }
-      const allow = new Set(busRoutesRef.current.map((r) => r.toUpperCase()));
-      for (const bus of allow.size ? buses.data?.buses ?? [] : []) {
-        if (!allow.has(bus.route.toUpperCase())) continue;
+      for (const bus of busRoutesRef.current.length ? focusedBuses(buses.data?.buses ?? [], [selectedKey, followedKey ?? undefined]) : []) {
         const v: Vehicle = { key: `bus:${bus.id}`, system: "bus", route: bus.route, label: bus.route, color: "#0039A6", lon: bus.lon, lat: bus.lat, bearing: bus.bearing ?? 0, grade: "grade", dir: bus.dir, nextStop: bus.next ?? undefined };
         if (inView(v) || v.key === selectedKey || v.key === followedKey) out.push(v);
       }
@@ -702,8 +767,11 @@ export default function TransitLayer() {
     if (!f || !m) return;
     const src = m.getSource<GeoJSONSource>("transit-vehicles");
     const fc = vehicleCollection(list, f.alerted, f.theme, f.followedKey);
-    void src?.setData(f.hide ? EMPTY : fc);
-    // Street level empties the vehicle source; the followed bus keeps its badge in its own source.
+    // Street level keeps only the nearby trains' bullets, so you can tell which line is passing.
+    const walker = f.walking ? streetEye(m) : null;
+    const near = walker ? { ...fc, features: fc.features.filter((x) => x.properties?.system === "subway" && x.geometry.type === "Point" && metresBetween(walker, x.geometry.coordinates) < STREET_TRAIN_M) } : fc;
+    void src?.setData(f.hide ? EMPTY : near);
+    // Street level empties the vehicle source of buses; the followed bus keeps its badge in its own source.
     void m.getSource<GeoJSONSource>("transit-followed-bus")?.setData({ type: "FeatureCollection", features: fc.features.filter((x) => x.properties?.followed === 1 && x.properties?.system === "bus") });
     if (f.three) {
       v3d.current?.update(
@@ -712,7 +780,7 @@ export default function TransitLayer() {
           .filter((v) => v.key === f.followedKey || f.xrayOn || v.grade !== "underground")
           .map((v) => {
             const ghost = v.grade === "underground";
-            return { lon: v.lon, lat: v.lat, bearing: v.bearing, z: ghost ? XRAY_DEPTH_M : v.z ?? 0, color: v.system === "bus" ? "#f8fafc" : v.color, kind: v.system === "bus" ? "bus" : v.system === "subway" ? "subway" : "rail", ghost };
+            return { lon: v.lon, lat: v.lat, bearing: v.bearing, z: ghost ? XRAY_DEPTH_M : v.z ?? 0, color: v.color, kind: v.system === "bus" ? "bus" : v.system === "subway" ? "subway" : "rail", livery: v.system === "bus" ? busLivery(v.route) : undefined, ghost };
           }),
       );
     }
@@ -796,7 +864,7 @@ export default function TransitLayer() {
   // Street level: publish the drawn vehicles once a second for the mini map.
   useEffect(() => {
     if (!walking) { publishLiveDots([]); return; }
-    const push = () => publishLiveDots(shownVehicles([...display.current.values()], busRoutesRef.current).map((v) => ({ key: v.key, lon: v.lon, lat: v.lat, color: v.system === "bus" ? theme.bus : v.color, bus: v.system === "bus", underground: v.grade === "underground" })));
+    const push = () => publishLiveDots(shownVehicles([...display.current.values()], busRoutesRef.current).map((v) => ({ key: v.key, lon: v.lon, lat: v.lat, color: v.system === "bus" ? theme.bus : v.color, bus: v.system === "bus", underground: v.grade === "underground", label: v.label })));
     push();
     const id = window.setInterval(push, 1000);
     return () => { window.clearInterval(id); publishLiveDots([]); };
@@ -830,8 +898,8 @@ export default function TransitLayer() {
         ...drawn.stops.map((st): GeoJSON.Feature => ({ type: "Feature", properties: { kind: "stop", name: formatStreetText(st.name) }, geometry: { type: "Point", coordinates: [st.lon, st.lat] } })),
       );
     }
-    // The replacement shuttle is drawn even before a bus is tapped, so the gap has a road.
-    if (show.why === "shuttle") {
+    // The replacement shuttle, and a watched stop's routes, are drawn before a bus is tapped, so they have a road.
+    if (show.why === "shuttle" || show.why === "watch") {
       for (const g of busShapes) {
         if (g.route === selBusRoute) continue;
         for (const l of g.lines) features.push({ type: "Feature", properties: { kind: "line", route: g.route }, geometry: { type: "LineString", coordinates: l } });
@@ -878,13 +946,15 @@ export default function TransitLayer() {
     const sync = () => {
       const sub = statics.find((s) => s.system === "subway");
       const c = map.getCenter();
-      entr.current = walking && sub ? entranceInstances(sub, outStations, [c.lng, c.lat]) : [];
+      // The tiles' street lines lay each stair along its curb when OpenStreetMap has no mapped steps for it.
+      const read = walking && sub ? readMap(map) : null;
+      entr.current = read && sub ? entranceInstances(sub, outStations, [c.lng, c.lat], 300, read.lines) : [];
       v3d.current?.setEntrances(entr.current);
       // A tap on a stair or elevator opens its station and next trains (owner, 2026-10-27).
       setPickTargets(entr.current.map((e) => ({ kind: "entrance" as const, id: e.id, lng: e.lon, lat: e.lat, h: 3, props: { name: e.name } })), "entrances");
       // Each nearby entrance's corner and kind.
       const phone = window.matchMedia("(max-width: 639px)").matches;
-      setEntrLabels(walking && sub ? entranceLabels(sub, outStations, [c.lng, c.lat], readMap(map).placeAt, { max: phone ? 3 : 6, phone }) : EMPTY_FC);
+      setEntrLabels(walking && sub ? entranceLabels(sub, outStations, [c.lng, c.lat], (read ?? readMap(map)).placeAt, { max: phone ? 2 : 4, phone }) : EMPTY_FC);
       // Over the 3D storefronts and kiosks, which are added after it and would hide it.
       if (walking && map.getLayer("transit-entrance-label")) map.moveLayer("transit-entrance-label");
     };
@@ -1150,6 +1220,8 @@ export default function TransitLayer() {
     setFollowMode("map");
     setFollowed(pick.key);
   }, [map, selected, setDrawerOpen]);
+  // The line panel's arrow keys step between these trains and the stations (useLineKeys.ts).
+  const trainsNow = useCallback(() => [...display.current.values()], []);
   // A line chosen from More layers that is not on screen: bring its whole length into view.
   useEffect(() => {
     if (!map || !lineSel || selected?.train) return;
@@ -1170,7 +1242,7 @@ export default function TransitLayer() {
 
   // Route bullets stay on in every view but street level: symbols draw above the 3D
   // buildings, so a train is never lost behind a tower or under the ground when tilted.
-  frame.current = { map, three, xrayOn, followedKey, followMode, reducedMotion, hide: walking || Boolean(opts.stationsOnly), alerted, theme };
+  frame.current = { map, three, xrayOn, followedKey, followMode, reducedMotion, hide: Boolean(opts.stationsOnly), walking, alerted, theme };
 
   if (!enabled || (!rail.length && !busOn)) return null;
 
@@ -1207,7 +1279,7 @@ export default function TransitLayer() {
           onStation={() => { const st = choice.choice.station; setChoice(null); if (st) openStation("subway", st.id, st.name); }} />
       ) : null}
       {followed && followMode !== "map" && map ? <FollowMiniMap main={map} vehicle={followed} line={followTrack} nextName={followNext} /> : null}
-      {lineSel && !followedKey ? <Suspense fallback={null}><LinePanel map={map} route={lineSel} onFollow={followLine} /></Suspense> : null}
+      {lineSel && !followedKey ? <Suspense fallback={null}><LinePanel map={map} route={lineSel} onFollow={followLine} trains={trainsNow} /></Suspense> : null}
       <Source id="transit-lines" type="geojson" data={lines}>
         {/* X-ray on stays a solid glow. Off: solid too (owner, 2026-10-25: dashes read as a broken line), nearly as wide as the at-grade stroke, opacity 0.75. */}
         <Layer id="transit-line-under" type="line" filter={["==", ["get", "grade"], "underground"]} layout={{ "line-cap": "round", "line-join": "round" }}
@@ -1251,7 +1323,7 @@ export default function TransitLayer() {
         <Layer id="transit-work-line" type="line" minzoom={lineSel ? 0 : 13} filter={(lineSel ? ["in", ["get", "route"], ["literal", isoRoutes]] : ["boolean", true]) as never}
           paint={{ "line-color": "#f59e0b", "line-width": ["interpolate", ["linear"], ["zoom"], 10, 2, 16, 6], "line-dasharray": [1, 1.5], "line-opacity": 0.85 }} />
       </Source>
-      <Source id="transit-viaduct" type="geojson" data={three ? viaduct : EMPTY} attribution={three ? VEHICLE_CREDITS : undefined}>
+      <Source id="transit-viaduct" type="geojson" data={three ? viaduct : EMPTY}>
         <Layer id="transit-viaduct" type="fill-extrusion" minzoom={13} filter={["any", ["get", "bridge"], ["<", ["zoom"], 15]]}
           paint={{ "fill-extrusion-color": ["get", "color"], "fill-extrusion-base": ["-", ["get", "top"], 1.2], "fill-extrusion-height": ["get", "top"], "fill-extrusion-opacity": 0.9 }} />
       </Source>
@@ -1291,14 +1363,29 @@ export default function TransitLayer() {
       <Source id="transit-entrance-labels" type="geojson" data={entrLabels}>
         {/* Street level: the corner first, then stairs, elevator or escalator, over the nearest entrances. */}
         <Layer id="transit-entrance-label" type="symbol"
-          layout={{ "text-field": ["get", "label"], "text-font": ["Noto Sans Bold"], "text-size": 14, "text-anchor": "bottom", "text-offset": [0, -2.2],
+          layout={{ "text-field": ["get", "label"], "text-font": ["Noto Sans Bold"], "text-size": 14, "text-anchor": "bottom",
+            // Above the stair's railing: a near stair stands tall on screen, a far one short.
+            "text-offset": ["interpolate", ["linear"], ["get", "d"], 5, ["literal", [0, -7]], 20, ["literal", [0, -4]], 60, ["literal", [0, -2]], 180, ["literal", [0, -1]]] as unknown as [number, number],
             "text-max-width": 16, "text-line-height": 1.25, "text-pitch-alignment": "viewport", "text-allow-overlap": true, "symbol-sort-key": ["get", "d"] }}
           paint={{ "text-color": "#ffffff", "text-halo-color": "rgba(14,23,38,0.95)", "text-halo-width": 3 }} />
       </Source>
       <Source id="transit-entrances" type="geojson" data={entrances}>
-        {/* Overhead: a small green dot. Street level: the 3D kit draws it; this stays as an invisible tap target. */}
+        {/* Overhead: a badge saying stairs, elevator or escalator, named when close. Street level: the 3D kit draws it.
+            The circle is only the tap target, bigger than the badge so it is easy to hit (owner, 2026-10-27). */}
         <Layer id="transit-entrance" type="circle" minzoom={16}
-          paint={{ "circle-color": "#16a34a", "circle-stroke-color": "#ffffff", "circle-stroke-width": walking ? 0 : 1, "circle-radius": walking ? 14 : 3.5, "circle-opacity": walking ? 0.01 : 1, "circle-stroke-opacity": walking ? 0 : 1 }} />
+          paint={{ "circle-color": "#16a34a", "circle-radius": walking ? 14 : ["interpolate", ["linear"], ["zoom"], 16, 9, 19, 18], "circle-opacity": 0.01 }} />
+        {walking ? null : (
+          <Layer id="transit-entrance-icon" type="symbol" minzoom={16} filter={["!", ["in", "assage", ["get", "kind"]]] as never}
+            layout={{ "icon-image": ["case",
+                ["in", "levator", ["get", "kind"]], ["case", ["in", ["get", "id"], ["literal", [...outStations]]], "transit-entr-elevator-out", "transit-entr-elevator"],
+                ["in", "scalator", ["get", "kind"]], "transit-entr-escalator", "transit-entr-stair"],
+              "icon-size": ["interpolate", ["linear"], ["zoom"], 16, 0.55, 19, 1], "icon-allow-overlap": true,
+              "text-field": ["step", ["zoom"], "", 17.5, ["case",
+                ["in", "levator", ["get", "kind"]], ["case", ["in", ["get", "id"], ["literal", [...outStations]]], "Elevator · out", "Elevator"],
+                ["in", "scalator", ["get", "kind"]], "Escalator", ["in", "asement", ["get", "kind"]], "Through a building", "Stairs"]],
+              "text-font": ["Noto Sans Bold"], "text-size": 12, "text-anchor": "left", "text-offset": [1.3, 0], "text-optional": true }}
+            paint={{ "text-color": theme.dark ? "#f2f1ed" : "#14532d", "text-halo-color": theme.land, "text-halo-width": 1.6 }} />
+        )}
       </Source>
       <Source id="transit-work-points" type="geojson" data={work.points}>
         <Layer id="transit-work" type="symbol" minzoom={11} filter={(lineSel ? ["in", ` ${lineSel} `, ["get", "routes"]] : ["boolean", true]) as never}
@@ -1344,7 +1431,8 @@ export default function TransitLayer() {
             <Layer id="transit-alert-skipped" type="symbol"
               layout={{ "icon-image": ["get", "icon"], "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.6, 16, 1], "icon-allow-overlap": true, "icon-ignore-placement": true,
                 "icon-offset": [18, -18],
-                "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-anchor": "left", "text-offset": [1.2, 0], "text-optional": true }}
+                // With a line picked, the notice's own ring tags name each skip and its direction (LinePanel); a second name here overlapped them.
+                "text-field": lineSel ? "" : ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-anchor": "left", "text-offset": [1.2, 0], "text-optional": true }}
               paint={{ "text-color": theme.dark ? "#f2f1ed" : "#111111", "text-halo-color": theme.land, "text-halo-width": 1.6 }} />
           </Source>
         </>

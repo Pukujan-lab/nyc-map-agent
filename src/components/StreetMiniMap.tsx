@@ -188,13 +188,18 @@ export function StreetMiniMap({ main, getEye, onExit, onMap, filters }: {
       const halo = main.getLayer(LANDMARK_LABELS_LAYER) ? main.getPaintProperty(LANDMARK_LABELS_LAYER, "text-halo-color") : undefined;
       installLandmarkLabels(mini, typeof color === "string" ? color : "#1f2937", typeof halo === "string" ? halo : "#ffffff");
       mini.addSource(DOTS, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      // Trains are bullets with their letter, so you can tell which line is passing.
       mini.addLayer({ id: DOTS, type: "circle", source: DOTS, paint: {
-        "circle-radius": ["case", ["get", "bus"], 3, 4],
+        "circle-radius": ["case", ["get", "bus"], 3, 7],
         "circle-color": ["get", "color"],
-        "circle-opacity": ["case", ["get", "under"], 0, 1],
-        "circle-stroke-color": ["get", "color"],
-        "circle-stroke-width": 2,
+        "circle-opacity": ["case", ["get", "bus"], ["case", ["get", "under"], 0, 1], ["case", ["get", "under"], 0.6, 1]],
+        "circle-stroke-color": ["case", ["get", "bus"], ["get", "color"], "#ffffff"],
+        "circle-stroke-width": ["case", ["get", "bus"], 2, 1.5],
       } });
+      mini.addLayer({ id: `${DOTS}-label`, type: "symbol", source: DOTS, filter: ["!", ["get", "bus"]], layout: {
+        "text-field": ["get", "label"], "text-font": ["Noto Sans Bold"], "text-size": 9,
+        "text-allow-overlap": true, "text-ignore-placement": true,
+      }, paint: { "text-color": ["case", ["in", ["get", "label"], ["literal", ["N", "Q", "R", "W"]]], "#111111", "#ffffff"] } });
       void import("@/lib/map/restrooms").then((mod) => {
         if (!alive) return;
         mod.mountMiniRestrooms(mini);
@@ -317,6 +322,8 @@ export function StreetMiniMap({ main, getEye, onExit, onMap, filters }: {
   const placed = place.right != null && place.bottom != null;
   const handle = "flex h-7 w-7 touch-none items-center justify-center rounded-full border border-border bg-card text-foreground shadow-md";
   const dist = nearest ? distanceLabel(nearest.metres) : "";
+  // Unmoved, it rides above Center on my location (.corner-locate: chat bar + pull sheet + 12 px, 44 px tall);
+  // a fixed 168 px put the restroom chip under that button on a 375×667 phone (layout check).
   return (
     <div
       ref={frame}
@@ -324,7 +331,7 @@ export function StreetMiniMap({ main, getEye, onExit, onMap, filters }: {
       data-vehicles={dots.length}
       data-size={place.size}
       style={placed ? { right: place.right!, bottom: place.bottom! } : undefined}
-      className={`absolute z-20 flex flex-col items-end gap-[var(--sp-1)] ${placed ? "" : "bottom-[calc(var(--edge)+168px)] lg:bottom-[calc(var(--edge)+36px)] right-[var(--edge)] sm:right-[calc(var(--edge)+68px)]"}`}
+      className={`absolute z-20 flex flex-col items-end gap-[var(--sp-1)] ${placed ? "" : "bottom-[calc(var(--chat-bar-h,56px)+var(--pull-sheet-h,0px)+64px)] lg:bottom-[calc(var(--edge)+36px)] right-[var(--edge)] sm:right-[calc(var(--edge)+68px)]"}`}
     >
       <div className="flex gap-[var(--sp-1)]">
         <button type="button" aria-label="Move map" title="Drag to move the map" className={`${handle} cursor-grab active:cursor-grabbing`} {...move}>
@@ -362,7 +369,7 @@ export function StreetMiniMap({ main, getEye, onExit, onMap, filters }: {
             You · {facing}
           </div>
         </button>
-        <button type="button" aria-label="Resize map" title="Drag to resize, tap for the next size" className={`${handle} absolute -left-2 -top-2 z-20 cursor-nwse-resize`} {...resize}>
+        <button type="button" aria-label="Resize map" title="Drag to resize, tap for the next size" data-overlap-ok className={`${handle} absolute -left-2 -top-2 z-20 cursor-nwse-resize`} {...resize}>
           <MoveDiagonal2 aria-hidden className="h-4 w-4" />
         </button>
       </div>

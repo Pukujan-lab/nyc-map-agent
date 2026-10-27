@@ -4,6 +4,7 @@ import { onMapInstance } from "@/lib/map/mapInstance";
 import { metresBetween } from "@/lib/map/walk";
 import { backToStreet, setStreetSpot, showView, useStreetSpot, type ViewName } from "@/lib/map/viewChange";
 import { useMapState } from "@/lib/store/MapStateContext";
+import { usePanel } from "@/lib/store/PanelContext";
 import { usePullSheetUp } from "@/lib/store/pullSheet";
 import { setFollowMode, useFollowMode, useFollowed, type FollowMode } from "@/lib/transit/follow";
 import { useSelectedLine } from "@/lib/transit/selectedLine";
@@ -146,6 +147,36 @@ export function BackToStreet() {
       </button>
       <button type="button" aria-label="Dismiss" onClick={() => setStreetSpot(null)}
         className="flex h-9 w-9 items-center justify-center rounded-full text-[18px] leading-none text-[#a5b4cb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]">×</button>
+    </div>
+  );
+}
+
+/**
+ * While live buses are on the map, one pill under the top says which and turns them off
+ * (owner, 2026-10-27: "no way to cut off the buses"). Off drops the route line, the
+ * chips, a followed bus and the bus lines in the URL. It sits under "Back to street view".
+ * Hidden in street view. On a phone it keeps to the left, clear of the 3D and zoom buttons on the right.
+ */
+export function BusesOff() {
+  const { chips } = usePanel();
+  const buses = chips.find((c) => c.id === "liveBuses");
+  const { walking } = useMapState();
+  const spot = useStreetSpot();
+  const place = usePlace();
+  // Street view keeps its own controls up top; there the Layers menu still turns buses off.
+  if (!buses?.active || walking) return null;
+  const routes = buses.routes ?? [];
+  const label = routes.length > 3 ? `${routes.slice(0, 3).join(", ")} +${routes.length - 3}` : routes.join(", ");
+  const top = (place.docked ? 72 : 16) + (spot ? 52 : 0);
+  return (
+    <div data-testid="buses-off"
+      className={`pointer-events-auto absolute left-4 top-[calc(env(safe-area-inset-top)+var(--bt))] z-40 flex max-w-[calc(100%-96px)] items-center gap-1 rounded-full sm:max-w-[calc(100%-32px)] sm:-translate-x-1/2 border border-[#263449] bg-[rgba(15,23,42,0.92)] py-1 pl-3.5 pr-1 text-[#f1f5f9] shadow-[0_6px_18px_rgba(0,0,0,0.35)] sm:left-[var(--bl)] ${place.cls}`}
+      style={{ ["--bl" as string]: place.left, ["--bt" as string]: `${top}px` }}>
+      <span className="min-w-0 truncate text-[13px] font-semibold">Buses{label ? ` · ${label}` : ""}</span>
+      <button type="button" onClick={buses.onToggle} aria-label="Turn live buses off"
+        className="flex h-9 shrink-0 items-center gap-1 rounded-full px-3 text-[13px] font-semibold text-[#fca5a5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]">
+        Hide <span aria-hidden className="text-[18px] leading-none">×</span>
+      </button>
     </div>
   );
 }

@@ -28,7 +28,7 @@ const parseTransit = (raw: string | null) =>
   new Set((raw ?? DEFAULT_TRANSIT).split(",").filter((id) => id && id !== "none"));
 
 /**
- * `?transit=subway,lirr` in the URL (absent = subway, `none` = off). `?busLines=Q1,B41` are the picked bus lines (at most 20), `?busCap=3` the buses shown per line. An old `?busPage=` link still opens that page's lines.
+ * `?transit=subway,lirr` in the URL (absent = subway, `none` = off). `?busLines=Q1,B41` are the picked bus lines (at most 20), `?busCap=3` the buses shown per line, `?busNear=1` that those lines came from a "buses near you" lookup and only their nearby buses show. An old `?busPage=` link still opens that page's lines.
  * `?transitPanel=1` opens the status drawer.
  */
 export function useTransitToggles() {
@@ -40,7 +40,7 @@ export function useTransitToggles() {
         const next = new URLSearchParams(prev);
         const cur = parseTransit(next.get("transit"));
         if (value) cur.add(id); else cur.delete(id);
-        if (id === "bus" && !value) { next.delete("busPage"); next.delete("busLines"); }
+        if (id === "bus" && !value) { next.delete("busPage"); next.delete("busLines"); next.delete("busNear"); }
         const joined = cur.size ? [...cur].join(",") : "none";
         if (joined === DEFAULT_TRANSIT) next.delete("transit"); else next.set("transit", joined);
         return next;
@@ -60,14 +60,19 @@ export function useTransitToggles() {
   const busPage = params.get("busPage");
   const busLines = useMemo(() => parseBusLines(params.get("busLines")), [params]);
   const busCap = parseBusCap(params.get("busCap"));
-  /** Picking a line turns Live buses on; clearing the last one leaves it on and empty. */
+  const busNear = params.get("busNear") === "1";
+  /**
+   * Picking a line turns Live buses on; clearing the last one leaves it on and empty.
+   * `near` marks lines found around you rather than picked: they stay out of focus.
+   */
   const setBusLines = useCallback(
-    (lines: string[]) =>
+    (lines: string[], opts?: { near?: boolean }) =>
       setParams((prev) => {
         const next = new URLSearchParams(prev);
         const cur = parseTransit(next.get("transit"));
         const clean = parseBusLines(lines.join(","));
         next.delete("busPage");
+        if (opts?.near && clean.length) next.set("busNear", "1"); else next.delete("busNear");
         if (clean.length) { cur.add("bus"); next.set("busLines", clean.join(",")); } else next.delete("busLines");
         const joined = cur.size ? [...cur].join(",") : "none";
         if (joined === DEFAULT_TRANSIT) next.delete("transit"); else next.set("transit", joined);
@@ -85,7 +90,7 @@ export function useTransitToggles() {
       }, { replace: true }),
     [setParams],
   );
-  return { on, set, panelOpen, setPanelOpen, busPage, busLines, setBusLines, busCap, setBusCap };
+  return { on, set, panelOpen, setPanelOpen, busPage, busLines, busNear, setBusLines, busCap, setBusCap };
 }
 
 export function useTransitMeta() {
@@ -212,6 +217,14 @@ export function useBusLines(enabled: boolean) {
     retry: 1,
   });
 }
+let catalogOnce: Promise<string[]> | null = null;
+/** Every bus route id from the borough catalog, fetched once (a failure lets the next ask retry). */
+export function fetchBusCatalog(): Promise<string[]> {
+  catalogOnce ??= getJson<{ groups: BusGroup[] }>(`${API_BASE}/api/transit/bus-lines`)
+    .then((d) => [...new Set(d.groups.flatMap((g) => g.pages.flatMap((p) => p.routes)))])
+    .catch((e: unknown) => { catalogOnce = null; throw e; });
+  return catalogOnce;
+}
 export function routesForPage(groups: BusGroup[] | undefined, pageId: string | null): string[] {
   if (!pageId || !groups) return [];
   for (const g of groups) {
@@ -237,7 +250,8 @@ export function useBusTrip(vehicle: string | undefined) {
   });
 }
 export type BusStopInfo = { id: string; name: string; lat: number; lon: number; dir: string; routes: string[] };
-export type BusArrival = { route: string; destination: string; eta: number | null; away: string };
+/** `vehicle` is the live feed's bus id ("MTA NYCT_7225"), so a row can follow its bus; empty when the MTA leaves it out. */
+export type BusArrival = { route: string; destination: string; vehicle?: string; eta: number | null; away: string };
 /** The routes serving the most of these stops, busiest first, at most `max`. Pure, for tests. */
 export function routesFromStops(stops: Pick<BusStopInfo, "routes">[], max = 6): string[] {
   const count = new Map<string, number>();
