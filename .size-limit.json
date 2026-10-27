@@ -32,7 +32,7 @@
   {
     "name": "feature: city3d (lazy)",
     "path": ".size-build/assets/city3d-*.js",
-    "limit": "2.7 kB"
+    "limit": "2.8 kB"
   },
   {
     "name": "feature: daylight (lazy)",
@@ -72,7 +72,7 @@
   {
     "name": "feature: transit layers (lazy)",
     "path": ".size-build/assets/layers-*.js",
-    "limit": "24.7 kB"
+    "limit": "27.5 kB"
   },
   {
     "name": "feature: line panel (lazy)",

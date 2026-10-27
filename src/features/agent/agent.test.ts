@@ -67,6 +67,17 @@ describe("flythrough timeline", () => {
   it("walk → descend → ride → ascend → walk", () => {
     expect(segs.map((s) => s.kind)).toEqual(["walk", "descend", "ride", "ascend", "walk"]);
   });
+  it("each part starts where the last one ended, so the marker never jumps", () => {
+    // The planner's walk out starts at the station's stop point, not at the exit: the marker used to jump back.
+    const out = tripSchema.parse({ ...sampleTrip, legs: sampleTrip.legs.map((l, i) => i === 4 && l.kind === "walk" ? { ...l, coords: [[-73.9768, 40.7518], [-73.9762, 40.7522], [-73.9772, 40.7527]] } : l) });
+    for (const t of [sampleTrip, out]) {
+      const s = buildTimeline(t);
+      for (let i = 1; i < s.length; i++) expect(s[i].coords[0]).toEqual(s[i - 1].coords[s[i - 1].coords.length - 1]);
+    }
+    // In at the entrance, and out from the exit.
+    expect(segs[0].coords.at(-1)).toEqual([-73.9901, 40.7345]);
+    expect(buildTimeline(out)[4].coords[0]).toEqual([-73.9762, 40.7522]);
+  });
   it("speeds up and stays watchable", () => {
     expect(wallSeconds(segs[2], 30)).toBe(14);
     expect(wallSeconds(segs[2], 10)).toBe(42);

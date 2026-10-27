@@ -36,6 +36,7 @@ import { executeCommand, type ExecutorContext } from "./executor";
 import { PLAYBACK_SPEEDS, langTag, type Leg, type MapAction, type PlaybackSpeed, type Trip, type TripMode } from "./schema";
 import { askAgent } from "./stream";
 import { TripSummary, selectAlternative } from "./TripSummary";
+import { TRIP_CHOICES, tripChoiceQuestion } from "./tripChoices";
 import { nameRemindButton, remindAt, saveReminder } from "./reminder";
 import { joinSegments, nameLocationButton } from "./answerText";
 import { toast } from "sonner";
@@ -824,6 +825,15 @@ export default function AgentOverlay() {
             ) : null}
             {trip && !busy ? (
               <div className="rounded-[18px] border border-[#22314a] bg-[#111c2f]/90 p-3 text-slate-100">
+                {/* Ask again another way: the subway or bus only, on foot, or the least walking (owner, 2026-10-26). */}
+                <div role="group" aria-label="Other ways to go" data-testid="trip-choices" className="mb-3 flex gap-1.5 overflow-x-auto">
+                  {TRIP_CHOICES.map((c) => (
+                    <button key={c} type="button" onClick={() => { void send(tripChoiceQuestion(trip, c)); }}
+                      className="h-9 shrink-0 rounded-full border border-[#2c3d5a] px-3 text-[13px] font-semibold text-slate-100 hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]">
+                      {tr(appLang, c === "subway" ? "bySubway" : c === "bus" ? "byBus" : c === "walk" ? "byWalk" : "lessWalking")}
+                    </button>
+                  ))}
+                </div>
                 <TripSummary trip={trip} mapTime={mapTime} onSelect={(alt) => chooseTrip(selectAlternative(trip, alt))} onLeg={showLeg} />
                 <Button className="mt-3 h-11 w-full gap-2 rounded-full" onClick={() => (player.state.playing && player.state.tripId === trip.id ? player.toggle() : startPreview(trip, prefSpeed))}>
                   {player.state.playing && player.state.tripId === trip.id ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}

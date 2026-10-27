@@ -5,7 +5,7 @@ import { sharedCoords, startSharing } from "@/lib/geo/sharedLocation";
 import { onMapInstance } from "@/lib/map/mapInstance";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { setOpenMenu, useOpenMenu } from "@/lib/store/openMenu";
-import { setFollowMode, stopFollowing, useFollowMode, useFollowed, type FollowMode } from "@/lib/transit/follow";
+import { setFollowMode, stopFollowing, useFollowMode, useFollowed, usePreviewing, type FollowMode } from "@/lib/transit/follow";
 import { useSelectedLine } from "@/lib/transit/selectedLine";
 import { useMenuT } from "@/lib/i18n/menuText";
 import { usePullSheetUp } from "@/lib/store/pullSheet";
@@ -150,7 +150,7 @@ const FOLLOW_VIEWS: Array<{ id: FollowMode; label: string; note: string }> = [
   { id: "cab", label: "Street", note: "Ride along at street level" },
 ];
 
-function FollowViewMenu({ onPick }: { onPick: () => void }) {
+function FollowViewMenu({ onPick, preview }: { onPick: () => void; preview?: boolean }) {
   const mode = useFollowMode();
   return (
     <div role="menu" aria-label="Change view" data-testid="follow-view-menu" data-map-cover className={`flex w-[220px] flex-col gap-0.5 ${FLOAT}`}>
@@ -164,8 +164,8 @@ function FollowViewMenu({ onPick }: { onPick: () => void }) {
           </button>
         );
       })}
-      <div className="mx-2 my-1 h-px bg-[#263449]" />
-      <button type="button" onClick={() => { stopFollowing(); onPick(); }} className="flex min-h-[44px] items-center rounded-[14px] px-2.5 text-left text-[14px] font-semibold text-[#fca5a5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]">Stop following</button>
+      {preview ? null : <><div className="mx-2 my-1 h-px bg-[#263449]" />
+      <button type="button" onClick={() => { stopFollowing(); onPick(); }} className="flex min-h-[44px] items-center rounded-[14px] px-2.5 text-left text-[14px] font-semibold text-[#fca5a5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]">Stop following</button></>}
     </div>
   );
 }
@@ -246,6 +246,8 @@ export function MapChrome() {
   const { map, bearing, pitch } = useCamera();
   const line = useSelectedLine();
   const followed = useFollowed();
+  // A trip preview rides its marker with the same follow cameras, so its Change view offers them too.
+  const previewing = usePreviewing();
   // One dropdown at a time across the menu row and this view menu.
   const open = useOpenMenu() === "view" ? "view" : null;
   const setOpen = (v: "view" | null) => setOpenMenu(v);
@@ -274,7 +276,7 @@ export function MapChrome() {
 
   const top = "calc(env(safe-area-inset-top) + 16px)";
   // Following: the same quick bar, with the follow cameras under Change view.
-  if (followed) {
+  if (followed || previewing) {
     return (
       <>
       <div ref={stack} data-testid="map-chrome" className="pointer-events-none absolute right-4 z-40 flex flex-col items-end gap-2.5" style={{ top }}>
@@ -283,7 +285,7 @@ export function MapChrome() {
             onClick={() => setOpen(open === "view" ? null : "view")} className={`${ROUND} ${open === "view" ? LIGHT : DARK} pointer-events-auto`}>
             <ViewIcon />
           </button>
-          {open === "view" ? <div className="pointer-events-auto absolute right-[52px] top-0"><FollowViewMenu onPick={() => setOpen(null)} /></div> : null}
+          {open === "view" ? <div className="pointer-events-auto absolute right-[52px] top-0"><FollowViewMenu preview={!followed} onPick={() => setOpen(null)} /></div> : null}
         </div>
         <ZoomControl map={map} />
         <ZoomButtons map={map} />
