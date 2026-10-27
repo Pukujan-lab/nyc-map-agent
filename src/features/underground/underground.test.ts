@@ -335,3 +335,12 @@ describe("offline cache list (public/sw.js)", () => {
     expect(how("/transit/equipment.json")).toBe("network-first");
   });
 });
+
+describe("the way up a stair", () => {
+  it("carries the mapped way up for stairs, not elevators", () => {
+    const st = { id: "X1", name: "Test St", at: [-73.98, 40.76] as [number, number] };
+    const exits = rankExits(st, [{ at: [-73.9801, 40.7601], kind: "Stair", up: 30 }, { at: [-73.9799, 40.7599], kind: "Elevator", up: 30 }], null);
+    expect(exits.find((e) => e.kind === "Stair")?.up).toBe(30);
+    expect(exits.find((e) => e.kind === "Elevator")?.up).toBeNull();
+  });
+});

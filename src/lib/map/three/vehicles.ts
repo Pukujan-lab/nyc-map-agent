@@ -185,6 +185,9 @@ function stairKit(): THREE.BufferGeometry {
     [0.35, 4.6, 0.25, -1.2, 0.6, 0, "#a8a29e"], [0.35, 4.6, 0.25, 1.2, 0.6, 0, "#a8a29e"], [2.75, 0.35, 0.25, 0, -1.7, 0, "#a8a29e"],
   ];
   for (let i = 0; i < 6; i++) boxes.push([1.75, 0.65, 0.12, 0, -1.1 + i * 0.65, -0.25 - i * 0.28, step]);
+  // The stairwell: dark walls and floor under the opening, so the steps read as going down into the ground, not floating over it.
+  const well = "#1f2937";
+  boxes.push([0.06, 4.2, 1.9, -1.08, 0.6, -1.9, well], [0.06, 4.2, 1.9, 1.08, 0.6, -1.9, well], [2.2, 0.06, 1.9, 0, 2.7, -1.9, well], [2.2, 4.2, 0.04, 0, 0.6, -1.95, well]);
   // Sign: a dark panel on two posts at the street end.
   boxes.push([1.6, 0.08, 0.45, 0, -1.75, 1.35, "#111827"], [1.5, 0.1, 0.08, 0, -1.76, 1.62, "#f8fafc"]); // sign on the end railing, white route band
   return kit(boxes, [[-1.2, -1.7, 2.4], [1.2, -1.7, 2.4]]);

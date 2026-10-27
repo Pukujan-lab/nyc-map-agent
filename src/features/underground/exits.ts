@@ -11,7 +11,7 @@ export { bearing, cornerOf, metres, type ExitPlace, type LandmarkCandidate, type
 /** The slice of public/transit/subway.json this needs. */
 export interface SubwayStatic {
   stations: { features: Array<{ geometry: { coordinates: number[] }; properties: { id: string; name: string } }> };
-  entrances?: { features: Array<{ geometry: { coordinates: number[] }; properties: { id: string; name: string; kind: string } }> };
+  entrances?: { features: Array<{ geometry: { coordinates: number[] }; properties: { id: string; name: string; kind: string; up?: number } }> };
 }
 
 export interface Station {
@@ -34,6 +34,8 @@ export interface Exit extends ExitPlace {
   trainEnd: "front" | "back" | null;
   /** Metres along the platform from the station point, + toward the front (approximate). */
   alongM: number | null;
+  /** The way you face coming up its stairs, when OpenStreetMap maps them; null otherwise. */
+  up: number | null;
 }
 
 const NO_PLACE: ExitPlace = { streets: null, corner: null, landmarks: [] };
@@ -63,8 +65,8 @@ export function nearestStation(sys: SubwayStatic, at: Pt, maxM = 350): (Station 
  * entrances of a same-named stop within 300 m count too. Passages between
  * buildings are not exits to the street and are left out.
  */
-export function stationEntrances(sys: SubwayStatic, st: Station): Array<{ at: Pt; kind: string }> {
-  const out: Array<{ at: Pt; kind: string }> = [];
+export function stationEntrances(sys: SubwayStatic, st: Station): Array<{ at: Pt; kind: string; up?: number }> {
+  const out: Array<{ at: Pt; kind: string; up?: number }> = [];
   const seen = new Set<string>();
   for (const f of sys.entrances?.features ?? []) {
     const p = f.properties;
@@ -76,7 +78,7 @@ export function stationEntrances(sys: SubwayStatic, st: Station): Array<{ at: Pt
     const key = `${at[0].toFixed(5)},${at[1].toFixed(5)}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ at: [at[0], at[1]], kind: p.kind || "Stair" });
+    out.push({ at: [at[0], at[1]], kind: p.kind || "Stair", ...(typeof p.up === "number" ? { up: p.up } : {}) });
   }
   return out;
 }
@@ -87,7 +89,7 @@ export function stationEntrances(sys: SubwayStatic, st: Station): Array<{ at: Pt
  */
 export function rankExits(
   st: Station,
-  ents: Array<{ at: Pt; kind: string }>,
+  ents: Array<{ at: Pt; kind: string; up?: number }>,
   dest: Pt | null,
   placeAt: (at: Pt) => ExitPlace = () => NO_PLACE,
   trainAt: (at: Pt) => Pick<Exit, "trainEnd" | "alongM"> = () => ({ trainEnd: null, alongM: null }),
@@ -95,6 +97,7 @@ export function rankExits(
   const exits: Exit[] = ents.map((e) => ({
     at: e.at,
     kind: e.kind,
+    up: typeof e.up === "number" && /stair|escalator/i.test(e.kind) ? e.up : null,
     side: octant(st.at, e.at),
     ...placeAt(e.at),
     toDestM: dest ? Math.round(metres(e.at, dest)) : null,

@@ -18,6 +18,7 @@ import { LANDMARKS } from "@/lib/map/landmarks";
 import { SurfaceCalibration } from "./SurfaceCalibration";
 import { SURFACE_CAL_MS, disagreementTrigger, lateOpenTrigger, movementCorrection, openedAfterTrip } from "./surface";
 import { angleDiff } from "./exits";
+import { compassWord } from "@/lib/map/stairs";
 import { arrowState, calibrate, correctedHeading, describePrompt, facingTracksHeading, headingJumped, landmarkLine, pickLandmarks, signText, trainCue, type Calibration } from "./cues";
 import { ageLabel, bearing, compassAgrees, exitKind, headingFromMovement, metres, nearestStation, turnHint, type Pt, type Station, type SubwayStatic } from "./exits";
 import { initialDetector, stepDetector } from "./motion";
@@ -34,7 +35,7 @@ import { setSelectedLine, useSelectedLine } from "@/lib/transit/selectedLine";
 import { whereYouAre } from "./where";
 import { useBasemapReady } from "@/lib/map/basemapReady";
 
-type Mode = "idle" | "ride" | "which" | "station" | "calibrate" | "landmark" | "corner" | "walk";
+type Mode = "idle" | "ride" | "which" | "station" | "calibrate" | "stairs" | "landmark" | "corner" | "walk";
 
 const QUEUE_KEY = "nyc-map:underground:queue";
 const MODE_KEY = "nyc-map:underground:mode";
@@ -169,7 +170,7 @@ export default function Underground() {
   const [mode, setModeRaw] = useState<Mode>(() => read<Mode>(MODE_KEY, "idle"));
   const setMode = (m: Mode) => {
     setModeRaw(m);
-    write(MODE_KEY, m === "calibrate" || m === "landmark" || m === "corner" || m === "walk" ? "station" : m);
+    write(MODE_KEY, m === "calibrate" || m === "stairs" || m === "landmark" || m === "corner" || m === "walk" ? "station" : m);
   };
   const [stationId, setStationId] = useState<string | null>(() => read<string | null>(`${MODE_KEY}:station`, null));
   const [chosen, setChosen] = useState(0);
@@ -668,6 +669,22 @@ export default function Underground() {
 
   const surfaced = () => {
     stopAllCompass(); // a platform calibration does not survive the stairs
+    // Up mapped stairs, you face the way they climb: one tap settles your direction (owner, 2026-10-27).
+    if (exit?.up != null) return setMode("stairs");
+    const cues = exit && target !== null ? pickLandmarks(exit.at, target, exit.landmarks) : [];
+    setMode(cues.length ? "landmark" : "corner");
+  };
+
+  /** Up this exit's stairs: you stand at its top facing the way they climb; the map turns to match. */
+  const cameUpStairs = () => {
+    if (!exit || exit.up == null) return;
+    getMapInstance()?.easeTo({ center: exit.at, zoom: 18, bearing: exit.up, pitch: 0, duration: online ? 800 : 0 });
+    fixes.current = [];
+    setMoveHeading(exit.up);
+    setMode("walk");
+  };
+
+  const otherExit = () => {
     const cues = exit && target !== null ? pickLandmarks(exit.at, target, exit.landmarks) : [];
     setMode(cues.length ? "landmark" : "corner");
   };
@@ -1044,6 +1061,21 @@ export default function Underground() {
         </>
       )}
       {(mode === "station" || mode === "calibrate") && !exit && <p className="text-xs text-muted-foreground">No street exits are listed for this station in the MTA data. Follow the station signs.</p>}
+
+      {mode === "stairs" && exit && exit.up != null && (
+        <div className="space-y-2" data-testid="stairs-facing">
+          <p className="font-medium">Came up the {exitKind(exit.kind)}{exitSign ? ` at ${exitSign.replace(/^Exit · /, "")}` : ""}?</p>
+          <p>Then you're facing {compassWord(exit.up)}{target !== null ? `. ${turnHint(exit.up, target)}` : ""}.</p>
+          <div className="flex gap-2">
+            <Button type="button" size="sm" className="flex-1" onClick={cameUpStairs}>
+              Yes
+            </Button>
+            <Button type="button" size="sm" variant="outline" className="flex-1" onClick={otherExit}>
+              Different exit
+            </Button>
+          </div>
+        </div>
+      )}
 
       {mode === "landmark" && exit && cues.length > 0 && (
         <div className="space-y-2">

@@ -891,13 +891,15 @@ export default function TransitLayer() {
     const sync = () => {
       const sub = statics.find((s) => s.system === "subway");
       const c = map.getCenter();
-      entr.current = walking && sub ? entranceInstances(sub, outStations, [c.lng, c.lat]) : [];
+      // The tiles' street lines lay each stair along its curb when OpenStreetMap has no mapped steps for it.
+      const read = walking && sub ? readMap(map) : null;
+      entr.current = read && sub ? entranceInstances(sub, outStations, [c.lng, c.lat], 300, read.lines) : [];
       v3d.current?.setEntrances(entr.current);
       // A tap on a stair or elevator opens its station and next trains (owner, 2026-10-27).
       setPickTargets(entr.current.map((e) => ({ kind: "entrance" as const, id: e.id, lng: e.lon, lat: e.lat, h: 3, props: { name: e.name } })), "entrances");
       // Each nearby entrance's corner and kind.
       const phone = window.matchMedia("(max-width: 639px)").matches;
-      setEntrLabels(walking && sub ? entranceLabels(sub, outStations, [c.lng, c.lat], readMap(map).placeAt, { max: phone ? 3 : 6, phone }) : EMPTY_FC);
+      setEntrLabels(walking && sub ? entranceLabels(sub, outStations, [c.lng, c.lat], (read ?? readMap(map)).placeAt, { max: phone ? 3 : 6, phone }) : EMPTY_FC);
       // Over the 3D storefronts and kiosks, which are added after it and would hide it.
       if (walking && map.getLayer("transit-entrance-label")) map.moveLayer("transit-entrance-label");
     };
