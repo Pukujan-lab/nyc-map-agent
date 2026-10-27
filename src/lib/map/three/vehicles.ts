@@ -155,7 +155,7 @@ export interface EntranceKitInstance {
 }
 const ENTRANCE_CAP = 300;
 /** Merge coloured boxes [w,l,h,x,y,z,color] (z = base) into one geometry; spheres for globe lamps. */
-function kit(boxes: Array<[number, number, number, number, number, number, string]>, globes: Array<[number, number, number]>): THREE.BufferGeometry {
+function kit(boxes: KitBox[], globes: Array<[number, number, number]>): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
   const paint = (g: THREE.BufferGeometry, hex: string) => {
     const c = new THREE.Color(hex), n = g.attributes.position.count, a = new Float32Array(n * 3);
@@ -179,25 +179,33 @@ function kit(boxes: Array<[number, number, number, number, number, number, strin
   out.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
   return out;
 }
-/** Low-poly NYC stair entrance, local y = toward the station: railings, descending steps, globe lamps, sign. */
+/**
+ * The street-level pavement is a 0.5 m slab (MapView flattens the blocks to it while walking), so the kits stand on it.
+ * Nothing goes below it: the map's ground hides nothing, so a stairwell under the street showed through as a
+ * grey box under the railings (owner, 2026-10-27).
+ */
+const PAVE = 0.5;
+type KitBox = [number, number, number, number, number, number, string];
+const onPavement = (boxes: KitBox[]): KitBox[] => boxes.map(([w, l, h, x, y, z, c]) => [w, l, h, x, y, z + PAVE, c]);
+/** Low-poly NYC stair entrance, local y = toward the station: railings, the opening with its steps going dark, globe lamps, sign. */
 function stairKit(): THREE.BufferGeometry {
-  const rail = "#15803d", step = "#9ca3af";
-  const boxes: Array<[number, number, number, number, number, number, string]> = [
+  const rail = "#15803d";
+  const boxes: KitBox[] = [
     [0.12, 4.2, 1.1, -1.2, 0.6, 0.25, rail], [0.12, 4.2, 1.1, 1.2, 0.6, 0.25, rail], [2.5, 0.12, 1.1, 0, -1.7, 0.25, rail],
     // Granite coping around the opening so it reads from a distance.
     [0.35, 4.6, 0.25, -1.2, 0.6, 0, "#a8a29e"], [0.35, 4.6, 0.25, 1.2, 0.6, 0, "#a8a29e"], [2.75, 0.35, 0.25, 0, -1.7, 0, "#a8a29e"],
+    // The opening: dark, with step nosings fading into it, so it reads as stairs going down.
+    [2.05, 4.2, 0.03, 0, 0.6, 0.01, "#0b1220"],
   ];
-  for (let i = 0; i < 6; i++) boxes.push([1.75, 0.65, 0.12, 0, -1.1 + i * 0.65, -0.25 - i * 0.28, step]);
-  // The stairwell: dark walls and floor under the opening, so the steps read as going down into the ground, not floating over it.
-  const well = "#1f2937";
-  boxes.push([0.06, 4.2, 1.9, -1.08, 0.6, -1.9, well], [0.06, 4.2, 1.9, 1.08, 0.6, -1.9, well], [2.2, 0.06, 1.9, 0, 2.7, -1.9, well], [2.2, 4.2, 0.04, 0, 0.6, -1.95, well]);
+  const nosing = ["#d1d5db", "#9ca3af", "#6b7280", "#4b5563", "#374151", "#1f2937"];
+  nosing.forEach((c, i) => boxes.push([1.75, 0.14, 0.02, 0, -1.25 + i * 0.65, 0.04, c]));
   // Sign: a dark panel on two posts at the street end.
   boxes.push([1.6, 0.08, 0.45, 0, -1.75, 1.35, "#111827"], [1.5, 0.1, 0.08, 0, -1.76, 1.62, "#f8fafc"]); // sign on the end railing, white route band
-  return kit(boxes, [[-1.2, -1.7, 2.4], [1.2, -1.7, 2.4]]);
+  return kit(onPavement(boxes), [[-1.2, -1.7, 2.4 + PAVE], [1.2, -1.7, 2.4 + PAVE]]);
 }
 /** Elevator variant: a glass cab with a dark roof and a sign. */
 function elevatorKit(): THREE.BufferGeometry {
-  return kit([[2.2, 2.2, 2.6, 0, 0, 0, "#93c5fd"], [2.4, 2.4, 0.25, 0, 0, 2.6, "#1f2937"], [1.2, 0.08, 0.35, 0, -1.2, 2.0, "#111827"]], [[1.3, -1.3, 2.4]]);
+  return kit(onPavement([[2.2, 2.2, 2.6, 0, 0, 0, "#93c5fd"], [2.4, 2.4, 0.25, 0, 0, 2.6, "#1f2937"], [1.2, 0.08, 0.35, 0, -1.2, 2.0, "#111827"]]), [[1.3, -1.3, 2.4 + PAVE]]);
 }
 
 /**

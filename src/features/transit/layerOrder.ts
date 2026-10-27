@@ -5,8 +5,11 @@ export const RAISED_LIFT_PX = 26;
 /** In 3D a dwelling train lifts this far so the station stays readable; flat, it stays on the track (owner report, 2026-10-25). */
 export const STOP_LIFT_PX = 52;
 
-/** These stay above the 3D vehicle layer: the station, its train bullet, skip marks, and the followed bus badge. */
-export const ABOVE_VEHICLE_LAYERS = ["transit-bullet-notch", "transit-bullet", "transit-held", "transit-station", "transit-station-raised", "transit-station-label", "transit-skip", "transit-alert-skipped", "transit-bus-badge-follow"];
+/**
+ * These stay above the 3D vehicle layer: the station, its train bullet, skip marks, the followed bus badge, and at
+ * street level the name over each stair (the kit's sign and globe lamps hid it; owner, 2026-10-27).
+ */
+export const ABOVE_VEHICLE_LAYERS = ["transit-bullet-notch", "transit-bullet", "transit-held", "transit-station", "transit-station-raised", "transit-station-label", "transit-skip", "transit-alert-skipped", "transit-bus-badge-follow", "transit-entrance-label"];
 
 type LayerOrderMap = Pick<MaplibreMap, "getLayer" | "getLayersOrder" | "moveLayer">;
 
