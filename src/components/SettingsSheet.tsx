@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Settings, X } from "lucide-react";
 import { PullSheet } from "@/components/PullSheet";
 import { SettingsBody } from "@/components/SettingsBody";
+import { LiveLayerRows } from "@/components/MenuRow";
 import type { SheetLevel } from "@/components/sheetSwipe";
 import { useMenuT } from "@/lib/i18n/menuText";
 
@@ -25,6 +26,9 @@ export default function SettingsSheet({ onClose }: { onClose: () => void }) {
         </div>
       }>
       <div className="pull-sheet-body flex flex-col gap-2">
+        {/* Phones have no Layers menu: live trains and buses, with the bus route chooser, open the sheet. */}
+        <div data-testid="phone-layers" className="text-[#f1f5f9]"><LiveLayerRows /></div>
+        <div className="mx-2 h-px bg-[#263449]" />
         <SettingsBody />
       </div>
     </PullSheet>

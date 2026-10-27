@@ -85,24 +85,23 @@ export function useCurrentView(): { map: MapLibreMap | null; current: ViewName; 
 }
 
 /**
- * Map · 3D · Street at the top centre, on wider screens (on a phone the cube
- * button opens the same three). Each keeps the spot and the heading.
+ * Map · 3D · Street, stacked in the bottom-right corner over Center on my location,
+ * on wider screens (on a phone the cube button opens the same three). Each keeps the
+ * spot and the heading.
  */
 export function MapViewSwitch() {
   const { map, current: here, walking, spot } = useCurrentView();
   const following = useFollowed() !== null;
   const mode = useFollowMode();
   const current = following ? followView(mode) : here;
-  const place = usePlace();
   return (
     <div role="radiogroup" aria-label="View" data-testid="map-view-switch"
-      className={`pointer-events-auto absolute z-40 hidden -translate-x-1/2 gap-0.5 rounded-full border border-[#263449] bg-[rgba(15,23,42,0.92)] p-1 text-[#f1f5f9] shadow-[0_6px_18px_rgba(0,0,0,0.35)] sm:flex ${place.cls}`}
-      style={{ top: `calc(env(safe-area-inset-top) + ${place.docked ? 72 : 16}px)`, left: place.left }}>
+      className="corner-view pointer-events-auto absolute z-40 hidden w-[52px] flex-col gap-0.5 rounded-[18px] border border-[#263449] bg-[rgba(15,23,42,0.92)] p-1 text-[#f1f5f9] shadow-[0_6px_18px_rgba(0,0,0,0.35)] sm:flex">
       {VIEWS.map((v) => {
         const on = current === v.id;
         return (
           <button key={v.id} type="button" role="radio" aria-checked={on} onClick={() => { if (on) return; if (following) setFollowMode(FOLLOW_FOR[v.id]); else pickView(map, v.id, walking, spot); }}
-            className="h-9 min-w-[64px] rounded-full px-3 text-[14px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]"
+            className="h-9 w-full rounded-[14px] text-[12px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]"
             style={{ background: on ? "#f8fafc" : "transparent", color: on ? "#0f172a" : undefined }}>
             {v.label}
           </button>
@@ -139,7 +138,7 @@ export function BackToStreet() {
   if (!show) return null;
   return (
     <div data-testid="back-to-street"
-      className={`pointer-events-auto absolute left-1/2 top-[calc(env(safe-area-inset-top)+var(--bt))] z-40 flex -translate-x-1/2 items-center gap-1 rounded-full border border-[#263449] bg-[rgba(15,23,42,0.92)] p-1 text-[#f1f5f9] shadow-[0_6px_18px_rgba(0,0,0,0.35)] sm:left-[var(--bl)] sm:top-[calc(env(safe-area-inset-top)+var(--bt)+56px)] ${place.cls}`}
+      className={`pointer-events-auto absolute left-1/2 top-[calc(env(safe-area-inset-top)+var(--bt))] z-40 flex -translate-x-1/2 items-center gap-1 rounded-full border border-[#263449] bg-[rgba(15,23,42,0.92)] p-1 text-[#f1f5f9] shadow-[0_6px_18px_rgba(0,0,0,0.35)] sm:left-[var(--bl)] ${place.cls}`}
       style={{ ["--bl" as string]: place.left, ["--bt" as string]: `${place.docked ? 72 : 16}px` }}>
       <button type="button" onClick={backToStreet}
         className="h-9 whitespace-nowrap rounded-full bg-[#2563eb] px-4 text-[14px] font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]">

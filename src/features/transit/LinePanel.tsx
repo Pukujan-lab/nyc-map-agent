@@ -64,8 +64,8 @@ function useNoticeRings(map: MaplibreMap | undefined, notice: LineNotice | null,
 }
 
 /**
- * The selected subway line (#370): a bullet pill with its notice count and a
- * close button, and under it a see-through panel listing the line's notices.
+ * The selected subway line (#370): one card headed by the line, its notice count
+ * and a close button, listing the line's notices; folded, just the pill.
  * Tapping a notice opens its full text and rings its stations on the map.
  */
 export function LinePanel({ map, route, onFollow }: { map: MaplibreMap | undefined; route: string; onFollow: () => void }) {
@@ -106,7 +106,7 @@ export function LinePanel({ map, route, onFollow }: { map: MaplibreMap | undefin
   useEffect(() => { sendScreen({ type: "LINE", on: true }); return () => sendScreen({ type: "LINE", on: false }); }, []);
   const folded = useScreen((v) => v.line === "pill");
   const sheet = !wide && !folded;
-  useEffect(() => setPanelEl(panelRef.current), [sheet, level]);
+  useEffect(() => setPanelEl(panelRef.current), [sheet, level, folded]);
   const pillLabel = (
     <>
       <span className="flex h-8 w-8 items-center justify-center rounded-full text-[16px] font-bold" style={{ background: color, color: text }} aria-hidden>
@@ -139,7 +139,7 @@ export function LinePanel({ map, route, onFollow }: { map: MaplibreMap | undefin
           </div>
         ) : null;
   const noticesEl = (inSheet: boolean) => count ? (
-          <ul className={`line-notices flex ${inSheet ? "" : picked ? "max-h-[min(236px,30dvh)]" : "max-h-[104px]"} min-h-0 flex-col gap-2 ${inSheet ? "" : "overflow-y-auto overscroll-contain"} pr-1.5`} aria-label={`${route} line notices`}>
+          <ul className={`line-notices flex ${inSheet ? "" : picked ? "max-h-[min(236px,30dvh)]" : "max-h-[150px]"} min-h-0 flex-col gap-2 ${inSheet ? "" : "overflow-y-auto overscroll-contain"} pr-1.5`} aria-label={`${route} line notices`}>
             {notices.map((n) => {
               const open = n.id === picked;
               const tone = TONE[n.tone];
@@ -198,25 +198,35 @@ export function LinePanel({ map, route, onFollow }: { map: MaplibreMap | undefin
       className="pointer-events-none absolute left-4 right-4 z-[44] flex flex-col gap-3 font-[Inter,system-ui,sans-serif] text-[#f1f5f9] sm:left-auto sm:w-[360px] md:w-[380px] lg:w-[400px]"
       style={{ top: "calc(env(safe-area-inset-top) + 16px)", maxHeight: "calc(100% - env(safe-area-inset-top) - var(--chat-bar-h, 0px) - 32px)" }}
     >
-      <div className="flex items-center justify-between">
-        {folded ? (
+      {folded ? (
+        <div className="flex items-center justify-between">
           <button type="button" aria-expanded={false} aria-label={`Show the ${route} line`} data-testid="line-pill" onClick={() => sendScreen({ type: "SHOW_LINE" })}
             className={`pointer-events-auto flex h-11 items-center gap-2.5 rounded-[22px] pl-1.5 pr-2 ${GLASS} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]`}>
             {pillLabel}
           </button>
-        ) : (
-          <div data-testid="line-pill" className={`pointer-events-auto flex h-11 items-center gap-2.5 rounded-[22px] pl-1.5 pr-2 ${GLASS}`}>{pillLabel}</div>
-        )}
-        <button type="button" aria-label="Close line" onClick={() => setSelectedLine(null)}
-          className={`pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full ${GLASS} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]`}>
-          <X className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden />
-        </button>
-      </div>
-      <div ref={panelRef} data-testid="line-body" className={`pointer-events-auto ${folded ? "hidden" : "flex"} min-h-0 flex-col gap-2.5 rounded-[22px] border border-[rgba(148,163,184,0.16)] bg-[rgba(11,18,32,0.45)] p-2.5 backdrop-blur-[14px]`}>
-        {boardEl}
-        {noticesEl(false)}
-        {actionsEl}
-      </div>
+          <button type="button" aria-label="Close line" onClick={() => setSelectedLine(null)}
+            className={`pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full ${GLASS} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]`}>
+            <X className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden />
+          </button>
+        </div>
+      ) : (
+        // One card: the line and its close button head it, then the board, the notices and the actions,
+        // all on the same left edge (owner, 2026-10-27).
+        <div className="pointer-events-auto flex min-h-0 flex-col rounded-[22px] border border-[#263449] bg-[rgba(15,23,42,0.92)] shadow-[0_10px_30px_rgba(0,0,0,0.4)] backdrop-blur-[14px]">
+          <div className="flex items-center gap-2 py-2 pl-2.5 pr-2">
+            <div data-testid="line-pill" className="flex min-w-0 flex-1 items-center gap-2.5">{pillLabel}</div>
+            <button type="button" aria-label="Close line" onClick={() => setSelectedLine(null)}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#cbd5e1] hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]">
+              <X className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden />
+            </button>
+          </div>
+          <div ref={panelRef} data-testid="line-body" className="flex min-h-0 flex-col gap-2.5 border-t border-[rgba(148,163,184,0.16)] p-2.5">
+            {boardEl}
+            {noticesEl(false)}
+            {actionsEl}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

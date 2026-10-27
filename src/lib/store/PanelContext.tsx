@@ -46,6 +46,11 @@ export interface PanelChip {
   label: string;
   active: boolean;
   onToggle: () => void;
+  /** Live buses only: the routes showing, a way to change them, routes near the map, and why nothing showed. */
+  routes?: string[];
+  setRoutes?: (routes: string[]) => void;
+  suggest?: () => Promise<string[]>;
+  note?: string | null;
 }
 
 /** One search hit; `onSelect` is the feature's own action (fly, select…). */
@@ -294,11 +299,16 @@ export function usePanelChip(chip: PanelChip | null) {
   const label = chip?.label;
   const active = chip?.active;
   const onToggle = chip?.onToggle;
+  const routesKey = chip?.routes?.join(",");
+  const setRoutes = chip?.setRoutes;
+  const suggest = chip?.suggest;
+  const note = chip?.note;
   useEffect(() => {
     if (!id || !label || !onToggle) return;
-    register("chip", id, { id, label, active: !!active, onToggle });
+    const routes = routesKey === undefined ? undefined : routesKey ? routesKey.split(",") : [];
+    register("chip", id, { id, label, active: !!active, onToggle, routes, setRoutes, suggest, note });
     return () => register("chip", id, null);
-  }, [register, id, label, active, onToggle]);
+  }, [register, id, label, active, onToggle, routesKey, setRoutes, suggest, note]);
 }
 
 /** Register a search source (e.g. transit stations) while mounted. */

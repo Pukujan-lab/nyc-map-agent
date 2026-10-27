@@ -345,20 +345,33 @@ export default function TransitLayer() {
   // which re-rendered this layer through the panel context ("Maximum update depth exceeded").
   const trainsOn = on.has("subway");
   const toggleTrains = useCallback(() => set("subway", !trainsOn), [trainsOn, set]);
+  // Why Live buses showed nothing, under its switch; cleared once routes show.
+  const [busNote, setBusNote] = useState<string | null>(null);
+  const busPoint = useCallback(() => {
+    const c = map?.getCenter();
+    return sharedCoords() ?? (c ? { lon: c.lng, lat: c.lat } : null);
+  }, [map]);
   const toggleBuses = useCallback(() => {
     if (show.routes.length > 0) { holdShuttle(alertFocus?.id ?? null); set("bus", false); return; }
     // Agent-first home: switch on the buses around you (or the map centre) instead of
     // opening the full line picker; the picker stays in More layers.
-    const c = map?.getCenter();
-    const point = sharedCoords() ?? (c ? { lon: c.lng, lat: c.lat } : null);
+    const point = busPoint();
     if (home && point) {
-      void fetchBusRoutesNear(point).then((routes) => { if (routes.length) setBusLines(routes); }).catch(() => {});
+      setBusNote(null);
+      void fetchBusRoutesNear(point)
+        .then((routes) => { if (routes.length) setBusLines(routes); else setBusNote("No buses near here. Pick a route below."); })
+        .catch(() => setBusNote("Couldn't load buses. Try again, or pick a route below."));
       return;
     }
     setDrawerOpen(true);
-  }, [show.routes.length, alertFocus, set, setDrawerOpen, home, map, setBusLines]);
+  }, [show.routes.length, alertFocus, set, setDrawerOpen, home, busPoint, setBusLines]);
+  useEffect(() => { if (show.routes.length) setBusNote(null); }, [show.routes.length]);
+  const suggestBuses = useCallback(async () => {
+    const point = busPoint();
+    return point ? fetchBusRoutesNear(point, 10) : [];
+  }, [busPoint]);
   usePanelChip({ id: "liveTrains", label: "Live trains", active: trainsOn, onToggle: toggleTrains });
-  usePanelChip(meta.data?.bus === true ? { id: "liveBuses", label: "Live buses", active: show.routes.length > 0, onToggle: toggleBuses } : null);
+  usePanelChip(meta.data?.bus === true ? { id: "liveBuses", label: "Live buses", active: show.routes.length > 0, onToggle: toggleBuses, routes: show.routes, setRoutes: setBusLines, suggest: suggestBuses, note: busNote } : null);
   usePanelChip({ id: "transitFocus", label: "Transit Focus", active: focus && anyOn, onToggle: toggleFocus });
 
   // Icons, including after a style swap.

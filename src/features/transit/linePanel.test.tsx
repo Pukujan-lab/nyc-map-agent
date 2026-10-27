@@ -16,7 +16,7 @@ describe("line panel and the answer (docs/PDD.md, Screen space)", () => {
   it("folds to its pill on a phone while an answer is open", () => {
     sendScreen({ type: "ANSWER", on: true });
     const html = render();
-    expect(html).toMatch(/data-testid="line-body" class="pointer-events-auto hidden/);
+    expect(html).not.toContain('data-testid="line-body"');
     expect(html).toContain('aria-label="Show the A line"');
   });
 
@@ -31,7 +31,7 @@ describe("line panel and the answer (docs/PDD.md, Screen space)", () => {
     sendScreen({ type: "SIZE", size: "wide" });
     sendScreen({ type: "ANSWER", on: true });
     const html = render();
-    expect(html).toMatch(/data-testid="line-body" class="pointer-events-auto flex/);
+    expect(html).toMatch(/data-testid="line-body" class="flex/);
     expect(html).toContain("sm:left-auto");
   });
 });
