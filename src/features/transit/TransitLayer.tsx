@@ -1221,7 +1221,7 @@ export default function TransitLayer() {
       {xrayOn && !three ? (
         // Top-down X-ray: the ground and buildings fade so the tunnels below read through.
         <Source id="transit-xray-veil" type="geojson" data={flatVeil}>
-          <Layer id="transit-xray-veil" type="fill" beforeId="transit-line-under" paint={{ "fill-color": "#0b1220", "fill-opacity": 0.55 }} />
+          <Layer id="transit-xray-veil" type="fill" beforeId="transit-line-under" paint={{ "fill-color": "#0b1220", "fill-opacity": 0.15 }} />
         </Source>
       ) : null}
       {focus ? (

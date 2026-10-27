@@ -886,9 +886,7 @@ export default function AgentOverlay() {
     };
     const panelUp = panelContent !== null && !panelMinimized;
     const answerOpen = hasAnswer && answerView === "open";
-    // Any sheet pulled up from behind the chat (station exits, a line) owns that space: the task row
-    // used to sit on top of it and hide its question (owner report, 2026-10-27).
-    const showIdle = !sheetUp && !selectedLine && !stationHelpVisible && !followingRoute && !player.state.active && !walking && !streetViewOpen && !answerOpen && !busy && !handsFree && !drawerOpen && !panelUp && followed === null;
+    const showIdle = !selectedLine && !stationHelpVisible && !followingRoute && !player.state.active && !walking && !streetViewOpen && !answerOpen && !busy && !handsFree && !drawerOpen && !panelUp && followed === null;
     const chip = hasAnswer && answerView === "chip" ? (
       <button type="button" aria-label={tr(appLang, "showAnswer")} data-testid="answer-chip" onClick={() => sendScreen({ type: "SHOW_ANSWER" })}
         className="pointer-events-auto flex h-11 max-w-full items-center gap-2 self-start rounded-full border border-[#263449] bg-[#0b1220]/85 px-4 text-sm font-semibold text-slate-100 shadow-lg backdrop-blur-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400">
@@ -896,7 +894,9 @@ export default function AgentOverlay() {
         <ChevronUp className="h-4 w-4 shrink-0" aria-hidden="true" />
       </button>
     ) : null;
-    const idle = chip ?? (showIdle ? (
+    // Another sheet pulled up from behind the chat (station exits) owns that space: the task row used to
+    // sit on top of it and hide its question (owner report, 2026-10-27). Settings is itself one.
+    const idle = chip ?? (showIdle && !(sheetUp && !settingsOpen) ? (
       <>
         <DailyCard places={places} onAsk={(q) => void send(q)} onFly={(sp) => flyTo({ lon: sp.lon, lat: sp.lat, zoom: 16 })} onShowStations={(points) => actionCtx.showPoints(points, { color: TROUBLE_COLOR.problem, title: "Delay" })} />
         <TaskButtons on={tasks} />
