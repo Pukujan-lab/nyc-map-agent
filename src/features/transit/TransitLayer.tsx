@@ -152,6 +152,33 @@ function addSkipIcons(map: MaplibreMap) {
   }
 }
 
+/** Overhead subway entrances (owner, 2026-10-27): a green badge with what it is, not a bare dot. */
+function addEntranceIcons(map: MaplibreMap) {
+  for (const id of ["transit-entr-stair", "transit-entr-elevator", "transit-entr-escalator", "transit-entr-elevator-out"] as const) {
+    if (map.hasImage(id)) continue;
+    const ctx = document.createElement("canvas").getContext("2d");
+    if (!ctx) return;
+    ctx.canvas.width = ctx.canvas.height = 48;
+    ctx.beginPath(); ctx.roundRect(4, 4, 40, 40, 10);
+    ctx.fillStyle = id.endsWith("-out") ? "#6b7280" : "#15803d"; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = "#ffffff"; ctx.stroke();
+    ctx.strokeStyle = "#ffffff"; ctx.fillStyle = "#ffffff"; ctx.lineWidth = 3.5; ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.beginPath();
+    if (id === "transit-entr-stair") {
+      // Three steps going down to the right.
+      ctx.moveTo(12, 15); ctx.lineTo(19, 15); ctx.lineTo(19, 22); ctx.lineTo(26, 22); ctx.lineTo(26, 29); ctx.lineTo(33, 29); ctx.lineTo(33, 35);
+    } else if (id === "transit-entr-escalator") {
+      ctx.moveTo(11, 34); ctx.lineTo(18, 34); ctx.lineTo(30, 16); ctx.lineTo(37, 16);
+    } else {
+      // A cab with up and down arrows.
+      ctx.moveTo(19, 21); ctx.lineTo(24, 15); ctx.lineTo(29, 21); ctx.moveTo(19, 27); ctx.lineTo(24, 33); ctx.lineTo(29, 27);
+      if (id.endsWith("-out")) { ctx.moveTo(13, 35); ctx.lineTo(35, 13); }
+    }
+    ctx.stroke();
+    map.addImage(id, ctx.getImageData(0, 0, 48, 48), { pixelRatio: 2 });
+  }
+}
+
 /** SVG markup per icon, rendered once (no server renderer in the bundle). */
 const ICON_SVG = new Map<string, string>();
 function iconSvg(id: string, node: JSX.Element): string {
@@ -437,7 +464,7 @@ export default function TransitLayer() {
     if (!map) return;
     const missing = (e: { id: string }) => { addIcon(map, e.id); addBulletImage(map, e.id); };
     Object.keys(ICONS).forEach((id) => addIcon(map, id));
-    const skipIcons = () => addSkipIcons(map);
+    const skipIcons = () => { addSkipIcons(map); addEntranceIcons(map); };
     skipIcons();
     map.on("styleimagemissing", missing);
     map.on("styledata", skipIcons);
@@ -1313,9 +1340,22 @@ export default function TransitLayer() {
           paint={{ "text-color": "#ffffff", "text-halo-color": "rgba(14,23,38,0.95)", "text-halo-width": 3 }} />
       </Source>
       <Source id="transit-entrances" type="geojson" data={entrances}>
-        {/* Overhead: a small green dot. Street level: the 3D kit draws it; this stays as an invisible tap target. */}
+        {/* Overhead: a badge saying stairs, elevator or escalator, named when close. Street level: the 3D kit draws it.
+            The circle is only the tap target, bigger than the badge so it is easy to hit (owner, 2026-10-27). */}
         <Layer id="transit-entrance" type="circle" minzoom={16}
-          paint={{ "circle-color": "#16a34a", "circle-stroke-color": "#ffffff", "circle-stroke-width": walking ? 0 : 1, "circle-radius": walking ? 14 : 3.5, "circle-opacity": walking ? 0.01 : 1, "circle-stroke-opacity": walking ? 0 : 1 }} />
+          paint={{ "circle-color": "#16a34a", "circle-radius": walking ? 14 : ["interpolate", ["linear"], ["zoom"], 16, 9, 19, 18], "circle-opacity": 0.01 }} />
+        {walking ? null : (
+          <Layer id="transit-entrance-icon" type="symbol" minzoom={16} filter={["!", ["in", "assage", ["get", "kind"]]] as never}
+            layout={{ "icon-image": ["case",
+                ["in", "levator", ["get", "kind"]], ["case", ["in", ["get", "id"], ["literal", [...outStations]]], "transit-entr-elevator-out", "transit-entr-elevator"],
+                ["in", "scalator", ["get", "kind"]], "transit-entr-escalator", "transit-entr-stair"],
+              "icon-size": ["interpolate", ["linear"], ["zoom"], 16, 0.55, 19, 1], "icon-allow-overlap": true,
+              "text-field": ["step", ["zoom"], "", 17.5, ["case",
+                ["in", "levator", ["get", "kind"]], ["case", ["in", ["get", "id"], ["literal", [...outStations]]], "Elevator · out", "Elevator"],
+                ["in", "scalator", ["get", "kind"]], "Escalator", ["in", "asement", ["get", "kind"]], "Through a building", "Stairs"]],
+              "text-font": ["Noto Sans Bold"], "text-size": 12, "text-anchor": "left", "text-offset": [1.3, 0], "text-optional": true }}
+            paint={{ "text-color": theme.dark ? "#f2f1ed" : "#14532d", "text-halo-color": theme.land, "text-halo-width": 1.6 }} />
+        )}
       </Source>
       <Source id="transit-work-points" type="geojson" data={work.points}>
         <Layer id="transit-work" type="symbol" minzoom={11} filter={(lineSel ? ["in", ` ${lineSel} `, ["get", "routes"]] : ["boolean", true]) as never}
@@ -1361,7 +1401,8 @@ export default function TransitLayer() {
             <Layer id="transit-alert-skipped" type="symbol"
               layout={{ "icon-image": ["get", "icon"], "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.6, 16, 1], "icon-allow-overlap": true, "icon-ignore-placement": true,
                 "icon-offset": [18, -18],
-                "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-anchor": "left", "text-offset": [1.2, 0], "text-optional": true }}
+                // With a line picked, the notice's own ring tags name each skip and its direction (LinePanel); a second name here overlapped them.
+                "text-field": lineSel ? "" : ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-anchor": "left", "text-offset": [1.2, 0], "text-optional": true }}
               paint={{ "text-color": theme.dark ? "#f2f1ed" : "#111111", "text-halo-color": theme.land, "text-halo-width": 1.6 }} />
           </Source>
         </>
