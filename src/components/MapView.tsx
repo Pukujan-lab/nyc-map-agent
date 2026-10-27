@@ -1496,25 +1496,30 @@ export function MapView({
     // Drag (mouse or one finger) looks around: across turns, up/down tilts the
     // head. Map panning is off while walking, so the drag is ours alone.
     let lookDirty = false;
-    let dragFrom: { x: number; y: number } | null = null;
+    let dragFrom: { x: number; y: number; id: number } | null = null;
     const canvas = map.getCanvas();
+    // With pan and pinch off, MapLibre drops its touch-action rule, so on a phone the browser took an
+    // up/down swipe as a page scroll instead of a look (owner report, 2026-10-27). The swipe is ours.
+    const touchAction = canvas.style.touchAction;
+    canvas.style.touchAction = "none";
     const onPointerDown = (event: PointerEvent) => {
-      if (event.button !== 0) return;
-      dragFrom = { x: event.clientX, y: event.clientY };
+      if (event.button !== 0 || dragFrom) return;
+      dragFrom = { x: event.clientX, y: event.clientY, id: event.pointerId };
     };
     const onPointerMove = (event: PointerEvent) => {
       const eye = eyeRef.current;
-      if (!dragFrom || !eye) return;
+      // One finger looks; a second finger landing must not make the view jump between them.
+      if (!dragFrom || !eye || event.pointerId !== dragFrom.id) return;
       const dx = event.clientX - dragFrom.x;
       const dy = event.clientY - dragFrom.y;
-      dragFrom = { x: event.clientX, y: event.clientY };
+      dragFrom = { x: event.clientX, y: event.clientY, id: dragFrom.id };
       // Grab-the-world feel: drag left to turn right, drag up to look up (like street-view apps).
       eye.bearing = (eye.bearing - dx * LOOK_DEG_PER_PX + 360) % 360;
       eye.pitch = clampLookPitch(eye.pitch - dy * LOOK_DEG_PER_PX);
       lookDirty = true;
     };
-    const onPointerUp = () => {
-      dragFrom = null;
+    const onPointerUp = (event: PointerEvent) => {
+      if (dragFrom?.id === event.pointerId) dragFrom = null;
     };
     canvas.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("pointermove", onPointerMove);
@@ -1578,6 +1583,7 @@ export function MapView({
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
+      canvas.style.touchAction = touchAction;
       canvas.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
