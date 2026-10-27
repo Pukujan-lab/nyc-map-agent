@@ -61,6 +61,16 @@ describe("exit ranking", () => {
     expect(ents.some((e) => /passage/i.test(e.kind))).toBe(false);
   });
 
+  it("counts exits up through a building as street exits (Hoyt-Schermerhorn has only those)", () => {
+    const hoyt = { id: "A42", name: "Hoyt-Schermerhorn Sts", at: [-73.985, 40.6884] as Pt };
+    const only: SubwayStatic = { ...sys, entrances: { features: [
+      { geometry: { coordinates: [-73.98586, 40.68903] }, properties: { id: "A42", name: "Hoyt-Schermerhorn Sts", kind: "Easement - Street" } },
+      { geometry: { coordinates: [-73.9843, 40.68843] }, properties: { id: "A42", name: "Hoyt-Schermerhorn Sts", kind: "Easement - Street" } },
+    ] } };
+    expect(stationEntrances(only, hoyt)).toHaveLength(2);
+    expect(exitKind("Easement - Street")).toBe("through a building");
+  });
+
   it("puts the exit nearest the destination first (straight line)", () => {
     expect(rankExits(station, stationEntrances(sys, station), [-73.974, 40.754])[0].side).toBe("NE");
     expect(rankExits(station, stationEntrances(sys, station), [-73.98, 40.749])[0].side).toBe("SW");
