@@ -44,6 +44,8 @@ import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 
 const stopFollow = () => setFollowed(null);
 import { SYSTEM_LABELS, cellKey } from "./model";
+import { entranceLabels } from "./entranceLabels";
+import { readMap } from "@/lib/map/mapRead";
 import { FollowCard, SkipDetails, StationDetails } from "./TransitCard";
 import { TransitStatusDetails } from "./TransitStatus";
 import { alertGeometry, setAlertFocus, stationChanges, useAlertFocus } from "./alertFocus";
@@ -96,6 +98,8 @@ const STREET_LABEL_M = 220;
 /** X-ray draws underground trains this far below the ground plane. */
 const XRAY_DEPTH_M = -12;
 /** Where the walker stands: at street level the map centre sits at most ~10 m ahead of the eye. */
+const EMPTY_FC: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
+
 function streetEye(map: MaplibreMap): { lon: number; lat: number } {
   const c = map.getCenter();
   return { lon: c.lng, lat: c.lat };
@@ -785,6 +789,7 @@ export default function TransitLayer() {
   // Street level: the 3D entrance kit within ~300 m of the camera; elevator entrances gray when out.
   const outKey = work.access.features.map((f) => String(f.properties?.id)).sort().join(",");
   const outStations = useMemo(() => new Set(outKey ? outKey.split(",") : []), [outKey]);
+  const [entrLabels, setEntrLabels] = useState<GeoJSON.FeatureCollection>(EMPTY_FC);
   useEffect(() => {
     if (!map) return;
     const sync = () => {
@@ -792,6 +797,11 @@ export default function TransitLayer() {
       const c = map.getCenter();
       entr.current = walking && sub ? entranceInstances(sub, outStations, [c.lng, c.lat]) : [];
       v3d.current?.setEntrances(entr.current);
+      // Each nearby entrance's corner and kind.
+      const phone = window.matchMedia("(max-width: 639px)").matches;
+      setEntrLabels(walking && sub ? entranceLabels(sub, outStations, [c.lng, c.lat], readMap(map).placeAt, { max: phone ? 3 : 6, phone }) : EMPTY_FC);
+      // Over the 3D storefronts and kiosks, which are added after it and would hide it.
+      if (walking && map.getLayer("transit-entrance-label")) map.moveLayer("transit-entrance-label");
     };
     sync();
     map.on("moveend", sync);
@@ -1144,6 +1154,13 @@ export default function TransitLayer() {
         <Layer id="transit-line-stop-name" type="symbol" minzoom={10} filter={lineStopName} layout={{ visibility: lineSel ? "visible" : "none",
             "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": 12, "text-anchor": "right", "text-offset": [-1.1, 0], "text-optional": true, "text-max-width": 12, "text-pitch-alignment": "viewport" }}
           paint={{ "text-color": "#e2e8f0", "text-halo-color": "rgba(14,23,38,0.85)", "text-halo-width": 2.5 }} />
+      </Source>
+      <Source id="transit-entrance-labels" type="geojson" data={entrLabels}>
+        {/* Street level: the corner first, then stairs, elevator or escalator, over the nearest entrances. */}
+        <Layer id="transit-entrance-label" type="symbol"
+          layout={{ "text-field": ["get", "label"], "text-font": ["Noto Sans Bold"], "text-size": 14, "text-anchor": "bottom", "text-offset": [0, -2.2],
+            "text-max-width": 16, "text-line-height": 1.25, "text-pitch-alignment": "viewport", "text-allow-overlap": true, "symbol-sort-key": ["get", "d"] }}
+          paint={{ "text-color": "#ffffff", "text-halo-color": "rgba(14,23,38,0.95)", "text-halo-width": 3 }} />
       </Source>
       <Source id="transit-entrances" type="geojson" data={entrances}>
         {/* Overhead: a small green dot. Street level: the 3D kit draws it; this stays as an invisible tap target. */}
