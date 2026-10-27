@@ -144,6 +144,7 @@ jobs:
     container: { image: node:22-bookworm }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { fetch-depth: 0 }
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: { node-version: 22, cache: pnpm }
@@ -152,6 +153,13 @@ jobs:
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: printf '%s\n' "$PR_TITLE" | pnpm -s lint:commit
+      - name: A screen change comes with a layout spec (e2e/layout.ts at every size)
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git diff --name-only "origin/$BASE_REF...HEAD" | pnpm -s check:layout-tests
       - name: Clean workspace (persistent runner)
         if: always()
         run: find "$GITHUB_WORKSPACE" -mindepth 1 -delete || true

@@ -30,6 +30,7 @@
     "feeds:health": "tsx scripts/feed-health.ts",
     "licenses:check": "tsx scripts/check-licenses.ts",
     "lint:commit": "commitlint --verbose",
+    "check:layout-tests": "tsx scripts/check-layout-tests.ts",
     "lint": "eslint . --max-warnings=0 --suppressions-location eslint-suppressions.json --pass-on-unpruned-suppressions",
     "lint:prune": "eslint . --suppressions-location eslint-suppressions.json --prune-suppressions",
     "knip": "knip --no-progress",

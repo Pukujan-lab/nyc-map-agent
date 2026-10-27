@@ -198,12 +198,16 @@ function ZoomControl({ map }: { map: MapLibreMap | null }) {
   );
 }
 
-/** Phones: just + and −, no slider; the column stays short and pinches still work. */
+/**
+ * Phones: just + and −, no slider; the column stays short and pinches still work.
+ * Short phones (under 700 px tall, an iPhone SE) drop them: with an answer open the
+ * column ran into Center on my location and under the sheet (layout check, 320×568).
+ */
 function ZoomButtons({ map }: { map: MapLibreMap | null }) {
   const step = (d: number) => { if (map) map.easeTo({ zoom: Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, map.getZoom() + d)), duration: 250 }); };
   const btn = "flex h-11 w-11 items-center justify-center text-[22px] font-semibold leading-none text-[#f1f5f9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]";
   return (
-    <div data-testid="zoom-buttons" className="pointer-events-auto flex w-11 flex-col items-center rounded-full border border-[#263449] bg-[rgba(15,23,42,0.92)] shadow-[0_6px_18px_rgba(0,0,0,0.35)] sm:hidden">
+    <div data-testid="zoom-buttons" className="pointer-events-auto flex w-11 flex-col items-center rounded-full border border-[#263449] bg-[rgba(15,23,42,0.92)] shadow-[0_6px_18px_rgba(0,0,0,0.35)] sm:hidden [@media(max-height:699px)]:hidden">
       <button type="button" aria-label="Zoom in" className={btn} onClick={() => step(1)}>+</button>
       <span className="h-px w-6 bg-[#263449]" aria-hidden />
       <button type="button" aria-label="Zoom out" className={btn} onClick={() => step(-1)}>−</button>
