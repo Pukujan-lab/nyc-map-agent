@@ -67,8 +67,8 @@ export function pickAt(map: MapLibreMap, x: number, y: number): PickTarget | nul
   return best;
 }
 
-/** Which restroom sets get 3D kiosks: mirrors the Restrooms toggle and its "Include shops & cafés" chip. */
-export const kioskSources = { restrooms: true, places: false };
+/** Shop and café restrooms get 3D kiosks with the "Include shops & cafés" chip; public restrooms always do. */
+export const kioskSources = { places: false };
 
 /** Street-level bus-stop poles. The Layers switch writes this; the furniture layer reads it. */
 let busStopsOn = true;
