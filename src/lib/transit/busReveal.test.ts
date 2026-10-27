@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { busRoutesOfTrip, busesInFocus, busesToShow, capPerLine, parseBusCap, parseBusLines, holdShuttle, registerBusToggle, revealTripBuses, setShuttleBuses, setTripBuses, shownVehicles } from "./busReveal";
+import { busRoutesOfTrip, busesInFocus, busesToShow, clearStopWatch, watchStopBuses, capPerLine, parseBusCap, parseBusLines, holdShuttle, registerBusToggle, revealTripBuses, setShuttleBuses, setTripBuses, shownVehicles } from "./busReveal";
 
 const leg = (route: string, mode: "bus" | "subway") => ({ kind: "ride", route, mode });
 
@@ -103,5 +103,19 @@ describe("which buses are in focus", () => {
 
   it("out of focus with no point to be near shows only the kept bus", () => {
     expect(ids(busesInFocus(fleet, { routes: ["M4"], nearOnly: true, cap: 3, near: null, keep: new Set(["b"]) }))).toEqual(["b"]);
+  });
+});
+
+describe("a bus stop's see-them-coming", () => {
+  it("puts the stop's routes ahead of picked lines and a trip, turns buses on, and gives them back when closed", () => {
+    let on = 0;
+    registerBusToggle(() => { on += 1; });
+    const at = { lon: -73.95, lat: 40.71 };
+    watchStopBuses({ routes: ["b62"], at, panelId: "busstop:x" });
+    expect(on).toBe(1);
+    expect(busesToShow(["M4"], { trip: ["Q58"], shuttle: null, watch: { routes: ["B62"], at, panelId: "busstop:x" } })).toEqual({ why: "watch", routes: ["B62"] });
+    clearStopWatch();
+    expect(busesToShow(["M4"], { trip: null, shuttle: null, watch: null })).toEqual({ why: "page", routes: ["M4"] });
+    registerBusToggle(null);
   });
 });

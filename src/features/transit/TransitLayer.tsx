@@ -21,7 +21,7 @@ import {
   type SystemId,
   type Vehicle,
 } from "./model";
-import { alertedRoutes, fetchBusCatalog, fetchBusRoutesNear, routesForPage, useAlerts, useBusLines, useBusRoute, useBusSegmentHistory, useBusShapes, useBuses, useStarred, useTransitData, useTransitMeta, useTransitToggles, useXrayData, useSegmentHistory } from "./hooks";
+import { alertedRoutes, type BusArrival, fetchBusCatalog, fetchBusRoutesNear, routesForPage, useAlerts, useBusLines, useBusRoute, useBusSegmentHistory, useBusShapes, useBuses, useStarred, useTransitData, useTransitMeta, useTransitToggles, useXrayData, useSegmentHistory } from "./hooks";
 import { sharedCoords } from "@/lib/geo/sharedLocation";
 import { useXray, xrayPrims } from "./xray";
 import { useMapState } from "@/lib/store/MapStateContext";
@@ -31,7 +31,7 @@ import { pickRouteVehicle, registerRouteFollower } from "@/lib/transit/routeFoll
 import { ZoomKeeper, followRig, publishFollowPos, rememberFollowOrigin, setBoardedOnFoot, setFollowMode, setFollowed, stableHeading, stopFollowing, takeFollowRestore, useFollowMode, useFollowed } from "./follow";
 import { followActionForMapClick } from "./followClick";
 import { publishSubway } from "@/lib/agent/streetContext";
-import { busesInFocus, busesToShow, holdShuttle, registerBusToggle, setShuttleBuses, shownVehicles, useBusPins } from "@/lib/transit/busReveal";
+import { busesInFocus, busesToShow, clearStopWatch, holdShuttle, watchStopBuses, registerBusToggle, setShuttleBuses, shownVehicles, useBusPins } from "@/lib/transit/busReveal";
 import { publishLiveDots } from "@/lib/transit/liveVehicles";
 import { heldTrains } from "@/lib/transit/holds";
 import { setLinesControl } from "@/lib/transit/linesControl";
@@ -296,13 +296,15 @@ export default function TransitLayer() {
   // Lines found around you (not picked), and every bus but the one you follow, are out of
   // focus: only their buses near you draw. Picked lines, a trip and a shuttle are in focus.
   const busNearOnly = (busNear && show.why === "page") || Boolean(followedKey?.startsWith("bus:"));
-  const busFocusRef = useRef({ busNearOnly, busCap, followedKey, walking });
-  busFocusRef.current = { busNearOnly, busCap, followedKey, walking };
+  // A watched stop shows a few more buses per line, nearest the stop: the ones coming to it.
+  const busFocusRef = useRef({ busNearOnly, busCap, followedKey, walking, watchAt: pins.watch?.at });
+  busFocusRef.current = { busNearOnly, busCap: show.why === "watch" ? Math.max(busCap, 5) : busCap, followedKey, walking, watchAt: show.why === "watch" ? pins.watch?.at : undefined };
   /** Where "near" is: the bus you follow, else you, else where you stand in street view, else the map centre. */
   const busNearPoint = useCallback((list: readonly { id: string; lon: number; lat: number }[]) => {
-    const { followedKey: fk, walking: w } = busFocusRef.current;
+    const { followedKey: fk, walking: w, watchAt } = busFocusRef.current;
     const fb = fk?.startsWith("bus:") ? list.find((b) => b.id === fk.slice(4)) : undefined;
     if (fb) return { lon: fb.lon, lat: fb.lat };
+    if (watchAt) return watchAt;
     if (!map) return sharedCoords();
     const c = map.getCenter();
     return sharedCoords() ?? (w ? streetEye(map) : { lon: c.lng, lat: c.lat });
@@ -320,18 +322,34 @@ export default function TransitLayer() {
     busEst.current.retain(new Set(list.map((b) => b.id)));
     // The map is read once per refresh, not on every move: re-running on `map` would reshuffle buses as you pan.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [buses.data, busShapes, show.routes, busCap, busNearOnly]);
+  }, [buses.data, busShapes, show.routes, show.why, busCap, busNearOnly]);
   // The followed vehicle as React sees it: refreshed only when what its card shows changes.
   const [followed, setFollowedVehicle] = useState<Vehicle | undefined>(undefined);
 
   // A bus stop's next buses, and a way to watch them come on the map from above.
+  // Both put the stop's routes in focus around the stop until its card closes; your own lines come back after.
   const openBusStop = useCallback((lon: number, lat: number, name: string) => {
+    const panelId = `busstop:${lon.toFixed(5)},${lat.toFixed(5)}`;
     const watch = (routes: string[]) => {
-      if (routes.length) setBusLines(routes);
+      if (!routes.length) return;
+      setFollowed(null);
+      watchStopBuses({ routes, at: { lon, lat }, panelId });
       showView("map", { lon, lat });
     };
-    showPanel({ id: `busstop:${lon.toFixed(5)},${lat.toFixed(5)}`, title: formatStreetText(name), subtitle: "Bus stop", details: <BusStopDetails lon={lon} lat={lat} onWatch={watch} /> });
-  }, [showPanel, setBusLines]);
+    const follow = (a: BusArrival) => {
+      watchStopBuses({ routes: [a.route], at: { lon, lat }, panelId });
+      if (a.vehicle) setFollowed(`bus:${a.vehicle}`); else showView("map", { lon, lat });
+    };
+    showPanel({ id: panelId, title: formatStreetText(name), subtitle: "Bus stop", details: <BusStopDetails lon={lon} lat={lat} onWatch={watch} onFollow={follow} /> });
+  }, [showPanel]);
+  // Closing the stop's card (or opening anything but a vehicle) ends the watch.
+  const watchPanel = pins.watch?.panelId;
+  const watchShown = useRef(false);
+  useEffect(() => {
+    if (!watchPanel) { watchShown.current = false; return; }
+    if (content?.id === watchPanel) watchShown.current = true;
+    else if (watchShown.current && !content?.id.startsWith("transit:vehicle:")) { watchShown.current = false; clearStopWatch(); }
+  }, [content?.id, watchPanel]);
   const openStation = useCallback(
     (system: SystemId, id: string, name: string) =>
       showPanel({ id: `transit:station:${system}:${id}`, title: name, subtitle: `${SYSTEM_LABELS[system]} station`, details: <StationDetails system={system} id={id} /> }),
@@ -843,8 +861,8 @@ export default function TransitLayer() {
         ...drawn.stops.map((st): GeoJSON.Feature => ({ type: "Feature", properties: { kind: "stop", name: formatStreetText(st.name) }, geometry: { type: "Point", coordinates: [st.lon, st.lat] } })),
       );
     }
-    // The replacement shuttle is drawn even before a bus is tapped, so the gap has a road.
-    if (show.why === "shuttle") {
+    // The replacement shuttle, and a watched stop's routes, are drawn before a bus is tapped, so they have a road.
+    if (show.why === "shuttle" || show.why === "watch") {
       for (const g of busShapes) {
         if (g.route === selBusRoute) continue;
         for (const l of g.lines) features.push({ type: "Feature", properties: { kind: "line", route: g.route }, geometry: { type: "LineString", coordinates: l } });
