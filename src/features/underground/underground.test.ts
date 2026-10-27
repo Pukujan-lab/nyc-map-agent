@@ -252,10 +252,11 @@ describe('"Are you in the station?"', () => {
     expect(accuracyWorsened(8, 30)).toBe(false);
   });
 
-  it("asks when the trip boards, unless a shared position is far away", () => {
+  it("asks when the trip boards and the shared position is at that station, not while it is only planned", () => {
     const b = boardingStation(trip)!;
     expect(b.id).toBe("629");
-    expect(stationToAsk({ ...base, boarding: b })?.id).toBe("629");
+    expect(stationToAsk({ ...base, boarding: b, here: b.at })?.id).toBe("629");
+    expect(stationToAsk({ ...base, boarding: b })).toBeNull();
     expect(stationToAsk({ ...base, boarding: b, here: [-73.9, 40.8] })).toBeNull();
   });
 
