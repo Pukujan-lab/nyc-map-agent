@@ -23,4 +23,15 @@ describe("GET /api/storefronts/logo", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     expect((await GET_LOGO(new Request("http://x/api/v1/storefronts/logo?qid=Q999999051"))).status).toBe(502);
   });
+  it("an Overpass outage answers no brand at once, and the cell is not asked again for a while", async () => {
+    const fetch = vi.fn(() => Promise.resolve(new Response("", { status: 504 })));
+    vi.stubGlobal("fetch", fetch);
+    const url = "http://x/api/v1/storefronts/logo?name=Starbucks&lon=-73.94111&lat=40.70009";
+    const first = await GET_LOGO(new Request(url));
+    expect(first.status).toBe(404);
+    expect(await first.json()).toEqual({ error: "no_brand" });
+    const asked = fetch.mock.calls.length;
+    expect((await GET_LOGO(new Request(url))).status).toBe(404);
+    expect(fetch.mock.calls.length).toBe(asked);
+  });
 });
