@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { CustomLayerInterface, Map as MaplibreMap } from "maplibre-gl";
 import { MercatorCoordinate, LEGACY_LIGHT, sharedRenderer } from "./core";
+import type { BusLivery } from "@/lib/transit/bullets";
 
 /** One moving body. `z` is metres above ground; `ghost` draws it translucent through the ground. */
 export interface VehicleInstance {
@@ -13,6 +14,8 @@ export interface VehicleInstance {
   color: string;
   kind: VehicleMode;
   ghost: boolean;
+  /** Buses only: which paint; unset draws the local livery. */
+  livery?: BusLivery;
 }
 
 /** Live-vehicle modes, each with its own swappable glTF slot. */
@@ -29,9 +32,9 @@ export type VehicleMode = "subway" | "rail" | "bus";
  * route colour with the route bullet drawn above it (#366). The train models
  * flashed, stuck after Follow and rode under the el (#319), and cost load time.
  */
-export const VEHICLE_MODELS: Partial<Record<VehicleMode, { url: string; length: number }>> = {
-  bus: { url: "/api/vehicle-models/bus", length: 12.2 }, // New Flyer XD40, 40 ft
-};
+export const VEHICLE_MODELS: Partial<Record<VehicleMode, { url: string; length: number }>> = {};
+// The XD40 glTF (/api/vehicle-models/bus) read as a white slab from above (owner, 2026-10-27);
+// buses are now `busGeometry`, drawn in every view.
 
 /** True when this mode may load a glTF model at all (trains never do). */
 export function hasVehicleModel(mode: VehicleMode): boolean {
@@ -229,6 +232,51 @@ function bodyGeometry(length: number, width: number, height: number): THREE.Buff
   return g;
 }
 
+/** Bands from the bottom (fraction of the height), then roof and windshield; colours from MTA photos. */
+const LIVERY: Record<BusLivery, { bands: Array<[number, number]>; roof: number; front: number }> = {
+  // 2016 "Excelsior" scheme: navy sides with a light-blue and yellow wave, black window trim.
+  local: { bands: [[0.12, 0x1f2937], [0.42, 0x0f2f7a], [0.48, 0x4fb3e8], [0.52, 0xfccc0a], [0.86, 0x111827], [1, 0x0f2f7a]], roof: 0x1e40af, front: 0x111827 },
+  // SBS: white with a light-blue wrap below the windows.
+  sbs: { bands: [[0.12, 0x1f2937], [0.5, 0x2fa4dc], [0.86, 0x111827], [1, 0xf8fafc]], roof: 0x7cc8ee, front: 0x111827 },
+  // 1977-2016 scheme still on express coaches: white with a straight blue stripe.
+  express: { bands: [[0.12, 0x1f2937], [0.36, 0xf8fafc], [0.46, 0x0039a6], [0.52, 0xf8fafc], [0.86, 0x111827], [1, 0xf8fafc]], roof: 0xe5e7eb, front: 0x111827 },
+};
+
+/**
+ * The same tapered box as the other vehicles, painted in a bus livery (owner, 2026-10-27:
+ * "just the colors in the box"). Extra segments only give the bands edges; the outline is unchanged.
+ * Front is +y: its windshield is dark and so is the front strip of the roof, so heading shows from above.
+ */
+export function busGeometry(livery: BusLivery, length = 12, width = 2.6, height = 3.2): THREE.BufferGeometry {
+  const seg = 25, lenSeg = 8;
+  const g = new THREE.BoxGeometry(width, length, height, 1, lenSeg, seg).toNonIndexed();
+  const pos = g.attributes.position as THREE.BufferAttribute;
+  for (let i = 0; i < pos.count; i++) pos.setX(i, pos.getX(i) * (1 - 0.2 * (pos.getZ(i) / height + 0.5)));
+  g.translate(0, 0, height / 2);
+  g.computeVertexNormals();
+  const nor = g.attributes.normal as THREE.BufferAttribute;
+  const paint = LIVERY[livery];
+  const col = new Float32Array(pos.count * 3);
+  const c = new THREE.Color();
+  for (let t = 0; t < pos.count; t += 3) {
+    const z = (pos.getZ(t) + pos.getZ(t + 1) + pos.getZ(t + 2)) / 3 / height;
+    const y = (pos.getY(t) + pos.getY(t + 1) + pos.getY(t + 2)) / 3;
+    const nz = nor.getZ(t), ny = nor.getY(t);
+    let hex: number, shade: number;
+    if (nz > 0.5) { hex = y > length / 2 - length / lenSeg ? paint.front : paint.roof; shade = 1; }
+    else if (nz < -0.5) { hex = 0x111827; shade = 1; }
+    else {
+      hex = paint.bands.find(([top]) => z <= top)?.[1] ?? paint.roof;
+      if (ny > 0.5 && z > 0.3) hex = paint.front; // windshield
+      shade = Math.abs(ny) > 0.5 ? 0.9 : 0.8; // ends a touch lighter than the long sides
+    }
+    c.setHex(hex).multiplyScalar(shade);
+    for (let k = 0; k < 3; k++) col.set([c.r, c.g, c.b], (t + k) * 3);
+  }
+  g.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  return g;
+}
+
 export function createVehicleLayer() {
   let map: MaplibreMap | null = null;
   let renderer: THREE.WebGLRenderer | null = null;
@@ -244,9 +292,10 @@ export function createVehicleLayer() {
 
   const make = (geom: THREE.BufferGeometry, ghost: boolean) => {
     // Unlit route color, same idea as the underground boxes. Lambert faces flip light and dark as a car turns, which reads as a flash.
+    // The bus carries its livery in vertex colours, and its instances stay white.
     const mat = ghost
       ? new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.8, depthTest: false, depthWrite: false })
-      : new THREE.MeshBasicMaterial({});
+      : new THREE.MeshBasicMaterial({ vertexColors: geom.hasAttribute("color") });
     const mesh = new THREE.InstancedMesh(geom, mat, CAP);
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     mesh.frustumCulled = false;
@@ -259,8 +308,10 @@ export function createVehicleLayer() {
   const boxes: Record<VehicleMode, THREE.InstancedMesh> = {
     subway: make(bodyGeometry(20, 3, 3.8), false),
     rail: make(bodyGeometry(20, 3, 3.8), false),
-    bus: make(bodyGeometry(12, 2.6, 3.2), false),
+    bus: make(busGeometry("local"), false),
   };
+  // SBS and express buses wear their own paint: one more instanced mesh each.
+  const busPaint: Record<Exclude<BusLivery, "local">, THREE.InstancedMesh> = { sbs: make(busGeometry("sbs"), false), express: make(busGeometry("express"), false) };
   const ghosts = make(bodyGeometry(20, 3, 3.8), true);
   ghosts.renderOrder = 3;
   /** Loaded glTF parts per mode, one InstancedMesh each; empty until the model arrives. */
@@ -483,6 +534,7 @@ export function createVehicleLayer() {
     loadModels();
     const detailed = vehicleModelsWanted();
     const n: Record<VehicleMode, number> = { subway: 0, rail: 0, bus: 0 };
+    const painted = { sbs: 0, express: 0 };
     let g = 0;
     for (const v of vehicles) {
       const mc = MercatorCoordinate.fromLngLat([v.lon, v.lat], 0);
@@ -496,12 +548,17 @@ export function createVehicleLayer() {
         ghosts.setColorAt(g++, color.set(v.color));
         continue;
       }
+      if (v.kind === "bus" && v.livery && v.livery !== "local") {
+        const j = painted[v.livery]++;
+        if (j < CAP) { busPaint[v.livery].setMatrixAt(j, m4); busPaint[v.livery].setColorAt(j, color.set(0xffffff)); }
+        continue;
+      }
       const i = n[v.kind]++;
       if (i >= CAP) continue;
       const parts = detailed && hasVehicleModel(v.kind) ? models[v.kind] : [];
       // A loaded model keeps its own livery; the box stand-in carries the route color.
       if (parts.length) for (const part of parts) part.setMatrixAt(i, m4);
-      else { boxes[v.kind].setMatrixAt(i, m4); boxes[v.kind].setColorAt(i, color.set(v.color)); }
+      else { boxes[v.kind].setMatrixAt(i, m4); boxes[v.kind].setColorAt(i, v.kind === "bus" ? color.set(0xffffff) : color.set(v.color)); }
     }
     for (const mode of Object.keys(n) as VehicleMode[]) {
       const count = Math.min(n[mode], CAP);
@@ -518,6 +575,11 @@ export function createVehicleLayer() {
         mesh.visible = false;
         mesh.count = 0;
       }
+    }
+    for (const k of ["sbs", "express"] as const) {
+      busPaint[k].count = Math.min(painted[k], CAP);
+      busPaint[k].instanceMatrix.needsUpdate = true;
+      if (busPaint[k].instanceColor) busPaint[k].instanceColor.needsUpdate = true;
     }
     ghosts.count = Math.min(g, CAP);
     ghosts.instanceMatrix.needsUpdate = true;

@@ -14,3 +14,10 @@ describe("bus routes grouped for picking", () => {
     expect([...groupBusRoutes(["M15+", "M15"]).entries()]).toEqual([["M", ["M15", "M15+"]]]);
   });
 });
+
+describe("bus paint by route", () => {
+  it("SBS routes end in +, express are QM/BM/BxM/X/SIM, the rest are local", async () => {
+    const { busLivery } = await import("./bullets");
+    expect(["M15+", "B44+", "QM2", "BXM1", "X27", "SIM1C", "B62", "Q58", "M4"].map(busLivery)).toEqual(["sbs", "sbs", "express", "express", "express", "express", "local", "local", "local"]);
+  });
+});
