@@ -250,7 +250,8 @@ export function useBusTrip(vehicle: string | undefined) {
   });
 }
 export type BusStopInfo = { id: string; name: string; lat: number; lon: number; dir: string; routes: string[] };
-export type BusArrival = { route: string; destination: string; eta: number | null; away: string };
+/** `vehicle` is the live feed's bus id ("MTA NYCT_7225"), so a row can follow its bus; empty when the MTA leaves it out. */
+export type BusArrival = { route: string; destination: string; vehicle?: string; eta: number | null; away: string };
 /** The routes serving the most of these stops, busiest first, at most `max`. Pure, for tests. */
 export function routesFromStops(stops: Pick<BusStopInfo, "routes">[], max = 6): string[] {
   const count = new Map<string, number>();

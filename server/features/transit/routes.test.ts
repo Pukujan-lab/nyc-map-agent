@@ -70,10 +70,10 @@ describe("bus-arrivals", () => {
     expect((await GET(new Request("http://x/api/transit/bus-arrivals?stop=../x"))).status).toBe(400);
   });
   it("lists visits soonest first with route, headsign and distance", async () => {
-    const visit = (line: string, t: string) => ({ MonitoredVehicleJourney: { PublishedLineName: [line], DestinationName: ["JAMAICA"], MonitoredCall: { ExpectedArrivalTime: t, Extensions: { Distances: { PresentableDistance: "2 stops away" } } } } });
+    const visit = (line: string, t: string) => ({ MonitoredVehicleJourney: { PublishedLineName: [line], DestinationName: ["JAMAICA"], VehicleRef: `MTA NYCT_${line}`, MonitoredCall: { ExpectedArrivalTime: t, Extensions: { Distances: { PresentableDistance: "2 stops away" } } } } });
     vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(JSON.stringify({ Siri: { ServiceDelivery: { StopMonitoringDelivery: [{ MonitoredStopVisit: [visit("Q6", "2026-01-01T00:10:00Z"), visit("Q8", "2026-01-01T00:05:00Z")] }] } } })))));
     const { arrivals } = await loadBusArrivals("k", "MTA_1");
     expect(arrivals.map((a) => a.route)).toEqual(["Q8", "Q6"]);
-    expect(arrivals[0]).toMatchObject({ destination: "JAMAICA", away: "2 stops away" });
+    expect(arrivals[0]).toMatchObject({ destination: "JAMAICA", vehicle: "MTA NYCT_Q8", away: "2 stops away" });
   });
 });

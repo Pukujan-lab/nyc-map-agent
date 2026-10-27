@@ -70,8 +70,14 @@ function alertStations(a: TransitAlert, sys: StaticSystem, route: string, tone: 
   }
   const skips = a.changes?.some((c) => c.kind === "skip") || (a.skipNames?.length ?? 0) > 0;
   const geo = alertGeometry({ ...a, routes: a.routes.filter((r) => lineOf(r) === route) }, sys);
-  const label = skips ? "Skipped" : a.kind === "planned" ? "Work" : "Affected";
-  return geo.skipped.map((s) => ({ ...s, label }));
+  // Skips say which way on the map itself: "52 St · Flushing-bound skipped" (owner, 2026-10-27).
+  // The direction from the parsed change, else the headline's own words ("Downtown [A] skips…"); unknown stays plain "Skipped".
+  // A parsed skip with no direction is both ways (src/lib/transit/serviceChanges.ts).
+  const change = a.changes?.find((c) => c.kind === "skip");
+  const said = /\b(Uptown|Downtown|[A-Z][\w.' -]*?-bound)\b/.exec(a.text)?.[1];
+  const way = change ? (change.toward ? `${change.toward}-bound` : "Both ways") : said;
+  const what = skips ? (way ? `${way} skipped` : "Skipped") : a.kind === "planned" ? "Work" : "Affected";
+  return geo.skipped.map((s) => ({ ...s, label: skips ? `${s.name} · ${what}` : what }));
 }
 
 /** "10/31/2026 11:59:00 PM" as "Oct 31"; anything else as it came. */

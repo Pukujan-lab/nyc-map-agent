@@ -30,7 +30,7 @@ describe("lineNotices", () => {
     expect(out[0].stations.map((s) => s.label)).toEqual(["Delays"]);
     expect(out[0].stations[0].id).toBe("A27");
     expect(out[1].meta).toBe("Planned work · Sat and Sun");
-    expect(out[1].stations).toEqual([{ id: "A28", name: "34 St-Penn Station", coord: [-73.993, 40.75], label: "Skipped" }]);
+    expect(out[1].stations).toEqual([{ id: "A28", name: "34 St-Penn Station", coord: [-73.993, 40.75], label: "34 St-Penn Station · Downtown skipped" }]);
   });
 
   it("turns an elevator outage into an access notice ringed at its station", () => {
@@ -90,5 +90,25 @@ describe("heldNotices", () => {
     const out = heldNotices("F", [f, { ...f, tripId: "a", route: "A", stop: "A41S" }, { ...f, tripId: "older", stop: "F33S", stopped: false, since: NOW - 900 }], real, NOW);
     expect(out.map((n) => n.id)).toEqual(["held:older", "held:094550_F..S"]);
     expect(out[0].title).toMatch(/^F train held before /);
+  });
+});
+
+describe("skip direction on the map", () => {
+  it("names the direction from the parsed change", () => {
+    const out = lineNotices("A", [alert({ id: "s", kind: "planned", text: "[A] skips 34 St-Penn Station", stops: ["A28S"], skipNames: ["34 St-Penn Station"], changes: [{ alertId: "s", kind: "skip", route: "A", names: ["34 St-Penn Station"], toward: "Far Rockaway", notice: "" }] })], [], sys, 200);
+    expect(out[0].stations[0].label).toBe("34 St-Penn Station · Far Rockaway-bound skipped");
+  });
+  it("says plain Skipped when no direction is known", () => {
+    const out = lineNotices("A", [alert({ id: "s", kind: "planned", text: "[A] skips 34 St-Penn Station", stops: ["A28S"], skipNames: ["34 St-Penn Station"] })], [], sys, 200);
+    expect(out[0].stations[0].label).toBe("34 St-Penn Station · Skipped");
+  });
+});
+
+describe("outage tag icons", async () => {
+  const { tagIcon } = await import("./LinePanel");
+  it("draws an elevator or escalator, nothing for other tags", () => {
+    expect(tagIcon("No elevator")).toContain("<rect");
+    expect(tagIcon("No escalator")).toContain("<path");
+    expect(tagIcon("Delays")).toBeNull();
   });
 });
