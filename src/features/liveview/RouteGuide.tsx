@@ -13,6 +13,8 @@ import { onMapInstance } from "@/lib/map/mapInstance";
 import { keepInView } from "@/lib/map/keepInView";
 import { LOOK_CENTER_DISTANCE_M, poseAlongRoute } from "@/lib/map/walk";
 import { useDataView } from "@/lib/store/DataViewContext";
+import { setTripStep, useTripStep } from "@/lib/store/tripStep";
+import { useCssHeight } from "@/lib/useCssHeight";
 import { appGeo } from "@/lib/geo/devGeo";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { bearingTo } from "./heading";
@@ -81,6 +83,10 @@ export default function RouteGuide() {
   });
 
   const active = Boolean(route) && (walking || navigating || (home && followingRoute));
+  // The rest of a train or bus trip, waiting at the end of this walk.
+  const tripStep = useTripStep();
+  const bottomCard = useCssHeight("--task-bottom-h");
+  useEffect(() => { if (!followingRoute && !walking && !navigating) setTripStep(null); }, [followingRoute, walking, navigating]);
 
   // Layers live while guidance is active; re-added after a style reload and on theme change.
   useEffect(() => {
@@ -257,9 +263,10 @@ export default function RouteGuide() {
           />
         </Suspense>
       ) : null}
-      <button type="button" className="task-action task-secondary h-11 w-11 shrink-0 p-0" aria-label="Stop walking guidance" onClick={() => { stopNav(); stopWalk(); clearRoute(); }}><Square size={18} /></button>
+      <button type="button" className="task-action task-secondary h-11 w-11 shrink-0 p-0" aria-label="Stop walking guidance" onClick={() => { stopNav(); stopWalk(); clearRoute(); setTripStep(null); }}><Square size={18} /></button>
     </section>
-    {checkpoint?.landmark.picture ? <section className="task-panel task-bottom flex flex-col gap-2.5 p-3.5" aria-label="Landmark checkpoint">
+    {/* Near the station the next step wins over a landmark checkpoint. */}
+    {checkpoint?.landmark.picture && !(tripStep && left < 150) ? <section ref={bottomCard} className="task-panel task-bottom flex flex-col gap-2.5 p-3.5" aria-label="Landmark checkpoint">
       <div className="flex items-center gap-2.5">
         <img src={checkpoint.landmark.picture.url} alt={checkpoint.landmark.name} className="h-11 w-11 shrink-0 rounded-xl border border-slate-400/25 object-cover" />
         <h3 className="line-clamp-2 text-[15px] font-semibold leading-snug min-[380px]:text-base">See {checkpoint.landmark.name} {checkpoint.direction}?</h3>
@@ -271,7 +278,13 @@ export default function RouteGuide() {
         <button type="button" className="task-action task-secondary min-h-11 !text-[length:inherit]" onClick={() => { seedChat(`I'm lost on my walk. Help me find ${checkpoint.landmark.name} using visible landmarks.`); setChatOpen(true); }}>I'm lost</button>
       </div>
       <a href={checkpoint.landmark.picture.page} target="_blank" rel="noreferrer" className="block truncate text-xs text-slate-300">Photo: {checkpoint.landmark.picture.artist} · {checkpoint.landmark.picture.license}</a>
-    </section> : <div className="task-panel task-bottom"><button type="button" className="task-action task-secondary w-full" onClick={() => { seedChat("I'm lost on my walking route. Help me find a visible landmark."); setChatOpen(true); }}>I'm lost</button></div>}
+    </section> : tripStep ? <section ref={bottomCard} className="task-panel task-bottom flex flex-col gap-2.5 p-3.5" aria-label="Next on this trip">
+      <p className="line-clamp-2 text-[15px] font-semibold leading-snug">{tripStep.then}</p>
+      <div className="grid grid-cols-2 gap-2 text-[13px] min-[380px]:text-sm">
+        <button type="button" className="task-action min-h-11 !text-[length:inherit]" onClick={() => { stopNav(); stopWalk(); tripStep.go(); }}>{tripStep.action}</button>
+        <button type="button" className="task-action task-secondary min-h-11 !text-[length:inherit]" onClick={() => { seedChat("I'm lost on my walk to the station. Help me find a visible landmark."); setChatOpen(true); }}>I'm lost</button>
+      </div>
+    </section> : <div ref={bottomCard} className="task-panel task-bottom"><button type="button" className="task-action task-secondary w-full" onClick={() => { seedChat("I'm lost on my walking route. Help me find a visible landmark."); setChatOpen(true); }}>I'm lost</button></div>}
   </>;
 
   return (

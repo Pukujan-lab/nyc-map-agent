@@ -66,6 +66,28 @@ for (const size of SIZES) {
       await expectLayout(page);
     });
 
+    // "Use this route" on a train trip walks you to the station first, then shows your train (owner, 2026-10-27).
+    test("a train trip walks to the station, then shows the train", async ({ page }) => {
+      await open(page, [
+        { type: "command", command: { type: "showRoute", trip } },
+        { type: "command", command: { type: "openPanel", trip } },
+        { type: "text", text: "Take this route." },
+      ]);
+      const walk = (trip.legs as { kind: string; coords?: number[][] }[])[0].coords!;
+      await page.route("**/routed-foot/route/**", (r) => r.fulfill({ json: { code: "Ok", routes: [{ distance: 105, duration: 90, geometry: { type: "LineString", coordinates: walk }, legs: [{ steps: walk.map((location, i) => ({ distance: 50, name: "E 14 St", maneuver: { location, type: i === walk.length - 1 ? "arrive" : "depart", bearing_after: 30 } })) }] }] } }));
+      await ask(page, "Plan a trip from Union Square to Grand Central");
+      await page.getByRole("button", { name: "Use this route", exact: true }).click();
+      await expect(page.getByRole("region", { name: "Walking guidance", exact: true })).toBeVisible();
+      const next = page.getByRole("region", { name: "Next on this trip" });
+      await expect(next).toContainText("Then the 4 train");
+      await expectLayout(page);
+      await next.getByRole("button", { name: "I'm at the station" }).click();
+      await expect(page.getByRole("region", { name: "Walking guidance", exact: true })).toBeHidden();
+      await page.waitForTimeout(800);
+      await expect(page.getByTestId("locate-button").first()).toBeVisible();
+      await expectLayout(page);
+    });
+
     test("a second quick question is held, then answered (no refusal)", async ({ page }) => {
       await open(page);
       let n = 0;

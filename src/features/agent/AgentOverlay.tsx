@@ -22,6 +22,8 @@ import { useFlag } from "@/lib/flags";
 import { getMapInstance } from "@/lib/map/mapInstance";
 import { useDataView } from "@/lib/store/DataViewContext";
 import { followTripRoute } from "@/lib/transit/routeFollow";
+import { setTripStep } from "@/lib/store/tripStep";
+import { walkToBoard } from "./tripStart";
 import { followUpQuestion } from "./followUpQuestion";
 import { lineOf, setSelectedLine, useSelectedLine } from "@/lib/transit/selectedLine";
 import { useMapState } from "@/lib/store/MapStateContext";
@@ -138,7 +140,7 @@ const MODES: Array<{ id: TripMode; Icon: typeof Bus }> = [
 ];
 
 export default function AgentOverlay() {
-  const { setRoutePoint, setFollowingRoute, followingRoute } = useDataView();
+  const { setRoutePoint, setFollowingRoute, followingRoute, clearRoute } = useDataView();
   const { chatOpen, setChatOpen, flyTo, startWalk, stopWalk, chatSeed, clearSeed, setRestrooms, walking, streetViewOpen } = useMapState();
   const { showPanel, closeAll, content: panelContent, minimized: panelMinimized, drawerOpen } = usePanel();
   // Agent-first home (#370): bottom chat bar, voice waveform, visible steps.
@@ -951,10 +953,32 @@ export default function AgentOverlay() {
           onClose={() => { player.stop(); setTrip(null); }}
           onUse={() => {
             player.release();
+            setTripStep(null);
             const ride = trip.legs.find((l) => l.kind === "ride");
             // A subway ride shows when its trains reach your stop, not a train somewhere else on the line.
-            if (ride?.mode === "subway") { setSelectedLine(lineOf(ride.route), null, { from: ride.coords[0], to: ride.coords[ride.coords.length - 1] }); return; }
-            if (ride?.mode === "bus" && followTripRoute({ system: "bus", route: ride.route, at: ride.coords[0] })) return;
+            const board = (): boolean => {
+              if (ride?.mode === "subway") { setSelectedLine(lineOf(ride.route), null, { from: ride.coords[0], to: ride.coords[ride.coords.length - 1] }); return true; }
+              return ride?.mode === "bus" && followTripRoute({ system: "bus", route: ride.route, at: ride.coords[0] });
+            };
+            // Walk to the station or stop first; the train or bus comes once you are there.
+            const walk = ride?.mode === "subway" || ride?.mode === "bus" ? walkToBoard(trip) : null;
+            if (ride && walk) {
+              const enter = trip.legs.find((l) => l.kind === "enter");
+              const stop = enter?.kind === "enter" ? enter.station.name : ride.fromStop;
+              setRoutePoint("start", { lon: trip.origin.at[0], lat: trip.origin.at[1] });
+              setRoutePoint("end", { lon: walk.at[0], lat: walk.at[1] });
+              setFollowingRoute(true);
+              setTrip(null);
+              flyTo({ lon: trip.origin.at[0], lat: trip.origin.at[1], zoom: 16 });
+              const what = ride.mode === "bus" ? `the ${ride.route} bus` : `the ${ride.route} train`;
+              setTripStep({
+                then: stop ? `Then ${what} at ${stop}` : `Then ${what}`,
+                action: ride.mode === "bus" ? "I'm at the stop" : "I'm at the station",
+                go: () => { setTripStep(null); clearRoute(); board(); },
+              });
+              return;
+            }
+            if (board()) return;
             if (trip.mode === "walk") {
               setRoutePoint("start", { lon: trip.origin.at[0], lat: trip.origin.at[1] });
               setRoutePoint("end", { lon: trip.destination.at[0], lat: trip.destination.at[1] });
