@@ -165,7 +165,7 @@ import { WalkControls } from "./WalkControls";
 import { useQuickLayer } from "@/lib/quickLayers";
 import { QuickLayers } from "./QuickLayers";
 import { MapChrome } from "./MapChrome";
-import { BackToStreet, MapViewSwitch } from "./MapViewSwitch";
+import { BackToStreet, BusesOff, MapViewSwitch } from "./MapViewSwitch";
 import { StreetMiniMap } from "./StreetMiniMap";
 import { nearestCorner, type CornerSign } from "@/lib/map/corner";
 import { pickAt as pickFurniture } from "@/lib/map/streetPick";
@@ -1779,6 +1779,7 @@ export function MapView({
       {agentHome ? <MapChrome /> : <QuickLayers />}
       {agentHome ? <MapViewSwitch /> : null}
       {agentHome ? <BackToStreet /> : null}
+      {agentHome ? <BusesOff /> : null}
       {walking ? (
         <WalkControls
           place={walkPlace}

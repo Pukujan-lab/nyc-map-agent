@@ -29,9 +29,9 @@ export type VehicleMode = "subway" | "rail" | "bus";
  * route colour with the route bullet drawn above it (#366). The train models
  * flashed, stuck after Follow and rode under the el (#319), and cost load time.
  */
-export const VEHICLE_MODELS: Partial<Record<VehicleMode, { url: string; length: number }>> = {
-  bus: { url: "/api/vehicle-models/bus", length: 12.2 }, // New Flyer XD40, 40 ft
-};
+export const VEHICLE_MODELS: Partial<Record<VehicleMode, { url: string; length: number }>> = {};
+// The XD40 glTF (/api/vehicle-models/bus) read as a white slab from above (owner, 2026-10-27);
+// buses are now `busGeometry`, drawn in every view.
 
 /** True when this mode may load a glTF model at all (trains never do). */
 export function hasVehicleModel(mode: VehicleMode): boolean {
@@ -229,6 +229,51 @@ function bodyGeometry(length: number, width: number, height: number): THREE.Buff
   return g;
 }
 
+/** [width, length, height, centre y, bottom z, colour]: one box of the bus, front at +y. */
+type BusPart = [number, number, number, number, number, number];
+const BUS_PARTS: BusPart[] = [
+  [2.62, 12.1, 0.3, 0, 0.3, 0x1f2937], // bumper skirt, the dark outline from above
+  [2.55, 12, 0.7, 0, 0.6, 0xf8fafc], // lower body
+  [2.58, 12.02, 0.2, 0, 1.0, 0x0039a6], // MTA blue stripe
+  [2.6, 11.2, 1.15, 0.4, 1.3, 0x1e293b], // window band, wrapping the windshield; wider than the roof so it rims it from above
+  [2.55, 0.8, 1.15, -5.6, 1.3, 0xf8fafc], // rear corner
+  [2.4, 11.4, 0.3, -0.2, 2.45, 0xf1f5f9], // roof, stopping short of the front so the windshield shows from above
+  [1.6, 2.6, 0.3, -2.2, 2.75, 0xb6c2d1], // roof air-conditioning pod
+  [1.6, 0.14, 0.2, 6.02, 2.2, 0xf59e0b], // destination sign
+  [2.68, 1.0, 0.8, 3.9, 0, 0x111827], // front wheels
+  [2.68, 1.0, 0.8, -3.6, 0, 0x111827], // rear wheels
+];
+
+/**
+ * A low-poly city bus (~120 triangles), drawn unlit with its livery and shading in vertex
+ * colours: tops brightest, sides darker, so it has volume without lights. Cheap enough to instance.
+ */
+export function busGeometry(): THREE.BufferGeometry {
+  const pos: number[] = [], nor: number[] = [], col: number[] = [], idx: number[] = [];
+  const c = new THREE.Color();
+  for (const [w, l, h, y, z0, hex] of BUS_PARTS) {
+    const box = new THREE.BoxGeometry(w, l, h).translate(0, y, z0 + h / 2);
+    const bp = box.attributes.position as THREE.BufferAttribute, bn = box.attributes.normal as THREE.BufferAttribute;
+    const base = pos.length / 3;
+    for (let i = 0; i < bp.count; i++) {
+      const nz = bn.getZ(i), ny = Math.abs(bn.getY(i));
+      const shade = nz > 0.5 ? 1 : nz < -0.5 ? 0.5 : ny > 0.5 ? 0.88 : 0.76;
+      c.setHex(hex).multiplyScalar(shade);
+      pos.push(bp.getX(i), bp.getY(i), bp.getZ(i));
+      nor.push(bn.getX(i), bn.getY(i), bn.getZ(i));
+      col.push(c.r, c.g, c.b);
+    }
+    for (const k of box.index!.array) idx.push(base + k);
+    box.dispose();
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  g.setIndex(idx);
+  return g;
+}
+
 export function createVehicleLayer() {
   let map: MaplibreMap | null = null;
   let renderer: THREE.WebGLRenderer | null = null;
@@ -244,9 +289,10 @@ export function createVehicleLayer() {
 
   const make = (geom: THREE.BufferGeometry, ghost: boolean) => {
     // Unlit route color, same idea as the underground boxes. Lambert faces flip light and dark as a car turns, which reads as a flash.
+    // The bus carries its livery in vertex colours, and its instances stay white.
     const mat = ghost
       ? new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.8, depthTest: false, depthWrite: false })
-      : new THREE.MeshBasicMaterial({});
+      : new THREE.MeshBasicMaterial({ vertexColors: geom.hasAttribute("color") });
     const mesh = new THREE.InstancedMesh(geom, mat, CAP);
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     mesh.frustumCulled = false;
@@ -259,7 +305,7 @@ export function createVehicleLayer() {
   const boxes: Record<VehicleMode, THREE.InstancedMesh> = {
     subway: make(bodyGeometry(20, 3, 3.8), false),
     rail: make(bodyGeometry(20, 3, 3.8), false),
-    bus: make(bodyGeometry(12, 2.6, 3.2), false),
+    bus: make(busGeometry(), false),
   };
   const ghosts = make(bodyGeometry(20, 3, 3.8), true);
   ghosts.renderOrder = 3;
@@ -501,7 +547,7 @@ export function createVehicleLayer() {
       const parts = detailed && hasVehicleModel(v.kind) ? models[v.kind] : [];
       // A loaded model keeps its own livery; the box stand-in carries the route color.
       if (parts.length) for (const part of parts) part.setMatrixAt(i, m4);
-      else { boxes[v.kind].setMatrixAt(i, m4); boxes[v.kind].setColorAt(i, color.set(v.color)); }
+      else { boxes[v.kind].setMatrixAt(i, m4); boxes[v.kind].setColorAt(i, v.kind === "bus" ? color.set(0xffffff) : color.set(v.color)); }
     }
     for (const mode of Object.keys(n) as VehicleMode[]) {
       const count = Math.min(n[mode], CAP);

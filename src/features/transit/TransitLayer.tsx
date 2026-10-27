@@ -69,8 +69,6 @@ import { lineChoice, type LineChoice } from "./lineChoice";
 import { LineChooser } from "./LineChooser";
 
 /** Layers a click on the map should hand to transit instead of the area pick. */
-/** CC BY 4.0 credit for the 3D bus model (public/models/LICENSE.md), shown while it can be on screen. Trains are plain boxes (#366). */
-const VEHICLE_CREDITS = "3D buses: XD40 by kieranfarr (Sketchfab, CC BY 4.0)";
 const TRANSIT_CLICK_LAYERS = ["transit-skip", "transit-alert-skipped", "transit-bus-badge-follow", "transit-bullet", "transit-bus-badge", "transit-bus-badge-full", "transit-bus-badge-selected", "transit-vehicle-2d", "transit-vehicle-hit", "transit-vehicle-hit-stop", "transit-vehicle-hit-raised", "transit-access", "transit-entrance", "transit-line-stop", "transit-line-stop-name", "transit-station-label", "transit-station-raised", "transit-station"];
 
 const MAX_VEHICLES = 400;
@@ -1295,7 +1293,7 @@ export default function TransitLayer() {
         <Layer id="transit-work-line" type="line" minzoom={lineSel ? 0 : 13} filter={(lineSel ? ["in", ["get", "route"], ["literal", isoRoutes]] : ["boolean", true]) as never}
           paint={{ "line-color": "#f59e0b", "line-width": ["interpolate", ["linear"], ["zoom"], 10, 2, 16, 6], "line-dasharray": [1, 1.5], "line-opacity": 0.85 }} />
       </Source>
-      <Source id="transit-viaduct" type="geojson" data={three ? viaduct : EMPTY} attribution={three ? VEHICLE_CREDITS : undefined}>
+      <Source id="transit-viaduct" type="geojson" data={three ? viaduct : EMPTY}>
         <Layer id="transit-viaduct" type="fill-extrusion" minzoom={13} filter={["any", ["get", "bridge"], ["<", ["zoom"], 15]]}
           paint={{ "fill-extrusion-color": ["get", "color"], "fill-extrusion-base": ["-", ["get", "top"], 1.2], "fill-extrusion-height": ["get", "top"], "fill-extrusion-opacity": 0.9 }} />
       </Source>
