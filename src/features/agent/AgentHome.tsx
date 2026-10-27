@@ -64,9 +64,14 @@ export interface AnswerCardProps {
   /** The sources/age line (#375), behind "More". */
   sources: ReactNode;
   primary: { label: string; run: () => void } | null;
-  onNearby: () => void;
-  onOther: () => void;
-  /** Anything under the buttons: more map actions, Use my location, the trip card. */
+  /**
+   * The reply asks where you are: Use my location takes the primary button's place, right under the text,
+   * and More stays shut, since nothing else helps until it is tapped (owner, 2026-10-26).
+   */
+  location?: ReactNode;
+  /** Follow-ups that fit this answer; with none and no sources, there is no More (owner, 2026-10-26). */
+  followUps: Array<{ label: string; run: () => void }>;
+  /** Anything under the buttons: a location note, the trip card. */
   extra: ReactNode;
   /**
    * The answer is on the map (a "which exit" answer): one or two lines in a small
@@ -88,7 +93,14 @@ export function AnswerCard(p: AnswerCardProps) {
   useEffect(() => {
     if (more) moreEnd.current?.scrollIntoView({ block: "nearest", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   }, [more]);
+  // The location button can land below the fold of the scrolling answer area: bring it into view.
+  const locationEl = useRef<HTMLDivElement>(null);
+  const hasLocation = Boolean(p.location);
+  useEffect(() => {
+    if (hasLocation && !p.busy) locationEl.current?.scrollIntoView({ block: "nearest", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  }, [hasLocation, p.busy]);
   const done = !p.busy && !!p.text;
+  const hasMore = !p.location && (Boolean(p.sources) || p.followUps.length > 0);
   if (p.compact && !more) {
     return (
       <div className="flex flex-col gap-2 pl-11" data-testid="answer-card" data-compact="">
@@ -117,23 +129,26 @@ export function AnswerCard(p: AnswerCardProps) {
           <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-slate-100" aria-live="polite">{plainText(p.text)}</p>
           {done ? (
             <div className="flex flex-col gap-2">
-              {p.primary ? (
+              {p.location ? <div ref={locationEl} className="flex flex-col gap-2">{p.location}</div> : p.primary ? (
                 <Button type="button" className="h-[52px] rounded-full bg-blue-600 text-[15px] font-semibold text-white hover:bg-blue-500" onClick={p.primary.run}>
                   {p.primary.label}
                 </Button>
               ) : null}
-              <Button type="button" variant="ghost" aria-expanded={more} onClick={() => setMore((v) => !v)}
-                className="h-11 self-center rounded-full px-4 text-sm font-semibold text-slate-300 hover:bg-slate-800 hover:text-white">
-                {t("more")}
-                <ChevronDown className={cn("!h-4 !w-4 transition-transform motion-reduce:transition-none", more && "rotate-180")} aria-hidden="true" />
-              </Button>
-              {more ? (
+              {hasMore ? (
+                <Button type="button" variant="ghost" aria-expanded={more} onClick={() => setMore((v) => !v)}
+                  className="h-11 self-center rounded-full px-4 text-sm font-semibold text-slate-300 hover:bg-slate-800 hover:text-white">
+                  {t("more")}
+                  <ChevronDown className={cn("!h-4 !w-4 transition-transform motion-reduce:transition-none", more && "rotate-180")} aria-hidden="true" />
+                </Button>
+              ) : null}
+              {hasMore && more ? (
                 <>
                   {p.sources}
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button type="button" variant="ghost" className={SECONDARY} onClick={p.onNearby}>{t("nearby")}</Button>
-                    <Button type="button" variant="ghost" className={SECONDARY} onClick={p.onOther}>{t("otherOptions")}</Button>
-                  </div>
+                  {p.followUps.length ? (
+                    <div className={cn("grid gap-2", p.followUps.length > 1 && "grid-cols-2")}>
+                      {p.followUps.map((f) => <Button key={f.label} type="button" variant="ghost" className={SECONDARY} onClick={f.run}>{f.label}</Button>)}
+                    </div>
+                  ) : null}
                   <div ref={moreEnd} aria-hidden="true" />
                 </>
               ) : null}

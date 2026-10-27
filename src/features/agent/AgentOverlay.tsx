@@ -793,8 +793,13 @@ export default function AgentOverlay() {
         ? { label: tr(appLang, "walkMeThere"), run: () => { void walkTo(first.restroom); } }
         : { label: first.label, run: () => runAction(first) }
       : null;
-    const onNearby = () => { void send(followUpQuestion("nearby", placeOf())); };
-    const onOther = () => { void send(followUpQuestion("other", placeOf())); };
+    // Only follow-ups that fit this answer: around the place it named, and other routes after a trip.
+    const named = first?.kind === "showRestroom" || first?.kind === "flyTo" || trip ? placeOf() : null;
+    const followUps = [
+      ...(named ? [{ label: tr(appLang, "nearby"), run: () => { void send(followUpQuestion("nearby", named)); } }] : []),
+      ...(trip && !busy ? [{ label: tr(appLang, "otherRoutes"), run: () => { void send(`What are the other routes from ${trip.origin.label} to ${trip.destination.label}?`); } }] : []),
+    ];
+    const askLocation = reply?.offerLocation && shared.status !== "on";
     const homeAnswer = (
       <AnswerCard
         question={lastUser?.content ?? null}
@@ -803,17 +808,16 @@ export default function AgentOverlay() {
         working={<WorkingPanel steps={steps} />}
         sources={reply?.sources && (reply.sources.sources.length || reply.sources.unverified.length) ? <AnswerSources line={reply.sources} /> : null}
         primary={primary}
-        onNearby={onNearby}
-        onOther={onOther}
+        followUps={followUps}
+        location={askLocation ? (
+          <Button type="button" className="h-[52px] w-full gap-1.5 rounded-full bg-blue-600 text-[15px] font-semibold text-white hover:bg-blue-500" disabled={shared.status === "asking"} onClick={() => void enableLocation()}>
+            <LocateFixed className="h-4 w-4" aria-hidden="true" />
+            {tr(appLang, shared.status === "asking" ? "findingYou" : "useMyLocation")}
+          </Button>
+        ) : undefined}
         compact={exitAnswer ? { hint: <CompassHint heading={heading} /> } : undefined}
         extra={
           <>
-            {reply?.offerLocation && shared.status !== "on" ? (
-              <Button type="button" className="h-12 w-full gap-1.5 rounded-full" disabled={shared.status === "asking"} onClick={() => void enableLocation()}>
-                <LocateFixed className="h-4 w-4" aria-hidden="true" />
-                {tr(appLang, shared.status === "asking" ? "findingYou" : "useMyLocation")}
-              </Button>
-            ) : null}
             {/* A blocked or failed location used to leave the button looking untouched (owner report, 2026-10-25). */}
             {reply?.offerLocation && (shared.status === "denied" || shared.status === "unavailable") ? (
               <p role="status" className="px-2 text-center text-sm text-slate-300">{tr(appLang, "locationBlocked")}</p>

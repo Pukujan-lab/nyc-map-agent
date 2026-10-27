@@ -59,10 +59,10 @@ test("answer follow-ups ask the agent even when extra map actions exist", async 
   await expect.poll(() => questions.length).toBe(2);
   expect(questions[1]).toMatch(/landmarks/i);
   expect(questions[1]).not.toMatch(/food|caf[eé]|shop/i);
+  // Only follow-ups that fit: with no trip there is no "Other routes".
   await page.getByRole("button", { name: "More", exact: true }).click();
-  await page.getByRole("button", { name: "Other options", exact: true }).click();
-  await expect.poll(() => questions.length).toBe(3);
-  expect(questions[2]).toMatch(/other options/i);
+  await expect(page.getByRole("button", { name: "What's nearby", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Other (routes|options)$/ })).toHaveCount(0);
 });
 
 for (const width of [390, 1280]) {
