@@ -62,6 +62,7 @@ import { usePalette, type Palette } from "@/lib/theme";
 import { RAISED_LIFT_PX, STOP_LIFT_PX, alertCameraAction, paintAboveVehicles, trainIconOffset } from "./layerOrder";
 import { FOCUS_OPACITY, FOCUS_VEIL_ID, WORLD, focusVeil, useTransitFocus } from "@/lib/map/transitFocus";
 import { framePadding } from "@/lib/map/mapCover";
+import { rowBulletAt } from "./rowBullet";
 import { TapCycle } from "./tapCycle";
 import { liveBranches } from "./liveBranches";
 import { lineChoice, type LineChoice } from "./lineChoice";
@@ -574,6 +575,8 @@ export default function TransitLayer() {
   lineSelRef.current = Boolean(lineSel);
   const walkingRef = useRef(walking);
   walkingRef.current = walking;
+  const threeRef = useRef(three);
+  threeRef.current = three;
   followedRef.current = followedKey;
   const savedCam = useRef<{ center: [number, number]; zoom: number; bearing: number; pitch: number } | null>(null);
   useEffect(() => {
@@ -1028,6 +1031,18 @@ export default function TransitLayer() {
       const kit = walkingRef.current && !all.length ? pickStreet(map, e.point.x, e.point.y) : null;
       if (kit?.kind === "busstop") { openBusStop(kit.lng, kit.lat, typeof kit.props.name === "string" ? kit.props.name : "Bus stop"); return; }
       if (kit?.kind === "entrance") { openStation("subway", kit.id, typeof kit.props.name === "string" ? kit.props.name : "Station"); return; }
+      // A bullet in a station's route row: that station with only that line, even when a train sits on top.
+      const label = all.find((h) => h.layer.id === "transit-station-label" && typeof h.properties?.row === "string" && h.properties.row);
+      if (label?.geometry.type === "Point" && !(threeRef.current && label.properties.raised)) {
+        const z = map.getZoom();
+        const size = walkingRef.current ? 1.35 : z <= 13 ? 0.8 : z >= 17 ? 1 : 0.8 + ((z - 13) / 4) * 0.2;
+        const route = rowBulletAt(String(label.properties.row), map.project(label.geometry.coordinates as [number, number]), e.point, size);
+        if (route) {
+          openStation("subway", String(label.properties.id), String(label.properties.name));
+          setSelectedLine(lineOf(route));
+          return;
+        }
+      }
       const f = tapCycle.current.next(e.point, all);
       if (f?.properties && (f.layer.id === "transit-skip" || f.layer.id === "transit-alert-skipped")) {
         const id = String(f.properties.id ?? "");
