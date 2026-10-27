@@ -392,10 +392,10 @@ export function createVehicleLayer() {
     g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
     return g;
   }
-  // ---- Street-level X-ray: a semi-transparent ground disc around the walker. ----
+  // ---- Street-level X-ray: a faint ground disc around the walker (a dark one distracted; owner, 2026-10-27). ----
   const veil = new THREE.Mesh(
     new THREE.CircleGeometry(1, 64),
-    new THREE.MeshBasicMaterial({ color: "#0b1220", transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide }),
+    new THREE.MeshBasicMaterial({ color: "#0b1220", transparent: true, opacity: 0.15, depthWrite: false, side: THREE.DoubleSide }),
   );
   veil.renderOrder = 2;
   veil.frustumCulled = false;

@@ -28,7 +28,7 @@ import { useMapState } from "@/lib/store/MapStateContext";
 import { useFlag } from "@/lib/flags";
 import { usePanel, usePanelChip, usePanelMode, usePanelSearch, type SearchProvider } from "@/lib/store/PanelContext";
 import { pickRouteVehicle, registerRouteFollower } from "@/lib/transit/routeFollow";
-import { ZoomKeeper, followRig, publishFollowPos, rememberFollowOrigin, setFollowMode, setFollowed, stableHeading, stopFollowing, takeFollowRestore, useFollowMode, useFollowed } from "./follow";
+import { ZoomKeeper, followRig, publishFollowPos, rememberFollowOrigin, setBoardedOnFoot, setFollowMode, setFollowed, stableHeading, stopFollowing, takeFollowRestore, useFollowMode, useFollowed } from "./follow";
 import { followActionForMapClick } from "./followClick";
 import { publishSubway } from "@/lib/agent/streetContext";
 import { busesToShow, capPerLine, holdShuttle, registerBusToggle, setShuttleBuses, shownVehicles, useBusPins } from "@/lib/transit/busReveal";
@@ -54,6 +54,7 @@ import { alertGeometry, setAlertFocus, stationChanges, useAlertFocus } from "./a
 import { LinesDrawer } from "./LinesDrawer";
 import { BusStopDetails } from "./BusStopDetails";
 import { busStopAt } from "@/lib/map/busStops";
+import { pickAt as pickStreet, setPickTargets } from "@/lib/map/streetPick";
 import { keepInView } from "@/lib/map/keepInView";
 import { lineOpacity, useMapOptions } from "@/lib/map/mapOptions";
 import { NOTCH_ICON, addBulletImage, lineColor as lineColorOf, stationRowId, bulletId, busBadgeId, busIconSize, busPrefix } from "@/lib/transit/bullets";
@@ -307,6 +308,14 @@ export default function TransitLayer() {
   // The followed vehicle as React sees it: refreshed only when what its card shows changes.
   const [followed, setFollowedVehicle] = useState<Vehicle | undefined>(undefined);
 
+  // A bus stop's next buses, and a way to watch them come on the map from above.
+  const openBusStop = useCallback((lon: number, lat: number, name: string) => {
+    const watch = (routes: string[]) => {
+      if (routes.length) setBusLines(routes);
+      showView("map", { lon, lat });
+    };
+    showPanel({ id: `busstop:${lon.toFixed(5)},${lat.toFixed(5)}`, title: formatStreetText(name), subtitle: "Bus stop", details: <BusStopDetails lon={lon} lat={lat} onWatch={watch} /> });
+  }, [showPanel, setBusLines]);
   const openStation = useCallback(
     (system: SystemId, id: string, name: string) =>
       showPanel({ id: `transit:station:${system}:${id}`, title: name, subtitle: `${SYSTEM_LABELS[system]} station`, details: <StationDetails system={system} id={id} /> }),
@@ -868,6 +877,8 @@ export default function TransitLayer() {
       const c = map.getCenter();
       entr.current = walking && sub ? entranceInstances(sub, outStations, [c.lng, c.lat]) : [];
       v3d.current?.setEntrances(entr.current);
+      // A tap on a stair or elevator opens its station and next trains (owner, 2026-10-27).
+      setPickTargets(entr.current.map((e) => ({ kind: "entrance" as const, id: e.id, lng: e.lon, lat: e.lat, h: 3, props: { name: e.name } })), "entrances");
       // Each nearby entrance's corner and kind.
       const phone = window.matchMedia("(max-width: 639px)").matches;
       setEntrLabels(walking && sub ? entranceLabels(sub, outStations, [c.lng, c.lat], readMap(map).placeAt, { max: phone ? 3 : 6, phone }) : EMPTY_FC);
@@ -876,7 +887,7 @@ export default function TransitLayer() {
     };
     sync();
     map.on("moveend", sync);
-    return () => { map.off("moveend", sync); };
+    return () => { map.off("moveend", sync); setPickTargets([], "entrances"); };
   }, [map, walking, outStations, staticKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // X-ray: a station's insides through a dimmed ground; the camera tilts in so the 3D layer is on.
   const xrayId = useXray();
@@ -1013,6 +1024,10 @@ export default function TransitLayer() {
       setChoice(null);
       const layers = TRANSIT_CLICK_LAYERS.filter((id) => map.getLayer(id));
       const all = layers.length ? map.queryRenderedFeatures(e.point, { layers }) : [];
+      // Street view: a bus stop sign or a subway entrance under the tap, when no train or bus is.
+      const kit = walkingRef.current && !all.length ? pickStreet(map, e.point.x, e.point.y) : null;
+      if (kit?.kind === "busstop") { openBusStop(kit.lng, kit.lat, typeof kit.props.name === "string" ? kit.props.name : "Bus stop"); return; }
+      if (kit?.kind === "entrance") { openStation("subway", kit.id, typeof kit.props.name === "string" ? kit.props.name : "Station"); return; }
       const f = tapCycle.current.next(e.point, all);
       if (f?.properties && (f.layer.id === "transit-skip" || f.layer.id === "transit-alert-skipped")) {
         const id = String(f.properties.id ?? "");
@@ -1023,6 +1038,14 @@ export default function TransitLayer() {
       }
       const decision = followActionForMapClick(f?.properties ? { layerId: f.layer.id, key: f.properties.key } : null, followedRef.current);
       if (decision.action === "release") { stopFollowing(); return; }
+      // Street view: a passing train or bus is one to board. The chase camera rides it; Get off walks again.
+      if (walkingRef.current && decision.action === "start") {
+        setDrawerOpen(false);
+        setFollowMode("chase");
+        setFollowed(decision.key);
+        setBoardedOnFoot(true);
+        return;
+      }
       // Home: a subway train or a line opens that line instead of riding along.
       if (homeRef.current) {
         const key = decision.action === "start" ? decision.key : "";
@@ -1054,7 +1077,7 @@ export default function TransitLayer() {
     };
     map.on("click", onClick);
     return () => { map.off("click", onClick); };
-  }, [map, openStation, setDrawerOpen, showPanel, setSnap]);
+  }, [map, openStation, openBusStop, setDrawerOpen, showPanel, setSnap]);
 
   // A basemap bus-stop icon shows its routes and next buses (transit features win).
   const busStopsShown = opts.busStops;
@@ -1066,11 +1089,11 @@ export default function TransitLayer() {
       const stop = busStopAt(map, e.point);
       if (!stop) return;
       const { lng, lat } = e.lngLat;
-      showPanel({ id: `busstop:${lng.toFixed(5)},${lat.toFixed(5)}`, title: formatStreetText(stop.name), subtitle: "Bus stop", details: <BusStopDetails lon={lng} lat={lat} /> });
+      openBusStop(lng, lat, stop.name);
     };
     map.on("click", onClick);
     return () => { map.off("click", onClick); };
-  }, [map, busStopsShown, showPanel]);
+  }, [map, busStopsShown, openBusStop]);
 
   // Notices for alerts touching starred lines or stations (in-app + optional browser).
   const notified = useRef(new Set<string>());
@@ -1198,7 +1221,7 @@ export default function TransitLayer() {
       {xrayOn && !three ? (
         // Top-down X-ray: the ground and buildings fade so the tunnels below read through.
         <Source id="transit-xray-veil" type="geojson" data={flatVeil}>
-          <Layer id="transit-xray-veil" type="fill" beforeId="transit-line-under" paint={{ "fill-color": "#0b1220", "fill-opacity": 0.55 }} />
+          <Layer id="transit-xray-veil" type="fill" beforeId="transit-line-under" paint={{ "fill-color": "#0b1220", "fill-opacity": 0.15 }} />
         </Source>
       ) : null}
       {focus ? (

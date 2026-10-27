@@ -246,6 +246,11 @@ function foldCredits(map: MaplibreMapInstance) {
   creditsFolded = true;
 }
 
+/** Any tap on the map folds the credits again; the "x" on the toggle does too. */
+function closeCredits(map: MaplibreMapInstance) {
+  map.getContainer().querySelector(".maplibregl-ctrl-attrib.maplibregl-compact-show")?.classList.remove("maplibregl-compact-show");
+}
+
 export function MapView({
   model,
   boundaries,
@@ -689,6 +694,7 @@ export function MapView({
 
   const handleClick = useCallback(
     (event: MapLayerMouseEvent) => {
+      closeCredits(event.target);
       // Picking a route endpoint takes priority over selecting an area.
       if (routePicking) {
         setRoutePoint(routePicking, { lon: event.lngLat.lng, lat: event.lngLat.lat });
@@ -711,7 +717,8 @@ export function MapView({
       // 3D restroom kiosks at street level: public ones open here, shop/café
       // ones are opened by the place-toilets feature's own click handler.
       const kiosk = walking ? pickFurniture(event.target, event.point.x, event.point.y) : null;
-      if (kiosk?.kind === "place") return;
+      // Shop restrooms, bus stop signs and subway entrances open from their own features.
+      if (kiosk && kiosk.kind !== "restroom") return;
       if (kiosk?.kind === "restroom") {
         const p = kiosk.props;
         const str = (k: string) => (typeof p[k] === "string" && p[k] ? p[k] : null);
@@ -1489,25 +1496,30 @@ export function MapView({
     // Drag (mouse or one finger) looks around: across turns, up/down tilts the
     // head. Map panning is off while walking, so the drag is ours alone.
     let lookDirty = false;
-    let dragFrom: { x: number; y: number } | null = null;
+    let dragFrom: { x: number; y: number; id: number } | null = null;
     const canvas = map.getCanvas();
+    // With pan and pinch off, MapLibre drops its touch-action rule, so on a phone the browser took an
+    // up/down swipe as a page scroll instead of a look (owner report, 2026-10-27). The swipe is ours.
+    const touchAction = canvas.style.touchAction;
+    canvas.style.touchAction = "none";
     const onPointerDown = (event: PointerEvent) => {
-      if (event.button !== 0) return;
-      dragFrom = { x: event.clientX, y: event.clientY };
+      if (event.button !== 0 || dragFrom) return;
+      dragFrom = { x: event.clientX, y: event.clientY, id: event.pointerId };
     };
     const onPointerMove = (event: PointerEvent) => {
       const eye = eyeRef.current;
-      if (!dragFrom || !eye) return;
+      // One finger looks; a second finger landing must not make the view jump between them.
+      if (!dragFrom || !eye || event.pointerId !== dragFrom.id) return;
       const dx = event.clientX - dragFrom.x;
       const dy = event.clientY - dragFrom.y;
-      dragFrom = { x: event.clientX, y: event.clientY };
-      // Grab-the-world feel: drag left to turn right, drag up to look up (like street-view apps).
+      dragFrom = { x: event.clientX, y: event.clientY, id: dragFrom.id };
+      // Grab-the-world feel both ways: drag left to turn right, drag up to look down (owner, 2026-10-27).
       eye.bearing = (eye.bearing - dx * LOOK_DEG_PER_PX + 360) % 360;
-      eye.pitch = clampLookPitch(eye.pitch - dy * LOOK_DEG_PER_PX);
+      eye.pitch = clampLookPitch(eye.pitch + dy * LOOK_DEG_PER_PX);
       lookDirty = true;
     };
-    const onPointerUp = () => {
-      dragFrom = null;
+    const onPointerUp = (event: PointerEvent) => {
+      if (dragFrom?.id === event.pointerId) dragFrom = null;
     };
     canvas.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("pointermove", onPointerMove);
@@ -1571,6 +1583,7 @@ export function MapView({
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
+      canvas.style.touchAction = touchAction;
       canvas.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);

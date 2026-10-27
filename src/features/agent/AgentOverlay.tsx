@@ -1,3 +1,4 @@
+import { usePullSheetUp } from "@/lib/store/pullSheet";
 import { Bus, Car, ChevronUp, Compass, Footprints, Headphones, LocateFixed, Mic, MicOff, MoreVertical, Pause, Play, Send, SkipForward, X } from "lucide-react";
 import { legFocus } from "./legFocus";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -390,7 +391,8 @@ export default function AgentOverlay() {
     setBusy(true);
     setSteps([]);
     abort.current?.abort();
-    abort.current = new AbortController();
+    const ctl = new AbortController();
+    abort.current = ctl;
     let spoken = "";
     // The text written between tool calls, piece by piece (see joinSegments).
     const segments: string[] = [""];
@@ -404,7 +406,9 @@ export default function AgentOverlay() {
     try {
       const memory = home ? memorySummary() : null;
       const underNow = getUndergroundNow();
-      for await (const ev of askAgent({ messages: recentTurns(history), location, mode, now: new Date().toISOString(), ...(askReq ? { context: askReq.context } : {}), ...(home && askLang ? { lang: askLang } : {}), ...(memory ? { memory } : {}), ...(underNow ? { underground: underNow } : {}) }, abort.current.signal)) {
+      for await (const ev of askAgent({ messages: recentTurns(history), location, mode, now: new Date().toISOString(), ...(askReq ? { context: askReq.context } : {}), ...(home && askLang ? { lang: askLang } : {}), ...(memory ? { memory } : {}), ...(underNow ? { underground: underNow } : {}) }, ctl.signal)) {
+        // Closed or replaced: nothing more from this answer reaches the map, the card or the voice.
+        if (ctl.signal.aborted) break;
         setSteps((s) => applyStep(s, ev));
         if (ev.type === "text") {
           segments[segments.length - 1] += ev.text;
@@ -425,21 +429,32 @@ export default function AgentOverlay() {
         }
       }
     } catch {
-      setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, content: x.content || "The assistant is unavailable right now." } : x)));
+      if (!ctl.signal.aborted) setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, content: x.content || "The assistant is unavailable right now." } : x)));
     } finally {
       window.clearTimeout(statusTimer);
-      setBusy(false);
-      // The model still asked for a start: put the same button on its reply.
-      const offersLocation = !askReq && !!spoken && !sharedCoords() && replyAsksForOrigin(spoken);
-      if (offersLocation) {
-        pendingQuestion.current = q;
-        setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, offerLocation: true } : x)));
-      }
-      // Short spoken answer; the full detail stays on screen. In hands-free the
-      // person can talk over it to interrupt.
-      if (spoken) speech.speak(spokenSummary(nameLocationButton(nameRemindButton(spoken, replyActions, tr(getAppLang(), "remindMe")), offersLocation, tr(getAppLang(), "useMyLocation"))), { bargeIn: handsFree, ...(heard ? { lang: heard } : {}) });
+      // A newer question owns busy; a closed one already let go of it.
+      if (abort.current === ctl) setBusy(false);
     }
+    if (ctl.signal.aborted) return;
+    // The model still asked for a start: put the same button on its reply.
+    const offersLocation = !askReq && !!spoken && !sharedCoords() && replyAsksForOrigin(spoken);
+    if (offersLocation) {
+      pendingQuestion.current = q;
+      setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, offerLocation: true } : x)));
+    }
+    // Short spoken answer; the full detail stays on screen. In hands-free the
+    // person can talk over it to interrupt.
+    if (spoken) speech.speak(spokenSummary(nameLocationButton(nameRemindButton(spoken, replyActions, tr(getAppLang(), "remindMe")), offersLocation, tr(getAppLang(), "useMyLocation"))), { bargeIn: handsFree, ...(heard ? { lang: heard } : {}) });
   }, [busy, mode, setChatOpen, speech, askReq, handsFree, closeAll, home, lang, stopPlayer]);
+
+  /** Exit: the answer stops where it is. No more text, map moves, trip or speech from it (owner, 2026-10-27). */
+  const stopAnswer = useCallback(() => {
+    abort.current?.abort();
+    abort.current = null;
+    setBusy(false);
+    setSteps([]);
+    speech.stopSpeaking();
+  }, [speech]);
 
   // The reply button and the footer chip both share location, then ask the waiting question.
   const enableLocation = useCallback(async () => {
@@ -479,6 +494,7 @@ export default function AgentOverlay() {
     setHandsFree(false);
     stopMic();
   }, [taskOn, handsFree, stopMic]);
+  const sheetUp = usePullSheetUp();
   const hasAnswer = home && chatOpen && messages.length > 0;
   const orbShown = home && handsFree && speech.listening && !dictating;
   useEffect(() => sendScreen({ type: "ANSWER", on: hasAnswer }), [hasAnswer]);
@@ -721,7 +737,7 @@ export default function AgentOverlay() {
         data-testid="ask-compact"
         className="pointer-events-auto absolute bottom-3 left-1/2 z-[60] flex h-[min(46vh,420px)] w-[min(440px,calc(100vw-1.5rem))] -translate-x-1/2 flex-col overflow-hidden rounded-xl border bg-card/95 shadow-xl backdrop-blur-md"
       >
-        <Button type="button" variant="ghost" size="icon" className="absolute right-1.5 top-1.5 z-10 h-8 w-8" aria-label="Close Ask" onClick={() => { setHandsFree(false); speech.stopListening(); speech.stopSpeaking(); closeAsk(); }}>
+        <Button type="button" variant="ghost" size="icon" className="absolute right-1.5 top-1.5 z-10 h-8 w-8" aria-label="Close Ask" onClick={() => { setHandsFree(false); speech.stopListening(); stopAnswer(); closeAsk(); }}>
           <X className="h-4 w-4" />
         </Button>
         {body}
@@ -878,7 +894,9 @@ export default function AgentOverlay() {
         <ChevronUp className="h-4 w-4 shrink-0" aria-hidden="true" />
       </button>
     ) : null;
-    const idle = chip ?? (showIdle ? (
+    // Another sheet pulled up from behind the chat (station exits) owns that space: the task row used to
+    // sit on top of it and hide its question (owner report, 2026-10-27). Settings is itself one.
+    const idle = chip ?? (showIdle && !(sheetUp && !settingsOpen) ? (
       <>
         <DailyCard places={places} onAsk={(q) => void send(q)} onFly={(sp) => flyTo({ lon: sp.lon, lat: sp.lat, zoom: 16 })} onShowStations={(points) => actionCtx.showPoints(points, { color: TROUBLE_COLOR.problem, title: "Delay" })} />
         <TaskButtons on={tasks} />
@@ -901,7 +919,7 @@ export default function AgentOverlay() {
           orb={{ show: handsFree && speech.listening && !dictating, transcript: speech.interim, stop: stopOrb }}
           notice={notice ?? speech.error}
           answerOpen={answerOpen}
-          onCloseAnswer={() => setChatOpen(false)}
+          onCloseAnswer={() => { stopAnswer(); setChatOpen(false); }}
           answer={homeAnswer}
           idle={idle}
           // Task controls sit above the persistent chat bar.

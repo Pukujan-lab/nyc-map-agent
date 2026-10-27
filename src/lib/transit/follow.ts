@@ -15,7 +15,18 @@ export function bindPreviewRelease(fn: (() => void) | null) {
   onLeavePreview = fn;
 }
 
+/** Boarded from street view: "Get off" puts you back on foot where the vehicle is (owner, 2026-10-27). */
+let onFoot = false;
+export function setBoardedOnFoot(on: boolean) {
+  onFoot = on;
+}
+export function useBoardedOnFoot(): boolean {
+  return useSyncExternalStore((f) => (subs.add(f), () => subs.delete(f)), () => onFoot);
+}
+
 export function setFollowed(key: string | null) {
+  // Riding ends with the follow, however it ends.
+  if (key === null) onFoot = false;
   // Drag, Esc, Show on map, Show map, and a non-vehicle map click release the camera where it is.
   // The Stop button sets the flag first.
   if (key === null && !restoreOnStop) snap = null;

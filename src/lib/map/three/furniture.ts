@@ -332,7 +332,11 @@ export function createFurnitureLayer(): CustomLayerInterface {
     });
     kioskBodies.count = ks.length;
     kioskFaces.count = kf;
-    setPickTargets(ks.map(({ kind, id, lng, lat, h, props }) => ({ kind, id, lng, lat, h, props })));
+    setPickTargets([
+      ...ks.map(({ kind, id, lng, lat, h, props }) => ({ kind, id, lng, lat, h, props })),
+      // The sign is the tap target: its next buses (owner, 2026-10-27).
+      ...near.map((s) => ({ kind: "busstop" as const, id: s.id, lng: s.lon, lat: s.lat, h: BUS_PLATE.z + BUS_PLATE.h / 2, props: { name: s.name, routes: s.routes } })),
+    ]);
     for (const x of all) x.instanceMatrix.needsUpdate = true;
     busSlot.needsUpdate = true;
     kioskSlot.needsUpdate = true;

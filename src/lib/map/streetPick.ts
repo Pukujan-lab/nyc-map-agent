@@ -1,5 +1,6 @@
 /**
- * Tap targets for 3D street furniture (restroom kiosks), registered by the
+ * Tap targets for 3D street furniture (restroom kiosks, bus stop signs) and
+ * subway entrances, registered by the
  * three.js layer and hit-tested here in screen space without three.js, so the
  * click handlers can stay in the main chunk and in the feature modules.
  */
@@ -7,7 +8,7 @@ import type { Map as MapLibreMap } from "maplibre-gl";
 import { cameraTransform } from "./cameraTransform";
 
 export interface PickTarget {
-  kind: "restroom" | "place";
+  kind: "restroom" | "place" | "busstop" | "entrance";
   id: string;
   lng: number;
   lat: number;
@@ -33,10 +34,13 @@ export function eyeOrCenter(map: MapLibreMap): { lng: number; lat: number } {
   const c = map.getCenter();
   return { lng: c.lng, lat: c.lat };
 }
+/** One list per owner: the furniture layer and the transit layer each replace only their own. */
+const groups = new Map<string, PickTarget[]>();
 let targets: PickTarget[] = [];
 
-export function setPickTargets(t: PickTarget[]): void {
-  targets = t;
+export function setPickTargets(t: PickTarget[], group = "furniture"): void {
+  groups.set(group, t);
+  targets = [...groups.values()].flat();
 }
 
 /**

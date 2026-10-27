@@ -105,6 +105,16 @@
   padding: 0 !important;
 }
 
+/* The credits toggle: a light chip that reads on the dark map, and an "x" while the credits are open,
+   so it is clear how to close them (owner, 2026-10-27). */
+.maplibregl-ctrl-attrib-button {
+  background-color: #f8fafc !important;
+  border-radius: 999px !important;
+}
+.maplibregl-ctrl-attrib.maplibregl-compact-show .maplibregl-ctrl-attrib-button {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M6.5 6.5l7 7M13.5 6.5l-7 7' stroke='%23111827' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") !important;
+}
+
 .deck-tooltip {
   background: rgba(9, 12, 20, 0.94) !important;
   border: 1px solid hsl(var(--border)) !important;
