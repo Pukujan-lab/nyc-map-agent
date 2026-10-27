@@ -798,7 +798,8 @@ export function MapView({
             });
             return;
           }
-          const shop = hit.props.store === 1 && hit.z < 4.5 ? signsMod.current?.storefrontAt(event.target, hit.lng, hit.lat) : null;
+          // Up to 7 m: the ground floor and the sign band above it.
+          const shop = hit.props.store === 1 && hit.z < 7 ? signsMod.current?.storefrontAt(event.target, hit.lng, hit.lat) : null;
           if (shop) {
             const shops = (shop.dir ?? "").split("|").filter(Boolean);
             showPanel({
@@ -808,6 +809,15 @@ export function MapView({
               details: (
                 <div className="space-y-2">
                   {shops.length ? <ul className="space-y-1 text-sm">{shops.map((name) => <li key={name}>{name}</li>)}</ul> : null}
+                  {/* The real place: Google's street photos open at the shop, no key needed. */}
+                  <a
+                    className="inline-block text-sm font-medium underline underline-offset-2"
+                    href={`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${shop.lat},${shop.lng}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    See a real photo
+                  </a>
                   <DirectionsFromHere lon={shop.lng} lat={shop.lat} label={shop.name} />
                 </div>
               ),

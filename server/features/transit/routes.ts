@@ -284,7 +284,7 @@ export async function loadBusArrivals(key: string, stop: string) {
     if (!j) return [];
     const c = j.MonitoredCall;
     const t = Date.parse(c?.ExpectedArrivalTime ?? c?.AimedArrivalTime ?? "");
-    return [{ route: first(j.PublishedLineName), destination: first(j.DestinationName), eta: Number.isFinite(t) ? Math.round(t / 1000) : null, away: c?.Extensions?.Distances?.PresentableDistance ?? "" }];
+    return [{ route: first(j.PublishedLineName), destination: first(j.DestinationName), vehicle: first(j.VehicleRef), eta: Number.isFinite(t) ? Math.round(t / 1000) : null, away: c?.Extensions?.Distances?.PresentableDistance ?? "" }];
   });
   arrivals.sort((a, b) => (a.eta ?? Infinity) - (b.eta ?? Infinity));
   return { arrivals };

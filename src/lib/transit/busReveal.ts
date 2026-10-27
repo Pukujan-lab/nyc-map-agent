@@ -47,16 +47,20 @@ export function busRoutesOfTrip(trip: TripLike): string[] {
   return [...new Set(ids)].slice(0, BUS_REVEAL_CAP);
 }
 
+/** A bus stop's "see them coming": its routes in focus around the stop, until its card closes. */
+export type StopWatch = { routes: string[]; at: { lon: number; lat: number }; panelId: string };
+let watch: StopWatch | null = null;
 let tripRoutes: string[] | null = null;
 let shuttleRoutes: string[] | null = null;
 /** Alert id whose shuttle the person hid with Live buses off, until a different alert is focused. */
 let shuttleHold: string | null = null;
 let turnBusesOn: (() => void) | null = null;
-let snap = { trip: null as string[] | null, shuttle: null as string[] | null };
+type Pins = { trip: string[] | null; shuttle: string[] | null; watch?: StopWatch | null };
+let snap: Pins = { trip: null, shuttle: null, watch: null };
 const subs = new Set<() => void>();
 
 function publish(): void {
-  snap = { trip: tripRoutes, shuttle: shuttleRoutes };
+  snap = { trip: tripRoutes, shuttle: shuttleRoutes, watch };
   subs.forEach((f) => f());
 }
 
@@ -96,15 +100,29 @@ export function setShuttleBuses(alertId: string | null, routes: string[]): boole
   return true;
 }
 
-/** Live buses off: drop the trip pin and keep this alert's shuttle hidden. */
+/** Show a stop's routes coming in (owner, 2026-10-27: the button showed nothing). Turns Live buses on. */
+export function watchStopBuses(next: StopWatch): void {
+  watch = { ...next, routes: next.routes.map((r) => r.toUpperCase()).slice(0, BUS_REVEAL_CAP) };
+  publish();
+  turnBusesOn?.();
+}
+
+export function clearStopWatch(): void {
+  if (!watch) return;
+  watch = null;
+  publish();
+}
+
+/** Live buses off: drop the trip and stop pins and keep this alert's shuttle hidden. */
 export function holdShuttle(alertId: string | null): void {
   shuttleHold = alertId;
   shuttleRoutes = null;
   tripRoutes = null;
+  watch = null;
   publish();
 }
 
-type BusShow = { why: "shuttle" | "trip" | "page" | "off"; routes: string[] };
+type BusShow = { why: "watch" | "shuttle" | "trip" | "page" | "off"; routes: string[] };
 
 /** Trains stay. Buses stay only while their route is one of the routes still on. */
 export function shownVehicles<T extends { system: string; route: string }>(vehicles: readonly T[], routes: readonly string[]): T[] {
@@ -113,15 +131,16 @@ export function shownVehicles<T extends { system: string; route: string }>(vehic
   return vehicles.filter((v) => v.system !== "bus" || allow.has(v.route.toUpperCase()));
 }
 
-/** Shuttle wins over a trip, and a trip wins over the corridor page. */
-export function busesToShow(pageRoutes: string[], pins: { trip: string[] | null; shuttle: string[] | null } = snap): BusShow {
+/** A watched stop (the latest thing asked for) wins, then a shuttle, then a trip, then the picked lines. */
+export function busesToShow(pageRoutes: string[], pins: Pins = snap): BusShow {
+  if (pins.watch?.routes.length) return { why: "watch", routes: pins.watch.routes };
   if (pins.shuttle?.length) return { why: "shuttle", routes: pins.shuttle };
   if (pins.trip?.length) return { why: "trip", routes: pins.trip };
   if (pageRoutes.length) return { why: "page", routes: pageRoutes.slice(0, BUS_REVEAL_CAP) };
   return { why: "off", routes: [] };
 }
 
-export function useBusPins(): { trip: string[] | null; shuttle: string[] | null } {
+export function useBusPins(): Pins {
   return useSyncExternalStore((f) => (subs.add(f), () => subs.delete(f)), () => snap, () => snap);
 }
 
