@@ -124,3 +124,30 @@ test("I'm lost asks the agent once and the page stays responsive", async ({ page
   await page.evaluate(() => 1);
   expect(Date.now() - t0).toBeLessThan(1000);
 });
+
+// The trip card hides the chat answer, so it carries the ways to go itself: one tap asks once (owner, 2026-10-26).
+test("the trip card asks again with the least walking", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await mockNetwork(page);
+  const coords = [[-73.9875, 40.7557], [-73.986, 40.757], [-73.9851, 40.758]];
+  const walk = { ...trip, id: "walk-choice", mode: "walk", origin: { label: "7 Av", at: coords[0] }, destination: { label: "Times Square", at: coords[2] }, routes: [], alternatives: [], legs: [{ kind: "walk", label: "Walk to Times Square", coords, durationS: 360, distanceM: 450, turns: [] }] };
+  const questions: string[] = [];
+  await page.route("**/api/agent", (r) => {
+    const body = r.request().postDataJSON() as { messages?: Array<{ role: string; content: string }> };
+    questions.push(body.messages?.filter((m) => m.role === "user").at(-1)?.content ?? "");
+    return r.fulfill({ contentType: "application/x-ndjson", body: stream(questions.length === 1 ? [
+      { type: "command", command: { type: "showRoute", trip: walk } },
+      { type: "command", command: { type: "openPanel", trip: walk } }, { type: "done" },
+    ] : [{ type: "text", text: "This one has the least walking." }, { type: "done" }]) });
+  });
+  await page.goto("/");
+  await ask(page, "Walk from 7 Av to Times Square");
+  const choices = page.getByTestId("trip-choices");
+  await expect(choices).toBeVisible();
+  await choices.getByRole("button", { name: "Least walking", exact: true }).click();
+  await expect.poll(() => questions.length).toBe(2);
+  expect(questions[1]).toMatch(/least walking/i);
+  expect(questions[1]).toContain("Times Square");
+  await page.waitForTimeout(1000);
+  expect(questions.length).toBe(2);
+});
