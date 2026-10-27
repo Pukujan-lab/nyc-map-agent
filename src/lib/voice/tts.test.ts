@@ -21,6 +21,11 @@ describe("spokenSummary", () => {
     expect(s.length).toBeLessThan(300);
     expect(s).toMatch(/details are on screen\.$/);
   });
+  it("does not end a Nepali answer in English", () => {
+    const s = spokenSummary("सबैभन्दा नजिकको शौचालय यहाँ छ। " + "थप विवरण यहाँ छ। ".repeat(30));
+    expect(s).not.toMatch(/details are on screen/);
+    expect(s.length).toBeLessThan(300);
+  });
   it("strips markdown", () => expect(spokenSummary("**Take** the [A](http://x) train.")).toBe("Take the A train."));
 });
 
