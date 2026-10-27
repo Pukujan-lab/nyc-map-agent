@@ -12,12 +12,12 @@ describe("Live buses near you", () => {
   afterEach(() => vi.unstubAllGlobals());
   it("looks about 700 m out when no stop is within 300 m, as over Newtown Creek", async () => {
     const asked: number[] = [];
-    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    vi.stubGlobal("fetch", vi.fn((url: string) => {
       const lat = Number(new URL(url, "http://x").searchParams.get("lat"));
       asked.push(lat);
       // Only the point to the north has a stop.
       const stops = lat > 40.7240 ? [{ id: "s", name: "n", lat, lon: 0, dir: "N", routes: ["B24"] }] : [];
-      return new Response(JSON.stringify({ stops }), { headers: { "content-type": "application/json" } });
+      return Promise.resolve(new Response(JSON.stringify({ stops }), { headers: { "content-type": "application/json" } }));
     }));
     expect(await fetchBusRoutesNear({ lat: 40.7200, lon: -73.9300 })).toEqual(["B24"]);
     expect(asked).toHaveLength(9);
