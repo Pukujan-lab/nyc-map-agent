@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Settings, X } from "lucide-react";
 import { PullSheet } from "@/components/PullSheet";
 import { SettingsBody } from "@/components/SettingsBody";
-import { LiveLayerRows } from "@/components/MenuRow";
+import { LiveLayerRows } from "@/components/LiveLayerRows";
 import type { SheetLevel } from "@/components/sheetSwipe";
 import { useMenuT } from "@/lib/i18n/menuText";
 
