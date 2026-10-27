@@ -44,10 +44,11 @@ export function PullSheet({ level, onLevel, onSide, header, children, testId, la
     window.addEventListener("resize", publish);
     return () => { ro?.disconnect(); window.removeEventListener("resize", publish); root.style.removeProperty("--pull-sheet-h"); };
   }, []);
-  // Open on a phone, the sheet reaches up to the quick buttons: locate steps aside until it closes.
+  // Open on a phone, locate rides just above the sheet (owner, 2026-10-27: "there isn't even a button
+  // to zoom to my location"); only a full-height sheet leaves no room, so it steps aside then.
   useLayoutEffect(() => {
     const root = document.documentElement;
-    if (level) root.dataset.pullSheet = "open";
+    if (level) root.dataset.pullSheet = level === 2 ? "full" : "open";
     else delete root.dataset.pullSheet;
     return () => { delete root.dataset.pullSheet; };
   }, [level]);
