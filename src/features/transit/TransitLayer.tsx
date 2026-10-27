@@ -36,7 +36,6 @@ import { publishLiveDots } from "@/lib/transit/liveVehicles";
 import { heldTrains } from "@/lib/transit/holds";
 import { setLinesControl } from "@/lib/transit/linesControl";
 import { lineOf, setSelectedLine, useSelectedLine } from "@/lib/transit/selectedLine";
-import { useLineKeys } from "./useLineKeys";
 import { useActiveTrip } from "@/lib/transit/activeTrip";
 // The line panel loads on the first line picked (own chunk), keeping the transit layers chunk in budget.
 const LinePanel = lazy(() => import("./LinePanel").then((m) => ({ default: m.LinePanel })));
@@ -1151,9 +1150,8 @@ export default function TransitLayer() {
     setFollowMode("map");
     setFollowed(pick.key);
   }, [map, selected, setDrawerOpen]);
-  // Arrows step along the picked line, train or station, and across to another line; Escape leaves it.
+  // The line panel's arrow keys step between these trains and the stations (useLineKeys.ts).
   const trainsNow = useCallback(() => [...display.current.values()], []);
-  useLineKeys(map, lineSel, selected?.train ?? null, statics.find((s) => s.system === "subway"), trainsNow, walking);
   // A line chosen from More layers that is not on screen: bring its whole length into view.
   useEffect(() => {
     if (!map || !lineSel || selected?.train) return;
@@ -1211,7 +1209,7 @@ export default function TransitLayer() {
           onStation={() => { const st = choice.choice.station; setChoice(null); if (st) openStation("subway", st.id, st.name); }} />
       ) : null}
       {followed && followMode !== "map" && map ? <FollowMiniMap main={map} vehicle={followed} line={followTrack} nextName={followNext} /> : null}
-      {lineSel && !followedKey ? <Suspense fallback={null}><LinePanel map={map} route={lineSel} onFollow={followLine} /></Suspense> : null}
+      {lineSel && !followedKey ? <Suspense fallback={null}><LinePanel map={map} route={lineSel} onFollow={followLine} trains={trainsNow} /></Suspense> : null}
       <Source id="transit-lines" type="geojson" data={lines}>
         {/* X-ray on stays a solid glow. Off: solid too (owner, 2026-10-25: dashes read as a broken line), nearly as wide as the at-grade stroke, opacity 0.75. */}
         <Layer id="transit-line-under" type="line" filter={["==", ["get", "grade"], "underground"]} layout={{ "line-cap": "round", "line-join": "round" }}
