@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchBusRoutesNear, routesFromStops } from "./hooks";
+import { busStopsQuery, fetchBusRoutesNear, routesFromStops } from "./hooks";
 
 describe("Live buses near you", () => {
   it("turns on the routes serving the most nearby stops, busiest first, capped", () => {
@@ -21,5 +21,11 @@ describe("Live buses near you", () => {
     }));
     expect(await fetchBusRoutesNear({ lat: 40.7200, lon: -73.9300 })).toEqual(["B24"]);
     expect(asked).toHaveLength(9);
+  });
+
+  it("sends coordinates the server accepts, at most 12 characters", () => {
+    const q = new URLSearchParams(busStopsQuery({ lat: 40.7000000000011, lon: -73.94000000000074 }));
+    expect(q.get("lat")).toBe("40.70000");
+    expect(q.get("lon")).toBe("-73.94000");
   });
 });
