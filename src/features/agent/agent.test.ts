@@ -82,8 +82,16 @@ describe("flythrough timeline", () => {
     expect(wallSeconds(segs[2], 30)).toBe(14);
     expect(wallSeconds(segs[2], 10)).toBe(42);
     expect(wallSeconds(segs[2], 2)).toBe(210);
-    expect(wallSeconds(segs[0], 30)).toBe(4);
-    expect(wallSeconds(segs[4], 30)).toBe(2);
+    // On foot it runs four times faster than a ride.
+    expect(wallSeconds(segs[0], 10)).toBe(3);
+    expect(wallSeconds(segs[1], 10)).toBe(1.5);
+    expect(wallSeconds(segs[4], 30)).toBe(0.5);
+  });
+  it("a long walk stays short", () => {
+    const walk = { ...segs[0], realS: 1200 };
+    expect(wallSeconds(walk, 10)).toBe(12);
+    expect(wallSeconds(walk, 30)).toBe(4);
+    expect(wallSeconds(walk, 10)).toBeLessThan(wallSeconds({ ...segs[2], realS: 1200 }, 10) / 3);
   });
   it("keeps 2x, 10x and 30x apart on a long ride", () => {
     const ride = { ...segs[2], realS: 1800 };

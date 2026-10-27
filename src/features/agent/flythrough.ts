@@ -120,12 +120,18 @@ export function buildTimeline(trip: Trip): Segment[] {
   }));
 }
 
+/** On foot (walks, stairs in and out) the preview runs this many times faster than a ride (owner, 2026-10-27: walking was "super duper slow"). */
+const FOOT_RATE = 4;
+const onFoot = (seg: Segment) => seg.kind === "walk" || seg.kind === "descend" || seg.kind === "ascend";
+
 /**
  * Wall-clock seconds for one leg. The ceiling and floor scale with the speed:
- * a flat 45s cap made 2x and 10x the same length on a subway ride.
+ * a flat 45s cap made 2x and 10x the same length on a subway ride. Walking moves little on the map,
+ * so it plays FOOT_RATE times faster and stops at 12s (at 10x) however long the walk is.
  */
 export function wallSeconds(seg: Segment, speed: number): number {
   const pace = 10 / speed;
+  if (onFoot(seg)) return Math.min(12 * pace, Math.max(1.5 * pace, seg.realS / (speed * FOOT_RATE)));
   return Math.min(45 * pace, Math.max(3 * pace, seg.realS / speed));
 }
 
