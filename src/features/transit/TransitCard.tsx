@@ -22,6 +22,10 @@ import { FollowSheet } from "./FollowSheet";
 
 type Data = Partial<Record<SystemId, { stat?: StaticSystem; live?: LiveSystem }>>;
 
+/** MTA entrance types in plain words: "Easement - Street" is a way up through a building. */
+const doorKind = (kind: string | undefined): string =>
+  !kind ? "Entrance" : /easement - street/i.test(kind) ? "Through a building" : /passage/i.test(kind) ? "Passage" : kind;
+
 export function RouteBullet({ system, route, data }: { system: SystemId | "bus"; route: string; data: Data }) {
   const info = system === "bus" ? undefined : data[system]?.stat?.routes[route];
   return (
@@ -102,7 +106,7 @@ export function StationDetails({ system, id }: { system: SystemId; id: string })
   const stationNotices = (alerts?.alerts ?? []).filter((a) => (a.kind === "planned" || a.reroute) && !skipIds.has(a.id) && a.stops.some((s) => stationOf(system, s) === id) && forLine(a.routes));
   const outages = system === "subway" ? (alerts?.outages ?? []).filter((o) => o.stops.some((s) => stationOf("subway", s) === id)) : [];
   // "Stair" ×5 reads better than five identical rows.
-  const doorKinds = [...doors.reduce((m, d) => m.set(d.properties.kind || "Entrance", (m.get(d.properties.kind || "Entrance") ?? 0) + 1), new Map<string, number>())];
+  const doorKinds = [...doors.reduce((m, d) => m.set(doorKind(d.properties.kind), (m.get(doorKind(d.properties.kind)) ?? 0) + 1), new Map<string, number>())];
   return (
     <div className="space-y-3 text-sm">
       {routes.length ? (
@@ -180,7 +184,7 @@ export function StationDetails({ system, id }: { system: SystemId; id: string })
             Entrances <span className="text-xs font-normal text-muted-foreground">{doorKinds.map(([k, n]) => (n > 1 ? `${k} ×${n}` : k)).join(" · ")}</span>
             <ChevronDown className="ml-auto h-4 w-4 transition-transform group-open:rotate-180" aria-hidden />
           </summary>
-          <ul className="mt-1 space-y-0.5">{doors.map((d, i) => <li key={i}>{d.properties.name || "Entrance"}{d.properties.kind ? <span className="text-muted-foreground"> · {d.properties.kind}</span> : null}</li>)}</ul>
+          <ul className="mt-1 space-y-0.5">{doors.map((d, i) => <li key={i}>{d.properties.name || "Entrance"}{d.properties.kind ? <span className="text-muted-foreground"> · {doorKind(d.properties.kind)}</span> : null}</li>)}</ul>
         </details>
       ) : null}
       <div className="flex flex-wrap gap-2">

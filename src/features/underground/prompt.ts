@@ -25,7 +25,7 @@ export function accuracyWorsened(baseline: number | null, now: number | null): b
 export function stationAtEntrance(sys: SubwayStatic, at: Pt, maxM = ENTRANCE_M): Station | null {
   let best: { id: string; name: string; d: number } | null = null;
   for (const f of sys.entrances?.features ?? []) {
-    if (/passage|easement/i.test(f.properties.kind)) continue;
+    if (/passage/i.test(f.properties.kind)) continue;
     const d = metres(at, f.geometry.coordinates as Pt);
     if (d <= maxM && (!best || d < best.d)) best = { id: String(f.properties.id), name: f.properties.name, d };
   }

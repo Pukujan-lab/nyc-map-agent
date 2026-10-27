@@ -70,7 +70,9 @@ export function stationEntrances(sys: SubwayStatic, st: Station): Array<{ at: Pt
     const p = f.properties;
     const at = f.geometry.coordinates as Pt;
     const mine = String(p.id) === st.id || (p.name === st.name && metres(at, st.at) <= 300);
-    if (!mine || /passage|easement/i.test(p.kind)) continue;
+    // "Easement - Street" is a real street exit up through a building; some stations (Hoyt-Schermerhorn)
+    // have only those, so dropping them left "No street exits listed". Only passages stay out.
+    if (!mine || /passage/i.test(p.kind)) continue;
     const key = `${at[0].toFixed(5)},${at[1].toFixed(5)}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -104,7 +106,7 @@ export function rankExits(
 
 /** "stairs", "elevator", "escalator": what the exit is, from the MTA type. */
 export function exitKind(kind: string): string {
-  return /elevator/i.test(kind) ? "elevator" : /escalator/i.test(kind) ? "escalator" : "stairs";
+  return /elevator/i.test(kind) ? "elevator" : /escalator/i.test(kind) ? "escalator" : /easement/i.test(kind) ? "through a building" : "stairs";
 }
 
 /**
