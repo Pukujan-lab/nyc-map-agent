@@ -219,3 +219,7 @@ pnpm test
 - Crash data lags about four months.
 - Neighborhoods come from a point-in-polygon join, so a point on a shared border goes to whichever neighbor wins the test.
 - The default basemap (OpenFreeMap Liberty) is keyless and free for this kind of use, but it is a third-party service: point `VITE_BASEMAP_STYLE` at your own MapTiler/Protomaps style before shipping at volume. Attribution is always visible, and if the style cannot be fetched the app falls back to public OSM raster tiles (`VITE_TILE_URL`), which are not meant for public traffic either.
+
+## License
+
+[Functional Source License 1.1, Apache 2.0 future license (FSL-1.1-ALv2)](LICENSE.md). You may read, run, change and share the code for any purpose except offering a product or service that competes with this one. Two years after each version is released, that version also becomes available under the Apache License 2.0. The MTA, NYC Open Data and OpenStreetMap data the app uses keep their own terms.
