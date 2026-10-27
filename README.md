@@ -28,6 +28,29 @@ The original noise and crash dashboard is still here for technical users, behind
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | What is built, what is checked and what is next |
 | [`AGENTS.md`](AGENTS.md) | Rules for coding agents working in this repository |
 
+## Repository layout
+
+| Folder | What is in it |
+| --- | --- |
+| `src/` | The web app (React, MapLibre, three.js). `src/features/<name>/` holds one feature each; `src/lib/` is shared code; `src/components/` the shared UI. [`docs/MODULES.md`](docs/MODULES.md) has the rules, and CI checks them (`pnpm lint:boundaries`). |
+| `server/` | The API (Hono): `server/features/<name>/` matches the app's features, including the agent. |
+| `api/` | Older API paths kept as one-line re-exports of `server/` while code moves over. |
+| `db/`, `ingest/` | Database migrations, and the SQL that loads each open dataset. |
+| `e2e/` | Browser tests (Playwright) that run in CI on every pull request. |
+| `public/` | Static files: icons, textures, 3D models. |
+| `scripts/` | Build and data scripts (city tiles, data checks). |
+| `deploy/` | How the live site runs: Docker containers, the web server (Caddy), the trip planner (OpenTripPlanner) and an operations dashboard. |
+| `docs/` | Architecture, design rules, roadmap, privacy and performance notes. |
+| `schemas/` | JSON schemas the project tooling validates against. |
+| `context/` | Short briefs the AI agent and coding agents read (data APIs, voice, features). |
+| `checkpoints/`, `tasks/` | The project continuity log (where work stands) and its task folder. |
+| `.github/` | CI workflows, issue and pull request templates. |
+| `.oio/`, `.continuity/`, `.coord/`, `.content-system/`, `.claude/` | Configuration for the coding-agent tooling: issue logs, continuity, coordination, writing rules. |
+
+Files at the top: [`AGENTS.md`](AGENTS.md) and [`AI_RULES.md`](AI_RULES.md) are the rules for coding agents (`CLAUDE.md` points to them); [`PROJECT.md`](PROJECT.md) says what the app is for; `CHANGELOG.md` is written by the release bot.
+
+State lives in small stores under `src/lib/` (one file each, read with React's `useSyncExternalStore`). The one state machine, built with XState, is [`src/lib/screen/screenSpace.ts`](src/lib/screen/screenSpace.ts): it decides which panel or sheet owns each part of the screen.
+
 ## For technical users: the city data layer
 
 Two datasets are joined to 2020 Neighborhood Tabulation Areas and drawn on the map: **311 noise complaints** (`erm2-nwe9`) and **motor vehicle crashes** (`h9gi-nx95`). Pick a unit (block, neighborhood, community district or borough) and a style (filled areas, 3D columns or heatmap). Color is the bucket and height is a square-root scale of the same number.

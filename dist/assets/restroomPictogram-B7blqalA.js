@@ -1,1 +1,0 @@
-const n=["M7 2a2 2 0 1 0 0 4 2 2 0 1 0 0-4Z","M5 7h4l1 7H8.5v7h-3v-7H4l1-7Z","M17 2a2 2 0 1 0 0 4 2 2 0 1 0 0-4Z","M15.2 7h3.6l2.2 8h-2.5v6h-3v-6H13l2.2-8Z"];function t(l,o,r,a,e){l.save(),l.translate(o-a/2,r-a/2),l.scale(a/24,a/24),l.fillStyle=e;for(const h of n)l.fill(new Path2D(h));l.restore()}export{t as d};
