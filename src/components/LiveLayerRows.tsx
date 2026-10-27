@@ -21,8 +21,8 @@ export function SwitchRow({ icon, label, on, onChange, disabled, testId, classNa
   );
 }
 
-const RestroomIcon = () => (
-  <svg width={22} height={22} viewBox="0 0 24 24" fill="currentColor" aria-hidden className="shrink-0">
+export const RestroomIcon = ({ size = 22 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden className="shrink-0">
     <circle cx="7" cy="4" r="2" /><path d="M5 7h4l1 7H8.5v7h-3v-7H4l1-7Z" /><circle cx="17" cy="4" r="2" /><path d="M15.2 7h3.6l2.2 8h-2.5v6h-3v-6H13l2.2-8Z" />
   </svg>
 );

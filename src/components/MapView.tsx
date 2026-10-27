@@ -530,10 +530,12 @@ export function MapView({
     const map = mapRef.current?.getMap();
     if (!map || !ready) return;
     applyMapTheme(map, t);
-    const streetLook = opts.roads ? (opts.streets === "simple" || transitFocus ? "simple" : "full") : "off";
+    // Street view always draws the roads you walk on, even with Hide roads set (owner, 2026-10-27).
+    const roads = opts.roads || walking;
+    const streetLook = roads ? (opts.streets === "simple" || transitFocus ? "simple" : "full") : "off";
     applyReadable(map, streetLook, { street: t.street, major: t.major, label: t.label_ });
     for (const l of map.getStyle()?.layers ?? []) {
-      if (/^highway-name-major$/.test(l.id)) map.setLayoutProperty(l.id, "visibility", opts.roads && opts.streetNames ? "visible" : "none");
+      if (/^highway-name-major$/.test(l.id)) map.setLayoutProperty(l.id, "visibility", roads && opts.streetNames ? "visible" : "none");
       // Transit-first open: neighbourhood / quarter names only with the analytics on.
       if (l.id === "label_other") map.setLayoutProperty(l.id, "visibility", analytics ? "visible" : "none");
       // Bus stop icons from zoom 15, names from 17. The Layers switch hides both.
@@ -558,7 +560,7 @@ export function MapView({
     return () => {
       map.off("styledata", keep);
     };
-  }, [ready, styleEpoch, transitFocus, places, businesses, health, parksPlaces, citibike, opts, t, extrude, flatBuildings, analytics]);
+  }, [ready, styleEpoch, transitFocus, places, businesses, health, parksPlaces, citibike, opts, t, extrude, flatBuildings, analytics, walking]);
 
   const loaded = useRef(false);
   const handleLoad = useCallback(() => {
@@ -1006,14 +1008,13 @@ export function MapView({
   const [toggledOn] = useFeatureToggles();
   const inset = useMemo(() => insetFilters({
     placeClasses: classesFor(withQuickPlaces(places, { businesses, health, parksPlaces, citibike })),
-    busStops: opts.busStops,
     restrooms,
     shops: toggledOn.has("restroomShops"),
     parking: toggledOn.has("parking"),
     events: toggledOn.has("events"),
     ferry: toggledOn.has("ferry"),
     schools: schoolIcons,
-  }), [places, businesses, health, parksPlaces, citibike, opts.busStops, restrooms, toggledOn, schoolIcons]);
+  }), [places, businesses, health, parksPlaces, citibike, restrooms, toggledOn, schoolIcons]);
   const mountedKey = FEATURES.filter((f) => f.layers && flags[f.id] && (!f.chip || toggledOn.has(f.chip.id)))
     .map((f) => f.id)
     .join(",");

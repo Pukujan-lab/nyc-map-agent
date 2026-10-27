@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StyleSpecification } from "maplibre-gl";
-import { bearingTo, coneRotation, facingLabel, insetFilters, keepInMini, miniStyle, pointLayerOn, whereLabel } from "./miniStyle";
+import { bearingTo, coneRotation, distanceLabel, facingLabel, insetFilters, keepInMini, miniStyle, pointLayerOn, whereLabel } from "./miniStyle";
 
 describe("street mini map", () => {
   it("keeps land, water, streets and subway; drops labels and 3D", () => {
@@ -13,6 +13,22 @@ describe("street mini map", () => {
     expect(keepInMini({ id: "building-3d", type: "fill-extrusion", "source-layer": "building" })).toBe(false);
     expect(keepInMini({ id: "building", type: "fill", "source-layer": "building" })).toBe(true);
     expect(keepInMini({ id: "tunnel_road", type: "line", "source-layer": "transportation" })).toBe(false);
+  });
+  it("names streets and stations, small and always visible", () => {
+    const s = miniStyle({
+      version: 8,
+      sources: { omt: { type: "vector", url: "https://example/tiles" }, st: { type: "geojson", data: { type: "FeatureCollection", features: [] } } },
+      layers: [
+        { id: "highway-name-minor", type: "symbol", source: "omt", "source-layer": "transportation_name", minzoom: 16, layout: { visibility: "none", "text-field": "{name}" } },
+        { id: "transit-station-label", type: "symbol", source: "st", layout: { "text-size": 15, "icon-image": ["get", "row"], "text-field": ["get", "name"] }, paint: { "text-color": "#111111" } },
+      ],
+    } as StyleSpecification);
+    const [street, station] = s.layers;
+    expect(street.type === "symbol" && street.layout?.visibility).toBe("visible");
+    expect(street.minzoom).toBeUndefined();
+    expect(station.type === "symbol" && station.layout?.["text-size"]).toBe(11);
+    expect(station.type === "symbol" && station.layout?.["icon-image"]).toBeUndefined();
+    expect(station.type === "symbol" && station.paint?.["text-color"]).toBe("#111111");
   });
   it("only carries the sources its layers use", () => {
     const s = miniStyle({
@@ -84,7 +100,6 @@ describe("street mini map", () => {
   it("draws a filter's points only while that filter is on, and keeps transit either way", () => {
     const on = insetFilters({
       placeClasses: ["cafe", "toilets"],
-      busStops: true,
       restrooms: true,
       shops: true,
       parking: true,
@@ -94,7 +109,6 @@ describe("street mini map", () => {
     });
     const off = insetFilters({
       placeClasses: [],
-      busStops: false,
       restrooms: false,
       shops: true,
       parking: false,
@@ -171,7 +185,10 @@ describe("street mini map", () => {
     expect(Object.keys(shown.sources)).not.toContain("events-lines");
 
     const hidden = miniStyle(style, off);
-    expect(hidden.layers.map((l) => l.id)).toEqual(["background", "transit-line", "transit-station"]);
+    // Bus stops stay with every switch off: they are how you find your bus at street level.
+    expect(hidden.layers.map((l) => l.id)).toEqual(["background", "transit-line", "transit-station", "poi_transit"]);
+    const stops = hidden.layers.find((l) => l.id === "poi_transit");
+    expect(stops?.type === "symbol" && stops.paint?.["icon-opacity"]).toBe(1);
   });
 
   it("leaves sprite and glyphs out when the main style has none (maplibre rejects undefined)", () => {
@@ -193,5 +210,8 @@ describe("nearest restroom chip", () => {
     expect(whereLabel(484, 50)).toBe("480 m NE");
     expect(whereLabel(1500, 270)).toBe("1.5 km W");
     expect(whereLabel(3, 90)).toBe("10 m E");
+    // The street-view chip shows distance alone; its arrow gives the way.
+    expect(distanceLabel(28)).toBe("30 m");
+    expect(distanceLabel(1500)).toBe("1.5 km");
   });
 });

@@ -2,11 +2,11 @@ import type { ExitPlace, Pt } from "@/lib/map/mapRead";
 import type { StaticSystem } from "./model";
 
 /**
- * Street level: a label over each nearby subway entrance, corner first
- * ("6 Av & W 47 St · SE corner"), then what it is ("Stairs", "Elevator · out
- * of service"). The station's name and line bullets already stand once over
- * the station, so they are not repeated per entrance. Only the nearest few get
- * one; on a phone, one line until you are close.
+ * Street level: a label over each nearby subway entrance, the station and what
+ * it is first ("47-50 Sts-Rockefeller Ctr · Stairs"), then the corner
+ * ("6 Av & W 47 St · SE corner"). The name over the station itself can be a
+ * block away, so each stair says which station it is (owner, 2026-10-27).
+ * Only the nearest few get one; on a phone, the station alone until you are close.
  */
 export interface EntranceLabelOpts {
   /** How many of the nearest entrances get a label. */
@@ -52,13 +52,13 @@ export function entranceLabels(
   placeAt: (at: Pt) => ExitPlace,
   { max, phone, closeM = 60, radiusM = 300 }: EntranceLabelOpts,
 ): GeoJSON.FeatureCollection<GeoJSON.Point, { label: string; d: number }> {
-  const near: Array<{ at: Pt; kind: string; d: number }> = [];
+  const near: Array<{ at: Pt; kind: string; name: string; d: number }> = [];
   for (const f of sys.entrances?.features ?? []) {
     const at = f.geometry.coordinates as Pt;
     const d = metresBetween(at, eye);
     if (d > radiusM) continue;
     const kind = entranceKind(f.properties.kind, outStations.has(String(f.properties.id)));
-    if (kind) near.push({ at, kind, d });
+    if (kind) near.push({ at, kind, name: String(f.properties.name ?? ""), d });
   }
   near.sort((a, b) => a.d - b.d);
   const features: GeoJSON.Feature<GeoJSON.Point, { label: string; d: number }>[] = [];
@@ -70,7 +70,8 @@ export function entranceLabels(
     const key = `${corner ?? ""}|${e.kind}`;
     if (shown.has(key)) continue;
     shown.add(key);
-    const lines = corner ? (phone && e.d > closeM ? [corner] : [corner, e.kind]) : [e.kind];
+    const head = e.name ? `${e.name} · ${e.kind}` : e.kind;
+    const lines = phone && e.d > closeM ? [e.name || corner || e.kind] : corner ? [head, corner] : [head];
     features.push({ type: "Feature", geometry: { type: "Point", coordinates: e.at }, properties: { label: lines.join("\n"), d: Math.round(e.d) } });
   }
   return { type: "FeatureCollection", features };

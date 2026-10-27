@@ -143,6 +143,11 @@
    corner itself, over the map credits' "i". */
 .corner-locate { right: 16px; bottom: calc(var(--chat-bar-h, 0px) + var(--pull-sheet-h, 0px) + 12px); }
 .corner-view { right: 12px; bottom: calc(var(--chat-bar-h, 0px) + var(--pull-sheet-h, 0px) + 66px); }
+/* 640-767px: the credits' "i" stays at the right, just above the chat bar, so the stack starts above it. */
+@media (min-width: 640px) and (max-width: 767px) {
+  .corner-locate { bottom: calc(var(--chat-bar-h, 0px) + var(--pull-sheet-h, 0px) + 40px); }
+  .corner-view { bottom: calc(var(--chat-bar-h, 0px) + var(--pull-sheet-h, 0px) + 94px); }
+}
 @media (min-width: 768px) {
   .corner-locate { bottom: calc(var(--pull-sheet-h, 0px) + 44px); }
   .corner-view { bottom: calc(var(--pull-sheet-h, 0px) + 98px); }
