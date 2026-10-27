@@ -1,3 +1,5 @@
+import type { NamedLine } from "@/lib/map/streetPos";
+import { stairDescent } from "@/lib/map/stairs";
 import { defaultDwell, motionAt } from "./dwell";
 import type { ProgressTracker } from "./monotonic";
 import { blendStops, type SegmentLookup } from "./history";
@@ -25,7 +27,8 @@ export type StaticSystem = {
   stations: GeoJSON.FeatureCollection<GeoJSON.Point, { id: string; name: string; routes: string }>;
   shapes: Record<string, { c: Array<[number, number]>; m: number[]; g: Grade[] }>;
   stopM: Record<string, Record<string, number>>;
-  entrances?: GeoJSON.FeatureCollection<GeoJSON.Point, { id: string; name: string; kind: string }>;
+  /** `up`: the bearing a stair climbs to the street, from OpenStreetMap's mapped steps (scripts/build-entrance-stairs.ts). */
+  entrances?: GeoJSON.FeatureCollection<GeoJSON.Point, { id: string; name: string; kind: string; up?: number }>;
 };
 /** stops: [stop id, arrival time, realtime departure when later]; origin: first stop is the trip's origin. */
 /** at: the stop the vehicle reports; st: its current_status (0 INCOMING_AT, 1 STOPPED_AT, 2 IN_TRANSIT_TO); vt: position time; skipped: SKIPPED stops (not in `stops`). */
@@ -521,9 +524,9 @@ export function viaductBays(sys: StaticSystem): Bay[] {
   return bays;
 }
 
-/** A street entrance for the 3D kit: faces its station (stairs descend toward the platform). */
+/** A street entrance for the 3D kit; `bearing` is the way its stair goes down (src/lib/map/stairs.ts). */
 export type EntranceInstance = { lon: number; lat: number; bearing: number; kind: "stair" | "elevator"; out: boolean; id: string; name: string };
-export function entranceInstances(sys: StaticSystem, outStations: Set<string>, center: [number, number], radius = 300): EntranceInstance[] {
+export function entranceInstances(sys: StaticSystem, outStations: Set<string>, center: [number, number], radius = 300, lines: NamedLine[] = []): EntranceInstance[] {
   const st = new Map(sys.stations.features.map((f) => [String(f.properties.id), f.geometry.coordinates as [number, number]]));
   const kx = 111_320 * Math.cos((center[1] * Math.PI) / 180), out: EntranceInstance[] = [];
   for (const f of sys.entrances?.features ?? []) {
@@ -531,7 +534,7 @@ export function entranceInstances(sys: StaticSystem, outStations: Set<string>, c
     if (Math.hypot((lon - center[0]) * kx, (lat - center[1]) * 111_320) > radius) continue;
     if (!/stair|elevator|escalator/i.test(f.properties.kind)) continue; // easements, station houses, walkways: no kit
     const s = st.get(String(f.properties.id));
-    const bearing = s ? ((Math.atan2((s[0] - lon) * kx, (s[1] - lat) * 111_320) * 180) / Math.PI + 360) % 360 : 0;
+    const bearing = stairDescent([lon, lat], s ?? null, f.properties.up, lines);
     const elevator = /elevator/i.test(f.properties.kind);
     out.push({ lon, lat, bearing, kind: elevator ? "elevator" : "stair", out: elevator && outStations.has(String(f.properties.id)), id: String(f.properties.id), name: f.properties.name });
   }
