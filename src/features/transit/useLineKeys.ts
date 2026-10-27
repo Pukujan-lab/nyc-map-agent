@@ -99,12 +99,14 @@ export function useLineKeys(map: MaplibreMap | undefined, route: string | null, 
       const a = map.project(pointAt(shape, at.m - 150)), b = map.project(pointAt(shape, at.m + 150));
       const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
       const along = ((b.x - a.x) * arrow[0] + (b.y - a.y) * arrow[1]) / len;
-      if (Math.abs(along) < 0.5 && at.id) {
-        const station = stops.find((s) => s.id === at.id && s.kind === "station");
+      // Within 45° of the line steps along it; the arrow across it changes line at the nearest station.
+      if (Math.abs(along) < Math.SQRT1_2) {
+        const m = at.m;
+        const station = stops.filter((s) => s.kind === "station").sort((p, q) => Math.abs(p.m - m) - Math.abs(q.m - m))[0];
         const next = station ? otherLine(sys, station.id, route, arrow[0] + arrow[1] > 0 ? 1 : -1) : null;
         if (next) {
-          carry.current = station!.id;
-          setSelectedLine(next);
+          carry.current = next.station;
+          setSelectedLine(next.route);
           return;
         }
       }
