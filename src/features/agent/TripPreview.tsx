@@ -48,6 +48,8 @@ export function TripPreview(p: {
       <PartyPopper size={22} className="mt-0.5 shrink-0 text-amber-300" aria-hidden />
       <div className="min-w-0"><p className="text-[15px] font-semibold">You've arrived at {trip.destination.label.split(",")[0]}</p>
         {state.where ? <p className="text-[13px] text-slate-300">{state.where}</p> : null}</div>
+      {/* The trip is over: one plain way to put it away, beside the small close at the top. */}
+      <button type="button" className="task-action task-secondary ml-auto shrink-0 px-4" data-testid="trip-done" onClick={p.onClose}>Done</button>
     </div> : <>
       {state.active ? <p className="text-[13px] text-slate-300" aria-live="polite">{state.callout}</p> : null}
       {state.where ? <p className="flex items-center gap-1.5 text-[13px] text-slate-200" data-testid="trip-where">

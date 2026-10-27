@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bindPreviewRelease, followRig, rememberFollowOrigin, setFollowed, stableHeading, stopFollowing, takeFollowRestore, type FollowSnap } from "./follow";
+import { bindPreviewRelease, followMode, followRig, rememberFollowOrigin, setFollowMode, setFollowed, setPreviewing, stableHeading, stopFollowing, takeFollowRestore, type FollowSnap } from "./follow";
 
 const cam: FollowSnap = { center: [-73.94, 40.7], zoom: 11, bearing: 20, pitch: 30 };
 
@@ -72,5 +72,17 @@ describe("stop following", () => {
     setFollowed("subway:1");
     stopFollowing();
     expect(takeFollowRestore().cam?.zoom).toBe(11);
+  });
+});
+
+describe("trip preview cameras", () => {
+  it("a preview on the map offers the follow cameras, and a picked one stays until changed", () => {
+    setPreviewing(true);
+    setFollowMode("side");
+    expect(followMode()).toBe("side");
+    setPreviewing(true);
+    expect(followMode()).toBe("side");
+    setPreviewing(false);
+    setFollowMode("chase");
   });
 });
