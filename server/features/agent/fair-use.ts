@@ -159,7 +159,7 @@ const STILL_WORKS = "The map, live transit, restrooms and the trip panel all kee
 export function limitedResponse(retryAt: number, reason: "window" | "burst", t: number = Date.now()): Response {
   const retryAfterSeconds = Math.max(1, Math.ceil((retryAt - t) / 1000));
   const lead = reason === "burst" ? "One moment between questions, please." : "You've used your share of assistant questions for now, so everyone gets a turn.";
-  const when = retryAfterSeconds < 120 ? `in about ${retryAfterSeconds} seconds` : `in about ${waitWords(retryAt - t)} (around ${nyClock(retryAt)} New York time)`;
+  const when = retryAfterSeconds < 120 ? `in about ${retryAfterSeconds} second${retryAfterSeconds === 1 ? "" : "s"}` : `in about ${waitWords(retryAt - t)} (around ${nyClock(retryAt)} New York time)`;
   const message = `${lead} Your next question frees up ${when}. ${STILL_WORKS}`;
   return Response.json(
     { error: "rate_limited", message, retryAfterSeconds, retryAt: new Date(retryAt).toISOString() },

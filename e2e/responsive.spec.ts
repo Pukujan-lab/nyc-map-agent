@@ -66,6 +66,23 @@ for (const size of SIZES) {
       await expectLayout(page);
     });
 
+    test("a second quick question is held, then answered (no refusal)", async ({ page }) => {
+      await open(page);
+      let n = 0;
+      await page.route("**/api/agent", (r) => {
+        n += 1;
+        return r.fulfill({ contentType: "application/x-ndjson", body: stream([{ type: "text", text: n === 1 ? "First answer." : "Times Square is 12 minutes away on the 1 train." }, { type: "done" }]) });
+      });
+      await ask(page, "Nearest restroom?");
+      await expect(page.getByText("First answer.")).toBeVisible();
+      await ask(page, "Plan my trip to Times Square, leaving now.");
+      await expect(page.getByText(/Sending in a moment/).first()).toBeVisible();
+      await expectLayout(page);
+      await expect(page.getByText("Times Square is 12 minutes away on the 1 train.")).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByText(/between questions/)).toHaveCount(0);
+      await expectLayout(page);
+    });
+
     test("a line panel", async ({ page }) => {
       await open(page, [
         { type: "text", text: "The 7 is running with delays." },

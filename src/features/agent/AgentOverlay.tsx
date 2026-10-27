@@ -176,6 +176,8 @@ export default function AgentOverlay() {
   const answerView = useScreen((v) => v.answer);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  // The question is held until the server's gap between questions ends (askSpacing).
+  const [waiting, setWaiting] = useState(false);
   const [trip, setTrip] = useState<Trip | null>(null);
   // Phones: language and the QR code, up from behind the chat over the idle home.
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -192,6 +194,8 @@ export default function AgentOverlay() {
   }, [trip]);
   const shared = useSharedLocation();
   const abort = useRef<AbortController | null>(null);
+  /** The reply still being answered (or held), so a newer question can replace it. */
+  const liveReply = useRef<string | null>(null);
   const messagesRef = useRef<Msg[]>([]);
   messagesRef.current = messages;
   /** The question waiting on a shared location, so the button can ask it again. */
@@ -363,7 +367,7 @@ export default function AgentOverlay() {
     const heard = byVoice ? heardLangRef.current : null;
     heardLangRef.current = null;
     const askLang = heard ?? lang;
-    if (!q || busy) return;
+    if (!q) return;
     setNotice(null);
     setInput("");
     // A new question replaces the last answer: its trip card, the line it opened, a follow.
@@ -371,7 +375,10 @@ export default function AgentOverlay() {
     if (!askReq) setChatOpen(true);
     // A second tap of the same question, after Use my location, keeps the one user bubble.
     const continuing = messagesRef.current.some((m) => m.offerLocation);
-    const prior = messagesRef.current.filter((m) => !m.offerLocation);
+    // A newer question replaces one still held or not yet answered: its bubble and its empty reply go.
+    const live = messagesRef.current.findIndex((m) => m.id === liveReply.current && !m.content);
+    const kept = live > 0 && messagesRef.current[live - 1].role === "user" ? messagesRef.current.filter((_, i) => i !== live && i !== live - 1) : messagesRef.current;
+    const prior = kept.filter((m) => !m.offerLocation);
     const lastUser = [...prior].reverse().find((m) => m.role === "user");
     const history: Msg[] = continuing && lastUser?.content === q ? prior : [...prior, { id: crypto.randomUUID(), role: "user", content: q }];
     // Only a position the person chose to share; never asked for here. Street view already has a spot.
@@ -393,6 +400,8 @@ export default function AgentOverlay() {
     abort.current?.abort();
     const ctl = new AbortController();
     abort.current = ctl;
+    liveReply.current = reply.id;
+    setWaiting(false);
     let spoken = "";
     // The text written between tool calls, piece by piece (see joinSegments).
     const segments: string[] = [""];
@@ -406,7 +415,7 @@ export default function AgentOverlay() {
     try {
       const memory = home ? memorySummary() : null;
       const underNow = getUndergroundNow();
-      for await (const ev of askAgent({ messages: recentTurns(history), location, mode, now: new Date().toISOString(), ...(askReq ? { context: askReq.context } : {}), ...(home && askLang ? { lang: askLang } : {}), ...(memory ? { memory } : {}), ...(underNow ? { underground: underNow } : {}) }, ctl.signal)) {
+      for await (const ev of askAgent({ messages: recentTurns(history), location, mode, now: new Date().toISOString(), ...(askReq ? { context: askReq.context } : {}), ...(home && askLang ? { lang: askLang } : {}), ...(memory ? { memory } : {}), ...(underNow ? { underground: underNow } : {}) }, ctl.signal, (w) => { if (abort.current === ctl) setWaiting(w); })) {
         // Closed or replaced: nothing more from this answer reaches the map, the card or the voice.
         if (ctl.signal.aborted) break;
         setSteps((s) => applyStep(s, ev));
@@ -433,7 +442,7 @@ export default function AgentOverlay() {
     } finally {
       window.clearTimeout(statusTimer);
       // A newer question owns busy; a closed one already let go of it.
-      if (abort.current === ctl) setBusy(false);
+      if (abort.current === ctl) { setBusy(false); setWaiting(false); liveReply.current = null; }
     }
     if (ctl.signal.aborted) return;
     // The model still asked for a start: put the same button on its reply.
@@ -445,13 +454,15 @@ export default function AgentOverlay() {
     // Short spoken answer; the full detail stays on screen. In hands-free the
     // person can talk over it to interrupt.
     if (spoken) speech.speak(spokenSummary(nameLocationButton(nameRemindButton(spoken, replyActions, tr(getAppLang(), "remindMe")), offersLocation, tr(getAppLang(), "useMyLocation"))), { bargeIn: handsFree, ...(heard ? { lang: heard } : {}) });
-  }, [busy, mode, setChatOpen, speech, askReq, handsFree, closeAll, home, lang, stopPlayer]);
+  }, [mode, setChatOpen, speech, askReq, handsFree, closeAll, home, lang, stopPlayer]);
 
   /** Exit: the answer stops where it is. No more text, map moves, trip or speech from it (owner, 2026-10-27). */
   const stopAnswer = useCallback(() => {
     abort.current?.abort();
     abort.current = null;
+    liveReply.current = null;
     setBusy(false);
+    setWaiting(false);
     setSteps([]);
     speech.stopSpeaking();
   }, [speech]);
@@ -634,7 +645,7 @@ export default function AgentOverlay() {
             // In the home sheet the working panel stands in for the empty reply bubble.
             home && !compact && m.role === "assistant" && !m.content && !m.actions?.length && !m.offerLocation ? null : (
             <div key={m.id} className={cn("max-w-[90%] rounded-lg px-3 py-2 text-sm", m.role === "user" ? "ml-auto bg-primary text-primary-foreground" : "bg-muted")}>
-              {nameLocationButton(nameRemindButton(m.content, m.actions, tr(appLang, "remindMe")), m.offerLocation, tr(appLang, "useMyLocation")) || (busy ? "…" : "")}
+              {nameLocationButton(nameRemindButton(m.content, m.actions, tr(appLang, "remindMe")), m.offerLocation, tr(appLang, "useMyLocation")) || (busy ? (waiting ? `${tr(appLang, "sendingSoon")}…` : "…") : "")}
               {m.actions?.length ? <AnswerActions actions={m.actions} onRun={runAction} /> : null}
               {m.sources ? <AnswerSources line={m.sources} /> : null}
               {m.offerLocation && shared.status !== "on" ? (
@@ -647,7 +658,7 @@ export default function AgentOverlay() {
             ),
           )
         )}
-        {home && !compact && busy ? <WorkingPanel steps={steps} /> : null}
+        {home && !compact && busy && !waiting ? <WorkingPanel steps={steps} /> : null}
         {trip ? (
           <div className="rounded-lg border p-3">
             <TripSummary trip={trip} mapTime={mapTime} onSelect={(alt) => chooseTrip(selectAlternative(trip, alt))} onLeg={showLeg} />
@@ -726,7 +737,7 @@ export default function AgentOverlay() {
             {speech.listening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
           </Button>
         ) : null}
-        <Button type="submit" size="icon" aria-label="Send" disabled={busy || !input.trim()} className="h-9 w-9 shrink-0"><Send className="h-4 w-4" /></Button>
+        <Button type="submit" size="icon" aria-label="Send" disabled={!input.trim()} className="h-9 w-9 shrink-0"><Send className="h-4 w-4" /></Button>
       </form>
     </div>
   );
@@ -826,6 +837,7 @@ export default function AgentOverlay() {
         question={lastUser?.content ?? null}
         text={nameLocationButton(nameRemindButton(reply?.content ?? "", reply?.actions, tr(appLang, "remindMe")), reply?.offerLocation, tr(appLang, "useMyLocation"))}
         busy={busy}
+        waiting={waiting}
         working={<WorkingPanel steps={steps} />}
         sources={reply?.sources && (reply.sources.sources.length || reply.sources.unverified.length) ? <AnswerSources line={reply.sources} /> : null}
         primary={primary}

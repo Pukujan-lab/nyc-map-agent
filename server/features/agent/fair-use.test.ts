@@ -93,6 +93,12 @@ describe("429 response", () => {
     const body = (await limitedResponse(t + 30_000, "burst", t).json()) as { message: string };
     expect(body.message).toMatch(/in about 30 seconds/);
   });
+
+  it("says one second, not one seconds", async () => {
+    const t = 1_000_000;
+    const body = (await limitedResponse(t + 400, "burst", t).json()) as { message: string };
+    expect(body.message).toMatch(/in about 1 second\./);
+  });
 });
 
 describe("daily budget", () => {
