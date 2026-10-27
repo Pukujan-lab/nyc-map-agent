@@ -10,7 +10,7 @@ import { Accessibility, ChevronDown, Crosshair, ScanEye, Star } from "lucide-rea
 import { Button } from "@/components/ui/button";
 import { arrivalsAt, directionLabel, estimateTrain, minutesUntil, stationOf, SYSTEM_LABELS, type LiveSystem, type StaticSystem, type SystemId, type Vehicle } from "./model";
 import { useAlerts, useBusRoute, useBusTrip, useNow, useStarred, useTransitData, type Outage, type TransitAlert } from "./hooks";
-import { setFollowed, stopFollowing, useFollowed } from "./follow";
+import { setFollowed, stopFollowing, useBoardedOnFoot, useFollowed } from "./follow";
 import { useSharedLocation } from "@/lib/geo/sharedLocation";
 import { getXray, setXray, useXray } from "./xray";
 import { AlertRow, presentAlert, StationNotice } from "./AlertCard";
@@ -350,8 +350,14 @@ const FOLLOW_CARD_GAP = 8;
  */
 export function FollowCard({ vehicle }: { vehicle: Vehicle }) {
   const home = useFlag("agentHome");
-  const { seedChat, setChatOpen, chatOpen } = useMapState();
+  const { seedChat, setChatOpen, chatOpen, startWalk } = useMapState();
   const stationHelp = useStationHelp();
+  const onFoot = useBoardedOnFoot();
+  // Off the bus or train where it is now, facing the way it was going, back in street view.
+  const getOff = () => {
+    setFollowed(null);
+    startWalk({ lon: vehicle.lon, lat: vehicle.lat, heading: vehicle.bearing });
+  };
   const now = useNow();
   const sys = vehicle.system === "bus" ? [] : [vehicle.system];
   const data = useTransitData(sys);
@@ -447,6 +453,7 @@ export function FollowCard({ vehicle }: { vehicle: Vehicle }) {
       actions={<div className="grid grid-cols-2 gap-2">
         {vehicle.system === "bus" ? <button type="button" className="task-action bg-sky-500" onClick={() => ask(`Where should I get off the ${vehicle.route} bus for my trip?`)}>Where to get off</button> : <button type="button" className="task-action" onClick={() => { if (stationHelp) { setFollowed(null); stationHelp(headId ? stationOf(vehicle.system === "bus" ? "subway" : vehicle.system, headId) : undefined); } else ask(`Which exit should I take at ${headName}?`); }}>Exit help</button>}
         <button type="button" className="task-action task-secondary" onClick={() => ask(`What are the other ways to make my ${vehicle.route} trip?`)}>Other ways</button>
+        {onFoot ? <button type="button" data-testid="get-off" className="task-action col-span-2 bg-[#c6f702] text-[#121212]" onClick={getOff}>Get off and walk</button> : null}
       </div>}
     />;
   }

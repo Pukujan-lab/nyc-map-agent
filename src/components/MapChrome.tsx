@@ -12,6 +12,7 @@ import { usePullSheetUp } from "@/lib/store/pullSheet";
 import { APP_LANGS, LANG_LABELS, setLangPref, useLangPref, type AppLang } from "@/lib/voice/langPref";
 import type { ViewName } from "@/lib/map/viewChange";
 import { pickView, useCurrentView } from "./MapViewSwitch";
+import { LiveLayerRows } from "./LiveLayerRows";
 
 /**
  * Agent-first map chrome (#370, #372): one column of quick buttons at the top
@@ -230,6 +231,29 @@ function LocateButton({ map, className, style }: { map: MapLibreMap | null; clas
   );
 }
 
+const LayersIcon = () => <svg {...svg} width={20} height={20}><path d="m12 2 10 5-10 5L2 7l10-5Z" /><path d="m2 12 10 5 10-5M2 17l10 5 10-5" /></svg>;
+
+/**
+ * Phones: Live trains, Live buses (and which routes) and Restrooms, one tap from the map.
+ * They were only in the Settings sheet, where nobody found them (owner, 2026-10-27).
+ */
+function PhoneLayers({ open, onOpen }: { open: boolean; onOpen: (open: boolean) => void }) {
+  return (
+    <div className="relative sm:hidden">
+      <button type="button" aria-label="Layers: trains, buses, restrooms" aria-haspopup="dialog" aria-expanded={open} data-testid="phone-layers-button"
+        onClick={() => onOpen(!open)} className={`${ROUND} ${open ? LIGHT : DARK} pointer-events-auto`}>
+        <LayersIcon />
+      </button>
+      {open ? (
+        <div role="dialog" aria-label="Layers" data-testid="phone-layers-menu" data-map-cover
+          className={`pointer-events-auto absolute right-[52px] top-0 w-[min(300px,calc(100vw-88px))] ${FLOAT}`}>
+          <LiveLayerRows />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function Compass({ map, bearing, style }: { map: MapLibreMap; bearing: number; style?: React.CSSProperties }) {
   return (
     <button type="button" aria-label={`Compass, bearing ${Math.round(bearing)} degrees. Reset north and flat`} data-testid="compass"
@@ -249,21 +273,24 @@ export function MapChrome() {
   // A trip preview rides its marker with the same follow cameras, so its Change view offers them too.
   const previewing = usePreviewing();
   // One dropdown at a time across the menu row and this view menu.
-  const open = useOpenMenu() === "view" ? "view" : null;
+  const menu = useOpenMenu();
+  const open = menu === "view" ? "view" : null;
   const setOpen = (v: "view" | null) => setOpenMenu(v);
+  // The menu row owns "layers" on wider screens; here it is the phone's Layers button.
+  const layersOpen = menu === "layers" && typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches;
   const stack = useRef<HTMLDivElement>(null);
   const rotated = Math.abs(bearing) > 0.5 || pitch > 0.5;
   const lineSheet = usePullSheetUp();
 
   // A tap anywhere else, or Escape, closes the open panel or menu.
   useEffect(() => {
-    if (!open) return;
+    if (!open && !layersOpen) return;
     const down = (e: PointerEvent) => { if (!stack.current?.contains(e.target as Node)) setOpenMenu(null); };
     const key = (e: KeyboardEvent) => { if (e.key === "Escape") setOpenMenu(null); };
     document.addEventListener("pointerdown", down);
     window.addEventListener("keydown", key);
     return () => { document.removeEventListener("pointerdown", down); window.removeEventListener("keydown", key); };
-  }, [open]);
+  }, [open, layersOpen]);
   // A newly picked line closes the menu; while following, the followed train's line is always
   // selected, so that rule would shut the follow view menu the moment it opened.
   // Only a change of line counts: with a line already open, the cube menu has to stay open on a phone.
@@ -337,6 +364,7 @@ export function MapChrome() {
       <ZoomControl map={map} />
       <ZoomButtons map={map} />
       {map ? <Compass map={map} bearing={bearing} /> : null}
+      <PhoneLayers open={layersOpen} onOpen={(v) => setOpenMenu(v ? "layers" : null)} />
       {/* On a phone, language and the QR code come up from behind the chat (the Settings chip). */}
       <div className="hidden flex-col items-end gap-2.5 sm:flex">
         <LangChip />

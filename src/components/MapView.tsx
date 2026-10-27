@@ -246,6 +246,11 @@ function foldCredits(map: MaplibreMapInstance) {
   creditsFolded = true;
 }
 
+/** Any tap on the map folds the credits again; the "x" on the toggle does too. */
+function closeCredits(map: MaplibreMapInstance) {
+  map.getContainer().querySelector(".maplibregl-ctrl-attrib.maplibregl-compact-show")?.classList.remove("maplibregl-compact-show");
+}
+
 export function MapView({
   model,
   boundaries,
@@ -689,6 +694,7 @@ export function MapView({
 
   const handleClick = useCallback(
     (event: MapLayerMouseEvent) => {
+      closeCredits(event.target);
       // Picking a route endpoint takes priority over selecting an area.
       if (routePicking) {
         setRoutePoint(routePicking, { lon: event.lngLat.lng, lat: event.lngLat.lat });
@@ -711,7 +717,8 @@ export function MapView({
       // 3D restroom kiosks at street level: public ones open here, shop/café
       // ones are opened by the place-toilets feature's own click handler.
       const kiosk = walking ? pickFurniture(event.target, event.point.x, event.point.y) : null;
-      if (kiosk?.kind === "place") return;
+      // Shop restrooms, bus stop signs and subway entrances open from their own features.
+      if (kiosk && kiosk.kind !== "restroom") return;
       if (kiosk?.kind === "restroom") {
         const p = kiosk.props;
         const str = (k: string) => (typeof p[k] === "string" && p[k] ? p[k] : null);

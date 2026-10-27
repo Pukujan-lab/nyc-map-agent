@@ -522,7 +522,7 @@ export function viaductBays(sys: StaticSystem): Bay[] {
 }
 
 /** A street entrance for the 3D kit: faces its station (stairs descend toward the platform). */
-export type EntranceInstance = { lon: number; lat: number; bearing: number; kind: "stair" | "elevator"; out: boolean };
+export type EntranceInstance = { lon: number; lat: number; bearing: number; kind: "stair" | "elevator"; out: boolean; id: string; name: string };
 export function entranceInstances(sys: StaticSystem, outStations: Set<string>, center: [number, number], radius = 300): EntranceInstance[] {
   const st = new Map(sys.stations.features.map((f) => [String(f.properties.id), f.geometry.coordinates as [number, number]]));
   const kx = 111_320 * Math.cos((center[1] * Math.PI) / 180), out: EntranceInstance[] = [];
@@ -533,7 +533,7 @@ export function entranceInstances(sys: StaticSystem, outStations: Set<string>, c
     const s = st.get(String(f.properties.id));
     const bearing = s ? ((Math.atan2((s[0] - lon) * kx, (s[1] - lat) * 111_320) * 180) / Math.PI + 360) % 360 : 0;
     const elevator = /elevator/i.test(f.properties.kind);
-    out.push({ lon, lat, bearing, kind: elevator ? "elevator" : "stair", out: elevator && outStations.has(String(f.properties.id)) });
+    out.push({ lon, lat, bearing, kind: elevator ? "elevator" : "stair", out: elevator && outStations.has(String(f.properties.id)), id: String(f.properties.id), name: f.properties.name });
   }
   return out;
 }

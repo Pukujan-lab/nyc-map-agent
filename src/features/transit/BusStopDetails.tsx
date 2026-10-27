@@ -1,8 +1,11 @@
 import { useBusArrivals, useBusStopsNear } from "./hooks";
 import { etaText, nearestStop } from "./busStop";
 
-/** Panel body for a tapped bus stop: the routes that stop there and the next buses. */
-export function BusStopDetails({ lon, lat }: { lon: number; lat: number }) {
+/**
+ * Panel body for a tapped bus stop: the routes that stop there and the next buses.
+ * `onWatch` shows those routes' buses live on the map from above, centred on the stop.
+ */
+export function BusStopDetails({ lon, lat, onWatch }: { lon: number; lat: number; onWatch?: (routes: string[]) => void }) {
   const stops = useBusStopsNear({ lon, lat });
   const stop = stops.data ? nearestStop(stops.data.stops, lon, lat) : undefined;
   const arrivals = useBusArrivals(stop?.id);
@@ -25,6 +28,11 @@ export function BusStopDetails({ lon, lat }: { lon: number; lat: number }) {
           </ul>
         ) : <p>No buses reported for this stop right now.</p>}
       </div>
+      {onWatch ? (
+        <button type="button" data-testid="watch-buses" onClick={() => onWatch(stop.routes)} className="task-action w-full">
+          See them coming on the map
+        </button>
+      ) : null}
     </div>
   );
 }
