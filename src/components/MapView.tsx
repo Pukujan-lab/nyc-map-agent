@@ -1394,17 +1394,22 @@ export function MapView({
     const asked = exitView.current;
     exitView.current = null;
     const at = asked?.place ?? (eye ? { lon: eye.lon, lat: eye.lat } : null);
+    const duration = reducedMotion ? 0 : 700;
     // Mid-way, a "moveend" would still read the walk's pitch as a tilt, and the tilt
     // effect would then flatten the map at the walk's zoom over the top of this.
     leaving.current = !reducedMotion;
-    map.easeTo({
-      ...(at ? { center: [at.lon, at.lat] as [number, number] } : {}),
-      pitch: asked?.view === "3d" ? VIEW_3D_PITCH : 0,
-      bearing: asked?.view === "3d" ? (asked.heading ?? eye?.bearing ?? 0) : 0,
-      elevation: 0,
-      zoom: asked?.view === "3d" ? VIEW_3D_ZOOM : Math.min(map.getZoom(), WALK_EXIT_ZOOM),
-      duration: reducedMotion ? 0 : 700,
-    });
+    if (asked?.frame) {
+      map.fitBounds(asked.frame.bounds, { padding: asked.frame.padding ?? 40, maxZoom: asked.frame.maxZoom ?? WALK_EXIT_ZOOM, pitch: 0, bearing: 0, duration });
+    } else {
+      map.easeTo({
+        ...(at ? { center: [at.lon, at.lat] as [number, number] } : {}),
+        pitch: asked?.view === "3d" ? VIEW_3D_PITCH : 0,
+        bearing: asked?.view === "3d" ? (asked.heading ?? eye?.bearing ?? 0) : 0,
+        elevation: 0,
+        zoom: asked?.view === "3d" ? VIEW_3D_ZOOM : Math.min(map.getZoom(), WALK_EXIT_ZOOM),
+        duration,
+      });
+    }
     if (leaving.current) {
       map.once("moveend", () => {
         leaving.current = false;
@@ -1430,6 +1435,10 @@ export function MapView({
       // Leaving street view: the exit effect frames it once the walk has let go of the camera.
       exitView.current = viewRequest;
       stopWalk();
+      return;
+    }
+    if (viewRequest.frame) {
+      map.fitBounds(viewRequest.frame.bounds, { padding: viewRequest.frame.padding ?? 40, maxZoom: viewRequest.frame.maxZoom ?? WALK_EXIT_ZOOM, pitch: 0, bearing: 0, duration: reducedMotion ? 0 : 700 });
       return;
     }
     const at = viewRequest.place ?? { lon: c.lng, lat: c.lat };
