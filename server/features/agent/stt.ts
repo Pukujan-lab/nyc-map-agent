@@ -34,6 +34,7 @@ const WHISPER_NAMES: Record<string, string> = {
   english: "en", spanish: "es", chinese: "zh", mandarin: "zh", cantonese: "zh", russian: "ru", bengali: "bn",
   "haitian creole": "ht", haitian: "ht", french: "fr", korean: "ko", arabic: "ar", urdu: "ur", hindi: "hi",
   polish: "pl", portuguese: "pt", italian: "it", japanese: "ja", ukrainian: "uk", yiddish: "yi", vietnamese: "vi",
+  nepali: "ne", marathi: "mr", punjabi: "pa", tagalog: "tl", greek: "el", persian: "fa", tibetan: "bo",
 };
 export function detectedLang(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
