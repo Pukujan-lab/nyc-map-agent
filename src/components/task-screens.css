@@ -114,7 +114,24 @@
   border-top-color: #f8fafc;
   transform: translateX(-50%);
 }
-@media (min-width: 640px) { .arrive-bubble { bottom: calc(var(--chat-bar-h, 96px) + 18px); } }
+/* Wide: the trip card sits at the left in the same band, so centre the bubble in the space between the card
+   and the right-hand buttons; its tail still lands over the chat bar. */
+@media (min-width: 640px) {
+  .arrive-bubble {
+    bottom: calc(var(--chat-bar-h, 96px) + 18px);
+    left: calc(24px + min(380px, 42vw));
+    right: 72px;
+    width: fit-content;
+    max-width: none;
+    margin-inline: auto;
+    transform: none;
+    animation-name: arrive-pop-wide;
+  }
+}
+@keyframes arrive-pop-wide {
+  from { opacity: 0; transform: translateY(10px) scale(.9); }
+  to { opacity: 1; transform: none; }
+}
 @keyframes arrive-pop {
   from { opacity: 0; transform: translate(-50%, 10px) scale(.9); }
   to { opacity: 1; transform: translate(-50%, 0) scale(1); }
