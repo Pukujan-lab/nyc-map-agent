@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { chunkText, pickVoice, speakQueued, spokenSummary } from "./tts";
+import { chunkText, pickVoice, speakQueued, spokenSummary, voiceFor } from "./tts";
 import { isSpeech } from "./bargeIn";
 
 describe("chunkText", () => {
@@ -34,6 +34,21 @@ describe("pickVoice", () => {
     expect(pickVoice(v, "es-MX")?.name).toBe("Paulina");
     expect(pickVoice(v, "es-US")?.name).toBe("Monica");
     expect(pickVoice(v, "zh-CN")).toBeUndefined();
+  });
+});
+
+describe("voiceFor", () => {
+  const v = [{ lang: "en-US", name: "Samantha" }, { lang: "hi-IN", name: "Lekha" }, { lang: "es-ES", name: "Monica" }] as SpeechSynthesisVoice[];
+  const nepali = "तपाईं कहाँबाट हिँड्नुहुन्छ?";
+  it("reads a Nepali answer in a Hindi voice, not the English one", () => {
+    expect(voiceFor(v, nepali, "en-US")).toEqual({ voice: v[1], lang: "hi-IN" });
+  });
+  it("borrows the Hindi voice when Nepali was heard but no Nepali voice exists", () => {
+    expect(voiceFor(v, nepali, "ne")).toEqual({ voice: v[1], lang: "hi-IN" });
+  });
+  it("keeps the asked language when the text is in its letters", () => {
+    expect(voiceFor(v, "Toma el tren A.", "es-ES").voice?.name).toBe("Monica");
+    expect(voiceFor(v, "Take the A train.").voice?.name).toBe("Samantha");
   });
 });
 
