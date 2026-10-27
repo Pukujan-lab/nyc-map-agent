@@ -33,6 +33,8 @@ export const CITY3D_LAYERS = ["city3d-storefront", "city3d-walls", "city3d-roofs
 
 /** Source layers only three.js reads; an invisible style layer keeps them in overzoomed tiles. */
 export const KEEP_SOURCE_LAYERS = ["storefronts", "signs"] as const;
+/** Basemap source layers read at street level whose only style layers (labels) walking hides. */
+export const KEEP_BASEMAP_LAYERS = ["transportation_name"] as const;
 
 async function loadFacades(map: MapLibreMap): Promise<void> {
   await Promise.all(
@@ -232,6 +234,23 @@ export async function installCity3d(map: MapLibreMap): Promise<void> {
       },
       beforeId,
     );
+  }
+  // Walking hides the basemap's labels, the only style layers that use street
+  // names, so corner signs and exit corners lost them the same way.
+  if (map.getSource("openmaptiles")) {
+    for (const sourceLayer of KEEP_BASEMAP_LAYERS) {
+      map.addLayer(
+        {
+          id: `city3d-keep-${sourceLayer}`,
+          type: "circle",
+          source: "openmaptiles",
+          "source-layer": sourceLayer,
+          minzoom: CITY3D_MIN_ZOOM,
+          paint: { "circle-radius": 0, "circle-opacity": 0, "circle-stroke-width": 0 },
+        },
+        beforeId,
+      );
+    }
   }
   // Corner street-name signs (three.js custom layer in this canvas); its own chunk.
   const { createStreetSignsLayer } = await import("./threeLayer");
