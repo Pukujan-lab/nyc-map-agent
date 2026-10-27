@@ -30,6 +30,31 @@ export const pickVoice = (v: SpeechSynthesisVoice[], lang = "en-US") => {
   return v.find((x) => x.lang.toLowerCase() === lang.toLowerCase()) ?? v.find((x) => x.lang.toLowerCase().startsWith(base));
 };
 
+/** Writing systems a voice must read, and the language whose voice to borrow when none speaks the text's own. */
+const SCRIPTS: Array<{ re: RegExp; langs: string[]; borrow: string }> = [
+  { re: /[\u0900-\u097F]/, langs: ["hi", "ne", "mr"], borrow: "hi-IN" },
+  { re: /[\u0980-\u09FF]/, langs: ["bn"], borrow: "bn-IN" },
+  { re: /[\u0600-\u06FF]/, langs: ["ar", "ur", "fa"], borrow: "ar-SA" },
+  { re: /[\uAC00-\uD7AF]/, langs: ["ko"], borrow: "ko-KR" },
+  { re: /[\u4E00-\u9FFF]/, langs: ["zh", "ja"], borrow: "zh-CN" },
+  { re: /[\u0400-\u04FF]/, langs: ["ru", "uk"], borrow: "ru-RU" },
+];
+
+/**
+ * The voice and language to say `text` in (owner, 2026-10-26). A Nepali answer was read by the English voice:
+ * Nepali was not a language we recognised, and no browser here has a Nepali voice. When the text is in a
+ * script the language does not use, or no voice speaks that language, a voice that reads the script is
+ * borrowed: Hindi reads Nepali and Marathi, which share Devanagari.
+ */
+export function voiceFor(v: SpeechSynthesisVoice[], text: string, lang = "en-US"): { voice?: SpeechSynthesisVoice; lang: string } {
+  const script = SCRIPTS.find((s) => s.re.test(text));
+  const base = lang.split("-")[0].toLowerCase();
+  const tag = script && !script.langs.includes(base) ? script.borrow : lang;
+  const voice = pickVoice(v, tag);
+  if (voice || !script || tag === script.borrow) return { voice, lang: tag };
+  return { voice: pickVoice(v, script.borrow), lang: script.borrow };
+}
+
 /** Speaks `text` chunk by chunk. Returns cancel. Callers mark speaking before calling. `onEnd` fires once: after the last chunk, on cancel, or on interruption. */
 export function speakQueued(synth: SpeechSynthesis, text: string, onEnd: () => void, lang?: string): () => void {
   const chunks = chunkText(text);
@@ -45,7 +70,7 @@ export function speakQueued(synth: SpeechSynthesis, text: string, onEnd: () => v
   synth.cancel();
   const go = () => {
     if (done || timer) return;
-    const voice = pickVoice(synth.getVoices(), lang);
+    const { voice, lang: tag } = voiceFor(synth.getVoices(), text, lang);
     timer = setInterval(() => { if (synth.speaking && !synth.paused) { synth.pause(); synth.resume(); } }, 10_000);
     let i = 0;
     const next = () => {
@@ -53,7 +78,7 @@ export function speakQueued(synth: SpeechSynthesis, text: string, onEnd: () => v
       if (i >= chunks.length) return end();
       const u = new SpeechSynthesisUtterance(chunks[i++]);
       if (voice) u.voice = voice;
-      if (lang) u.lang = lang;
+      u.lang = tag;
       u.rate = 1.02;
       u.onend = next;
       u.onerror = (e) => (/interr|cancel/.test(e.error) ? end() : next());

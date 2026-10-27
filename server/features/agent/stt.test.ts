@@ -45,6 +45,7 @@ describe("server speech-to-text", () => {
   it("reads Whisper's language as a name or a code", () => {
     expect(detectedLang("bengali")).toBe("bn");
     expect(detectedLang("Haitian Creole")).toBe("ht");
+    expect(detectedLang("nepali")).toBe("ne");
     expect(detectedLang("ko")).toBe("ko");
     expect(detectedLang("klingon")).toBeNull();
     expect(detectedLang(undefined)).toBeNull();
