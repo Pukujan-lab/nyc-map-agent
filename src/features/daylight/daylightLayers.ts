@@ -18,6 +18,9 @@ const COLOR_PROPS: Record<string, string[]> = {
   symbol: ["text-color", "text-halo-color"],
 };
 const GLOW_LAYER = "daylight-streetlights";
+const SHADOW_LAYER = "daylight-street-shadows";
+/** The textured street-level buildings the shadows are cut from (lib/map/city3d). */
+const CITY_SOURCE = "city3d";
 const FACADES = ["modern", "prewar", "rowhouse", "storefront", "tower", "walkup"].map((f) => `facade-${f}`);
 
 type Saved = { base: unknown; written: string | null };
@@ -134,6 +137,42 @@ export function mount(map: MapLibreMap): () => void {
     map.setLayoutProperty(GLOW_LAYER, "visibility", on ? "visible" : "none");
   };
 
+  // Street view only: each footprint again, shifted away from the sun and faint, under the walls. One flat
+  // layer from tiles already loaded, so it costs next to nothing (owner, 2026-10-27). All footprints shift
+  // the same distance whatever their height; kept faint, nobody reads it as wrong.
+  let shadowSun: Sun | null = null;
+  const shadows = (sun: Sun) => {
+    shadowSun = sun;
+    const { walking, weather } = getAmbient();
+    const walls = map.getLayer("city3d-walls") ? "city3d-walls" : undefined;
+    if (!map.getLayer(SHADOW_LAYER)) {
+      if (!walking || !walls || !map.getSource(CITY_SOURCE)) return;
+      map.addLayer(
+        {
+          id: SHADOW_LAYER,
+          type: "fill",
+          source: CITY_SOURCE,
+          "source-layer": "buildings",
+          minzoom: 16,
+          paint: { "fill-color": "#0b1220", "fill-opacity": 0, "fill-translate-anchor": "map", "fill-antialias": false },
+        },
+        walls,
+      );
+    }
+    const strength = (1 - Math.min(1, sun.night * 2)) * (weather === "clear" ? 1 : 0.4);
+    const on = walking && strength > 0.02 && sun.altitudeDeg > 2;
+    map.setLayoutProperty(SHADOW_LAYER, "visibility", on ? "visible" : "none");
+    if (!on) return;
+    const metres = Math.min(20, 6 / Math.max(Math.tan((sun.altitudeDeg * Math.PI) / 180), 0.3));
+    // fill-translate is in screen pixels at the map's scale (512 px tiles): metres per pixel at this zoom.
+    const perPx = (78_271.517 * Math.cos((map.getCenter().lat * Math.PI) / 180)) / 2 ** map.getZoom();
+    const away = ((sun.azimuthDeg + 180) * Math.PI) / 180;
+    const px = metres / perPx;
+    map.setPaintProperty(SHADOW_LAYER, "fill-translate", [Math.sin(away) * px, -Math.cos(away) * px]);
+    map.setPaintProperty(SHADOW_LAYER, "fill-opacity", 0.18 * strength);
+  };
+  const onZoom = () => { if (shadowSun && map.getLayer(SHADOW_LAYER)) shadows(shadowSun); };
+
   const facades = async (sun: Sun) => {
     const want = sun.night > 0.55 && !getAmbient().eco ? "night" : "day";
     if (want === facadesAt || !map.hasImage(FACADES[0])) return;
@@ -155,6 +194,8 @@ export function mount(map: MapLibreMap): () => void {
     const sun = sunFor(new Date(), lighting);
     const key = `${sun.night.toFixed(2)}|${a.weather}|${a.walking}|${a.eco}|${lighting}`;
     void facades(sun).catch(() => {});
+    // The street buildings load after the walk starts, so the shadows retry on every tick.
+    shadows(sun);
     if (!force && key === lastKey) return;
     lastKey = key;
     recolor(sun);
@@ -169,7 +210,10 @@ export function mount(map: MapLibreMap): () => void {
   const timer = window.setInterval(() => apply(), 5_000);
   const onStyle = () => apply(true);
   map.on("style.load", onStyle);
+  map.on("zoomend", onZoom);
   return () => {
+    map.off("zoomend", onZoom);
+    if (map.getLayer(SHADOW_LAYER)) map.removeLayer(SHADOW_LAYER);
     unsub();
     unsubTheme();
     window.clearInterval(timer);
