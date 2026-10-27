@@ -50,6 +50,8 @@ export interface PanelChip {
   routes?: string[];
   setRoutes?: (routes: string[]) => void;
   suggest?: () => Promise<string[]>;
+  /** Every bus route, for choosing by group instead of typing. */
+  catalog?: () => Promise<string[]>;
   note?: string | null;
 }
 
@@ -302,13 +304,14 @@ export function usePanelChip(chip: PanelChip | null) {
   const routesKey = chip?.routes?.join(",");
   const setRoutes = chip?.setRoutes;
   const suggest = chip?.suggest;
+  const catalog = chip?.catalog;
   const note = chip?.note;
   useEffect(() => {
     if (!id || !label || !onToggle) return;
     const routes = routesKey === undefined ? undefined : routesKey ? routesKey.split(",") : [];
-    register("chip", id, { id, label, active: !!active, onToggle, routes, setRoutes, suggest, note });
+    register("chip", id, { id, label, active: !!active, onToggle, routes, setRoutes, suggest, catalog, note });
     return () => register("chip", id, null);
-  }, [register, id, label, active, onToggle, routesKey, setRoutes, suggest, note]);
+  }, [register, id, label, active, onToggle, routesKey, setRoutes, suggest, catalog, note]);
 }
 
 /** Register a search source (e.g. transit stations) while mounted. */

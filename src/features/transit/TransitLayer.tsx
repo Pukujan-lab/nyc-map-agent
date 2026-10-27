@@ -21,7 +21,7 @@ import {
   type SystemId,
   type Vehicle,
 } from "./model";
-import { alertedRoutes, fetchBusRoutesNear, routesForPage, useAlerts, useBusLines, useBusRoute, useBusSegmentHistory, useBusShapes, useBuses, useStarred, useTransitData, useTransitMeta, useTransitToggles, useXrayData, useSegmentHistory } from "./hooks";
+import { alertedRoutes, fetchBusCatalog, fetchBusRoutesNear, routesForPage, useAlerts, useBusLines, useBusRoute, useBusSegmentHistory, useBusShapes, useBuses, useStarred, useTransitData, useTransitMeta, useTransitToggles, useXrayData, useSegmentHistory } from "./hooks";
 import { sharedCoords } from "@/lib/geo/sharedLocation";
 import { useXray, xrayPrims } from "./xray";
 import { useMapState } from "@/lib/store/MapStateContext";
@@ -31,7 +31,7 @@ import { pickRouteVehicle, registerRouteFollower } from "@/lib/transit/routeFoll
 import { ZoomKeeper, followRig, publishFollowPos, rememberFollowOrigin, setBoardedOnFoot, setFollowMode, setFollowed, stableHeading, stopFollowing, takeFollowRestore, useFollowMode, useFollowed } from "./follow";
 import { followActionForMapClick } from "./followClick";
 import { publishSubway } from "@/lib/agent/streetContext";
-import { busesToShow, capPerLine, holdShuttle, registerBusToggle, setShuttleBuses, shownVehicles, useBusPins } from "@/lib/transit/busReveal";
+import { busesInFocus, busesToShow, holdShuttle, registerBusToggle, setShuttleBuses, shownVehicles, useBusPins } from "@/lib/transit/busReveal";
 import { publishLiveDots } from "@/lib/transit/liveVehicles";
 import { heldTrains } from "@/lib/transit/holds";
 import { setLinesControl } from "@/lib/transit/linesControl";
@@ -257,7 +257,7 @@ export default function TransitLayer() {
   useEffect(() => {
     if (import.meta.env.DEV) (window as unknown as { __walk?: unknown }).__walk = startWalk;
   }, [startWalk]);
-  const { on, set, panelOpen, setPanelOpen, busPage, busLines: pickedLines, busCap, setBusLines } = useTransitToggles();
+  const { on, set, panelOpen, setPanelOpen, busPage, busLines: pickedLines, busNear, busCap, setBusLines } = useTransitToggles();
   const { content, showPanel, setDrawerOpen, setSnap, drawerOpen } = usePanel();
   const meta = useTransitMeta();
   const rail = (["subway", "lirr", "mnr"] as SystemId[]).filter((s) => on.has(s));
@@ -293,19 +293,34 @@ export default function TransitLayer() {
   const busShapes = useBusShapes(show.routes);
   const busHistory = useBusSegmentHistory(show.routes);
   useEffect(() => busEst.current.setHistory(busHistory), [busHistory]);
+  // Lines found around you (not picked), and every bus but the one you follow, are out of
+  // focus: only their buses near you draw. Picked lines, a trip and a shuttle are in focus.
+  const busNearOnly = (busNear && show.why === "page") || Boolean(followedKey?.startsWith("bus:"));
+  const busFocusRef = useRef({ busNearOnly, busCap, followedKey, walking });
+  busFocusRef.current = { busNearOnly, busCap, followedKey, walking };
+  /** Where "near" is: the bus you follow, else you, else where you stand in street view, else the map centre. */
+  const busNearPoint = useCallback((list: readonly { id: string; lon: number; lat: number }[]) => {
+    const { followedKey: fk, walking: w } = busFocusRef.current;
+    const fb = fk?.startsWith("bus:") ? list.find((b) => b.id === fk.slice(4)) : undefined;
+    if (fb) return { lon: fb.lon, lat: fb.lat };
+    if (!map) return sharedCoords();
+    const c = map.getCenter();
+    return sharedCoords() ?? (w ? streetEye(map) : { lon: c.lng, lat: c.lat });
+  }, [map]);
+  const focusedBuses = useCallback(<T extends { id: string; route: string; lon: number; lat: number }>(list: readonly T[], keep: (string | undefined)[]) => {
+    const f = busFocusRef.current;
+    const ids = new Set(keep.filter((k): k is string => Boolean(k?.startsWith("bus:"))).map((k) => k.slice(4)));
+    return busesInFocus(list, { routes: busRoutesRef.current, nearOnly: f.busNearOnly, cap: f.busCap, near: busNearPoint(list), keep: ids });
+  }, [busNearPoint]);
   useEffect(() => {
     for (const g of busShapes) busEst.current.setRoute(g);
-    const allow = new Set(show.routes.map((r) => r.toUpperCase()));
-    const inRoutes = (buses.data?.buses ?? []).filter((b) => allow.has(b.route.toUpperCase()));
-    // Buses per line: the nearest to the map, plus the one being followed so Follow never loses its bus.
-    const c = map?.getCenter();
-    const kept = new Set(capPerLine(inRoutes, busCap, c ? { lon: c.lng, lat: c.lat } : null).map((b) => b.id));
-    const list = inRoutes.filter((b) => kept.has(b.id) || `bus:${b.id}` === followedKey);
+    // Buses per line: the nearest, plus the one being followed so Follow never loses its bus.
+    const list = focusedBuses(buses.data?.buses ?? [], [followedKey ?? undefined]);
     for (const b of list) busEst.current.report(b);
     busEst.current.retain(new Set(list.map((b) => b.id)));
     // The map is read once per refresh, not on every move: re-running on `map` would reshuffle buses as you pan.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [buses.data, busShapes, show.routes, busCap]);
+  }, [buses.data, busShapes, show.routes, busCap, busNearOnly]);
   // The followed vehicle as React sees it: refreshed only when what its card shows changes.
   const [followed, setFollowedVehicle] = useState<Vehicle | undefined>(undefined);
 
@@ -369,7 +384,7 @@ export default function TransitLayer() {
     if (home && point) {
       setBusNote(null);
       void fetchBusRoutesNear(point)
-        .then((routes) => { if (routes.length) setBusLines(routes); else setBusNote("No buses near here. Pick a route below."); })
+        .then((routes) => { if (routes.length) setBusLines(routes, { near: true }); else setBusNote("No buses near here. Pick a route below."); })
         .catch(() => setBusNote("Couldn't load buses. Try again, or pick a route below."));
       return;
     }
@@ -408,13 +423,13 @@ export default function TransitLayer() {
       void fetchBusRoutesNear({ lon: e.lon, lat: e.lat }).then((routes) => {
         if (streetAuto.current !== auto || !routes.length || autoState.current.routes.length) return;
         auto.buses = routes;
-        autoState.current.setBusLines(routes);
+        autoState.current.setBusLines(routes, { near: true });
       }).catch(() => {});
     };
     if (map.isMoving()) map.once("moveend", pick); else pick();
   }, [map, walking]);
   usePanelChip({ id: "liveTrains", label: "Live trains", active: trainsOn, onToggle: toggleTrains });
-  usePanelChip(meta.data?.bus === true ? { id: "liveBuses", label: "Live buses", active: show.routes.length > 0, onToggle: toggleBuses, routes: show.routes, setRoutes: setBusLines, suggest: suggestBuses, note: busNote } : null);
+  usePanelChip(meta.data?.bus === true ? { id: "liveBuses", label: "Live buses", active: show.routes.length > 0, onToggle: toggleBuses, routes: show.routes, setRoutes: setBusLines, suggest: suggestBuses, catalog: fetchBusCatalog, note: busNote } : null);
   usePanelChip({ id: "transitFocus", label: "Transit Focus", active: focus && anyOn, onToggle: toggleFocus });
 
   // Icons, including after a style swap.
@@ -669,9 +684,7 @@ export default function TransitLayer() {
           if (v && (inView(v) || v.key === selectedKey || v.key === followedKey)) out.push(v);
         }
       }
-      const allow = new Set(busRoutesRef.current.map((r) => r.toUpperCase()));
-      for (const bus of allow.size ? buses.data?.buses ?? [] : []) {
-        if (!allow.has(bus.route.toUpperCase())) continue;
+      for (const bus of busRoutesRef.current.length ? focusedBuses(buses.data?.buses ?? [], [selectedKey, followedKey ?? undefined]) : []) {
         const v: Vehicle = { key: `bus:${bus.id}`, system: "bus", route: bus.route, label: bus.route, color: "#0039A6", lon: bus.lon, lat: bus.lat, bearing: bus.bearing ?? 0, grade: "grade", dir: bus.dir, nextStop: bus.next ?? undefined };
         if (inView(v) || v.key === selectedKey || v.key === followedKey) out.push(v);
       }
