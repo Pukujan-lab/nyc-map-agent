@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 
 /** A drawn live vehicle, as the mini map needs it. */
-export type LiveDot = { key: string; lon: number; lat: number; color: string; bus: boolean; underground: boolean };
+export type LiveDot = { key: string; lon: number; lat: number; color: string; bus: boolean; underground: boolean; /** Route short name: "G", "B62". */ label?: string };
 
 /** Live vehicle positions the map layer publishes (~1 Hz) for other views such as the street mini map. */
 let dots: LiveDot[] = [];
@@ -20,6 +20,6 @@ export function dotsNear(list: LiveDot[], lon: number, lat: number, radiusM: num
     type: "FeatureCollection",
     features: list
       .filter((d) => Math.hypot((d.lon - lon) * kx, (d.lat - lat) * ky) <= radiusM)
-      .map((d) => ({ type: "Feature", properties: { color: d.color, bus: d.bus, under: d.underground }, geometry: { type: "Point", coordinates: [d.lon, d.lat] } })),
+      .map((d) => ({ type: "Feature", properties: { color: d.color, bus: d.bus, under: d.underground, label: d.label ?? "" }, geometry: { type: "Point", coordinates: [d.lon, d.lat] } })),
   };
 }
