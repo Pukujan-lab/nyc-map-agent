@@ -10,15 +10,8 @@ import { useSelectedLine } from "@/lib/transit/selectedLine";
 import { useMenuT } from "@/lib/i18n/menuText";
 import { usePullSheetUp } from "@/lib/store/pullSheet";
 import { APP_LANGS, LANG_LABELS, setLangPref, useLangPref, type AppLang } from "@/lib/voice/langPref";
-import { MID_HEIGHT_M, levelOf, type ViewLevel } from "./ViewSwitcher";
-
-/**
- * Aerial on the home's Change view: clearly higher and wider than Closer.
- * The classic Up level (300 m) comes out nearly straight down and only a
- * little above Closer, so Aerial stands the camera ~1.1 km up at a 45° tilt.
- */
-const AERIAL_HEIGHT_M = 1100;
-const AERIAL_PITCH = 45;
+import type { ViewName } from "@/lib/map/viewChange";
+import { pickView, useCurrentView } from "./MapViewSwitch";
 
 /**
  * Agent-first map chrome (#370, #372): one column of quick buttons at the top
@@ -37,10 +30,10 @@ const svg = { width: 22, height: 22, viewBox: "0 0 24 24", fill: "none", stroke:
 const ViewIcon = () => <svg {...svg} width={20} height={20}><path d="M12 3 3 8v8l9 5 9-5V8l-9-5Z" /><path d="M3 8l9 5 9-5M12 13v8" /></svg>;
 // The "my location" crosshair people know from Google Maps (Material Icons, Apache-2.0).
 const LocateIcon = () => <svg width={22} height={22} viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.99 8.99 0 0 0 13 3.06V1h-2v2.06A8.99 8.99 0 0 0 3.06 11H1v2h2.06A8.99 8.99 0 0 0 11 20.94V23h2v-2.06A8.99 8.99 0 0 0 20.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z" /></svg>;
-const VIEWS: Array<{ id: ViewLevel; label: string; note: string; icon: ReactNode }> = [
-  { id: "top", label: "Top", note: "Flat map", icon: <svg {...svg}><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M4 12h16M12 4v16" /></svg> },
-  { id: "up", label: "Aerial", note: "Tilted, from above", icon: <svg {...svg}><path d="M3 17l9-12 9 12H3Z" /></svg> },
-  { id: "mid", label: "Closer", note: "Low angle, buildings", icon: <svg {...svg}><path d="M3 20h18M6 20V10l6-5 6 5v10" /></svg> },
+/** The same three as the Map · 3D · Street switch, which this menu stands in for on a phone. */
+const VIEWS: Array<{ id: ViewName; label: string; note: string; icon: ReactNode }> = [
+  { id: "map", label: "Map", note: "Flat, from above", icon: <svg {...svg}><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M4 12h16M12 4v16" /></svg> },
+  { id: "3d", label: "3D", note: "Tilted, with buildings", icon: <svg {...svg}><path d="M3 20h18M6 20V10l6-5 6 5v10" /></svg> },
   { id: "street", label: "Street", note: "Walk at street level", icon: <svg {...svg}><circle cx="12" cy="5" r="2" /><path d="M12 7v7M9 21l3-7 3 7M8 11h8" /></svg> },
 ];
 
@@ -114,18 +107,14 @@ function useCamera(): { map: MapLibreMap | null; bearing: number; pitch: number 
   return { map, ...cam };
 }
 
-/** Top / Aerial / Closer / Street: the app's camera levels, as a menu of radio items. */
-function ViewMenu({ pitch, onPick }: { pitch: number; onPick: () => void }) {
+/** Map / 3D / Street, as a menu of radio items; each keeps the spot and the heading. */
+function ViewMenu({ onPick }: { onPick: () => void }) {
   const street = useFlag("streetLevel");
-  const { walking, startWalk, navigate, setCameraHeight, cameraHeightM } = useMapState();
-  const level = levelOf(walking, cameraHeightM, pitch);
+  const { map, current: level, walking, spot } = useCurrentView();
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => { ref.current?.querySelector<HTMLButtonElement>('[aria-checked="true"], [role="menuitemradio"]')?.focus(); }, []);
-  const go = (l: ViewLevel) => {
-    if (l === "street") { if (!walking) startWalk(); }
-    else if (l === "mid") setCameraHeight(MID_HEIGHT_M);
-    else if (l === "up") setCameraHeight(AERIAL_HEIGHT_M, AERIAL_PITCH);
-    else navigate("north");
+  const go = (l: ViewName) => {
+    if (l !== level) pickView(map, l, walking, spot);
     onPick();
   };
   const onKey = (e: ReactKeyboardEvent) => {
@@ -275,7 +264,13 @@ export function MapChrome() {
   }, [open]);
   // A newly picked line closes the menu; while following, the followed train's line is always
   // selected, so that rule would shut the follow view menu the moment it opened.
-  useEffect(() => { if (line && open && !followed) setOpenMenu(null); }, [line, open, followed]);
+  // Only a change of line counts: with a line already open, the cube menu has to stay open on a phone.
+  const lastLine = useRef(line);
+  useEffect(() => {
+    const changed = lastLine.current !== line;
+    lastLine.current = line;
+    if (changed && line && !followed) setOpenMenu(null);
+  }, [line, followed]);
 
   const top = "calc(env(safe-area-inset-top) + 16px)";
   // Following: the same quick bar, with the follow cameras under Change view.
@@ -311,7 +306,7 @@ export function MapChrome() {
                 onClick={() => setOpen(open === "view" ? null : "view")} className={`${ROUND} ${open === "view" ? LIGHT : DARK} pointer-events-auto`}>
                 <ViewIcon />
               </button>
-              {open === "view" ? <div className="pointer-events-auto absolute right-[52px] top-0"><ViewMenu pitch={pitch} onPick={() => setOpen(null)} /></div> : null}
+              {open === "view" ? <div className="pointer-events-auto absolute right-[52px] top-0"><ViewMenu onPick={() => setOpen(null)} /></div> : null}
             </div>
             <ZoomButtons map={map} />
             {map ? <Compass map={map} bearing={bearing} /> : null}
@@ -324,14 +319,15 @@ export function MapChrome() {
   return (
     <>
     <div ref={stack} data-testid="map-chrome" className="pointer-events-none absolute right-4 z-40 flex flex-col items-end gap-2.5" style={{ top }}>
-      <div className="relative">
+      {/* On wider screens the Map · 3D · Street switch at the top centre stands in for it. */}
+      <div className="relative sm:hidden">
         <button type="button" aria-label="Change view" aria-haspopup="menu" aria-expanded={open === "view"} data-testid="view-button"
           onClick={() => setOpen(open === "view" ? null : "view")} className={`${ROUND} ${open === "view" ? LIGHT : DARK} pointer-events-auto`}>
           <ViewIcon />
         </button>
         {open === "view" ? (
           <div className="pointer-events-auto absolute right-[52px] top-0">
-            <ViewMenu pitch={pitch} onPick={() => setOpen(null)} />
+            <ViewMenu onPick={() => setOpen(null)} />
           </div>
         ) : null}
       </div>
