@@ -8,7 +8,7 @@ const SUBWAY = JSON.parse(readFileSync(new URL("../public/transit/subway.json", 
 };
 const MYRTLE = SUBWAY.stations.features.find((f) => f.properties.id === "M11")!.geometry.coordinates;
 
-type TestMap = { jumpTo(o: object): void; project(p: [number, number]): { x: number; y: number }; queryRenderedFeatures(b: [[number, number], [number, number]], o: { layers: string[] }): Array<{ properties?: Record<string, unknown>; geometry: unknown }>; loaded(): boolean; areTilesLoaded(): boolean; getLayer(id: string): unknown; getContainer(): HTMLElement };
+type TestMap = { jumpTo(o: object): void; getCenter(): { lng: number; lat: number }; getZoom(): number; project(p: [number, number]): { x: number; y: number }; queryRenderedFeatures(b: [[number, number], [number, number]], o: { layers: string[] }): Array<{ properties?: Record<string, unknown>; geometry: unknown }>; loaded(): boolean; areTilesLoaded(): boolean; getLayer(id: string): unknown; getContainer(): HTMLElement };
 
 async function tapMyrtle(page: Page) {
   await mockNetwork(page);
@@ -17,12 +17,15 @@ async function tapMyrtle(page: Page) {
   await page.waitForFunction(() => Boolean((window as unknown as { __map?: TestMap }).__map?.getLayer("transit-line")), null, { timeout: 20_000 });
   await page.evaluate((c) => (window as unknown as { __map: TestMap }).__map.jumpTo({ center: c, zoom: 13.5, bearing: 0, pitch: 0 }), MYRTLE);
   // Wait until the J, M and Z are drawn around the station: tapping before they are lands on the dot instead.
-  await page.waitForFunction((c) => {
+  // On a phone the app can still be settling its first view, so put the station back in the middle if it moved.
+  await expect.poll(() => page.evaluate((c) => {
     const m = (window as unknown as { __map: TestMap }).__map;
+    const at = m.getCenter();
+    if (Math.abs(at.lng - c[0]) > 0.002 || Math.abs(at.lat - c[1]) > 0.002 || Math.abs(m.getZoom() - 13.5) > 0.2) m.jumpTo({ center: c, zoom: 13.5, bearing: 0, pitch: 0 });
     const p = m.project(c);
     const routes = new Set(m.queryRenderedFeatures([[p.x - 30, p.y - 30], [p.x + 30, p.y + 30]], { layers: ["transit-line"] }).map((f) => String(f.properties?.route)));
-    return ["J", "M", "Z"].every((r) => routes.has(r));
-  }, MYRTLE, { timeout: 15_000 });
+    return ["J", "M", "Z"].filter((r) => routes.has(r)).join(" ") || `none at ${at.lng.toFixed(4)},${at.lat.toFixed(4)} z${m.getZoom().toFixed(1)}`;
+  }, MYRTLE), { timeout: 15_000 }).toBe("J M Z");
   // A tap on the white dot opens the station card as before; the chooser is for the shared track beside it,
   // so tap the J/M/Z line about 8 px from the dot.
   const at = await page.evaluate((c) => {
