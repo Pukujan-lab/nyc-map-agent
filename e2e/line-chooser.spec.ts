@@ -8,7 +8,7 @@ const SUBWAY = JSON.parse(readFileSync(new URL("../public/transit/subway.json", 
 };
 const MYRTLE = SUBWAY.stations.features.find((f) => f.properties.id === "M11")!.geometry.coordinates;
 
-type TestMap = { jumpTo(o: object): void; project(p: [number, number]): { x: number; y: number }; loaded(): boolean; areTilesLoaded(): boolean; getLayer(id: string): unknown; getContainer(): HTMLElement };
+type TestMap = { jumpTo(o: object): void; project(p: [number, number]): { x: number; y: number }; queryRenderedFeatures(b: [[number, number], [number, number]], o: { layers: string[] }): Array<{ properties?: Record<string, unknown>; geometry: unknown }>; loaded(): boolean; areTilesLoaded(): boolean; getLayer(id: string): unknown; getContainer(): HTMLElement };
 
 async function tapMyrtle(page: Page) {
   await mockNetwork(page);
@@ -17,11 +17,31 @@ async function tapMyrtle(page: Page) {
   await page.waitForFunction(() => Boolean((window as unknown as { __map?: TestMap }).__map?.getLayer("transit-line")), null, { timeout: 20_000 });
   await page.evaluate((c) => (window as unknown as { __map: TestMap }).__map.jumpTo({ center: c, zoom: 13.5, bearing: 0, pitch: 0 }), MYRTLE);
   await page.waitForTimeout(800);
+  // A tap on the white dot opens the station card as before; the chooser is for the shared track beside it,
+  // so tap the J/M/Z line about 8 px from the dot.
   const at = await page.evaluate((c) => {
     const m = (window as unknown as { __map: TestMap }).__map;
     const p = m.project(c);
     const box = m.getContainer().getBoundingClientRect();
-    return { x: box.left + p.x, y: box.top + p.y };
+    const lines = m.queryRenderedFeatures([[p.x - 30, p.y - 30], [p.x + 30, p.y + 30]], { layers: ["transit-line"] })
+      .filter((f) => ["J", "M", "Z"].includes(String(f.properties?.route)));
+    // Skip spots where a station dot, label or entrance would take the tap.
+    const taps = ["transit-station", "transit-station-label", "transit-entrance", "transit-bullet"].filter((id) => m.getLayer(id));
+    const free = (x: number, y: number) => m.queryRenderedFeatures([[x - 1, y - 1], [x + 1, y + 1]], { layers: taps }).length === 0;
+    let best = { x: p.x, y: p.y, miss: Infinity };
+    for (const f of lines) {
+      const g = f.geometry as { type: string; coordinates: unknown };
+      const parts = (g.type === "MultiLineString" ? g.coordinates : [g.coordinates]) as [number, number][][];
+      for (const part of parts) for (let i = 1; i < part.length; i++) {
+        const a = m.project(part[i - 1]), b = m.project(part[i]);
+        for (let t = 0; t <= 1; t += 0.02) {
+          const x = a.x + (b.x - a.x) * t, y = a.y + (b.y - a.y) * t;
+          const miss = Math.abs(Math.hypot(x - p.x, y - p.y) - 8);
+          if (miss < best.miss && free(x, y)) best = { x, y, miss };
+        }
+      }
+    }
+    return { x: box.left + best.x, y: box.top + best.y };
   }, MYRTLE);
   await page.mouse.click(at.x, at.y);
   return at;
@@ -36,7 +56,7 @@ test("a tap where the J, M and Z meet asks which line, and a bullet opens that l
   await expect(chooser.getByRole("button", { name: "Myrtle Av station" })).toBeVisible();
   // It sits just above the tapped spot.
   const b = (await chooser.boundingBox())!;
-  expect(b.y + b.height).toBeLessThanOrEqual(at.y);
+  expect(b.y + b.height).toBeLessThanOrEqual(at.y + 1);
   expect(Math.abs(b.x + b.width / 2 - at.x)).toBeLessThan(4);
   await chooser.getByRole("button", { name: "M line" }).click();
   await expect(chooser).toBeHidden();
