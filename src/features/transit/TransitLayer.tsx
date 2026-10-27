@@ -36,6 +36,7 @@ import { publishLiveDots } from "@/lib/transit/liveVehicles";
 import { heldTrains } from "@/lib/transit/holds";
 import { setLinesControl } from "@/lib/transit/linesControl";
 import { lineOf, setSelectedLine, useSelectedLine } from "@/lib/transit/selectedLine";
+import { useLineKeys } from "./useLineKeys";
 import { useActiveTrip } from "@/lib/transit/activeTrip";
 // The line panel loads on the first line picked (own chunk), keeping the transit layers chunk in budget.
 const LinePanel = lazy(() => import("./LinePanel").then((m) => ({ default: m.LinePanel })));
@@ -1150,6 +1151,9 @@ export default function TransitLayer() {
     setFollowMode("map");
     setFollowed(pick.key);
   }, [map, selected, setDrawerOpen]);
+  // Arrows step along the picked line, train or station, and across to another line; Escape leaves it.
+  const trainsNow = useCallback(() => [...display.current.values()], []);
+  useLineKeys(map, lineSel, selected?.train ?? null, statics.find((s) => s.system === "subway"), trainsNow, walking);
   // A line chosen from More layers that is not on screen: bring its whole length into view.
   useEffect(() => {
     if (!map || !lineSel || selected?.train) return;
