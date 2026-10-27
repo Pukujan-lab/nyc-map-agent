@@ -6,7 +6,7 @@
  * Ask when either:
  *  - the last good fix was within ~60 m of a station entrance AND then the
  *    network went offline or GPS accuracy suddenly got much worse, or
- *  - the active trip says the person is boarding a subway at a station.
+ *  - the active trip boards a subway at a station and the shared position is there.
  * At most once per station visit; never again for a station after a No.
  */
 import { metres, type Pt, type Station, type SubwayStatic } from "./exits";
@@ -54,8 +54,9 @@ export interface PromptSignals {
 /** The station to ask about, or null. Trip boarding wins over the entrance signals. */
 export function stationToAsk(s: PromptSignals): Station | null {
   const ok = (st: Station | null) => !!st && !s.asked.has(st.id) && !s.declined.has(st.id);
-  // A shared position far from the boarding station means the trip is not under way yet.
-  const atBoarding = !!s.boarding && (!s.here || metres(s.here, s.boarding.at) <= VISIT_END_M);
+  // Only a shared position at the boarding station says the trip is under way. With none, a trip on
+  // screen is being planned: asking then stacked the question over the trip card (layout check, 2026-10-27).
+  const atBoarding = !!s.boarding && !!s.here && metres(s.here, s.boarding.at) <= VISIT_END_M;
   if (atBoarding && ok(s.boarding)) return s.boarding;
   if (ok(s.nearStation) && (!s.online || accuracyWorsened(s.baselineAccuracy, s.accuracy))) return s.nearStation;
   return null;
