@@ -59,6 +59,8 @@ import { FOCUS_OPACITY, FOCUS_VEIL_ID, WORLD, focusVeil, useTransitFocus } from 
 import { framePadding } from "@/lib/map/mapCover";
 import { TapCycle } from "./tapCycle";
 import { liveBranches } from "./liveBranches";
+import { lineChoice, type LineChoice } from "./lineChoice";
+import { LineChooser } from "./LineChooser";
 
 /** Layers a click on the map should hand to transit instead of the area pick. */
 /** CC BY 4.0 credit for the 3D bus model (public/models/LICENSE.md), shown while it can be on screen. Trains are plain boxes (#366). */
@@ -100,6 +102,18 @@ function streetEye(map: MaplibreMap): { lon: number; lat: number } {
   const c = map.getCenter();
   return { lon: c.lng, lat: c.lat };
 }
+/** The subway station drawn under a tap, if any: within a finger's width of it on screen. */
+function stationNear(map: MaplibreMap, at: { x: number; y: number }, sys: StaticSystem | undefined): { id: string; name: string; routes: string } | undefined {
+  let best: { id: string; name: string; routes: string } | undefined;
+  let bestD = 24;
+  for (const f of sys?.stations.features ?? []) {
+    const p = map.project(f.geometry.coordinates as [number, number]);
+    const d = Math.hypot(p.x - at.x, p.y - at.y);
+    if (d < bestD) { bestD = d; best = { id: String(f.properties.id), name: String(f.properties.name), routes: String(f.properties.routes ?? "") }; }
+  }
+  return best;
+}
+
 function metresApart(a: { lon: number; lat: number }, b: { lon: number; lat: number }) {
   const k = 111_320;
   return Math.hypot((a.lon - b.lon) * k * Math.cos((a.lat * Math.PI) / 180), (a.lat - b.lat) * k);
@@ -912,10 +926,15 @@ export default function TransitLayer() {
   const followZoom = useRef(new ZoomKeeper());
   const followZoomKey = useRef<string | null>(null);
   const tapCycle = useRef(new TapCycle());
+  const [choice, setChoice] = useState<{ at: [number, number]; choice: LineChoice } | null>(null);
+  const closeChoice = useCallback(() => setChoice(null), []);
+  const subwayRef = useRef<StaticSystem | undefined>(undefined);
+  subwayRef.current = statics.find((s) => s.system === "subway");
   // A train or bus starts Follow. Any other map click, including empty map, drops it in place.
   useEffect(() => {
     if (!map) return;
     const onClick = (e: MapLayerMouseEvent) => {
+      setChoice(null);
       const layers = TRANSIT_CLICK_LAYERS.filter((id) => map.getLayer(id));
       const all = layers.length ? map.queryRenderedFeatures(e.point, { layers }) : [];
       const f = tapCycle.current.next(e.point, all);
@@ -936,8 +955,12 @@ export default function TransitLayer() {
         if (!f) {
           const lineLayers = ["transit-line", "transit-line-under"].filter((id) => map.getLayer(id));
           const pad = 8;
-          const hit = lineLayers.length ? map.queryRenderedFeatures([[e.point.x - pad, e.point.y - pad], [e.point.x + pad, e.point.y + pad]], { layers: lineLayers }).find((x) => x.properties?.system === "subway" && x.properties?.route) : undefined;
-          if (hit) { setSelectedLine(lineOf(String(hit.properties.route))); return; }
+          const hits = lineLayers.length ? map.queryRenderedFeatures([[e.point.x - pad, e.point.y - pad], [e.point.x + pad, e.point.y + pad]], { layers: lineLayers }).filter((x) => x.properties?.system === "subway" && x.properties?.route) : [];
+          // Where several lines meet, ask which one (src/features/transit/lineChoice.ts) instead of opening whichever is on top.
+          const station = hits.length ? stationNear(map, e.point, subwayRef.current) : undefined;
+          const pick = lineChoice(hits.map((x) => String(x.properties.route)), station);
+          if (typeof pick === "string") { setSelectedLine(pick); return; }
+          if (pick) { setChoice({ at: [e.lngLat.lng, e.lngLat.lat], choice: pick }); return; }
         }
       }
       if (decision.action === "start") {
@@ -1064,6 +1087,11 @@ export default function TransitLayer() {
   return (
     <>
       {followed ? <FollowCard vehicle={followed} /> : null}
+      {choice && map ? (
+        <LineChooser map={map} at={choice.at} choice={choice.choice} onClose={closeChoice}
+          onLine={(r) => { setChoice(null); setSelectedLine(r); }}
+          onStation={() => { const st = choice.choice.station; setChoice(null); if (st) openStation("subway", st.id, st.name); }} />
+      ) : null}
       {lineSel && !followedKey ? <Suspense fallback={null}><LinePanel map={map} route={lineSel} onFollow={followLine} /></Suspense> : null}
       <Source id="transit-lines" type="geojson" data={lines}>
         {/* X-ray on stays a solid glow. Off: solid too (owner, 2026-10-25: dashes read as a broken line), nearly as wide as the at-grade stroke, opacity 0.75. */}
@@ -1117,9 +1145,9 @@ export default function TransitLayer() {
           paint={{ "fill-extrusion-color": "#6b7280", "fill-extrusion-base": 0, "fill-extrusion-height": ["-", ["get", "top"], 1.2], "fill-extrusion-opacity": 0.9 }} />
       </Source>
       <Source id="transit-stations" type="geojson" data={stations}>
-        <Layer id="transit-station" type="circle" minzoom={14}
+        <Layer id="transit-station" type="circle" minzoom={13}
           {...(three ? { filter: ["!=", ["get", "raised"], true] as ["!=", ["get", "raised"], true] } : {})}
-          paint={{ "circle-color": "#ffffff", "circle-stroke-color": "#6b6a66", "circle-stroke-width": 1, "circle-radius": ["interpolate", ["linear"], ["zoom"], 14, 2.5, 16, 4], "circle-opacity": stationAlpha, "circle-stroke-opacity": stationAlpha }} />
+          paint={{ "circle-color": "#ffffff", "circle-stroke-color": "#6b6a66", "circle-stroke-width": 1, "circle-radius": ["interpolate", ["linear"], ["zoom"], 13, 2, 14, 2.5, 16, 4], "circle-opacity": stationAlpha, "circle-stroke-opacity": stationAlpha }} />
         {three ? (
           // The white station dot is the click target. On a viaduct it has to sit with the label, or the tap lands on the street underneath.
           <Layer id="transit-station-raised" type="circle" minzoom={14}
