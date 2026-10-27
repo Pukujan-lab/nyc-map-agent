@@ -28,8 +28,13 @@ export function tagIcon(label: string): string | null {
   return null;
 }
 
+/** A skipped stop reads as trouble: red ring, red tag, white words (owner, 2026-10-27: the grey tag was barely visible). */
+const SKIP = { color: "#dc2626", glow: "rgba(220,38,38,0.28)" };
+
 /** The ring and label for one affected station, as plain DOM so it matches the design exactly. */
 function ringMarker(color: string, glow: string, label: string): HTMLElement {
+  const skip = /skipped/i.test(label);
+  if (skip) ({ color, glow } = SKIP);
   const el = document.createElement("div");
   // No `position` here: MapLibre's marker class places the element absolutely, which also anchors the label.
   el.style.cssText = "width:34px;height:34px;pointer-events:none";
@@ -39,7 +44,7 @@ function ringMarker(color: string, glow: string, label: string): HTMLElement {
   const icon = tagIcon(label);
   if (icon) tag.innerHTML = icon;
   tag.append(label);
-  tag.style.cssText = `position:absolute;left:39px;top:5px;display:flex;align-items:center;gap:5px;padding:4px 8px;border-radius:8px;background:${color};color:#111827;font:700 12px Inter,system-ui,sans-serif;white-space:nowrap`;
+  tag.style.cssText = `position:absolute;left:39px;top:5px;display:flex;align-items:center;gap:5px;padding:4px 8px;border-radius:8px;background:${color};color:${skip ? "#ffffff" : "#111827"};font:700 12px Inter,system-ui,sans-serif;white-space:nowrap;border:1.5px solid rgba(17,24,39,0.55);box-shadow:0 1px 4px rgba(0,0,0,0.35)`;
   el.append(ring, tag);
   return el;
 }
@@ -56,6 +61,9 @@ function useNoticeRings(map: MaplibreMap | undefined, notice: LineNotice | null,
     if (!map || !notice?.stations.length) return;
     const tone = TONE[notice.tone];
     const markers = notice.stations.map((s) => new Marker({ element: ringMarker(tone.color, tone.glow, s.label) }).setLngLat(s.coord).addTo(map));
+    // The ring's tag names each skip and its direction: the station's own "Skipped …-bound" words would print under it.
+    const quiet = map.getLayer("transit-skip") ? "transit-skip" : null;
+    if (quiet) map.setPaintProperty(quiet, "text-opacity", 0);
     // An alert's own focus already fits the affected stretch (TransitLayer); only outages are framed here.
     if (!notice.alert) {
       // A phone's line sheet is a map cover at the bottom (the map's padding clears it): frame under the quick buttons.
@@ -71,7 +79,10 @@ function useNoticeRings(map: MaplibreMap | undefined, notice: LineNotice | null,
       } else map.fitBounds(bounds, { padding, maxZoom: 15, duration: 700 });
       leftFor.current = notice.id;
     }
-    return () => markers.forEach((m) => m.remove());
+    return () => {
+      markers.forEach((m) => m.remove());
+      if (quiet && map.getLayer(quiet)) map.setPaintProperty(quiet, "text-opacity", 1);
+    };
   }, [map, notice, panel, sheet]);
 }
 
