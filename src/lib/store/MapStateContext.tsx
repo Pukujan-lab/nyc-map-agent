@@ -52,6 +52,10 @@ export interface ChatSeed {
 export interface WalkRequest {
   lon: number;
   lat: number;
+  /** Face this way instead of along the nearest street. */
+  heading?: number;
+  /** Stand right here instead of snapping to the middle of the street. */
+  exact?: boolean;
   nonce: number;
 }
 
@@ -106,7 +110,7 @@ interface MapStateActions {
   setCity3d: (on: boolean) => void;
   setTilted: (tilted: boolean) => void;
   /** Enter walk mode, optionally framing a point first. */
-  startWalk: (target?: { lon: number; lat: number } | null) => void;
+  startWalk: (target?: { lon: number; lat: number; heading?: number; exact?: boolean } | null) => void;
   stopWalk: () => void;
   selectNta: (ntaCode: string | null) => void;
   selectBlock: (block: { key: string; ntaCode: string } | null) => void;
@@ -222,7 +226,7 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
   );
 
   const startWalk = useCallback(
-    (target?: { lon: number; lat: number } | null) => {
+    (target?: { lon: number; lat: number; heading?: number; exact?: boolean } | null) => {
       // Street level means the block grid: a neighborhood column is a wall you
       // would be standing inside.
       setScale("blocks");
