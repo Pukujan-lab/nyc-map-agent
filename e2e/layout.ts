@@ -106,7 +106,12 @@ export async function layoutProblems(page: Page, opts: LayoutOpts = {}): Promise
 
     // 4b. Overlapping: two controls (neither inside the other) may not share more than a sliver,
     // even when each one's middle is still free.
-    const boxes = controls.map((el) => ({ el, r: el.getBoundingClientRect() }));
+    // Only the part on show counts: a chip half scrolled out of its strip is cut off there, not under the next button.
+    const boxes = controls.map((el) => {
+      const r = el.getBoundingClientRect();
+      const c = clipper(el)?.getBoundingClientRect();
+      return { el, r: c ? { left: Math.max(r.left, c.left), right: Math.min(r.right, c.right), top: Math.max(r.top, c.top), bottom: Math.min(r.bottom, c.bottom) } : r };
+    });
     for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
       const a = boxes[i], b = boxes[j];
       if (a.el.contains(b.el) || b.el.contains(a.el)) continue;
