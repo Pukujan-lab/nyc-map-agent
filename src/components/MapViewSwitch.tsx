@@ -5,6 +5,7 @@ import { metresBetween } from "@/lib/map/walk";
 import { backToStreet, setStreetSpot, showView, useStreetSpot, type ViewName } from "@/lib/map/viewChange";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { usePullSheetUp } from "@/lib/store/pullSheet";
+import { setFollowMode, useFollowMode, useFollowed, type FollowMode } from "@/lib/transit/follow";
 import { useSelectedLine } from "@/lib/transit/selectedLine";
 
 /** Tilted past this, the map counts as 3D. */
@@ -65,6 +66,15 @@ export function pickView(map: MapLibreMap | null, view: ViewName, walking: boole
   showView(view, walking ? null : { lon: c.lng, lat: c.lat }, walking ? null : map.getBearing());
 }
 
+/**
+ * While following a train the switch moves the follow camera instead: Map is
+ * the flat follow, 3D the chase camera, Street the cab (owner, 2026-10-26).
+ */
+const FOLLOW_FOR: Record<ViewName, FollowMode> = { map: "map", "3d": "chase", street: "cab" };
+export function followView(mode: FollowMode): ViewName {
+  return mode === "cab" ? "street" : mode === "chase" || mode === "side" ? "3d" : "map";
+}
+
 /** Which of Map, 3D and Street is showing. */
 export function useCurrentView(): { map: MapLibreMap | null; current: ViewName; walking: boolean; spot: ReturnType<typeof useStreetSpot> } {
   const map = useMap();
@@ -79,7 +89,10 @@ export function useCurrentView(): { map: MapLibreMap | null; current: ViewName; 
  * button opens the same three). Each keeps the spot and the heading.
  */
 export function MapViewSwitch() {
-  const { map, current, walking, spot } = useCurrentView();
+  const { map, current: here, walking, spot } = useCurrentView();
+  const following = useFollowed() !== null;
+  const mode = useFollowMode();
+  const current = following ? followView(mode) : here;
   const place = usePlace();
   return (
     <div role="radiogroup" aria-label="View" data-testid="map-view-switch"
@@ -88,7 +101,7 @@ export function MapViewSwitch() {
       {VIEWS.map((v) => {
         const on = current === v.id;
         return (
-          <button key={v.id} type="button" role="radio" aria-checked={on} onClick={() => { if (!on) pickView(map, v.id, walking, spot); }}
+          <button key={v.id} type="button" role="radio" aria-checked={on} onClick={() => { if (on) return; if (following) setFollowMode(FOLLOW_FOR[v.id]); else pickView(map, v.id, walking, spot); }}
             className="h-9 min-w-[64px] rounded-full px-3 text-[14px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]"
             style={{ background: on ? "#f8fafc" : "transparent", color: on ? "#0f172a" : undefined }}>
             {v.label}
