@@ -60,6 +60,8 @@ export interface AnswerCardProps {
   /** The answer text so far; empty while the agent is still working. */
   text: string;
   busy: boolean;
+  /** Held until the gap between questions ends; sent on its own. */
+  waiting?: boolean;
   working: ReactNode;
   /** The sources/age line (#375), behind "More". */
   sources: ReactNode;
@@ -105,7 +107,7 @@ export function AnswerCard(p: AnswerCardProps) {
     return (
       <div className="flex flex-col gap-2 pl-11" data-testid="answer-card" data-compact="">
         {p.text ? <p className="line-clamp-2 text-[15px] leading-snug text-slate-100" aria-live="polite">{p.text}</p> : null}
-        {p.busy ? <p className="text-sm text-slate-300" role="status">{t("agentsWorking")}…</p> : null}
+        {p.busy ? <p className="text-sm text-slate-300" role="status">{t(p.waiting ? "sendingSoon" : "agentsWorking")}…</p> : null}
         {done ? (
           <div className="flex min-h-9 items-center gap-2">
             <div className="min-w-0 flex-1">{p.compact.hint}</div>
@@ -156,7 +158,7 @@ export function AnswerCard(p: AnswerCardProps) {
           ) : null}
         </div>
       ) : null}
-      {p.busy ? p.working : null}
+      {p.busy ? (p.waiting ? <p className="text-sm text-slate-300" role="status">{t("sendingSoon")}…</p> : p.working) : null}
       {p.extra}
     </div>
   );
@@ -320,8 +322,8 @@ export function AgentHome(p: AgentHomeProps) {
         <Mic className={cn("!h-[22px] !w-[22px]", p.dictation.on && "animate-pulse motion-reduce:animate-none")} aria-hidden="true" />
       </Button>
       {typed && !p.dictation.on ? (
-        <Button type="submit" aria-label="Send" disabled={p.busy} className={cn("shrink-0 rounded-full bg-blue-600 p-0 text-white hover:bg-blue-500", sheet ? "h-12 w-12" : "h-[52px] w-[52px]")}>
-          {p.busy ? <Loader2 className="!h-6 !w-6 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <ArrowUp className="!h-6 !w-6" strokeWidth={2.4} aria-hidden="true" />}
+        <Button type="submit" aria-label="Send" className={cn("shrink-0 rounded-full bg-blue-600 p-0 text-white hover:bg-blue-500", sheet ? "h-12 w-12" : "h-[52px] w-[52px]")}>
+          <ArrowUp className="!h-6 !w-6" strokeWidth={2.4} aria-hidden="true" />
         </Button>
       ) : (
         <Button
