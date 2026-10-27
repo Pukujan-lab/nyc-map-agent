@@ -1,1 +1,0 @@
-import{r as l}from"./index-BOaQbqGe.js";let a=null;const n=new Set;function r(e){a=e,n.forEach(t=>t())}function u(){return l.useSyncExternalStore(e=>(n.add(e),()=>n.delete(e)),()=>a,()=>null)}let s=!1;const i=new Set;function c(e){s!==e&&(s=e,i.forEach(t=>t()))}function S(){return l.useSyncExternalStore(e=>(i.add(e),()=>i.delete(e)),()=>s,()=>!1)}export{r as a,S as b,c as s,u};

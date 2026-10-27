@@ -1,1 +1,0 @@
-:where(html){--nav-route: #1a73e8;--nav-glow: #4f8ff7;--nav-ink: #ffffff}:where(html.dark,html.theme-ink){--nav-route: #8ab4f8;--nav-glow: #8ab4f8;--nav-ink: #0b0b0b}:where(html.theme-neon){--nav-route: #ff4fd8;--nav-glow: #ff4fd8;--nav-ink: #ffffff}

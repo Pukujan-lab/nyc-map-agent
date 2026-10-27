@@ -15,3 +15,6 @@ test-results/
 # Claude Code subagent worktrees (ACS wants them under ~/.cache/acs/worktrees)
 .claude/worktrees/
 .claude/settings.local.json
+
+# Build output (vite build); never committed
+dist/
