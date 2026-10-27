@@ -244,8 +244,16 @@ export function routesFromStops(stops: Pick<BusStopInfo, "routes">[], max = 6): 
   for (const s of stops) for (const r of new Set(s.routes)) count.set(r, (count.get(r) ?? 0) + 1);
   return [...count.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, max).map(([r]) => r);
 }
+/**
+ * The bus-stops query for a point. The server takes at most 12 characters per coordinate, and a
+ * map centre is often `40.7000000000011`, a 400 that made Live buses look dead (owner, 2026-10-27);
+ * five decimals is about a metre.
+ */
+export function busStopsQuery(point: { lon: number; lat: number }): string {
+  return new URLSearchParams({ lat: point.lat.toFixed(5), lon: point.lon.toFixed(5) }).toString();
+}
 async function stopsNear(point: { lon: number; lat: number }): Promise<BusStopInfo[]> {
-  const { stops } = await getJson<{ stops: BusStopInfo[] }>(`${API_BASE}/api/transit/bus-stops?${new URLSearchParams({ lat: String(point.lat), lon: String(point.lon) })}`);
+  const { stops } = await getJson<{ stops: BusStopInfo[] }>(`${API_BASE}/api/transit/bus-stops?${busStopsQuery(point)}`);
   return stops ?? [];
 }
 /** About 700 m north-south in degrees; east-west is scaled for New York's latitude. */
@@ -266,7 +274,7 @@ export async function fetchBusRoutesNear(point: { lon: number; lat: number }, ma
 export function useBusStopsNear(point: { lon: number; lat: number } | undefined) {
   return useQuery({
     queryKey: ["transit", "bus-stops", point && point.lat.toFixed(3), point && point.lon.toFixed(3)],
-    queryFn: () => getJson<{ stops: BusStopInfo[] }>(`${API_BASE}/api/transit/bus-stops?${new URLSearchParams({ lat: String(point!.lat), lon: String(point!.lon) })}`),
+    queryFn: () => getJson<{ stops: BusStopInfo[] }>(`${API_BASE}/api/transit/bus-stops?${busStopsQuery(point!)}`),
     staleTime: 3600_000,
     enabled: Boolean(point),
     retry: false,
