@@ -44,6 +44,7 @@ import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 
 const stopFollow = () => setFollowed(null);
 import { SYSTEM_LABELS, cellKey } from "./model";
+import { showView } from "@/lib/map/viewChange";
 import { FollowCard, SkipDetails, StationDetails } from "./TransitCard";
 import { TransitStatusDetails } from "./TransitStatus";
 import { alertGeometry, setAlertFocus, stationChanges, useAlertFocus } from "./alertFocus";
@@ -497,12 +498,18 @@ export default function TransitLayer() {
   // A selected line's panel covers the top (phone) or right (desktop): frame alerts around it.
   const lineSelRef = useRef(false);
   lineSelRef.current = Boolean(lineSel);
+  const walkingRef = useRef(walking);
+  walkingRef.current = walking;
   followedRef.current = followedKey;
   const savedCam = useRef<{ center: [number, number]; zoom: number; bearing: number; pitch: number } | null>(null);
   useEffect(() => {
     if (!map) return;
     const act = alertCameraAction({ hasBounds: Boolean(alertGeo?.bounds), hasFocus: Boolean(alertFocus), hasSaved: Boolean(savedCam.current), following: Boolean(followedRef.current) });
-    if (act === "fit" && alertGeo?.bounds) {
+    if (act === "fit" && alertGeo?.bounds && walkingRef.current) {
+      // Street view: the flat map framed on the notice; "Back to street view" resumes the walk.
+      const wide = window.innerWidth >= 768;
+      showView("map", null, null, { frame: { bounds: alertGeo.bounds, maxZoom: 15.5, padding: framePadding(map, lineSelRef.current ? (wide ? { top: 90, bottom: 120, left: 80, right: 460 } : { top: 140, bottom: 24, left: 30, right: 72 }) : wide ? { top: 90, bottom: 60, left: 440, right: 80 } : { top: 90, bottom: Math.round(window.innerHeight * 0.45), left: 30, right: 30 }) } });
+    } else if (act === "fit" && alertGeo?.bounds) {
       if (!savedCam.current) { const c = map.getCenter(); savedCam.current = { center: [c.lng, c.lat], zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() }; }
       const wide = window.innerWidth >= 768;
       // A phone's line sheet sits at the bottom and is a map cover, so the map's own padding already clears it.

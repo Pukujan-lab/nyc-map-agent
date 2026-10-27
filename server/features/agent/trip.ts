@@ -28,15 +28,31 @@ export async function safe<T>(p: Promise<T>, fallback: T): Promise<T> {
 export const walkLeg = (kind: "walk" | "transfer", label: string, w: WalkResult): Leg => ({ kind, label, coords: w.coords, durationS: w.durationS, distanceM: w.distanceM, turns: w.turns });
 export const straight = (a: LngLatTuple, b: LngLatTuple): WalkResult => ({ coords: [a, b], distanceM: distM(a, b), durationS: distM(a, b) / 1.35, turns: [] });
 
-export async function portalFor(st: Station, ents: Entrance[], toward: LngLatTuple, mode: "entry" | "exit", outages: string[]) {
+/** How many of the nearest entrances, as the crow flies, get a real walking distance. */
+const WALK_CANDIDATES = 3;
+
+/**
+ * The entrance or exit to use (owner, 2026-10-26). An elevator-only one whose elevator is out is
+ * skipped while there is another way in or out (the outage list names the station, not the entrance,
+ * so any elevator outage counts). Of the nearest few, the shortest walk wins; the straight line
+ * decides when the walking router is down.
+ */
+export async function portalFor(st: Station, ents: Entrance[], toward: LngLatTuple, mode: "entry" | "exit", outages: string[], walk: ((a: LngLatTuple, b: LngLatTuple) => Promise<WalkResult>) | null = routeWalk) {
   const usable = ents.filter((e) => (mode === "entry" ? e.entry : e.exit));
-  const pick = (usable.length ? usable : ents).sort((a, b) => distM(a.at, toward) - distM(b.at, toward))[0];
+  const liftOut = outages.some((o) => /^elevator out/i.test(o));
+  const open = (usable.length ? usable : ents).filter((e) => !(liftOut && /elevator/i.test(e.type)));
+  const pool = (open.length ? open : usable.length ? usable : ents).sort((a, b) => distM(a.at, toward) - distM(b.at, toward)).slice(0, WALK_CANDIDATES);
+  const walked = walk && pool.length > 1
+    ? await Promise.all(pool.map((e) => safe(walk(mode === "exit" ? e.at : toward, mode === "exit" ? toward : e.at).then((w) => w.distanceM), Infinity)))
+    : [];
+  const best = walked.length && walked.some(Number.isFinite) ? walked.indexOf(Math.min(...walked)) : 0;
+  const pick = pool[best];
   const at = pick?.at ?? st.at;
   const dir = octant(st.at, at);
   const street = await reverseGeocode(at);
   const type = pick?.type ?? "Station";
   const elevatorOnly = /elevator/i.test(type);
-  const outage = elevatorOnly ? outages[0] ?? null : null;
+  const outage = elevatorOnly ? outages.find((o) => /^elevator out/i.test(o)) ?? null : null;
   const word = mode === "entry" ? "entrance" : "exit";
   return { lon: at[0], lat: at[1], type, elevatorOnly, outage, label: `${dir} ${word}${street ? ` on ${street}` : ""}${elevatorOnly ? " (elevator)" : ""}` };
 }
