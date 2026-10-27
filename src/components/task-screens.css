@@ -142,8 +142,9 @@
 /* Bottom-right corner group (owner, 2026-10-27): Map · 3D · Street stacked over Center on my location.
    Phones keep them just above the chat bar; from 768px the chat bar is centred, so they sit in the
    corner itself, over the map credits' "i". */
-.corner-locate { right: 16px; bottom: calc(var(--chat-bar-h, 0px) + var(--pull-sheet-h, 0px) + 12px); }
-.corner-view { right: 12px; bottom: calc(var(--chat-bar-h, 0px) + var(--pull-sheet-h, 0px) + 66px); }
+/* A full-width task card on a phone (the walk to the station) lifts them above it: --task-bottom-h is its height. */
+.corner-locate { right: 16px; bottom: max(calc(var(--chat-bar-h, 0px) + var(--pull-sheet-h, 0px) + 12px), calc(env(safe-area-inset-bottom) + 112px + var(--task-bottom-h, -999px))); }
+.corner-view { right: 12px; bottom: max(calc(var(--chat-bar-h, 0px) + var(--pull-sheet-h, 0px) + 66px), calc(env(safe-area-inset-bottom) + 166px + var(--task-bottom-h, -999px))); }
 /* 640-767px: the credits' "i" stays at the right, just above the chat bar, so the stack starts above it. */
 @media (min-width: 640px) and (max-width: 767px) {
   .corner-locate { bottom: calc(var(--chat-bar-h, 0px) + var(--pull-sheet-h, 0px) + 40px); }
