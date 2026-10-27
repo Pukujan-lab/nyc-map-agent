@@ -1,6 +1,6 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buildStreetContext, closeAsk, openAsk } from "@/lib/agent/streetContext";
-import { followedTrain } from "@/lib/transit/follow";
+import { followedTrain, useFollowed } from "@/lib/transit/follow";
 import { setMapInstance } from "@/lib/map/mapInstance";
 import { watchMapCovers } from "@/lib/map/mapCover";
 import { DirectionsFromHere } from "@/components/DirectionsFromHere";
@@ -75,6 +75,7 @@ import { fetchNearestStreet, type WalkingRoute } from "@/lib/api/routing";
 import { useDataView } from "@/lib/store/DataViewContext";
 import type { CameraOptions, Map as MaplibreMapInstance } from "maplibre-gl";
 import { sendCamera } from "@/lib/map/cameraMode";
+import { setStreetSpot, showView, useViewRequest, type ViewRequest } from "@/lib/map/viewChange";
 import {
   approachBearing,
   clampLookPitch,
@@ -165,6 +166,7 @@ import { WalkControls } from "./WalkControls";
 import { useQuickLayer } from "@/lib/quickLayers";
 import { QuickLayers } from "./QuickLayers";
 import { MapChrome } from "./MapChrome";
+import { BackToStreet, MapViewSwitch } from "./MapViewSwitch";
 import { StreetMiniMap } from "./StreetMiniMap";
 import { nearestCorner, type CornerSign } from "@/lib/map/corner";
 import { pickAt as pickFurniture } from "@/lib/map/streetPick";
@@ -193,7 +195,11 @@ const TILT_EPSILON = 5;
  * at `WALK_ZOOM`: a flat map at 21 shows ~50 m of ground, which is no map at
  * all. Only applied when the camera is tighter than this.
  */
-const WALK_EXIT_ZOOM = 15.5;
+/** Leaving street view: close enough to see the block you stood on, centred on you. */
+const WALK_EXIT_ZOOM = 16.5;
+/** The 3D view: tilted over the buildings around the spot. */
+const VIEW_3D_PITCH = 60;
+const VIEW_3D_ZOOM = 17;
 
 type Picked =
   | { kind: "neighborhood"; datum: NeighborhoodDatum }
@@ -310,6 +316,10 @@ export function MapView({
   const restroomsMod = useRef<typeof import("@/lib/map/restrooms") | null>(null);
   /** So leaving walk mode can restore the overhead camera exactly once. */
   const wasWalking = useRef(false);
+  /** The view asked for while leaving street view, framed once the walk lets go. */
+  const exitView = useRef<ViewRequest | null>(null);
+  /** True while the camera eases out of street view. */
+  const leaving = useRef(false);
   /** The walker's eye pose; the camera is derived from it every frame. */
   const eyeRef = useRef<Eye | null>(null);
   const getEye = useCallback(() => eyeRef.current, []);
@@ -326,6 +336,7 @@ export function MapView({
     walkRequest,
     stopWalk,
     startWalk,
+    setRestrooms,
     cameraTarget,
     navCommand,
     reportCameraHeight,
@@ -337,6 +348,7 @@ export function MapView({
     selectBlock,
     streetViewOpen,
   } = useMapState();
+  const followingNow = useFollowed() !== null;
   const businesses = businessesPicked || walking;
   const storefrontsOn = storefrontsFlag && businesses;
   const reducedMotion = usePrefersReducedMotion();
@@ -840,7 +852,7 @@ export function MapView({
     if (!map) return;
     // A walk is always pitched to the ceiling, so it would report the map as
     // "tilted" the whole time and light up the dock's 3D button.
-    if (walking) return;
+    if (walking || leaving.current) return;
     // Keep the toggle honest when the user tilts with the mouse or touch.
     setTilted(map.getPitch() > TILT_EPSILON);
   }, [walking, setTilted]);
@@ -1159,7 +1171,8 @@ export function MapView({
     // Only act when the camera disagrees with the requested state, so a
     // `fly_to` that carries its own pitch is not snapped back afterwards.
     const isTilted = map.getPitch() > TILT_EPSILON;
-    if (tilted === isTilted) return;
+    // Leaving street view frames its own camera; the flag catches up when it lands.
+    if (tilted === isTilted || leaving.current) return;
     map.easeTo({
       pitch: tilted ? TILT_PITCH : 0,
       bearing: tilted ? map.getBearing() : 0,
@@ -1327,14 +1340,17 @@ export function MapView({
 
     // Stand in the middle of the nearest street, facing along it: a block
     // centre or the map centre can be inside a building footprint.
-    const snapped = snapToStreet(target, streetLines(map), map.getBearing());
+    // A heading asked for (the view switch, going back) wins over the street's direction;
+    // going back to where you stood skips the snap altogether.
+    const heading = walkRequest?.heading;
+    const snapped = walkRequest?.exact ? null : snapToStreet(target, streetLines(map), heading ?? map.getBearing());
     const eye: Eye = snapped
-      ? { lon: snapped.lon, lat: snapped.lat, bearing: snapped.bearing, pitch: WALK_PITCH }
-      : { lon: target[0], lat: target[1], bearing: map.getBearing(), pitch: WALK_PITCH };
+      ? { lon: snapped.lon, lat: snapped.lat, bearing: heading ?? snapped.bearing, pitch: WALK_PITCH }
+      : { lon: target[0], lat: target[1], bearing: heading ?? map.getBearing(), pitch: WALK_PITCH };
     eyeRef.current = eye;
     setWalkEye(eye);
     map.easeTo({ ...eyeCamera(map, eye), duration: reducedMotion ? 0 : 900 });
-    if (!snapped) {
+    if (!snapped && !walkRequest?.exact) {
       // No road tiles in view yet (e.g. entering from the citywide map): ask OSRM.
       const controller = new AbortController();
       fetchNearestStreet({ lon: target[0], lat: target[1] }, controller.signal)
@@ -1342,7 +1358,7 @@ export function MapView({
           if (!p || eyeRef.current !== eye) return;
           eye.lon = p.lon;
           eye.lat = p.lat;
-          const aligned = snapToStreet([p.lon, p.lat], streetLines(map), eye.bearing, 30);
+          const aligned = heading == null ? snapToStreet([p.lon, p.lat], streetLines(map), eye.bearing, 30) : null;
           if (aligned) eye.bearing = aligned.bearing;
           map.jumpTo(eyeCamera(map, eye));
         })
@@ -1368,15 +1384,74 @@ export function MapView({
     setWalkEye(null);
     const map = mapRef.current?.getMap();
     if (!map || !ready) return;
+    // Remember where you stood so the map can show you there and "Back to street view"
+    // can put you back, facing the same way.
+    const eye = eyeRef.current;
     eyeRef.current = null;
+    if (eye) setStreetSpot({ lon: eye.lon, lat: eye.lat, heading: eye.bearing });
+    // Restrooms stay on after street view; shops were only on because you walked (no unasked shops).
+    setRestrooms(true);
+    const asked = exitView.current;
+    exitView.current = null;
+    const at = asked?.place ?? (eye ? { lon: eye.lon, lat: eye.lat } : null);
+    const duration = reducedMotion ? 0 : 700;
+    // Mid-way, a "moveend" would still read the walk's pitch as a tilt, and the tilt
+    // effect would then flatten the map at the walk's zoom over the top of this.
+    leaving.current = !reducedMotion;
+    if (asked?.frame) {
+      map.fitBounds(asked.frame.bounds, { padding: asked.frame.padding ?? 40, maxZoom: asked.frame.maxZoom ?? WALK_EXIT_ZOOM, pitch: 0, bearing: 0, duration });
+    } else {
+      map.easeTo({
+        ...(at ? { center: [at.lon, at.lat] as [number, number] } : {}),
+        pitch: asked?.view === "3d" ? VIEW_3D_PITCH : 0,
+        bearing: asked?.view === "3d" ? (asked.heading ?? eye?.bearing ?? 0) : 0,
+        elevation: 0,
+        zoom: asked?.view === "3d" ? VIEW_3D_ZOOM : Math.min(map.getZoom(), WALK_EXIT_ZOOM),
+        duration,
+      });
+    }
+    if (leaving.current) {
+      map.once("moveend", () => {
+        leaving.current = false;
+        setTilted(map.getPitch() > TILT_EPSILON);
+      });
+    } else setTilted(map.getPitch() > TILT_EPSILON);
+  }, [walking, ready, reducedMotion, setTilted, setRestrooms]);
+
+  // Map, 3D or Street from the view switch, the mini map or "Back to street view" (showView).
+  const viewRequest = useViewRequest();
+  useEffect(() => {
+    if (!viewRequest || !ready) return;
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    const here = eyeRef.current;
+    const c = map.getCenter();
+    if (viewRequest.view === "street") {
+      const place = viewRequest.place ?? (here ? { lon: here.lon, lat: here.lat } : { lon: c.lng, lat: c.lat });
+      startWalk({ ...place, heading: viewRequest.heading ?? (here?.bearing ?? map.getBearing()), exact: viewRequest.exact });
+      return;
+    }
+    if (walking) {
+      // Leaving street view: the exit effect frames it once the walk has let go of the camera.
+      exitView.current = viewRequest;
+      stopWalk();
+      return;
+    }
+    if (viewRequest.frame) {
+      map.fitBounds(viewRequest.frame.bounds, { padding: viewRequest.frame.padding ?? 40, maxZoom: viewRequest.frame.maxZoom ?? WALK_EXIT_ZOOM, pitch: 0, bearing: 0, duration: reducedMotion ? 0 : 700 });
+      return;
+    }
+    const at = viewRequest.place ?? { lon: c.lng, lat: c.lat };
     map.easeTo({
-      pitch: 0,
-      bearing: 0,
-      elevation: 0,
-      zoom: Math.min(map.getZoom(), WALK_EXIT_ZOOM),
+      center: [at.lon, at.lat],
+      pitch: viewRequest.view === "3d" ? VIEW_3D_PITCH : 0,
+      bearing: viewRequest.view === "3d" ? (viewRequest.heading ?? map.getBearing()) : 0,
+      zoom: viewRequest.view === "3d" ? Math.max(map.getZoom(), VIEW_3D_ZOOM - 1) : Math.min(map.getZoom(), WALK_EXIT_ZOOM),
       duration: reducedMotion ? 0 : 700,
     });
-  }, [walking, ready, reducedMotion, setTilted]);
+    // Only a new request moves the camera; `walking` is read as it is now.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewRequest, ready]);
 
   // The walk loop. Each frame moves the camera in ground metres along its own
   // bearing, so speed is constant at any zoom and the horizon stays level.
@@ -1702,6 +1777,8 @@ export function MapView({
 
 
       {agentHome ? <MapChrome /> : <QuickLayers />}
+      {agentHome && !followingNow ? <MapViewSwitch /> : null}
+      {agentHome ? <BackToStreet /> : null}
       {walking ? (
         <WalkControls
           place={walkPlace}
@@ -1724,7 +1801,7 @@ export function MapView({
         />
       ) : null}
       {walking && ready && mapRef.current ? (
-        <StreetMiniMap main={mapRef.current.getMap()} getEye={getEye} onExit={stopWalk} filters={inset} />
+        <StreetMiniMap main={mapRef.current.getMap()} getEye={getEye} onExit={stopWalk} onMap={() => showView("map")} filters={inset} />
       ) : null}
 
       {hover && !walking && canHover && !sheetOpen && analytics ? (

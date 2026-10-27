@@ -11,15 +11,22 @@ export type CameraMode =
   /** You pan the map: Top, Aerial, Closer or wherever you left it. */
   | { kind: "map" }
   /** Eye-level walk. `back` is where leaving returns to; guidance resumes there. */
-  | { kind: "street"; target: { lon: number; lat: number; nonce: number } | null; back: "map" | "guide" }
+  | { kind: "street"; target: (StreetTarget & { nonce: number }) | null; back: "map" | "guide" }
   /**
    * 2D guidance from your location. `centred` keeps you in the middle until you pan;
    * `tilt` frames you close (top-down, north up) until you pick a view yourself.
    */
   | { kind: "guide"; centred: boolean; tilt: boolean };
 
+/**
+ * Where to stand. `heading` faces that way instead of along the nearest street;
+ * `exact` stands right there instead of snapping to the middle of the street
+ * (going back to a spot you already stood on).
+ */
+export interface StreetTarget { lon: number; lat: number; heading?: number; exact?: boolean }
+
 export type CameraEvent =
-  | { type: "street"; target?: { lon: number; lat: number } | null }
+  | { type: "street"; target?: StreetTarget | null }
   | { type: "leave-street" }
   /** Top, Aerial, Closer or north-up: a view you chose. */
   | { type: "view" }
