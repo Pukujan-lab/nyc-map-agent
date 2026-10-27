@@ -1513,9 +1513,9 @@ export function MapView({
       const dx = event.clientX - dragFrom.x;
       const dy = event.clientY - dragFrom.y;
       dragFrom = { x: event.clientX, y: event.clientY, id: dragFrom.id };
-      // Grab-the-world feel: drag left to turn right, drag up to look up (like street-view apps).
+      // Grab-the-world feel both ways: drag left to turn right, drag up to look down (owner, 2026-10-27).
       eye.bearing = (eye.bearing - dx * LOOK_DEG_PER_PX + 360) % 360;
-      eye.pitch = clampLookPitch(eye.pitch - dy * LOOK_DEG_PER_PX);
+      eye.pitch = clampLookPitch(eye.pitch + dy * LOOK_DEG_PER_PX);
       lookDirty = true;
     };
     const onPointerUp = (event: PointerEvent) => {
