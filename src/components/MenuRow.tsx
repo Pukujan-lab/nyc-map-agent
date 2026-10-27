@@ -4,7 +4,7 @@ import {
   BarChart3, BusFront, Building2, CalendarDays, ChevronRight, CircleDot, Database, Ear, History, House, Info, Languages, Layers,
   Leaf, Lightbulb, LocateFixed, Lock, MessageSquare, Box, Palette, Settings, Shield, Signpost, SlidersHorizontal, Sun, TrainFront, Trash2, Volume2, Gauge, CloudSun, type LucideIcon,
 } from "lucide-react";
-import { Switch } from "@/components/ui/switch";
+import { LiveLayerRows, SwitchRow } from "@/components/LiveLayerRows";
 import { FEATURES } from "@/features";
 import { setAmbient, useAmbient, type LightingMode, type WeatherMode } from "@/lib/ambient";
 import { useAdvancedMode, useFlags } from "@/lib/flags";
@@ -57,23 +57,12 @@ export function pressMenu(active: MenuId, open: MenuId | null, id: MenuId): { ac
 const FLOAT = "rounded-[20px] border border-[#263449] bg-[rgba(11,18,32,0.82)] p-2 text-[#f1f5f9] shadow-[0_12px_32px_rgba(0,0,0,0.5)] backdrop-blur-[14px]";
 const RING = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]";
 const ROW = `flex min-h-12 w-full items-center gap-3 rounded-[12px] px-2 text-left text-[14px] font-medium hover:bg-white/5 disabled:opacity-50 ${RING}`;
-const SWITCH = "data-[state=checked]:bg-[#2563eb] data-[state=unchecked]:bg-[#334155]";
 const ICON = "h-5 w-5 shrink-0";
 
 /** The items in row order starting at the active one, wrapping round. */
 export function rowOrder<T extends { id: string }>(items: T[], active: string): T[] {
   const i = Math.max(0, items.findIndex((x) => x.id === active));
   return [...items.slice(i), ...items.slice(0, i)];
-}
-
-function SwitchRow({ icon, label, on, onChange, disabled, testId, className }: { icon: ReactNode; label: string; on: boolean; onChange: (on: boolean) => void; disabled?: boolean; testId?: string; className?: string }) {
-  return (
-    <label className={`flex min-h-12 cursor-pointer items-center gap-3 px-2 text-[14px] font-medium ${disabled ? "opacity-50" : ""} ${className ?? ""}`} data-testid={testId}>
-      {icon}
-      <span className="flex-1">{label}</span>
-      <Switch checked={on} onCheckedChange={onChange} disabled={disabled} aria-label={label} className={SWITCH} />
-    </label>
-  );
 }
 
 function Divider() {
@@ -96,21 +85,13 @@ function Choice<T extends string>({ icon, label, value, options, onChange }: { i
 const MY_DAY = FEATURES.find((f) => f.myDay);
 const MyDayBody = MY_DAY?.myDay ? lazy(MY_DAY.myDay.load) : null;
 
-const LAYER_ICON = "h-[22px] w-[22px] shrink-0";
-const LAYER_ROW = "min-h-[52px] text-[15px]";
 
 function LayersBody({ onClose }: { onClose: () => void }) {
-  const { chips, setDrawerOpen } = usePanel();
-  const { restrooms, setRestrooms } = useMapState();
-  const flags = useFlags();
-  const trains = chips.find((c) => c.id === "liveTrains");
-  const buses = chips.find((c) => c.id === "liveBuses");
+  const { setDrawerOpen } = usePanel();
   const t = useMenuT();
   return (
     <div data-testid="layers-panel">
-      {trains ? <SwitchRow className={LAYER_ROW} icon={<TrainFront className={LAYER_ICON} aria-hidden />} label={t("liveTrains")} on={trains.active} onChange={trains.onToggle} /> : null}
-      {buses ? <SwitchRow className={LAYER_ROW} icon={<BusFront className={LAYER_ICON} aria-hidden />} label={t("liveBuses")} on={buses.active} onChange={buses.onToggle} /> : null}
-      {flags.restrooms ? <SwitchRow className={LAYER_ROW} icon={<RestroomIcon />} label={t("restrooms")} on={restrooms} onChange={() => setRestrooms(!restrooms)} /> : null}
+      <LiveLayerRows />
       <Divider />
       <button type="button" className={`${ROW} text-[#cbd5e1]`} onClick={() => { onClose(); setDrawerOpen(true); }}>
         <Layers className={ICON} aria-hidden /><span className="flex-1">{t("moreLayers")}</span><ChevronRight className="h-4 w-4 text-[#a5b4cb]" aria-hidden />
@@ -118,12 +99,6 @@ function LayersBody({ onClose }: { onClose: () => void }) {
     </div>
   );
 }
-
-const RestroomIcon = () => (
-  <svg width={22} height={22} viewBox="0 0 24 24" fill="currentColor" aria-hidden className="shrink-0">
-    <circle cx="7" cy="4" r="2" /><path d="M5 7h4l1 7H8.5v7h-3v-7H4l1-7Z" /><circle cx="17" cy="4" r="2" /><path d="M15.2 7h3.6l2.2 8h-2.5v6h-3v-6H13l2.2-8Z" />
-  </svg>
-);
 
 function FiltersBody({ onClose }: { onClose: () => void }) {
   const opts = useMapOptions();

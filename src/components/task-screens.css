@@ -137,3 +137,13 @@
   to { opacity: 1; transform: translate(-50%, 0) scale(1); }
 }
 @media (prefers-reduced-motion: reduce) { .arrive-bubble { animation: none; } }
+
+/* Bottom-right corner group (owner, 2026-10-27): Map · 3D · Street stacked over Center on my location.
+   Phones keep them just above the chat bar; from 768px the chat bar is centred, so they sit in the
+   corner itself, over the map credits' "i". */
+.corner-locate { right: 16px; bottom: calc(var(--chat-bar-h, 0px) + var(--pull-sheet-h, 0px) + 12px); }
+.corner-view { right: 12px; bottom: calc(var(--chat-bar-h, 0px) + var(--pull-sheet-h, 0px) + 66px); }
+@media (min-width: 768px) {
+  .corner-locate { bottom: calc(var(--pull-sheet-h, 0px) + 44px); }
+  .corner-view { bottom: calc(var(--pull-sheet-h, 0px) + 98px); }
+}

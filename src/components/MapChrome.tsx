@@ -292,7 +292,7 @@ export function MapChrome() {
         {map ? <Compass map={map} bearing={bearing} /> : null}
       </div>
       {/* Locate rides just above the follow sheet; language and the QR code live in its Settings tab. */}
-      <LocateButton map={map} className="sheet-locate absolute right-4 z-40" style={{ bottom: "calc(var(--chat-bar-h, 0px) + var(--pull-sheet-h, 0px) + 12px)" }} />
+      <LocateButton map={map} className="sheet-locate corner-locate absolute z-40" />
       </>
     );
   }
@@ -314,7 +314,7 @@ export function MapChrome() {
             {map ? <Compass map={map} bearing={bearing} /> : null}
           </div>
         ) : rotated && map ? <Compass map={map} bearing={bearing} style={{ position: "absolute", top, right: 68, zIndex: 45 }} /> : null}
-        <LocateButton map={map} className="sheet-locate absolute right-4 z-40" style={{ bottom: "calc(var(--chat-bar-h, 0px) + var(--pull-sheet-h, 0px) + 12px)" }} />
+        <LocateButton map={map} className="sheet-locate corner-locate absolute z-40" />
       </>
     );
   }
@@ -343,7 +343,7 @@ export function MapChrome() {
         <QrButton />
       </div>
     </div>
-    <LocateButton map={map} className="sheet-locate absolute right-4 z-40" style={{ bottom: "calc(var(--chat-bar-h, 0px) + var(--pull-sheet-h, 0px) + 12px)" }} />
+    <LocateButton map={map} className="sheet-locate corner-locate absolute z-40" />
     </>
   );
 }

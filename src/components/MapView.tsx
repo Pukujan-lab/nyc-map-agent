@@ -42,7 +42,6 @@ import { formatCount, formatPercent } from "@/lib/format";
 import { blockContaining, blockKey } from "@/lib/geo/blocks";
 import { eyePick } from "@/lib/map/eyePick";
 import { boroughOutlinesToGeoJson } from "@/lib/geo/boroughs";
-import { boroughAt } from "@/lib/geo/boroughAt";
 import { NtaIndex } from "@/lib/geo/ntaIndex";
 import { areasToGeoJson, blockPointsToGeoJson, type AreaDatum } from "@/lib/geo/areas";
 import {
@@ -292,7 +291,6 @@ export function MapView({
   /** "Grand Street & Essex Street": street underfoot and nearest cross street, throttled. */
   const [streetHere, setStreetHere] = useState<string | null>(null);
   /** The street alone and its borough, for the walk card's noise and crash dots. */
-  const [levelsFor, setLevelsFor] = useState<{ street: string; borough: string | null } | null>(null);
   const { showPanel, emptyMapTap, content: panelContent, minimized: panelMinimized, drawerOpen } = usePanel();
   // The hover card is a mouse affordance; on touch / narrow screens the sheet
   // already shows the same numbers.
@@ -476,12 +474,6 @@ export function MapView({
   useEffect(() => {
     describeAtRef.current = describeAt;
   }, [describeAt]);
-  /** The borough lookup for the walk card, read from the walking loop. */
-  const ntaIndexRef = useRef(ntaIndex);
-  useEffect(() => {
-    ntaIndexRef.current = ntaIndex;
-  }, [ntaIndex]);
-
   /** The block grid, held in a ref for the same reason as `describeAt`. */
   const blocksRef = useRef(model.blocks);
   useEffect(() => {
@@ -1268,7 +1260,6 @@ export function MapView({
     const map = mapRef.current?.getMap();
     if (!ready || !walking || !map) {
       setStreetHere(null);
-      setLevelsFor(null);
       return;
     }
     let lines: ReturnType<typeof namedStreetLines> = [];
@@ -1288,10 +1279,6 @@ export function MapView({
       // Street, then the landmark you can see: "Grand St & Essex St · Empire State Building ahead".
       const pos = streetPosition(lines, c.lng, c.lat);
       const street = streetLabel(pos);
-      const borough = pos ? boroughAt(c.lat, c.lng, ntaIndexRef.current) : null;
-      setLevelsFor((prev) =>
-        prev?.street === pos?.street && prev?.borough === borough ? prev : pos ? { street: pos.street, borough } : null,
-      );
       const guide = describeGuide(
         pickGuideLandmarks({ lon: c.lng, lat: c.lat }, eye ? eye.bearing : map.getBearing(), { max: 1, maxDistanceM: STREET_LEVEL_RANGE_M }),
       );
@@ -1783,7 +1770,6 @@ export function MapView({
           place={walkPlace}
           street={streetHere}
           corner={corner}
-          levelsFor={levelsFor}
           onInput={(input) => {
             walkPad.current = input;
           }}

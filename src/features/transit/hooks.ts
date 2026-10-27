@@ -244,10 +244,23 @@ export function routesFromStops(stops: Pick<BusStopInfo, "routes">[], max = 6): 
   for (const s of stops) for (const r of new Set(s.routes)) count.set(r, (count.get(r) ?? 0) + 1);
   return [...count.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, max).map(([r]) => r);
 }
-/** Bus routes near a point, for the Live buses switch: no picking a line first. */
-export async function fetchBusRoutesNear(point: { lon: number; lat: number }, max = 6): Promise<string[]> {
+async function stopsNear(point: { lon: number; lat: number }): Promise<BusStopInfo[]> {
   const { stops } = await getJson<{ stops: BusStopInfo[] }>(`${API_BASE}/api/transit/bus-stops?${new URLSearchParams({ lat: String(point.lat), lon: String(point.lon) })}`);
-  return routesFromStops(stops ?? [], max);
+  return stops ?? [];
+}
+/** About 700 m north-south in degrees; east-west is scaled for New York's latitude. */
+const RING_DEG = 0.0063;
+const RING = [[1, 0], [-1, 0], [0, 1], [0, -1], [0.7, 0.7], [0.7, -0.7], [-0.7, 0.7], [-0.7, -0.7]] as const;
+/**
+ * Bus routes near a point, for the Live buses switch: no picking a line first. The server looks
+ * about 300 m out; over a park, a creek or the river that finds nothing, so a ring of points
+ * about 700 m away is asked next (owner, 2026-10-27: the switch looked dead over Newtown Creek).
+ */
+export async function fetchBusRoutesNear(point: { lon: number; lat: number }, max = 6): Promise<string[]> {
+  const near = await stopsNear(point);
+  if (near.length) return routesFromStops(near, max);
+  const ring = await Promise.all(RING.map(([dy, dx]) => stopsNear({ lat: point.lat + dy * RING_DEG, lon: point.lon + dx * RING_DEG * 1.32 }).catch(() => [])));
+  return routesFromStops(ring.flat(), max);
 }
 /** Stops around a tapped point with the routes serving each (grid-cached on the server). */
 export function useBusStopsNear(point: { lon: number; lat: number } | undefined) {
