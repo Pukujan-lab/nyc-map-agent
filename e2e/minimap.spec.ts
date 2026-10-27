@@ -19,9 +19,12 @@ test("street level shows a mini map whose heading cone turns with the camera", a
   await page.waitForTimeout(1200);
   await page.keyboard.up("d");
   await expect.poll(async () => Number(await cone.getAttribute("data-bearing"))).not.toBe(before);
-  await page.getByRole("button", { name: "Hide map" }).click();
+  // Tapping the corner handle steps to the next size.
+  const size = Number(await mini.getAttribute("data-size"));
+  await page.getByRole("button", { name: "Resize map" }).click();
+  await expect.poll(async () => Number(await mini.getAttribute("data-size"))).toBeGreaterThan(size);
+  await page.getByRole("button", { name: "Leave", exact: true }).click();
   await expect(mini).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Show map" })).toBeVisible();
 });
 
 test("street level mini map points to the nearest restroom and the card offers directions", async ({ page }) => {
@@ -46,7 +49,8 @@ test("street level mini map points to the nearest restroom and the card offers d
   await page.getByTestId("view-switcher").getByRole("button", { name: "Street", exact: true }).click();
   const chip = page.getByTestId("minimap-nearest-restroom");
   await expect(chip).toBeVisible({ timeout: 20_000 });
-  await expect(chip).toContainText("Nearest restroom");
+  await expect(chip).toHaveAttribute("aria-label", /^Nearest restroom, \d+ m /);
+  await expect(chip).toContainText(" m");
   await chip.click();
   await expect(page.getByText("Bryant Park").first()).toBeVisible();
   // About 700 m from where street view starts: past the inset's edge, and close enough that Directions

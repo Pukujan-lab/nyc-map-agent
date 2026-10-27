@@ -20,8 +20,6 @@ const BUS_STOP_LAYER = "poi_transit";
 export interface InsetFilters {
   /** OpenMapTiles classes for the chosen Places (and quick groups). Empty hides them. */
   placeClasses: readonly string[];
-  /** Basemap bus-stop icons. Rail icons on the same layer stay with them. */
-  busStops: boolean;
   /**
    * Other point switches: restrooms, restroomShops, parking, events, ferry, schools.
    * Shops are included only while Restrooms is on, matching the main map.
@@ -31,7 +29,6 @@ export interface InsetFilters {
 
 export function insetFilters(input: {
   placeClasses: readonly string[];
-  busStops: boolean;
   restrooms: boolean;
   shops: boolean;
   parking: boolean;
@@ -46,13 +43,14 @@ export function insetFilters(input: {
   if (input.events) on.add("events");
   if (input.ferry) on.add("ferry");
   if (input.schools) on.add("schools");
-  return { placeClasses: input.placeClasses, busStops: input.busStops, on };
+  return { placeClasses: input.placeClasses, on };
 }
 
 /** True when this layer id is one of the point layers a switch draws. Pure. */
 export function pointLayerOn(id: string, filters: InsetFilters): boolean {
   if (POI_LAYERS.test(id)) return filters.placeClasses.length > 0;
-  if (id === BUS_STOP_LAYER) return filters.busStops;
+  // Bus stops are how you find your bus at street level, so the inset always draws them (owner, 2026-10-27).
+  if (id === BUS_STOP_LAYER) return true;
   for (const key of Object.keys(FILTER_POINT_LAYERS)) {
     if (FILTER_POINT_LAYERS[key].includes(id)) return filters.on.has(key);
   }
@@ -69,6 +67,40 @@ function isBase(l: { id: string; type: string; "source-layer"?: string }): boole
   if (l.id === "transit-station-raised") return true;
   return /^transit-(line|line-under|station|bullet)$/.test(l.id);
 }
+
+/** Street names: where you are is the street you stand on, so the inset always names them. */
+function isStreetName(l: { type: string; "source-layer"?: string }): boolean {
+  return l.type === "symbol" && l["source-layer"] === "transportation_name";
+}
+
+const STATION_LABEL = "transit-station-label";
+
+/** The main map's names sized for eye level (15 px, bullets, overlap allowed); the inset gets small plain names. */
+function insetLabel(l: LayerSpecification): LayerSpecification | null {
+  if (l.type !== "symbol") return null;
+  if (isStreetName(l)) {
+    const next = { ...l, layout: { ...(l.layout ?? {}), visibility: "visible" as const } } as LayerSpecification & { minzoom?: number; maxzoom?: number };
+    delete next.minzoom;
+    delete next.maxzoom;
+    return next;
+  }
+  if (l.id !== STATION_LABEL) return null;
+  return {
+    id: l.id,
+    type: "symbol",
+    source: l.source,
+    filter: ["==", ["get", "system"], "subway"],
+    layout: { "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-anchor": "top", "text-offset": [0, 0.6], "text-max-width": 8 },
+    paint: l.paint,
+  };
+}
+
+/**
+ * Trip, walking-guidance and answer marks the main map draws, in drawing order:
+ * the inset shows where you are going, not only where you stand.
+ * Its own "You" dot stands in for `agent-you`.
+ */
+const INSET_OVERLAYS = ["agent-walk", "agent-drive", "agent-ride", "agent-exit-path", "agent-portal", "agent-note", "agent-exit-dest", "agent-exit-dot", "agent-points-dot", "agent-marker", "agent-note-label", "agent-points-label"] as const;
 
 /** Drop street-level pattern images and metre widths the inset does not have. */
 export function miniLayer(l: LayerSpecification): LayerSpecification {
@@ -90,7 +122,7 @@ export function miniLayer(l: LayerSpecification): LayerSpecification {
 
 /** Layers the street-level mini map keeps from the loaded style. Pure, for tests. */
 export function keepInMini(l: { id: string; type: string; "source-layer"?: string }, filters?: InsetFilters): boolean {
-  if (isBase(l)) return true;
+  if (isBase(l) || isStreetName(l) || (l.id === STATION_LABEL && l.type === "symbol")) return true;
   if (!filters || (l.type !== "symbol" && l.type !== "circle")) return false;
   return pointLayerOn(l.id, filters);
 }
@@ -108,18 +140,23 @@ function insetPointSpec(layer: LayerSpecification, filters: InsetFilters): Point
   const next = { ...layer, layout: { ...(layer.layout ?? {}), visibility: "visible" as const } } as PointLayer & { minzoom?: number };
   // Street view hides symbol layers on the main map. The switch is still on, so the inset draws them.
   delete next.minzoom;
+  // Bus stop icons always; their names would bury the street names at this size.
+  if (layer.id === BUS_STOP_LAYER && next.type === "symbol") next.paint = { ...(next.paint ?? {}), "icon-opacity": 1, "text-opacity": 0 };
   return next;
 }
 
 /**
  * A lightweight north-up style for the mini map, cut from the main map's
- * already-loaded style: land, water, parks, streets, flat building footprints,
- * subway lines, stations, and, when `filters` says so, the point layers those
- * Layers switches draw. No basemap name labels, no 3D, no analytics. Pure.
+ * already-loaded style: land, water, parks, streets and their names, flat
+ * building footprints, subway lines, stations and their names, bus stops, and,
+ * when `filters` says so, the point layers those Layers switches draw.
+ * No other basemap labels, no 3D, no analytics. Pure.
  */
 export function miniStyle(full: StyleSpecification, filters?: InsetFilters): StyleSpecification {
   const layers = (full.layers ?? []).flatMap((l) => {
     if (isBase(l)) return [miniLayer(l)];
+    const label = insetLabel(l);
+    if (label) return [label];
     const point = filters ? insetPointSpec(l, filters) : null;
     return point ? [point] : [];
   });
@@ -160,10 +197,14 @@ export function bearingTo(from: [number, number], to: [number, number]): number 
   return ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
 }
 
-/** "480 m NE": distance and eight-point compass for the nearest-restroom chip. Pure. */
+/** "480 m", "1.2 km": rounded walking distance. Pure. */
+export function distanceLabel(metres: number): string {
+  return metres < 950 ? `${Math.max(10, Math.round(metres / 10) * 10)} m` : `${(metres / 1000).toFixed(1)} km`;
+}
+
+/** "480 m NE": distance and eight-point compass for the nearest-restroom card. Pure. */
 export function whereLabel(metres: number, bearing: number): string {
-  const d = metres < 950 ? `${Math.max(10, Math.round(metres / 10) * 10)} m` : `${(metres / 1000).toFixed(1)} km`;
-  return `${d} ${SHORT[octant(bearing)]}`;
+  return `${distanceLabel(metres)} ${SHORT[octant(bearing)]}`;
 }
 
 const poiIds = new WeakMap<MapLibreMap, string[]>();
@@ -231,7 +272,7 @@ export function refreshInsetSource(mini: MapLibreMap, main: MapLibreMap, sourceI
 export function applyInsetFilters(mini: MapLibreMap, main: MapLibreMap, filters: InsetFilters, beforeId?: string): void {
   if (!mini.isStyleLoaded() || !main.isStyleLoaded()) return;
   const ids = candidateIds(main);
-  const sig = `${[...filters.on].join(",")}|${filters.busStops ? 1 : 0}|${filters.placeClasses.join(",")}|${ids.map((id) => layerSig(main, id)).join("\n")}`;
+  const sig = `${[...filters.on].join(",")}|${filters.placeClasses.join(",")}|${ids.map((id) => layerSig(main, id)).join("\n")}`;
   if (appliedSig.get(mini) === sig) return;
   const want = new Set(ids.filter((id) => pointLayerOn(id, filters)));
   try {
@@ -263,5 +304,33 @@ export function applyInsetFilters(mini: MapLibreMap, main: MapLibreMap, filters:
     appliedSig.set(mini, sig);
   } catch {
     /* a source or icon may still be loading; the next style event retries */
+  }
+}
+
+/**
+ * Copy the trip and guidance marks (INSET_OVERLAYS) the main map has now, and drop the
+ * ones it no longer has. Lines and dots sit under the inset's labels; names go on top.
+ * Their geojson sources follow the main map through `refreshInsetSource`.
+ */
+export function syncInsetOverlays(mini: MapLibreMap, main: MapLibreMap, beforeId?: string): void {
+  if (!mini.isStyleLoaded() || !main.isStyleLoaded()) return;
+  try {
+    for (const id of INSET_OVERLAYS) {
+      const raw = main.getLayer(id)?.serialize();
+      if (!raw) {
+        if (mini.getLayer(id)) mini.removeLayer(id);
+        continue;
+      }
+      if (mini.getLayer(id)) continue;
+      const source = sourceOf(raw);
+      if (source) ensureSource(mini, main, source);
+      const spec = { ...raw, layout: { ...("layout" in raw ? raw.layout ?? {} : {}), visibility: "visible" } } as LayerSpecification & { minzoom?: number };
+      delete spec.minzoom;
+      const firstLabel = spec.type === "symbol" ? undefined : mini.getStyle().layers.find((l) => l.type === "symbol")?.id;
+      const before = firstLabel ?? (beforeId && mini.getLayer(beforeId) ? beforeId : undefined);
+      mini.addLayer(spec, before);
+    }
+  } catch {
+    /* a source may still be loading; the next style event retries */
   }
 }

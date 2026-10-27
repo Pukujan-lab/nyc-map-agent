@@ -39,7 +39,7 @@ import { lineOf, setSelectedLine, useSelectedLine } from "@/lib/transit/selected
 import { useActiveTrip } from "@/lib/transit/activeTrip";
 // The line panel loads on the first line picked (own chunk), keeping the transit layers chunk in budget.
 const LinePanel = lazy(() => import("./LinePanel").then((m) => ({ default: m.LinePanel })));
-import { XRAY_VEIL_M, setStreetXray, useStreetXray, xrayForFollow, xrayVeilDisc } from "@/lib/transit/streetXray";
+import { XRAY_VEIL_M, getStreetXray, setStreetXray, useStreetXray, xrayForFollow, xrayVeilDisc } from "@/lib/transit/streetXray";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 
 const stopFollow = () => setFollowed(null);
@@ -370,6 +370,39 @@ export default function TransitLayer() {
     const point = busPoint();
     return point ? fetchBusRoutesNear(point, 10) : [];
   }, [busPoint]);
+  // Street view: live trains, the buses around you and x-ray of the tunnels near you come on
+  // (owner, 2026-10-27). Leaving puts back what this turned on, unless you changed it meanwhile.
+  const streetAuto = useRef<{ xray: boolean; trains: boolean; buses: string[] | null } | null>(null);
+  const autoState = useRef({ trainsOn, routes: show.routes, set, setBusLines });
+  autoState.current = { trainsOn, routes: show.routes, set, setBusLines };
+  useEffect(() => {
+    if (!map) return;
+    if (!walking) {
+      const auto = streetAuto.current;
+      streetAuto.current = null;
+      if (!auto) return;
+      setStreetXray(auto.xray);
+      const now = autoState.current;
+      if (auto.buses && now.routes.join(",") === auto.buses.join(",")) now.set("bus", false);
+      if (auto.trains && now.trainsOn) now.set("subway", false);
+      return;
+    }
+    const auto = { xray: getStreetXray(), trains: !autoState.current.trainsOn, buses: null as string[] | null };
+    streetAuto.current = auto;
+    setStreetXray(true);
+    if (auto.trains) autoState.current.set("subway", true);
+    if (autoState.current.routes.length) return;
+    // Where you stand once the camera lands, not where it flew from.
+    const pick = () => {
+      const e = streetEye(map);
+      void fetchBusRoutesNear({ lon: e.lon, lat: e.lat }).then((routes) => {
+        if (streetAuto.current !== auto || !routes.length || autoState.current.routes.length) return;
+        auto.buses = routes;
+        autoState.current.setBusLines(routes);
+      }).catch(() => {});
+    };
+    if (map.isMoving()) map.once("moveend", pick); else pick();
+  }, [map, walking]);
   usePanelChip({ id: "liveTrains", label: "Live trains", active: trainsOn, onToggle: toggleTrains });
   usePanelChip(meta.data?.bus === true ? { id: "liveBuses", label: "Live buses", active: show.routes.length > 0, onToggle: toggleBuses, routes: show.routes, setRoutes: setBusLines, suggest: suggestBuses, note: busNote } : null);
   usePanelChip({ id: "transitFocus", label: "Transit Focus", active: focus && anyOn, onToggle: toggleFocus });
