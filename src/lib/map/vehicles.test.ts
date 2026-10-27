@@ -18,14 +18,30 @@ describe("vehicle body", () => {
 });
 
 describe("bus body", () => {
-  it("is a 12 m bus facing +y with its livery in vertex colours, cheap enough to instance", () => {
-    const g = busGeometry();
-    g.computeBoundingBox();
-    const b = g.boundingBox!;
-    expect(b.max.y - b.min.y).toBeCloseTo(12.1, 1);
-    expect(b.max.y).toBeGreaterThan(-b.min.y); // the destination sign sticks out at the front
-    expect(b.max.z).toBeLessThan(3.2);
-    expect(g.hasAttribute("color")).toBe(true);
-    expect(g.index!.count / 3).toBeLessThanOrEqual(150);
+  it("keeps the tapered box outline, painted, with a dark windshield at the front", () => {
+    for (const livery of ["local", "sbs", "express"] as const) {
+      const g = busGeometry(livery);
+      g.computeBoundingBox();
+      const b = g.boundingBox!;
+      expect(b.max.y - b.min.y).toBeCloseTo(12, 5);
+      expect(b.max.x - b.min.x).toBeCloseTo(2.6, 5);
+      expect(b.max.z).toBeCloseTo(3.2, 5);
+      expect(g.hasAttribute("color")).toBe(true);
+    }
+  });
+
+  it("paints locals navy, SBS light blue and express white from above", () => {
+    const roof = (livery: "local" | "sbs" | "express") => {
+      const g = busGeometry(livery);
+      const c = g.attributes.color, p = g.attributes.position, n = g.attributes.normal;
+      for (let i = 0; i < p.count; i++) if (n.getZ(i) > 0.5 && p.getY(i) < 0) return [c.getX(i), c.getY(i), c.getZ(i)];
+      return [];
+    };
+    const [lr, , lb] = roof("local"), [sr, sg, sb] = roof("sbs"), [er, eg] = roof("express");
+    expect(lb).toBeGreaterThan(lr * 2);
+    expect(sb).toBeGreaterThan(sr);
+    expect(sg).toBeGreaterThan(0.5);
+    expect(er).toBeGreaterThan(0.85);
+    expect(eg).toBeGreaterThan(0.85);
   });
 });

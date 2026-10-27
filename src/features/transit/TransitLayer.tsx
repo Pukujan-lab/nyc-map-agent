@@ -57,7 +57,7 @@ import { busStopAt } from "@/lib/map/busStops";
 import { pickAt as pickStreet, setPickTargets } from "@/lib/map/streetPick";
 import { keepInView } from "@/lib/map/keepInView";
 import { lineOpacity, useMapOptions } from "@/lib/map/mapOptions";
-import { NOTCH_ICON, addBulletImage, lineColor as lineColorOf, stationRowId, bulletId, busBadgeId, busIconSize, busPrefix } from "@/lib/transit/bullets";
+import { NOTCH_ICON, addBulletImage, lineColor as lineColorOf, stationRowId, bulletId, busBadgeId, busIconSize, busLivery, busPrefix } from "@/lib/transit/bullets";
 import { usePalette, type Palette } from "@/lib/theme";
 import { RAISED_LIFT_PX, STOP_LIFT_PX, alertCameraAction, paintAboveVehicles, trainIconOffset } from "./layerOrder";
 import { FOCUS_OPACITY, FOCUS_VEIL_ID, WORLD, focusVeil, useTransitFocus } from "@/lib/map/transitFocus";
@@ -750,7 +750,7 @@ export default function TransitLayer() {
           .filter((v) => v.key === f.followedKey || f.xrayOn || v.grade !== "underground")
           .map((v) => {
             const ghost = v.grade === "underground";
-            return { lon: v.lon, lat: v.lat, bearing: v.bearing, z: ghost ? XRAY_DEPTH_M : v.z ?? 0, color: v.system === "bus" ? "#f8fafc" : v.color, kind: v.system === "bus" ? "bus" : v.system === "subway" ? "subway" : "rail", ghost };
+            return { lon: v.lon, lat: v.lat, bearing: v.bearing, z: ghost ? XRAY_DEPTH_M : v.z ?? 0, color: v.color, kind: v.system === "bus" ? "bus" : v.system === "subway" ? "subway" : "rail", livery: v.system === "bus" ? busLivery(v.route) : undefined, ghost };
           }),
       );
     }
