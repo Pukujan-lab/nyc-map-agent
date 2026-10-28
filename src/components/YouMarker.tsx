@@ -43,7 +43,7 @@ export function YouMarker() {
   const lastFix = useRef(0);
   const raf = useRef(0);
   const easingUntil = useRef(0);
-  const reached = useRef(false);
+  const foreign = useRef(false);
   const live = useRef({ heading, accuracy: shared.accuracy ?? null, camera });
   live.current = { heading, accuracy: shared.accuracy ?? null, camera };
 
@@ -63,7 +63,7 @@ export function YouMarker() {
     const guided = Boolean(m.getSource(GUIDE_SOURCE));
     setYouLayer(m, guided ? null : at, live.current.heading, live.current.accuracy);
     const mode = live.current.camera;
-    if (!at || mode === "off" || performance.now() < easingUntil.current) return;
+    if (!at || mode === "off" || foreign.current || performance.now() < easingUntil.current) return;
     m.jumpTo({ center: at, ...(mode === "turn" && live.current.heading !== null ? { bearing: live.current.heading } : {}) }, YOU_MOVE);
   };
 
@@ -87,17 +87,27 @@ export function YouMarker() {
     return () => { map.off("styledata", install); };
   }, [map]);
 
-  // A drag always stops following. Other camera moves (an answer framing a place) stop it only
-  // once the map has reached you: the app's own start-up moves must not cancel a fresh tap.
+  // A drag always stops following. Another feature's camera move (an answer framing a place, the
+  // underground helper turning the map) runs undisturbed; following stops only if it leaves you off screen.
   useEffect(() => {
     if (!map) return;
-    const stop = (e: unknown) => {
+    const start = (e: unknown) => {
       const ev = e as { youMove?: boolean; originalEvent?: unknown };
       if (ev.youMove || youCamera() === "off") return;
-      if (ev.originalEvent || reached.current) setYouCamera("off");
+      if (ev.originalEvent) { setYouCamera("off"); return; }
+      foreign.current = true;
     };
-    map.on("movestart", stop);
-    return () => { map.off("movestart", stop); };
+    const end = (e: unknown) => {
+      if ((e as { youMove?: boolean }).youMove || !foreign.current) return;
+      foreign.current = false;
+      if (youCamera() === "off" || !shown.current) return;
+      const p = map.project(shown.current);
+      const { clientWidth: w, clientHeight: h } = map.getContainer();
+      if (p.x < 0 || p.y < 0 || p.x > w || p.y > h) setYouCamera("off");
+    };
+    map.on("movestart", start);
+    map.on("moveend", end);
+    return () => { map.off("movestart", start); map.off("moveend", end); };
   }, [map]);
 
   // A new fix: glide from where the dot is now.
@@ -141,12 +151,10 @@ export function YouMarker() {
 
   // Entering a mode eases there once; after that each frame keeps up.
   useEffect(() => {
-    if (camera === "off") reached.current = false;
     if (!map || camera === "off" || !shown.current) return;
     const turn = camera === "turn" && live.current.heading !== null;
     easingUntil.current = performance.now() + 700;
     map.easeTo({ center: shown.current, zoom: Math.max(map.getZoom(), 16), bearing: turn ? live.current.heading! : 0, duration: 650 }, YOU_MOVE);
-    reached.current = true;
   }, [map, camera, on]);
 
   return null;
