@@ -112,6 +112,8 @@ const bus = new Set<(content: PanelContent) => void>();
 export function pushPanel(content: PanelContent): void {
   bus.forEach((show) => show(content));
 }
+// Handle for the browser tests (open a card the way a map tap does) in dev and the e2e build only; production compiles it away.
+if ((import.meta.env.DEV || import.meta.env.VITE_E2E) && typeof window !== "undefined") (window as unknown as { __pushPanel?: unknown }).__pushPanel = pushPanel;
 
 export function PanelProvider({ children }: { children: ReactNode }) {
   const { selectNta, selectBlock, selectedNtaCode, selectedBlockKey } = useMapState();

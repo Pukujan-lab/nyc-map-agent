@@ -28,7 +28,7 @@ export type StaticSystem = {
   shapes: Record<string, { c: Array<[number, number]>; m: number[]; g: Grade[] }>;
   stopM: Record<string, Record<string, number>>;
   /** `up`: the bearing a stair climbs to the street, from OpenStreetMap's mapped steps (scripts/build-entrance-stairs.ts). */
-  entrances?: GeoJSON.FeatureCollection<GeoJSON.Point, { id: string; name: string; kind: string; up?: number }>;
+  entrances?: GeoJSON.FeatureCollection<GeoJSON.Point, { id: string; name: string; kind: string; up?: number; /** "in" entry only, "out" exit only. */ way?: "in" | "out" }>;
 };
 /** stops: [stop id, arrival time, realtime departure when later]; origin: first stop is the trip's origin. */
 /** at: the stop the vehicle reports; st: its current_status (0 INCOMING_AT, 1 STOPPED_AT, 2 IN_TRANSIT_TO); vt: position time; skipped: SKIPPED stops (not in `stops`). */

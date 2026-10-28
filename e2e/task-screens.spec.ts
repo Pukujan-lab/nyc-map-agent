@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
+import { expectLayout } from "./layout";
 import { mockNetwork } from "./mocks";
 
 const trip = JSON.parse(readFileSync(new URL("./fixtures/agent-trip.json", import.meta.url), "utf8")) as Record<string, unknown>;
@@ -37,6 +38,27 @@ for (const width of [390, 1280]) {
     await expect(page.getByTestId("agent-bar")).toBeVisible();
   });
 }
+
+// A station or place card opened over a trip is not covered by the trip's top and bottom panels (owner, 2026-10-27).
+test("a card opened over a trip preview is not covered by it", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockNetwork(page);
+  await page.route("**/api/agent", (r) => r.fulfill({ contentType: "application/x-ndjson", body: stream([
+    { type: "command", command: { type: "showRoute", trip } },
+    { type: "command", command: { type: "openPanel", trip } },
+    { type: "text", text: "Take this route." }, { type: "done" },
+  ]) }));
+  await page.goto("/");
+  await ask(page, "Plan a trip from Union Square to Grand Central");
+  const preview = page.getByRole("region", { name: "Trip preview" });
+  await expect(preview).toBeVisible();
+  // As a station tap does: the station card opens while the trip is up.
+  await page.evaluate(() => (window as unknown as { __pushPanel: (c: object) => void }).__pushPanel({ id: "transit:station:subway:631", title: "Grand Central-42 St", subtitle: "Subway station" }));
+  await expect(page.getByTestId("details-sheet")).toBeVisible();
+  await expect(preview).toBeHidden();
+  await expect(page.getByTestId("trip-heading")).toHaveCount(0);
+  await expectLayout(page);
+});
 
 test("answer follow-ups ask the agent even when extra map actions exist", async ({ page }) => {
   await mockNetwork(page);

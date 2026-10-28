@@ -15,6 +15,8 @@ export interface EntranceLabelOpts {
   phone: boolean;
   closeM?: number;
   radiusM?: number;
+  /** Overhead: the station's own label is on the map already, so just what it is and the corner. */
+  overhead?: boolean;
 }
 
 const WORDS: Record<string, string> = { Avenue: "Av", Street: "St", Place: "Pl", Road: "Rd", Boulevard: "Blvd", Parkway: "Pkwy", Square: "Sq", Drive: "Dr", Lane: "Ln", Plaza: "Plz", Terrace: "Ter", West: "W", East: "E", North: "N", South: "S" };
@@ -25,10 +27,12 @@ export function shortStreet(name: string): string {
 }
 
 /** What the entrance is, in words; null for passages and station houses (no kit, no label). */
-export function entranceKind(kind: string, out: boolean): string | null {
-  if (/elevator/i.test(kind)) return out ? "Elevator · out of service" : "Elevator";
-  if (/escalator/i.test(kind)) return "Escalator";
-  if (/stair/i.test(kind)) return "Stairs";
+export function entranceKind(kind: string, out: boolean, way?: string): string | null {
+  // One-way entrances say so: an exit-only stair is no way in (owner, 2026-10-27).
+  const only = way === "in" ? " · entry only" : way === "out" ? " · exit only" : "";
+  if (/elevator/i.test(kind)) return out ? "Elevator · out of service" : `Elevator${only}`;
+  if (/escalator/i.test(kind)) return `Escalator${only}`;
+  if (/stair/i.test(kind)) return `Stairs${only}`;
   return null;
 }
 
@@ -60,7 +64,7 @@ export function entranceLabels(
   outStations: Set<string>,
   eye: Pt,
   placeAt: (at: Pt) => ExitPlace,
-  { max, phone, closeM = 60, radiusM = 180 }: EntranceLabelOpts,
+  { max, phone, closeM = 60, radiusM = 180, overhead = false }: EntranceLabelOpts,
 ): GeoJSON.FeatureCollection<GeoJSON.Point, { label: string; d: number }> {
   const routes = routesById(sys);
   const near: Array<{ at: Pt; kind: string; name: string; trains: string; d: number }> = [];
@@ -68,7 +72,7 @@ export function entranceLabels(
     const at = f.geometry.coordinates as Pt;
     const d = metresBetween(at, eye);
     if (d > radiusM) continue;
-    const kind = entranceKind(f.properties.kind, outStations.has(String(f.properties.id)));
+    const kind = entranceKind(f.properties.kind, outStations.has(String(f.properties.id)), f.properties.way);
     // A shared mezzanine lists both stations ("A12; D13"): their trains together.
     const trains = [...new Set(String(f.properties.id).split(/;\s*/).flatMap((id) => (routes.get(id) ?? "").split(" ").filter(Boolean)))].join(" ");
     if (kind) near.push({ at, kind, name: String(f.properties.name ?? ""), trains, d });
@@ -85,7 +89,7 @@ export function entranceLabels(
     shown.add(key);
     const head = [e.name, e.trains].filter(Boolean).join(" · ");
     const what = corner ? `${e.kind} · ${corner}` : e.kind;
-    const lines = phone && e.d > closeM ? [head || corner || e.kind] : head ? [head, what] : [what];
+    const lines = overhead ? (corner ? [e.kind, corner] : [e.kind]) : phone && e.d > closeM ? [head || corner || e.kind] : head ? [head, what] : [what];
     features.push({ type: "Feature", geometry: { type: "Point", coordinates: e.at }, properties: { label: lines.join("\n"), d: Math.round(e.d) } });
   }
   return { type: "FeatureCollection", features };

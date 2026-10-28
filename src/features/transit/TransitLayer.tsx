@@ -109,6 +109,7 @@ function metresBetween(a: { lon: number; lat: number }, b: number[]): number {
 /** X-ray draws underground trains this far below the ground plane. */
 const XRAY_DEPTH_M = -12;
 /** Where the walker stands: at street level the map centre sits at most ~10 m ahead of the eye. */
+const ENTRANCE_LABEL_ZOOM = 17;
 const EMPTY_FC: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 
 function streetEye(map: MaplibreMap): { lon: number; lat: number } {
@@ -954,7 +955,12 @@ export default function TransitLayer() {
       setPickTargets(entr.current.map((e) => ({ kind: "entrance" as const, id: e.id, lng: e.lon, lat: e.lat, h: 3, props: { name: e.name } })), "entrances");
       // Each nearby entrance's corner and kind.
       const phone = window.matchMedia("(max-width: 639px)").matches;
-      setEntrLabels(walking && sub ? entranceLabels(sub, outStations, [c.lng, c.lat], (read ?? readMap(map)).placeAt, { max: phone ? 2 : 4, phone }) : EMPTY_FC);
+      // Overhead and close in, each nearby entrance says what it is, one-way or not, and its corner, not just "Stairs" (owner, 2026-10-27).
+      const close = !walking && map.getZoom() >= ENTRANCE_LABEL_ZOOM;
+      setEntrLabels(!sub ? EMPTY_FC
+        : walking ? entranceLabels(sub, outStations, [c.lng, c.lat], (read ?? readMap(map)).placeAt, { max: phone ? 2 : 4, phone })
+        : close ? entranceLabels(sub, outStations, [c.lng, c.lat], readMap(map).placeAt, { max: phone ? 4 : 8, phone, radiusM: 300, overhead: true })
+        : EMPTY_FC);
       // Over the 3D storefronts and kiosks, which are added after it and would hide it.
       if (walking && map.getLayer("transit-entrance-label")) map.moveLayer("transit-entrance-label");
     };
@@ -1365,8 +1371,9 @@ export default function TransitLayer() {
         <Layer id="transit-entrance-label" type="symbol"
           layout={{ "text-field": ["get", "label"], "text-font": ["Noto Sans Bold"], "text-size": 14, "text-anchor": "bottom",
             // Above the stair's railing: a near stair stands tall on screen, a far one short.
-            "text-offset": ["interpolate", ["linear"], ["get", "d"], 5, ["literal", [0, -7]], 20, ["literal", [0, -4]], 60, ["literal", [0, -2]], 180, ["literal", [0, -1]]] as unknown as [number, number],
-            "text-max-width": 16, "text-line-height": 1.25, "text-pitch-alignment": "viewport", "text-allow-overlap": true, "symbol-sort-key": ["get", "d"] }}
+            "text-offset": walking ? ["interpolate", ["linear"], ["get", "d"], 5, ["literal", [0, -7]], 20, ["literal", [0, -4]], 60, ["literal", [0, -2]], 180, ["literal", [0, -1]]] as unknown as [number, number] : [0, -1.3],
+            // Overhead the labels give way to each other; at street level the nearest few always show.
+            "text-max-width": 16, "text-line-height": 1.25, "text-pitch-alignment": "viewport", "text-allow-overlap": walking, "symbol-sort-key": ["get", "d"] }}
           paint={{ "text-color": "#ffffff", "text-halo-color": "rgba(14,23,38,0.95)", "text-halo-width": 3 }} />
       </Source>
       <Source id="transit-entrances" type="geojson" data={entrances}>
@@ -1380,9 +1387,9 @@ export default function TransitLayer() {
                 ["in", "levator", ["get", "kind"]], ["case", ["in", ["get", "id"], ["literal", [...outStations]]], "transit-entr-elevator-out", "transit-entr-elevator"],
                 ["in", "scalator", ["get", "kind"]], "transit-entr-escalator", "transit-entr-stair"],
               "icon-size": ["interpolate", ["linear"], ["zoom"], 16, 0.55, 19, 1], "icon-allow-overlap": true,
-              "text-field": ["step", ["zoom"], "", 17.5, ["case",
-                ["in", "levator", ["get", "kind"]], ["case", ["in", ["get", "id"], ["literal", [...outStations]]], "Elevator · out", "Elevator"],
-                ["in", "scalator", ["get", "kind"]], "Escalator", ["in", "asement", ["get", "kind"]], "Through a building", "Stairs"]],
+              // Stairs, elevators and escalators get the fuller label (transit-entrance-label: kind, one-way, corner);
+              // only an entrance through a building is named on its badge.
+              "text-field": ["step", ["zoom"], "", 17.5, ["case", ["in", "asement", ["get", "kind"]], "Through a building", ""]],
               "text-font": ["Noto Sans Bold"], "text-size": 12, "text-anchor": "left", "text-offset": [1.3, 0], "text-optional": true }}
             paint={{ "text-color": theme.dark ? "#f2f1ed" : "#14532d", "text-halo-color": theme.land, "text-halo-width": 1.6 }} />
         )}
