@@ -293,7 +293,7 @@ export function troubleFromAlert(a: FeedAlert, stations: TroubleStation[], nowS:
     const dirs = [...new Set(mine.map((e) => e.direction_id).filter((d): d is number => d === 0 || d === 1))];
     // "some Coney Island-bound [F] and some Church Av-bound [G]": each line's own label first.
     const textDir = boundFor(header, route) ?? skipChanges.find((c) => c.route === route)?.toward ?? null;
-    const direction = textDir ? `${textDir}-bound` : dirs.length === 1 ? directionLabel(dirs[0], skipped[0] ?? (mine[0]?.stop_id ? byId.get(mine[0].stop_id) : undefined)) : /^\s*(uptown|downtown)\b/i.exec(header)?.[1] ?? null;
+    const direction = textDir ? (/^(?:up|down)town$/i.test(textDir) ? textDir : `${textDir}-bound`) : dirs.length === 1 ? directionLabel(dirs[0], skipped[0] ?? (mine[0]?.stop_id ? byId.get(mine[0].stop_id) : undefined)) : /^\s*(uptown|downtown)\b/i.exec(header)?.[1] ?? null;
     const between = sh.between.map((n) => findStation(n, stations, route)).filter((s): s is TroubleStation => Boolean(s));
     return {
       alertId: a.id,

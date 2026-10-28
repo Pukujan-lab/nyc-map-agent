@@ -99,8 +99,11 @@ export function LinePanel({ map, route, onFollow, trains = () => [] }: { map: Ma
   // Held trains first: they are happening now, on this line (src/lib/transit/holds.ts).
   const notices = useMemo(() => allLineNotices(route, heldTrains(live).values(), alerts?.alerts ?? [], alerts?.outages ?? [], sys), [route, alerts, sys, live]);
   const [picked, setPicked] = useState<string | null>(null);
-  // A new line starts with every notice closed.
+  // A new line starts with every notice closed; opened from an answer about its trouble, with that trouble open.
+  const trouble = useSelectedLine()?.trouble ?? false;
+  const troubleNotice = trouble ? notices.find((n) => n.alert && n.tone !== "access" && n.stations.length) ?? notices.find((n) => n.alert && n.tone !== "access") : undefined;
   useEffect(() => setPicked(null), [route]);
+  useEffect(() => { if (troubleNotice) setPicked(troubleNotice.id); }, [route, troubleNotice?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const panelRef = useRef<HTMLDivElement>(null);
   const [panelEl, setPanelEl] = useState<HTMLElement | null>(null);
   const wide = useScreenSize() === "wide";

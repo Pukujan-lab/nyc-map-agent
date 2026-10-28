@@ -350,7 +350,8 @@ export default function AgentOverlay() {
     },
     // The same switch as the Layers menu, so turning it off again is where people expect.
     showLayer: (layer) => { if (layer === "busStops") setOptions({ busStops: true }); else setQuickLayer(layer, true); },
-    showLine: (route) => setSelectedLine(lineOf(route)),
+    // From an answer, the line opens on its service change: skipped stations ringed and framed.
+    showLine: (route) => setSelectedLine(lineOf(route), null, undefined, true),
   };
   const runAction = (a: MapAction) => {
     runMapAction(a, actionCtx, routeColor);
@@ -408,6 +409,7 @@ export default function AgentOverlay() {
     // The text written between tool calls, piece by piece (see joinSegments).
     const segments: string[] = [""];
     let replyActions: MapAction[] | undefined;
+    let sawTrip = false;
     // A voice question still working after ~2.5 s gets one short spoken status line.
     const sayIn = heard ?? statusLang(q, lang);
     // A question clearly in another language switches the app's own text to it (unless one is picked in the menu).
@@ -429,6 +431,7 @@ export default function AgentOverlay() {
         } else if (ev.type === "step" && ev.status === "start") {
           if (segments[segments.length - 1].trim()) segments.push("");
         } else if (ev.type === "command") {
+          if (ev.command.type === "showRoute") sawTrip = true;
           executeCommand(ev.command, ctxRef.current);
         } else if (ev.type === "actions") {
           replyActions = ev.actions;
@@ -447,6 +450,10 @@ export default function AgentOverlay() {
       if (abort.current === ctl) { setBusy(false); setWaiting(false); liveReply.current = null; }
     }
     if (ctl.signal.aborted) return;
+    // On a wide screen an answer about a line's trouble shows it on the map by itself, beside the answer:
+    // the 7's weekend skips were only words until someone found the line (owner, 2026-10-27).
+    const lineFirst = replyActions?.[0];
+    if (!sawTrip && lineFirst?.kind === "showLine" && window.matchMedia("(min-width: 1024px)").matches) setSelectedLine(lineOf(lineFirst.route), null, undefined, true);
     // The model still asked for a start: put the same button on its reply.
     const offersLocation = !askReq && !!spoken && !sharedCoords() && replyAsksForOrigin(spoken);
     if (offersLocation) {

@@ -6,7 +6,7 @@ import { elevatorStatus, geocode, hazardsAt, nearestRestrooms, publicRestrooms, 
 import { exitActions, LAYER_HELP, layerAction, lineAction, placeActions, restroomActions, troubleActions, tripActions } from "./mapActions";
 import { buildDriveTrip } from "./drive/trip";
 import type { DriveRouter } from "./drive/router";
-import { portalFor, safe, straight, toNyLocal, tripBrief } from "./trip";
+import { nyLocalToDate, portalFor, safe, straight, toNyLocal, tripBrief } from "./trip";
 import { distM, openDataEntrances, type Station } from "./transit";
 import { loadGuideLandmarks, type GuideLandmark } from "../../../src/lib/guide/landmarkGuide";
 import { landmarkAtTurn, landmarksOnWay } from "./landmarksOnWay";
@@ -14,7 +14,7 @@ import { sameStation } from "../../../src/lib/transit/serviceChanges";
 import { lineTroubles, otherLinesAt, stuckTrains, troubleSummary, type FeedAlert, type LiveVehicle } from "../../../src/lib/transit/trouble";
 import { planTrip, type PlanDeps } from "./plan";
 import { withSources, type SourceLedger } from "./freshness";
-import { parseWhen, scheduleFor } from "./when";
+import { parseWhen, sayWhen, scheduleFor } from "./when";
 
 export interface ToolContext {
   location: { lon: number; lat: number } | null;
@@ -69,7 +69,10 @@ export const args = {
     to: z.string().min(2).describe("Where they are going once out: a landmark or address"),
   }),
   elevator_status: z.object({ station: z.string().min(2) }),
-  line_status: z.object({ lines: z.array(z.string().regex(/^[A-Za-z0-9]{1,3}$/)).min(1).max(6).describe("Subway lines as the MTA names them, e.g. [\"L\"] or [\"4\",\"5\",\"6\"]") }),
+  line_status: z.object({
+    lines: z.array(z.string().regex(/^[A-Za-z0-9]{1,3}$/)).min(1).max(6).describe("Subway lines as the MTA names them, e.g. [\"L\"] or [\"4\",\"5\",\"6\"]"),
+    when: when.describe("The time the user asks about, in their words: \"now\", \"this weekend\", \"Saturday 2pm\", \"tomorrow morning\". Planned work is checked for that time."),
+  }),
   flyTo: z.object({ place: z.string(), zoom: z.number().min(9).max(20).optional() }),
   tripRef: z.object({ tripId: z.string() }),
   enterStreetView: z.object({ place: z.string() }),
@@ -201,7 +204,7 @@ function allTools(ctx: ToolContext) {
       origin: { label: from.label, at: at(from) }, destination: { label: to.label, at: to.at },
       departIso: toNyLocal(start), arriveIso: toNyLocal(new Date(start.getTime() + w.durationS * 1000)),
       legs: [{ kind: "walk", label: `Walk to ${to.label}`, coords: w.coords, durationS: w.durationS, distanceM: w.distanceM, turns: w.turns }],
-      routes: [], alerts: [], elevators: [], hazards: [], weather: null, exitAdvice: null, context: [], skips: [], stubbed: [], alternatives: [],
+      routes: [], alerts: [], elevators: [], hazards: [], weather: null, exitAdvice: null, context: [], skips: [], impacts: [], stubbed: [], alternatives: [],
     };
     trips.set(t.id, t);
     return t;
@@ -297,9 +300,13 @@ function allTools(ctx: ToolContext) {
     line_status: tool({
       description: "Live MTA subway trouble right now for the given lines: what is wrong and at which station, skipped stations, shuttle buses (where they run, where to board, where to get the train back), stations where the MTA says to switch direction, other lines at skipped stations, and trains not moving on a delayed line. Subway only: no buses, LIRR or Metro-North.",
       inputSchema: args.line_status,
-      execute: sourced(async ({ lines }: z.infer<typeof args.line_status>) => {
+      execute: sourced(async ({ lines, when: asked }: z.infer<typeof args.line_status>) => {
         const routes = [...new Set(lines.map((l) => l.toUpperCase()))];
-        const nowS = Math.floor((ctx.deps?.now?.() ?? Date.now()) / 1000);
+        const liveS = Math.floor((ctx.deps?.now?.() ?? Date.now()) / 1000);
+        // "This weekend" on a Tuesday: the work that runs then, not what is running now (owner, 2026-10-27).
+        const atLocal = parseWhen(asked ?? "now", new Date(liveS * 1000)) ?? toNyLocal(new Date(liveS * 1000));
+        const nowS = Math.max(liveS, Math.floor(nyLocalToDate(atLocal).getTime() / 1000));
+        const ahead = nowS - liveS > 3600;
         const [alerts, feed] = await Promise.all([
           (ctx.deps?.alerts ?? serviceAlerts)(routes, nowS),
           safe((ctx.deps?.alertEntities ?? subwayAlertEntities)(), [] as FeedAlert[]),
@@ -308,15 +315,18 @@ function allTools(ctx: ToolContext) {
         const touched = feed.some((a) => a.alert.informed_entity?.some((e) => e.route_id && routes.includes(e.route_id)));
         const stations = touched ? troubleStations(await safe((ctx.deps?.entrances ?? openDataEntrances).stations(), [] as Station[])) : [];
         const troubles = lineTroubles(feed, stations, routes, nowS);
-        const delayed = [...new Set(troubles.filter((t) => t.kind === "delay").map((t) => t.route))];
+        // Stuck trains are a now thing: none for a time ahead.
+        const delayed = ahead ? [] : [...new Set(troubles.filter((t) => t.kind === "delay").map((t) => t.route))];
         const vehicles = delayed.length ? await safe((ctx.deps?.vehicles ?? subwayVehicles)(delayed), [] as LiveVehicle[]) : [];
         const stuck = stuckTrains(vehicles, troubles, stations, nowS);
-        offer(troubleActions(troubles, stuck));
-        offer(routes.slice(0, 2).map(lineAction));
+        // The line opens on its trouble notice, so it leads; a train stuck right now is more pressing still.
+        const lineButtons = routes.slice(0, 2).map((r) => lineAction(r, troubles.some((t) => t.route === r)));
+        if (stuck.length) { offer(troubleActions(troubles, stuck)); offer(lineButtons); } else { offer(lineButtons); offer(troubleActions(troubles, stuck)); }
         const followed = ctx.followedTrain?.replace(/^subway:/, "") ?? null;
         const followedSeen = followed ? vehicles.find((v) => v.tripId === followed) : undefined;
         return {
           lines: routes,
+          ...(ahead ? { checkedFor: sayWhen(atLocal) } : {}),
           alerts,
           trouble: troubles.slice(0, 8).map((t) => ({
             line: t.route,

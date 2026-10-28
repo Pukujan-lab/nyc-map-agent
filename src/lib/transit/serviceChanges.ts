@@ -4,15 +4,18 @@
  *  - skips: "Flushing-bound [7] skips 52 St and 69 St" (direction-aware;
  *    no direction in the text = both directions);
  *  - platform changes: "All trains at Woodside-61 St board from the
- *    Manhattan-bound platform".
+ *    Manhattan-bound platform";
+ *  - suspensions: "No [W] between 57 St-7 Av, Manhattan and Astoria-Ditmars
+ *    Blvd, Queens" (the two ends; a station closed outright, "No [7] at
+ *    Flushing-Main St", is a skip in both directions).
  * A direction is kept as the label the MTA uses ("Flushing", "Manhattan",
  * "Coney Island"); `towardEnd` turns it into an end of the line.
  */
 export type ServiceChange = {
   alertId: string;
   route: string;
-  kind: "skip" | "platform";
-  /** Station names as written in the alert. */
+  kind: "skip" | "platform" | "suspended";
+  /** Station names as written in the alert; for a suspension, the two ends of the gap. */
   names: string[];
   /** Direction label the change applies to ("Flushing"), or null for both directions. */
   toward: string | null;
@@ -24,35 +27,58 @@ export type ServiceChange = {
 
 type AlertLike = { id: string; text: string; routes: string[] };
 
-const list = (s: string) => s.replace(/[.]\s*$/, "").split(/,\s*|\s+and\s+/).map((x) => x.trim()).filter((x) => x && x.length < 60);
+const BOROUGH = /^(?:the )?(?:Manhattan|Queens|Brooklyn|Bronx|Staten Island)$/i;
+const list = (s: string) => s.replace(/[.]\s*$/, "").replace(/\s+(?:-|–)\s+.*$/, "").split(/,\s*(?:and\s+)?|\s+and\s+/).map((x) => x.trim().split("/")[0].trim())
+  // "… and runs every 16 minutes": a clause, not a station.
+  .filter((x) => x && x.length < 60 && /^[A-Z0-9]/.test(x) && !BOROUGH.test(x));
 const dirOf = (s: string): string | null => {
-  const m = s.match(/(?:^|[\s,])([A-Z][\w.'/]*(?: [A-Z][\w.'/]*){0,2})-bound/);
-  return m ? m[1] : null;
+  const m = s.match(/(?:^|[\s,])([A-Z0-9][\w.'/]*(?: [A-Z][\w.'/]*){0,2})-bound/);
+  if (m) return m[1].replace(/^St\. /, "St ");
+  const ud = s.match(/\b(uptown|downtown)\b/i);
+  return ud ? ud[1].charAt(0).toUpperCase() + ud[1].slice(1).toLowerCase() : null;
 };
+const bullets = (s: string) => [...s.matchAll(/\[([A-Z0-9]+)\]/g)].map((m) => m[1]);
 
 export function serviceChanges(a: AlertLike): ServiceChange[] {
   const out: ServiceChange[] = [];
   const route = a.routes[0] ?? "";
   const alertDir = dirOf(a.text.split("\n")[0]);
   for (const line of a.text.split(/\n/)) {
-    const skip = line.match(/((?:\[[A-Z0-9]+\])+)(?: trains?)?(?: will)? skips? ([^.\n]+)/);
+    const skip = line.match(/((?:\[[A-Z0-9]+\](?:,? and |, )?)+)(?: (?:local|express))?(?: trains?)?(?: will)? skips? ([^.\n]+)/);
     if (skip) {
       const before = line.slice(0, skip.index);
       const toward = /both directions/i.test(line) ? null : dirOf(before);
       const names = list(skip[2]);
-      const routes = [...skip[1].matchAll(/\[([A-Z0-9]+)\]/g)].map((m) => m[1]);
+      const routes = bullets(skip[1]);
       for (const r of routes.length ? routes : [route]) {
         out.push({ alertId: a.id, route: r, kind: "skip", names, toward, notice: `Skipped${toward ? ` ${toward}-bound` : " in both directions"}` });
       }
     }
-    const plat = line.match(/(?:(?:all|some)\s+)?((?:\[[A-Z0-9]+\])*)\s*(?:trains? )?at ([^\n]+?) board from the ([\w .'/]+?)-bound platform/i);
+    // "No Jamaica-bound [F] service at 57 St, …" / "No [7] at Flushing-Main St": closed there.
+    const closed = line.match(/(?:^|, )[Nn]o (?:([\w .'/]+?)-bound )?((?:\[[A-Z0-9]+\](?:,? and |, )?)+)(?: trains?| service)? at ([^\n]+)/);
+    if (closed) {
+      const toward = closed[1] ?? null;
+      for (const r of bullets(closed[2])) out.push({ alertId: a.id, route: r, kind: "skip", names: list(closed[3]), toward, notice: `No ${toward ? `${toward}-bound ` : ""}${r} trains` });
+    }
+    // "No [W] between 57 St-7 Av, Manhattan and Astoria-Ditmars Blvd, Queens - take the [N] instead"
+    const gap = line.match(/(?:^|, )[Nn]o ((?:\[[A-Z0-9]+\](?:,? and |, )?)+)(?: trains?| service)? between (.+?)(?:, (?:the )?(?:Manhattan|Queens|Brooklyn|Bronx|Staten Island))? and ([^\n]+)/);
+    if (gap) {
+      const ends = [list(gap[2])[0], list(gap[3])[0]].filter(Boolean);
+      if (ends.length === 2) for (const r of bullets(gap[1])) out.push({ alertId: a.id, route: r, kind: "suspended", names: ends, toward: null, notice: `No ${r} trains between ${ends[0]} and ${ends[1]}` });
+    }
+    const plat = line.match(/(?:(?:all|some)\s+)?((?:\[[A-Z0-9]+\])*)\s*(?:trains? )?at ([^\n]+?) board from the ([\w .'/]+?)-bound platform/i)
+      // "All trains board from the Manhattan-bound platform at Burnside Av" / "All [SIR] trains from Eltingville to Huguenot board from …"
+      ?? line.match(/(?:all|some)\s+((?:\[[A-Z0-9]+\])*)\s*trains? (?:from (.+?) to (.+?) )?board from the ([\w .'/]+?)-bound platform(?: at ([^\n.]+))?/i);
     if (plat) {
-      const platform = plat[3].trim();
-      const lead = dirOf(line.slice(0, plat.index! + plat[0].indexOf(" at ")));
+      const reversed = plat.length > 4;
+      const names = reversed ? (plat[5] ? list(plat[5]) : [plat[2], plat[3]].filter(Boolean).map((n) => n.replace(/^St\. /, "St "))) : list(plat[2]);
+      const platform = (reversed ? plat[4] : plat[3]).trim();
+      const cut = reversed ? plat.index! : plat.index! + plat[0].indexOf(" at ");
+      const lead = dirOf(line.slice(0, cut));
       // "All trains at X board from the Manhattan-bound platform" in a Flushing-bound alert: the Flushing-bound riders are the ones moved.
       const toward = lead ?? (alertDir && alertDir !== platform ? alertDir : null);
       const who = toward ? `${toward}-bound trains` : `All ${route} trains`.replace("  ", " ");
-      out.push({ alertId: a.id, route, kind: "platform", names: list(plat[2]), toward, platform, notice: `${who} board from the ${platform}-bound platform` });
+      if (names.length) out.push({ alertId: a.id, route, kind: "platform", names, toward, platform, notice: `${who} board from the ${platform}-bound platform${reversed && plat[2] ? ` between ${names[0]} and ${names[1]}` : ""}` });
     }
   }
   return out;

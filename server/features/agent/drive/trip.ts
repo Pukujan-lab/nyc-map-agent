@@ -44,6 +44,7 @@ export async function buildDriveTrip(
     exitAdvice: null,
     context: [...slow, ...close, ...events, ...n511.notes, ...tolls(r.coords), ...crashes],
     skips: [],
+    impacts: [],
     stubbed,
     alternatives: [],
   };

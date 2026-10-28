@@ -131,8 +131,10 @@ export function AnswerCard(p: AnswerCardProps) {
           <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-slate-100" aria-live="polite">{plainText(p.text)}</p>
           {done ? (
             <div className="flex flex-col gap-2">
-              {p.location ? <div ref={locationEl} className="flex flex-col gap-2">{p.location}</div> : p.primary ? (
-                <Button type="button" className="h-[52px] rounded-full bg-blue-600 text-[15px] font-semibold text-white hover:bg-blue-500" onClick={p.primary.run}>
+              {p.location ? <div ref={locationEl} className="flex flex-col gap-2">{p.location}</div> : null}
+              {/* Asking where you are never hides what the answer shows on the map (owner, 2026-10-27: the 7's weekend work). */}
+              {p.primary ? (
+                <Button type="button" variant={p.location ? "outline" : "default"} className={cn("h-[52px] rounded-full text-[15px] font-semibold", p.location ? "border-[#2c3d5a] bg-transparent text-slate-100 hover:bg-slate-800" : "bg-blue-600 text-white hover:bg-blue-500")} onClick={p.primary.run}>
                   {p.primary.label}
                 </Button>
               ) : null}
