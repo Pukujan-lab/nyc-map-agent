@@ -1,6 +1,6 @@
 import { ArrowLeftRight, Ban, BellRing, Bus, DoorOpen, Layers, ListOrdered, MapPin, Route, TrainFront, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { RestroomPhoto } from "@/features/restrooms/RestroomPhoto";
+import { RestroomPhoto } from "@/components/RestroomPhoto";
 import { useT } from "@/lib/i18n/appLang";
 import { distanceText } from "./mapActions";
 import type { MapAction, RestroomSpot } from "./schema";

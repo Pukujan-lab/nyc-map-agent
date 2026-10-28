@@ -6,7 +6,7 @@ import { currentOrigin } from "@/lib/geo/directionsFromHere";
 import { startSharing } from "@/lib/geo/sharedLocation";
 import { useDataView } from "@/lib/store/DataViewContext";
 import type { RestroomInfo } from "./layers";
-import { RestroomPhoto } from "./RestroomPhoto";
+import { RestroomPhoto } from "@/components/RestroomPhoto";
 import { restroomRows, restroomSourceLine } from "./source";
 
 /** A clicked public restroom's details, shown in the map panel. */
