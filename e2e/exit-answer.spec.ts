@@ -41,10 +41,22 @@ for (const [width, height] of [[375, 667], [320, 568]]) {
   });
 }
 
-test("walking away from the place after an exit answer says to turn around", async ({ page, context }) => {
+test("walking away from the place after an exit answer says to turn around", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
-  await context.grantPermissions(["geolocation"]);
-  await context.setGeolocation({ latitude: exit[1], longitude: exit[0], accuracy: 8 });
+  // A location we move by hand: every watcher hears each step.
+  await page.addInitScript(([lon, lat]) => {
+    const watchers = new Map<number, PositionCallback>();
+    let at = { lon, lat };
+    let next = 1;
+    const fix = () => ({ coords: { longitude: at.lon, latitude: at.lat, accuracy: 8, heading: null, speed: null, altitude: null, altitudeAccuracy: null }, timestamp: Date.now() }) as unknown as GeolocationPosition;
+    Object.defineProperty(navigator, "geolocation", { configurable: true, value: {
+      watchPosition: (ok: PositionCallback) => { const id = next++; watchers.set(id, ok); setTimeout(() => ok(fix()), 50); return id; },
+      clearWatch: (id: number) => watchers.delete(id),
+      getCurrentPosition: (ok: PositionCallback) => setTimeout(() => ok(fix()), 50),
+    } });
+    (window as unknown as { __moveTo: (lon: number, lat: number) => void }).__moveTo = (lo, la) => { at = { lon: lo, lat: la }; watchers.forEach((w) => w(fix())); };
+  }, exit);
+  const moveTo = (lon: number, lat: number) => page.evaluate(([lo, la]) => (window as unknown as { __moveTo: (lon: number, lat: number) => void }).__moveTo(lo, la), [lon, lat]);
   await mockNetwork(page);
   await page.route("**/api/agent", (r) => r.fulfill({ contentType: "application/x-ndjson", body: stream([
     { type: "text", text: "Take the NE exit on West 34 Street. About 3 minutes on foot." },
@@ -73,12 +85,12 @@ test("walking away from the place after an exit answer says to turn around", asy
   await expect(page.getByTestId("wrong-way")).toHaveCount(0);
   // Walk west, away from the Empire State Building to the east.
   for (const lon of [-73.9883, -73.9886, -73.9889, -73.9892, -73.9896, -73.99]) {
-    await context.setGeolocation({ latitude: exit[1], longitude: lon, accuracy: 8 });
+    await moveTo(lon, exit[1]);
     await page.waitForTimeout(500);
   }
   await expect(page.getByTestId("wrong-way")).toHaveText("Turn around, Empire State Building is behind you");
   // Walking back clears it.
-  await context.setGeolocation({ latitude: exit[1], longitude: exit[0], accuracy: 8 });
+  await moveTo(exit[0], exit[1]);
   await expect(page.getByTestId("wrong-way")).toHaveCount(0);
   await expectLayout(page);
 });
