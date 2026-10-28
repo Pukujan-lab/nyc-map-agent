@@ -7,7 +7,7 @@ import { mockNetwork } from "./mocks";
  * not the whole city's tunnels through every building.
  */
 for (const size of [{ width: 390, height: 844 }, { width: 1280, height: 800 }]) {
-  test(`street view X-ray toggles on and keeps the layout at ${size.width}px`, async ({ page }) => {
+  test(`street view opens with X-ray on and keeps the layout at ${size.width}px`, async ({ page }) => {
     await page.setViewportSize(size);
     await mockNetwork(page);
     const errors: string[] = [];
@@ -16,9 +16,8 @@ for (const size of [{ width: 390, height: 844 }, { width: 1280, height: 800 }]) 
     await expect(page.locator("canvas.maplibregl-canvas").first()).toBeVisible();
     await page.getByTestId("view-switcher").getByRole("button", { name: "Street", exact: true }).click();
     await page.waitForTimeout(2500);
-    const toggle = page.getByTestId("xray-toggle");
-    await toggle.click();
-    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    // Street view turns X-ray on by itself.
+    await expect(page.getByTestId("xray-toggle")).toHaveAttribute("aria-pressed", "true");
     await page.waitForTimeout(1500);
     expect(errors).toEqual([]);
     await expectLayout(page);
