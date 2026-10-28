@@ -9,6 +9,17 @@ import { installYouLayer, raiseYouLayer, setYouLayer } from "@/lib/map/youLayer"
 
 type Pt = [number, number];
 
+/** Add the marker's layers if the style takes them now; false while it is still loading. */
+function tryInstall(map: MapLibreMap): boolean {
+  try {
+    installYouLayer(map);
+    raiseYouLayer(map);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** A new fix glides in over this long (or the time since the last fix, if shorter) instead of jumping. */
 const GLIDE_MS = 900;
 /** Walking guidance draws its own arrow for you; the dot steps aside while it runs. */
@@ -32,6 +43,7 @@ export function YouMarker() {
   const lastFix = useRef(0);
   const raf = useRef(0);
   const easingUntil = useRef(0);
+  const reached = useRef(false);
   const live = useRef({ heading, accuracy: shared.accuracy ?? null, camera });
   live.current = { heading, accuracy: shared.accuracy ?? null, camera };
 
@@ -45,7 +57,8 @@ export function YouMarker() {
   // Draw at the glided position and move the camera with it when following.
   const draw = useRef<(m: MapLibreMap) => void>(() => {});
   draw.current = (m: MapLibreMap) => {
-    if (!m.getSource("you")) return;
+    // The style may not have been ready when the marker mounted; try again with each fix.
+    if (!m.getLayer("you-dot") && !tryInstall(m)) return;
     const at = shown.current;
     const guided = Boolean(m.getSource(GUIDE_SOURCE));
     setYouLayer(m, guided ? null : at, live.current.heading, live.current.accuracy);
@@ -59,14 +72,12 @@ export function YouMarker() {
     if (!map) return;
     let busy = false;
     const install = () => {
-      if (busy || !map.isStyleLoaded()) return;
-      // Other features add layers later; keep the marker above them.
-      if (map.getSource("you")) { raiseYouLayer(map); return; }
+      if (busy) return;
       busy = true;
       try {
-        installYouLayer(map);
-        raiseYouLayer(map);
-        draw.current(map);
+        // Other features add layers later; keep the marker above them.
+        if (map.getLayer("you-dot")) raiseYouLayer(map);
+        else if (tryInstall(map)) draw.current(map);
       } finally {
         busy = false;
       }
@@ -76,12 +87,14 @@ export function YouMarker() {
     return () => { map.off("styledata", install); };
   }, [map]);
 
-  // Any camera move the marker did not make (a drag, an answer framing a place) stops following.
+  // A drag always stops following. Other camera moves (an answer framing a place) stop it only
+  // once the map has reached you: the app's own start-up moves must not cancel a fresh tap.
   useEffect(() => {
     if (!map) return;
     const stop = (e: unknown) => {
-      if ((e as { youMove?: boolean }).youMove) return;
-      if (youCamera() !== "off") setYouCamera("off");
+      const ev = e as { youMove?: boolean; originalEvent?: unknown };
+      if (ev.youMove || youCamera() === "off") return;
+      if (ev.originalEvent || reached.current) setYouCamera("off");
     };
     map.on("movestart", stop);
     return () => { map.off("movestart", stop); };
@@ -128,10 +141,12 @@ export function YouMarker() {
 
   // Entering a mode eases there once; after that each frame keeps up.
   useEffect(() => {
+    if (camera === "off") reached.current = false;
     if (!map || camera === "off" || !shown.current) return;
     const turn = camera === "turn" && live.current.heading !== null;
     easingUntil.current = performance.now() + 700;
     map.easeTo({ center: shown.current, zoom: Math.max(map.getZoom(), 16), bearing: turn ? live.current.heading! : 0, duration: 650 }, YOU_MOVE);
+    reached.current = true;
   }, [map, camera, on]);
 
   return null;

@@ -34,12 +34,13 @@ function pxPerMetreZ22(lat: number): number {
 }
 
 export function installYouLayer(map: MapLibreMap): void {
-  if (map.getSource(SRC)) return;
-  map.addSource(SRC, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+  // Each piece only when missing, so a try during a style load can be finished later.
+  if (map.getLayer("you-dot")) return;
+  if (!map.getSource(SRC)) map.addSource(SRC, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
   const beam = beamImage();
   if (beam && !map.hasImage(BEAM)) map.addImage(BEAM, beam, { pixelRatio: 2 });
-  map.addLayer({ id: "you-accuracy", type: "circle", source: SRC, paint: { "circle-radius": 0, "circle-color": "#3b82f6", "circle-opacity": 0.12, "circle-stroke-color": "#3b82f6", "circle-stroke-opacity": 0.35, "circle-stroke-width": 1, "circle-pitch-alignment": "map" } });
-  map.addLayer({ id: "you-beam", type: "symbol", source: SRC, filter: ["has", "heading"], layout: { "icon-image": BEAM, "icon-rotate": ["get", "heading"], "icon-rotation-alignment": "map", "icon-allow-overlap": true, "icon-ignore-placement": true } });
+  if (!map.getLayer("you-accuracy")) map.addLayer({ id: "you-accuracy", type: "circle", source: SRC, paint: { "circle-radius": 0, "circle-color": "#3b82f6", "circle-opacity": 0.12, "circle-stroke-color": "#3b82f6", "circle-stroke-opacity": 0.35, "circle-stroke-width": 1, "circle-pitch-alignment": "map" } });
+  if (!map.getLayer("you-beam")) map.addLayer({ id: "you-beam", type: "symbol", source: SRC, filter: ["has", "heading"], layout: { "icon-image": BEAM, "icon-rotate": ["get", "heading"], "icon-rotation-alignment": "map", "icon-allow-overlap": true, "icon-ignore-placement": true } });
   map.addLayer({ id: "you-dot", type: "circle", source: SRC, paint: { "circle-radius": 8, "circle-color": "#2563eb", "circle-stroke-color": "#ffffff", "circle-stroke-width": 3, "circle-pitch-alignment": "map" } });
 }
 
