@@ -11,6 +11,7 @@ import { useFlags } from "@/lib/flags";
 import { useFeatureToggles } from "@/lib/featureToggles";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { MapCompass } from "./MapCompass";
+import { YouMarker } from "./YouMarker";
 import { ViewSwitcher } from "./ViewSwitcher";
 import { applyReadable, hideShields } from "@/lib/map/readable";
 import { busStopAt, busStopIconOpacity, busStopTextOpacity } from "@/lib/map/busStops";
@@ -1781,6 +1782,7 @@ export function MapView({
         <Suspense fallback={null}>
           {FEATURES.map((f) => (f.MapLayer ? <f.MapLayer key={f.id} /> : null))}
         </Suspense>
+        <YouMarker />
         {walking || agentHome ? null : <MapCompass />}
         <ViewSwitcher />
       </MapLibreMap>
