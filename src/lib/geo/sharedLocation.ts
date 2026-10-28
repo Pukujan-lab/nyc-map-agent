@@ -14,6 +14,10 @@ export interface SharedLocation {
   coords: { lon: number; lat: number } | null;
   /** The browser's accuracy radius for `coords`, in metres (a sudden jump hints at a station or tunnel). */
   accuracy?: number | null;
+  /** The direction of travel the device reports while moving (degrees from north), or null. */
+  course?: number | null;
+  /** Metres per second while moving, or null. */
+  speed?: number | null;
 }
 
 type Geo = Pick<Geolocation, "watchPosition" | "clearWatch">;
@@ -44,7 +48,8 @@ export function startSharing(g: Geo | null = geo()): Promise<SharedLocation["coo
       (p) => {
         if (watchId === null) return;
         const coords = { lon: p.coords.longitude, lat: p.coords.latitude };
-        set({ status: "on", coords, accuracy: Number.isFinite(p.coords.accuracy) ? p.coords.accuracy : null });
+        const num = (n: number | null | undefined) => (typeof n === "number" && Number.isFinite(n) ? n : null);
+        set({ status: "on", coords, accuracy: num(p.coords.accuracy), course: num(p.coords.heading), speed: num(p.coords.speed) });
         if (first) { first = false; resolve(coords); }
       },
       () => {

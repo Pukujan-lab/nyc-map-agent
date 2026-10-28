@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import { useFlag } from "@/lib/flags";
-import { sharedCoords, startSharing } from "@/lib/geo/sharedLocation";
+import { sharedCoords, startSharing, useSharedLocation } from "@/lib/geo/sharedLocation";
+import { nextYouCamera, setYouCamera, useYouCamera } from "@/lib/geo/youCamera";
 import { onMapInstance } from "@/lib/map/mapInstance";
-import { useMapState } from "@/lib/store/MapStateContext";
 import { setOpenMenu, useOpenMenu } from "@/lib/store/openMenu";
 import { setFollowMode, stopFollowing, useFollowMode, useFollowed, usePreviewing, type FollowMode } from "@/lib/transit/follow";
 import { useSelectedLine } from "@/lib/transit/selectedLine";
@@ -215,22 +215,34 @@ function ZoomButtons({ map }: { map: MapLibreMap | null }) {
   );
 }
 
-function LocateButton({ map, className, style }: { map: MapLibreMap | null; className?: string; style?: React.CSSProperties }) {
-  const { flyTo } = useMapState();
+/** The arrow Center on my location shows while the map turns with you. */
+const TurnIcon = () => <svg width={22} height={22} viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M12 2 4.5 20.3l.7.7L12 18l6.8 3 .7-.7z" /></svg>;
+
+/**
+ * Center on my location, cycled like Google and Apple Maps: the first tap
+ * shares your location and follows you; the next turns the map with the way you
+ * face (when the phone knows it); the next goes back to north up. Dragging the
+ * map stops following (see youCamera).
+ */
+function LocateButton({ className, style }: { map?: MapLibreMap | null; className?: string; style?: React.CSSProperties }) {
   const [asking, setAsking] = useState(false);
+  const camera = useYouCamera();
+  const shared = useSharedLocation();
+  const canTurn = shared.course != null || typeof DeviceOrientationEvent !== "undefined";
   const locate = () => {
-    const here = sharedCoords();
-    if (here) { flyTo({ lon: here.lon, lat: here.lat, zoom: Math.max(map?.getZoom() ?? 16, 16) }); return; }
+    if (sharedCoords()) { setYouCamera(nextYouCamera(camera, canTurn)); return; }
     setAsking(true);
+    setYouCamera("follow");
     void startSharing().then((c) => {
       setAsking(false);
-      if (c) flyTo({ lon: c.lon, lat: c.lat, zoom: 16 });
+      if (!c) setYouCamera("off");
     });
   };
+  const label = camera === "follow" && canTurn ? "Turn the map with me" : camera === "turn" ? "Keep north up" : "Center on my location";
   return (
-    <button type="button" aria-label="Center on my location" aria-busy={asking} onClick={locate} data-testid="locate-button"
-      className={`${ROUND} border border-[#263449] bg-[rgba(15,23,42,0.92)] pointer-events-auto text-[#60a5fa] ${asking ? "animate-pulse motion-reduce:animate-none" : ""} ${className ?? ""}`} style={style}>
-      <LocateIcon />
+    <button type="button" aria-label={label} aria-pressed={camera !== "off"} aria-busy={asking} onClick={locate} data-testid="locate-button" data-camera={camera}
+      className={`${ROUND} border border-[#263449] pointer-events-auto ${camera === "off" ? "bg-[rgba(15,23,42,0.92)] text-[#60a5fa]" : "bg-[#2563eb] text-white"} ${asking ? "animate-pulse motion-reduce:animate-none" : ""} ${className ?? ""}`} style={style}>
+      {camera === "turn" ? <TurnIcon /> : <LocateIcon />}
     </button>
   );
 }

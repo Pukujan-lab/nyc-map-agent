@@ -559,13 +559,6 @@ export default function AgentOverlay() {
     if (exitAnswer) void frameExit(exitAnswer);
   }, [exitAnswer]);
   useEffect(() => {
-    const m = getMapInstance();
-    if (!m) return;
-    const c = exitAnswer && shared.status === "on" ? shared.coords : null;
-    if (!exitAnswer && !exitLoaded) return;
-    void exitLayer().then((x) => x.setYou(m, c ? [c.lon, c.lat] : null, heading.heading));
-  }, [exitAnswer, shared, heading.heading]);
-  useEffect(() => {
     const a = lastActions?.[0];
     if (!home || a?.kind !== "showRestroom") return;
     const m = getMapInstance();
