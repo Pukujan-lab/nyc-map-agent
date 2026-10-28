@@ -25,6 +25,7 @@ import { followTripRoute } from "@/lib/transit/routeFollow";
 import { setTripStep } from "@/lib/store/tripStep";
 import { walkToBoard } from "./tripStart";
 import { followUpQuestion } from "./followUpQuestion";
+import { setLineDay } from "@/lib/transit/lineDay";
 import { lineOf, setSelectedLine, useSelectedLine } from "@/lib/transit/selectedLine";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { publishActiveTrip } from "@/lib/transit/activeTrip";
@@ -351,7 +352,7 @@ export default function AgentOverlay() {
     // The same switch as the Layers menu, so turning it off again is where people expect.
     showLayer: (layer) => { if (layer === "busStops") setOptions({ busStops: true }); else setQuickLayer(layer, true); },
     // From an answer, the line opens on its service change: skipped stations ringed and framed.
-    showLine: (route) => setSelectedLine(lineOf(route), null, undefined, true),
+    showLine: (route, day) => { setLineDay(day ?? null); setSelectedLine(lineOf(route), null, undefined, true); },
   };
   const runAction = (a: MapAction) => {
     runMapAction(a, actionCtx, routeColor);
@@ -453,7 +454,7 @@ export default function AgentOverlay() {
     // On a wide screen an answer about a line's trouble shows it on the map by itself, beside the answer:
     // the 7's weekend skips were only words until someone found the line (owner, 2026-10-27).
     const lineFirst = replyActions?.[0];
-    if (!sawTrip && lineFirst?.kind === "showLine" && window.matchMedia("(min-width: 1024px)").matches) setSelectedLine(lineOf(lineFirst.route), null, undefined, true);
+    if (!sawTrip && lineFirst?.kind === "showLine" && window.matchMedia("(min-width: 1024px)").matches) { setLineDay(lineFirst.day ?? null); setSelectedLine(lineOf(lineFirst.route), null, undefined, true); }
     // The model still asked for a start: put the same button on its reply.
     const offersLocation = !askReq && !!spoken && !sharedCoords() && replyAsksForOrigin(spoken);
     if (offersLocation) {

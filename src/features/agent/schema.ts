@@ -198,7 +198,9 @@ export const mapAction = z.discriminatedUnion("kind", [
   /** A map layer that answers the question (#313). The person taps it; the agent never switches layers itself. */
   z.object({ ...actionBase, kind: z.literal("showLayer"), layer: z.enum(LAYER_HELP_IDS) }),
   /** A subway line's live trains and notices, where Follow a train is: on a phone the chat is the way there. */
-  z.object({ ...actionBase, kind: z.literal("showLine"), route: z.string().min(1).max(4) }),
+  z.object({ ...actionBase, kind: z.literal("showLine"), route: z.string().min(1).max(4),
+    /** Asked about another time ("this weekend"): the line panel opens on the planned work then. */
+    day: z.object({ from: z.number(), to: z.number(), label: z.string().max(40) }).optional() }),
 ]);
 export type MapAction = z.infer<typeof mapAction>;
 /** Most buttons one answer carries. */

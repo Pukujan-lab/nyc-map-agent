@@ -15,6 +15,7 @@ import { lineTroubles, otherLinesAt, stuckTrains, troubleSummary, type FeedAlert
 import { planTrip, type PlanDeps } from "./plan";
 import { withSources, type SourceLedger } from "./freshness";
 import { parseWhen, sayWhen, scheduleFor } from "./when";
+import { dayWindow, weekendWindow } from "../../../src/lib/transit/weekend";
 
 export interface ToolContext {
   location: { lon: number; lat: number } | null;
@@ -307,26 +308,32 @@ function allTools(ctx: ToolContext) {
         const atLocal = parseWhen(asked ?? "now", new Date(liveS * 1000)) ?? toNyLocal(new Date(liveS * 1000));
         const nowS = Math.max(liveS, Math.floor(nyLocalToDate(atLocal).getTime() / 1000));
         const ahead = nowS - liveS > 3600;
-        const [alerts, feed] = await Promise.all([
-          (ctx.deps?.alerts ?? serviceAlerts)(routes, nowS),
+        // The span the question covers: a weekend is Friday night to Monday morning, a day is the whole day.
+        const span = /\bweek-?end\b/i.test(asked ?? "") ? weekendWindow(nowS * 1000) : ahead ? dayWindow(nowS * 1000) : null;
+        // Work that runs only Sunday, or only overnight, is still that weekend's: look across it.
+        const times = span ? [...new Set([nowS, ...[2, 13, 25, 37, 49, 53].map((h) => span.from + h * 3600).filter((t) => t < span.to)])] : [nowS];
+        const [alertSets, feed] = await Promise.all([
+          Promise.all(times.map((t) => (ctx.deps?.alerts ?? serviceAlerts)(routes, t))),
           safe((ctx.deps?.alertEntities ?? subwayAlertEntities)(), [] as FeedAlert[]),
         ]);
+        const alerts = [...new Set(alertSets.flat())].slice(0, 6);
         // Stations only matter when an alert names one of these lines.
         const touched = feed.some((a) => a.alert.informed_entity?.some((e) => e.route_id && routes.includes(e.route_id)));
         const stations = touched ? troubleStations(await safe((ctx.deps?.entrances ?? openDataEntrances).stations(), [] as Station[])) : [];
-        const troubles = lineTroubles(feed, stations, routes, nowS);
+        const troubles = times.flatMap((t) => lineTroubles(feed, stations, routes, t))
+          .filter((t, i, all) => all.findIndex((o) => o.route === t.route && troubleSummary(o) === troubleSummary(t)) === i);
         // Stuck trains are a now thing: none for a time ahead.
         const delayed = ahead ? [] : [...new Set(troubles.filter((t) => t.kind === "delay").map((t) => t.route))];
         const vehicles = delayed.length ? await safe((ctx.deps?.vehicles ?? subwayVehicles)(delayed), [] as LiveVehicle[]) : [];
         const stuck = stuckTrains(vehicles, troubles, stations, nowS);
         // The line opens on its trouble notice, so it leads; a train stuck right now is more pressing still.
-        const lineButtons = routes.slice(0, 2).map((r) => lineAction(r, troubles.some((t) => t.route === r)));
+        const lineButtons = routes.slice(0, 2).map((r) => lineAction(r, troubles.some((t) => t.route === r), span ?? undefined));
         if (stuck.length) { offer(troubleActions(troubles, stuck)); offer(lineButtons); } else { offer(lineButtons); offer(troubleActions(troubles, stuck)); }
         const followed = ctx.followedTrain?.replace(/^subway:/, "") ?? null;
         const followedSeen = followed ? vehicles.find((v) => v.tripId === followed) : undefined;
         return {
           lines: routes,
-          ...(ahead ? { checkedFor: sayWhen(atLocal) } : {}),
+          ...(span ? { checkedFor: span.label === "This weekend" ? `the weekend of ${dayWindow(span.from * 1000 + 86_400_000).label} (Friday 9 pm to Monday 5 am)` : sayWhen(atLocal) } : {}),
           alerts,
           trouble: troubles.slice(0, 8).map((t) => ({
             line: t.route,

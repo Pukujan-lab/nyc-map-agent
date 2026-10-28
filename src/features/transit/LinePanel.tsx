@@ -9,7 +9,8 @@ import { showView } from "@/lib/map/viewChange";
 import { sendScreen, useScreen, useScreenSize } from "@/lib/screen/screenSpace";
 import { heldTrains } from "@/lib/transit/holds";
 import { setAlertFocus } from "./alertFocus";
-import { useAlerts, useNow, useTransitData } from "./hooks";
+import { useAlerts, useAlertsBetween, useNow, useTransitData } from "./hooks";
+import { setLineDay, useLineDay, weekendWindow } from "@/lib/transit/lineDay";
 import { boardingArrivals, minutesUntil } from "./model";
 import { TONE, allLineNotices, type LineNotice } from "./lineNotices";
 import { NoticeIcon, noticeKind } from "./noticeKind";
@@ -93,11 +94,17 @@ function useNoticeRings(map: MaplibreMap | undefined, notice: LineNotice | null,
  */
 export function LinePanel({ map, route, onFollow, trains = () => [] }: { map: MaplibreMap | undefined; route: string; onFollow: () => void; trains?: () => Vehicle[] }) {
   const data = useTransitData(["subway"]);
-  const alerts = useAlerts(true).data;
+  const nowAlerts = useAlerts(true).data;
+  // "This weekend": the planned work then, not what is running now (owner, 2026-10-27).
+  const day = useLineDay();
+  const ahead = useAlertsBetween(day);
+  const alerts = day ? ahead.data : nowAlerts;
   const sys = data.subway?.stat;
   const live = data.subway?.live;
-  // Held trains first: they are happening now, on this line (src/lib/transit/holds.ts).
-  const notices = useMemo(() => allLineNotices(route, heldTrains(live).values(), alerts?.alerts ?? [], alerts?.outages ?? [], sys), [route, alerts, sys, live]);
+  // Held trains first: they are happening now, on this line (src/lib/transit/holds.ts). Not part of another day.
+  const notices = useMemo(() => allLineNotices(route, day ? [] : heldTrains(live).values(), alerts?.alerts ?? [], alerts?.outages ?? [], sys), [route, alerts, sys, live, day]);
+  // The day goes with the line: closing it (or another line) starts again from now.
+  useEffect(() => () => setLineDay(null), []);
   const [picked, setPicked] = useState<string | null>(null);
   // A new line starts with every notice closed; opened from an answer about its trouble, with that trouble open.
   const trouble = useSelectedLine()?.trouble ?? false;
@@ -190,6 +197,19 @@ export function LinePanel({ map, route, onFollow, trains = () => [] }: { map: Ma
             })}
           </ul>
         ) : null;
+  const weekend = weekendWindow();
+  const onWeekend = Boolean(day && day.from === weekend.from && day.to === weekend.to);
+  const chip = (on: boolean) => `h-8 rounded-full border px-3 text-[13px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa] ${on ? "border-transparent bg-slate-50 text-slate-900" : "border-[rgba(148,163,184,0.3)] text-[#f1f5f9]"}`;
+  const dayEl = (
+    <div role="group" aria-label="Show notices for" data-testid="line-day" className="flex items-center gap-1.5">
+      <button type="button" aria-pressed={!day} className={chip(!day)} onClick={() => { setLineDay(null); setPicked(null); }}>Now</button>
+      <button type="button" aria-pressed={onWeekend} className={chip(onWeekend)} onClick={() => { setLineDay(weekend); setPicked(null); }}>This weekend</button>
+      {day && !onWeekend ? <button type="button" aria-pressed className={chip(true)}>{day.label}</button> : null}
+      {day && ahead.isLoading ? <span className="text-[12px] text-[#cbd5e1]" aria-live="polite">Checking…</span> : null}
+    </div>
+  );
+  const noneEl = day && !ahead.isLoading && !count
+    ? <p className="text-[13px] text-[#cbd5e1]" data-testid="line-day-none">No planned work on the {route} {onWeekend ? "this weekend" : `for ${day.label}`}.</p> : null;
   const actionsEl = (
     <div className="grid grid-cols-2 gap-2">
           <button type="button" onClick={() => { seedChat(`What are other ways to go instead of the ${route} train right now?`); setChatOpen(true); }}
@@ -214,7 +234,9 @@ export function LinePanel({ map, route, onFollow, trains = () => [] }: { map: Ma
         <div ref={panelRef} data-testid="line-body" className="pull-sheet-body mt-2 flex flex-col gap-2.5 text-[#f1f5f9]">
           {actionsEl}
           {boardEl}
+          {dayEl}
           {noticesEl(true)}
+          {noneEl}
         </div>
       </PullSheet>
     );
@@ -250,7 +272,9 @@ export function LinePanel({ map, route, onFollow, trains = () => [] }: { map: Ma
           </div>
           <div ref={panelRef} data-testid="line-body" className="flex min-h-0 flex-col gap-2.5 border-t border-[rgba(148,163,184,0.16)] p-2.5">
             {boardEl}
+            {dayEl}
             {noticesEl(false)}
+            {noneEl}
             {actionsEl}
           </div>
         </div>

@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/store/MapStateContext", () => ({ useMapState: () => ({ seedChat: () => {}, setChatOpen: () => {} }) }));
-vi.mock("./hooks", () => ({ useTransitData: () => ({}), useAlerts: () => ({ data: undefined }), useNow: () => 0 }));
+vi.mock("./hooks", () => ({ useTransitData: () => ({}), useAlerts: () => ({ data: undefined }), useAlertsBetween: () => ({ data: undefined, isLoading: false }), useNow: () => 0 }));
 
 const { LinePanel } = await import("./LinePanel");
 const { sendScreen } = await import("@/lib/screen/screenSpace");

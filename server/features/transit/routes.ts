@@ -145,8 +145,20 @@ export async function loadBuses(key: string) {
   return { at: Math.round(Date.now() / 1000), buses };
 }
 
+const getMta = (path: string) => fetch(`${MTA}${path}`, { signal: AbortSignal.timeout(10_000) }).then((r) => r.json());
+
+/**
+ * Service alerts in effect at any time from → to (epoch s): "this weekend" on a Tuesday (owner, 2026-10-27:
+ * the 7's weekend work was invisible on the map until it started). Outages are a right-now thing, so none.
+ */
+export async function loadAlertsBetween(from: number, to: number) {
+  const feed = await cached("alerts-feed", () => getMta("camsys%2Fall-alerts.json"), 5 * 60_000) as { entity?: MercuryAlert[] };
+  const alerts = (feed.entity ?? []).flatMap((e) => slimAlert(e, from, to) ?? []);
+  return { at: Math.round(Date.now() / 1000), from, to, alerts, outages: [] };
+}
+
 export async function loadAlerts() {
-  const get = (path: string) => fetch(`${MTA}${path}`, { signal: AbortSignal.timeout(10_000) }).then((r) => r.json());
+  const get = getMta;
   const [alertsRes, eneRes, equipRes] = await Promise.allSettled([
     get("camsys%2Fall-alerts.json"),
     get("nyct%2Fnyct_ene.json"),
@@ -364,7 +376,17 @@ export async function GET(request: Request): Promise<Response> {
       if (!VEHICLE_RE.test(vehicle)) return json({ error: "bad_vehicle" }, { status: 400 });
       return json(await cached(`bus-trip:${vehicle}`, () => loadBusTrip(busKey, vehicle)), { maxAge: 15, browserMaxAge: 10 });
     }
-    if (system === "alerts") return json(await cached("alerts", loadAlerts), { maxAge: 60, browserMaxAge: 30 });
+    if (system === "alerts") {
+      const q = new URL(request.url).searchParams;
+      if (q.has("from")) {
+        // Whole hours, so riders asking about the same weekend share one cached answer.
+        const from = Math.floor(Number(q.get("from")) / 3600) * 3600, to = Math.ceil(Number(q.get("to")) / 3600) * 3600;
+        const now = Date.now() / 1000;
+        if (!(to > from && to - from <= 4 * 86_400 && to > now - 86_400 && from < now + 60 * 86_400)) return json({ error: "bad_window" }, { status: 400 });
+        return json(await cached(`alerts:${from}-${to}`, () => loadAlertsBetween(from, to), 5 * 60_000), { maxAge: 300, browserMaxAge: 120 });
+      }
+      return json(await cached("alerts", loadAlerts), { maxAge: 60, browserMaxAge: 30 });
+    }
     if (!(system in FEEDS)) return json({ error: "unknown_system" }, { status: 404 });
     return json(await cached(system, () => loadTrips(system)), { maxAge: 15, browserMaxAge: 10 });
   } catch (err) {

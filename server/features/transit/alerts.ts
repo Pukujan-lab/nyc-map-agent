@@ -94,9 +94,10 @@ export function parseProse(text: string, route: string | undefined): Pick<SlimAl
   return { direction, via: uniq(via), skipNames: uniq(skipNames) };
 }
 
-export function slimAlert(e: MercuryAlert, now: number): SlimAlert | null {
+/** The alert as of `now`, or, given `until`, its first period that overlaps now…until (planned work for a chosen day). */
+export function slimAlert(e: MercuryAlert, now: number, until = now): SlimAlert | null {
   const a = e.alert;
-  const period = (a.active_period ?? []).find((p) => (p.start ?? 0) <= now && (!p.end || p.end >= now));
+  const period = (a.active_period ?? []).find((p) => (p.start ?? 0) <= until && (!p.end || p.end >= now));
   if (!period) return null;
   const merc = a["transit_realtime.mercury_alert"];
   const type = merc?.alert_type ?? "";
