@@ -1,4 +1,7 @@
 import "@/components/task-screens.css";
+import { createPortal } from "react-dom";
+import { useFlag } from "@/lib/flags";
+import { useLeftCard } from "@/lib/store/leftColumn";
 import { ArrowUp, LocateFixed, WifiOff, X } from "lucide-react";
 import { useState } from "react";
 import { PullSheet } from "@/components/PullSheet";
@@ -26,6 +29,10 @@ export function ExitTask(p: {
   const away = exit && w?.kind === "here" && w.toExitM !== null ? `About ${w.toExitM} m from you` : null;
   const wide = useMediaQuery("(min-width: 640px)");
   const [level, setLevel] = useState<SheetLevel>(1);
+  // A desktop with the agent home: the station and its exits are one card in the left column.
+  const home = useFlag("agentHome");
+  const desktop = useMediaQuery("(min-width: 1024px)");
+  const { slot, top } = useLeftCard(`exits:${p.pack.station.name}`, home && desktop);
   const exitTitle = exit ? signText(exit.streets, exit.corner)?.replace(/^Exit · /, "") ?? `Exit ${p.chosen + 1}` : "No street exits listed";
   const offline = !p.online ? <span className="ml-auto flex shrink-0 items-center gap-1 text-xs text-slate-300"><WifiOff size={14} />Offline</span> : null;
   const close = <button type="button" aria-label="Close underground help" className="task-action task-close" onClick={p.onClose}><X size={18} /></button>;
@@ -58,6 +65,17 @@ export function ExitTask(p: {
       </div>}>
       <section className="pull-sheet-body mt-1 flex flex-col gap-2" aria-label="Station exits">{body}</section>
     </PullSheet>
+  );
+  if (slot) return createPortal(
+    <section aria-label="Station exits" data-testid="exit-card" className={`task-panel ${top ? "flex" : "hidden"} min-h-0 flex-col gap-2 overflow-y-auto rounded-2xl px-3 py-2.5`}>
+      <div className="flex items-center gap-2">
+        <h2 className="min-w-0 flex-1 truncate text-sm font-semibold">{p.pack.station.name}</h2>
+        {offline}
+        {close}
+      </div>
+      {body}
+    </section>,
+    slot,
   );
   return <>
     <div className="task-top flex items-center gap-2">

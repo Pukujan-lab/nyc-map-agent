@@ -240,7 +240,7 @@ export function AgentHome(p: AgentHomeProps) {
   const { orb, answerOpen, onCloseAnswer, hidden } = p;
   const sheet = orb.show || answerOpen;
   const wide = useMediaQuery("(min-width: 1024px)");
-  const card = useLeftColumn((s) => s.card);
+  const card = useLeftColumn((s) => s.cards.length > 0);
   const column = !hidden && wide && (sheet || card);
   useLayoutEffect(() => {
     setLeftAnswer(!hidden && wide && sheet);
@@ -450,7 +450,7 @@ export function AgentHome(p: AgentHomeProps) {
       )}
     >
       {/* A map card (MapPanel) prints here; it leaves the answer at least half the column. */}
-      {column ? <div ref={setLeftSlot} data-testid="left-slot" className={cn("flex min-h-0 shrink flex-col empty:hidden", sheet && "max-h-[50%]")} /> : null}
+      {column ? <div ref={setLeftSlot} data-testid="left-slot" data-map-cover className={cn("flex min-h-0 shrink flex-col empty:hidden", sheet && "max-h-[50%]")} /> : null}
       <div
         ref={stackRef}
         // An open answer or the orb is a map cover: the map keeps you and the answer's place beside it.

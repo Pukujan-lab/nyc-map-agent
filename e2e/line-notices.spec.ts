@@ -104,3 +104,22 @@ for (const [width, height] of [[375, 667], [1280, 800]]) {
     await expectLayout(page);
   });
 }
+
+// Owner, 2026-10-28: one sheet. On a desktop the line is a card at the top of the left column, not a panel on the right.
+test("a desktop line card sits in the left column", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockNetwork(page);
+  await page.route("**/api/transit-live*", (r) => r.fulfill({ contentType: "application/json", body: liveNow() }));
+  await page.route("**/api/transit", (r) => r.fulfill({ contentType: "application/json", body: JSON.stringify({ bus: false }) }));
+  await page.goto("/");
+  await page.getByRole("button", { name: "My train" }).click({ timeout: 15_000 });
+  await page.getByRole("button", { name: /^7 Avenue Express/ }).first().click({ timeout: 15_000 });
+  const line = page.getByTestId("left-slot").getByTestId("line-panel");
+  await expect(line).toBeVisible();
+  expect((await line.boundingBox())!.x).toBeLessThan(40);
+  await expect(page.getByTestId("agent-home")).toHaveAttribute("data-layout", "column");
+  await expectLayout(page);
+  await page.getByRole("button", { name: "Close line" }).click();
+  await expect(page.getByTestId("line-panel")).toHaveCount(0);
+  await expect(page.getByTestId("agent-home")).not.toHaveAttribute("data-layout", "column");
+});
