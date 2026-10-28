@@ -2,7 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import { useFlag, useFlags } from "@/lib/flags";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { useLeftCard, useLeftColumn } from "@/lib/store/leftColumn";
+import { useLeftCard, useLeftChips, useLeftColumn } from "@/lib/store/leftColumn";
 import { peekChipLabel } from "@/lib/store/panelSlot";
 import { Drawer } from "vaul";
 import { Button } from "@/components/ui/button";
@@ -151,6 +151,7 @@ export function MapPanel({
   // The agent home draws one left column on wide screens; the card goes at its top.
   // Another place or restroom is a new card on the stack, so Back returns to the line under it.
   const inColumn = home && isDesktop && showSheet;
+  const row = useLeftChips();
   const { slot, top: cardOnTop } = useLeftCard(`map:${content?.id ?? "place"}`, inColumn);
   useLayoutEffect(() => {
     const root = document.documentElement;
@@ -219,17 +220,23 @@ export function MapPanel({
   const top = home ? null : <TopBar boundaries={boundaries} status={status} onLayers={toggleDrawer} />;
   // The minimized sheet: one labelled chip that restores on tap.
   const peekLabel = content ? peekChipLabel(content.title, content.peek) : "Place";
-  const chip = body && minimized && !layersOpen ? (
+  // On the wide home it joins the chip row at the top of the left side, clear of the ask box.
+  const peekRow = home && isDesktop ? row : null;
+  const peekChip = body && minimized && !layersOpen ? (
     <button
       type="button"
       data-testid="peek-chip"
       onClick={restore}
       aria-label={`Restore ${peekLabel}`}
-      className="absolute bottom-[calc(var(--edge)+env(safe-area-inset-bottom))] left-[var(--edge)] z-40 h-10 max-w-[calc(100%-var(--edge)*2-120px)] truncate rounded-full border border-primary bg-card px-[var(--sp-4)] text-[14px] font-semibold text-foreground shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:max-w-[340px]"
+      className={cn(
+        "h-10 truncate rounded-full border border-primary bg-card px-[var(--sp-4)] text-[14px] font-semibold text-foreground shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        peekRow ? "min-w-0 max-w-full" : "absolute bottom-[calc(var(--edge)+env(safe-area-inset-bottom))] left-[var(--edge)] z-40 max-w-[calc(100%-var(--edge)*2-120px)] lg:max-w-[340px]",
+      )}
     >
       {peekLabel}
     </button>
   ) : null;
+  const chip = peekChip && peekRow ? createPortal(peekChip, peekRow) : peekChip;
 
 
   if (isDesktop) {
