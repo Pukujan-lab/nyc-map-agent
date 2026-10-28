@@ -340,7 +340,6 @@ export function MapView({
     walkRequest,
     stopWalk,
     startWalk,
-    setRestrooms,
     cameraTarget,
     navCommand,
     reportCameraHeight,
@@ -1394,8 +1393,8 @@ export function MapView({
     const eye = eyeRef.current;
     eyeRef.current = null;
     if (eye) setStreetSpot({ lon: eye.lon, lat: eye.lat, heading: eye.bearing });
-    // Restrooms stay on after street view; shops were only on because you walked (no unasked shops).
-    setRestrooms(true);
+    // Leaving street view keeps the layers as they were: it used to turn restrooms on, and they then
+    // stayed on after a restroom answer was closed (owner, 2026-10-28). Shops were only on because you walked.
     const asked = exitView.current;
     exitView.current = null;
     const at = asked?.place ?? (eye ? { lon: eye.lon, lat: eye.lat } : null);
@@ -1421,7 +1420,7 @@ export function MapView({
         setTilted(map.getPitch() > TILT_EPSILON);
       });
     } else setTilted(map.getPitch() > TILT_EPSILON);
-  }, [walking, ready, reducedMotion, setTilted, setRestrooms]);
+  }, [walking, ready, reducedMotion, setTilted]);
 
   // Map, 3D or Street from the view switch, the mini map or "Back to street view" (showView).
   const viewRequest = useViewRequest();
