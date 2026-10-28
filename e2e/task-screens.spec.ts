@@ -52,8 +52,8 @@ test("a card opened over a trip preview is not covered by it", async ({ page }) 
   await ask(page, "Plan a trip from Union Square to Grand Central");
   const preview = page.getByRole("region", { name: "Trip preview" });
   await expect(preview).toBeVisible();
-  await page.getByPlaceholder("Search neighborhoods, addresses, stations").fill("Greenpoint");
-  await page.getByRole("option", { name: /Greenpoint/ }).first().click();
+  // As a station tap does: the station card opens while the trip is up.
+  await page.evaluate(() => (window as unknown as { __pushPanel: (c: object) => void }).__pushPanel({ id: "transit:station:subway:631", title: "Grand Central-42 St", subtitle: "Subway station" }));
   await expect(page.getByTestId("details-sheet")).toBeVisible();
   await expect(preview).toBeHidden();
   await expect(page.getByTestId("trip-heading")).toHaveCount(0);

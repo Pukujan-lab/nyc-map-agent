@@ -953,7 +953,7 @@ export default function AgentOverlay() {
         />
         {settingsUp ? <Suspense fallback={null}><SettingsSheet onClose={() => setSettingsOpen(false)} /></Suspense> : null}
         {/* One card at a time: station help or a station card covers the same spot, so the trip waits under it (owner, 2026-10-27). */}
-        {trip && player.state.active && !answerOpen && !stationHelpVisible && !panelUp ? <Suspense fallback={null}><TripPreview
+        {trip && player.state.active && !answerOpen && !stationHelpVisible && !(panelUp && !panelContent.id.startsWith("agent:trip:")) ? <Suspense fallback={null}><TripPreview
           trip={trip} state={player.state} speed={player.state.speed}
           onToggle={player.toggle} onSpeed={(s) => { setPrefSpeed(s); player.setSpeed(s); }}
           onAlert={(route) => setSelectedLine(route)}
