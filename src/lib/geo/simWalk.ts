@@ -1,5 +1,5 @@
 import { bearing, metres, type Pt } from "@/lib/map/mapRead";
-import { publishActiveTrip, type ActiveTrip } from "@/lib/transit/activeTrip";
+import { getActiveTrip, publishActiveTrip, type ActiveTrip } from "@/lib/transit/activeTrip";
 
 /**
  * A pretend trip for `?sim=walk`, so anyone can watch the "you" marker work
@@ -156,10 +156,12 @@ export function simGeo(load: () => Promise<SubwayFile> = () => fetch("/transit/s
     watchPosition: (ok, fail) => {
       const id = next++;
       void load().then((data) => {
-        if (mode === "wrongway") publishActiveTrip(simTrip(data));
+        const trip = mode === "wrongway" ? simTrip(data) : null;
         const samples = mode === "wrongway" ? buildSimWrongWay(data) : buildSimWalk(data);
         let i = 0;
         const emit = () => {
+          // The agent overlay loads late and publishes "no trip" on mount: keep the pretend trip on screen.
+          if (trip && getActiveTrip() === null) publishActiveTrip(trip);
           const s = samples[Math.min(i++, samples.length - 1)];
           ok({ coords: { longitude: s.at[0], latitude: s.at[1], accuracy: s.accuracy, heading: s.course, speed: s.speed, altitude: null, altitudeAccuracy: null }, timestamp: Date.now() } as GeolocationPosition);
           if (i >= samples.length) { clearInterval(timers.get(id)); timers.delete(id); }
