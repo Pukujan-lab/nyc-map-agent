@@ -4,7 +4,7 @@
  * always use the real `navigator.geolocation`. Set VITE_FAKE_LOCATION to
  * "lon,lat" to move it, or to "off" to use the real location in development.
  */
-import { simGeo, simRequested } from "./simWalk";
+import { simGeo, simMode, simRequested } from "./simWalk";
 
 type Geo = Pick<Geolocation, "watchPosition" | "clearWatch">;
 
@@ -33,7 +33,7 @@ let sim: Geo | null = null;
 /** The geolocation the app should use: the pretend trip with `?sim=walk`, the fake one in development, the browser's otherwise. */
 export function appGeo(): Geo | null {
   // One instance, so clearWatch finds the watch that watchPosition started.
-  if (typeof window !== "undefined" && simRequested(window.location.search)) return (sim ??= simGeo());
+  if (typeof window !== "undefined" && simRequested(window.location.search)) return (sim ??= simGeo(undefined, simMode(window.location.search) ?? "walk"));
   const fake = fakeCoords(import.meta.env.VITE_FAKE_LOCATION as string | undefined, import.meta.env.DEV && import.meta.env.MODE !== "test");
   if (fake) return fakeGeo(fake);
   return typeof navigator !== "undefined" && "geolocation" in navigator ? navigator.geolocation : null;
