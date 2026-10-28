@@ -1,6 +1,8 @@
 import { ArrowLeft } from "lucide-react";
 import { useFlag, useFlags } from "@/lib/flags";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { setLeftCard, useLeftColumn } from "@/lib/store/leftColumn";
 import { peekChipLabel } from "@/lib/store/panelSlot";
 import { Drawer } from "vaul";
 import { Button } from "@/components/ui/button";
@@ -145,16 +147,25 @@ export function MapPanel({
   const showSheet = !!(content || place) && !panelHidden && !layersOpen && !minimized;
   // The view controls sit in the map beside the desktop sheet or layers drawer,
   // and step out of the way when the phone sheet is half or full.
+  const leftAnswer = useLeftColumn((s) => s.answer);
+  const slot = useLeftColumn((s) => s.slot);
+  // The agent home draws one left column on wide screens; the card goes at its top.
+  const inColumn = home && isDesktop && showSheet;
+  useLayoutEffect(() => {
+    setLeftCard(inColumn);
+    return () => setLeftCard(false);
+  }, [inColumn]);
   useLayoutEffect(() => {
     const root = document.documentElement;
-    const leftColumn = isDesktop && (showSheet || layersOpen);
-    root.style.setProperty("--sheet-left", leftColumn ? "calc(var(--edge) + 360px)" : "0px");
+    const column = home && isDesktop && (showSheet || leftAnswer);
+    const leftColumn = column || (isDesktop && layersOpen);
+    root.style.setProperty("--sheet-left", column ? "calc(var(--edge) + min(400px, 44vw))" : leftColumn ? "calc(var(--edge) + 360px)" : "0px");
     root.style.setProperty("--controls-display", !isDesktop && showSheet && (snap === "half" || snap === "full") ? "none" : "flex");
     return () => {
       root.style.removeProperty("--sheet-left");
       root.style.removeProperty("--controls-display");
     };
-  }, [isDesktop, showSheet, layersOpen, snap]);
+  }, [home, isDesktop, showSheet, leftAnswer, layersOpen, snap]);
   // No top bar, but the menu row (My day, layers…) sits top-left: the side sheet starts below it, or its
   // title hides under the row (owner screenshot, 2026-10-25).
   useLayoutEffect(() => {
@@ -230,7 +241,12 @@ export function MapPanel({
         {top ? <div className="absolute left-[var(--edge)] top-[var(--edge)] z-40 w-[clamp(360px,46vw,720px)]">{top}</div> : null}
         {drawer}
         {chip}
-        {showSheet ? (
+        {inColumn && slot ? createPortal(
+          <div data-testid="details-sheet" className="pointer-events-auto flex min-h-0 flex-col overflow-hidden rounded-[22px] border border-border bg-card text-card-foreground shadow-2xl">
+            {body}
+          </div>,
+          slot,
+        ) : showSheet ? (
           <div data-testid="details-sheet" className="absolute left-[var(--edge)] top-[calc(var(--edge)+var(--topbar-h)+var(--sp-3))] z-30 flex max-h-[calc(100%-var(--edge)*2-var(--topbar-h)-var(--sp-3))] w-[360px] flex-col overflow-hidden rounded-[22px] border border-border bg-card shadow-2xl">
             {body}
           </div>

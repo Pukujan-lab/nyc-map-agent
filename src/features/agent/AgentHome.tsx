@@ -1,6 +1,9 @@
 import { AlertCircle, ArrowUp, AudioLines, Check, ChevronDown, Loader2, Mic, X } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
 import { Button } from "@/components/ui/button";
+import { nextLevel, swipeOf, type SheetLevel } from "@/components/sheetSwipe";
+import { setLeftAnswer, setLeftSlot, useLeftColumn } from "@/lib/store/leftColumn";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/appLang";
 import { removeShell, shellFocused, shellText } from "@/lib/shellDraft";
@@ -213,16 +216,52 @@ interface AgentHomeProps {
   lift: boolean;
 }
 
+/** How much of the answer a phone shows at each pull: a line, the usual box, nearly the whole screen. */
+const PHONE_ANSWER_H: Record<SheetLevel, string> = {
+  0: "max-h-[3.25rem]",
+  1: "max-h-[30dvh]",
+  // Up to just under the map buttons at the top right; never shorter than the usual box.
+  2: "max-h-[max(30dvh,calc(100dvh-30rem))]",
+};
+
 /**
  * The agent-first home (#370), as the owner's mockups draw it: a light chat bar
  * that is always there ([text box][dictate][hands-free]), the task buttons above
  * it when nothing is open, and the answer or the voice orb in a translucent
  * sheet that wraps the bar so the map shows through.
+ *
+ * On a wide screen an open answer or map card makes it one left column (owner,
+ * 2026-10-28): the card at the top, the answer under it, the ask box at the foot,
+ * so the middle of the map stays clear. On a phone the answer pulls up and down.
  */
 export function AgentHome(p: AgentHomeProps) {
   const t = useT();
   const scroller = useRef<HTMLDivElement>(null);
-  const { orb, answerOpen, onCloseAnswer } = p;
+  const { orb, answerOpen, onCloseAnswer, hidden } = p;
+  const sheet = orb.show || answerOpen;
+  const wide = useMediaQuery("(min-width: 1024px)");
+  const card = useLeftColumn((s) => s.card);
+  const column = !hidden && wide && (sheet || card);
+  useLayoutEffect(() => {
+    setLeftAnswer(!hidden && wide && sheet);
+    return () => setLeftAnswer(false);
+  }, [hidden, wide, sheet]);
+
+  // A phone's answer box pulls up (more answer) and down (more map); each new question starts at the usual size.
+  const [level, setLevel] = useState<SheetLevel>(1);
+  const swiped = useRef(false);
+  const pull = (e: ReactPointerEvent) => {
+    swiped.current = false;
+    const from = { x: e.clientX, y: e.clientY };
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener("pointerup", up);
+      const swipe = swipeOf(ev.clientX - from.x, ev.clientY - from.y);
+      if (swipe !== "up" && swipe !== "down") return;
+      swiped.current = true;
+      setLevel((l) => nextLevel(l, swipe));
+    };
+    window.addEventListener("pointerup", up);
+  };
 
   // Keep the newest answer in view while it streams; once it is done, show it from the top,
   // since on a small phone the box is shorter than the answer and its start was cut off.
@@ -235,6 +274,17 @@ export function AgentHome(p: AgentHomeProps) {
     const el = scroller.current;
     if (el && !busy) el.scrollTop = 0;
   }, [busy]);
+  useEffect(() => {
+    if (busy) setLevel(1);
+  }, [busy]);
+  // Pulled all the way up, Center on my location gives way, as it does for a full line sheet.
+  const tall = !column && answerOpen && level === 2;
+  useLayoutEffect(() => {
+    if (!tall) return;
+    const root = document.documentElement;
+    root.dataset.answerSheet = "full";
+    return () => { delete root.dataset.answerSheet; };
+  }, [tall]);
 
   // Escape stops the orb first, then closes the answer. Not while someone is
   // part-way through typing: the first Escape there is theirs, not the answer's.
@@ -252,12 +302,13 @@ export function AgentHome(p: AgentHomeProps) {
   }, [orb, answerOpen, onCloseAnswer]);
 
   // Publish how much of the screen bottom the home takes as --chat-bar-h, so
-  // map controls sit above it. 0px while hidden; unset on unmount.
+  // map controls sit above it. 0px while hidden; unset on unmount. The left
+  // column only takes the bar's height there: the rest sits beside the map.
   const stackRef = useRef<HTMLDivElement>(null);
-  const { hidden } = p;
+  const barRef = useRef<HTMLFormElement>(null);
   useLayoutEffect(() => {
     const root = document.documentElement;
-    const el = stackRef.current;
+    const el = column ? barRef.current : stackRef.current;
     if (hidden || !el) {
       root.style.setProperty("--chat-bar-h", "0px");
       return;
@@ -271,12 +322,12 @@ export function AgentHome(p: AgentHomeProps) {
       ro?.disconnect();
       window.removeEventListener("resize", publish);
     };
-  }, [hidden]);
+  }, [hidden, column]);
   // Also after every render: a ResizeObserver can lag (or not run in a background
   // tab), and a stale, taller value lifted More layers over the menus while the
   // idle cards were gone; a stale, shorter one let panels cover the bar.
   useLayoutEffect(() => {
-    const el = stackRef.current;
+    const el = column ? barRef.current : stackRef.current;
     if (!hidden && el) document.documentElement.style.setProperty("--chat-bar-h", `${Math.max(0, Math.ceil(window.innerHeight - el.getBoundingClientRect().top))}px`);
   });
   useEffect(() => () => { document.documentElement.style.removeProperty("--chat-bar-h"); }, []);
@@ -295,14 +346,14 @@ export function AgentHome(p: AgentHomeProps) {
 
   if (p.hidden) return null;
 
-  const sheet = orb.show || answerOpen;
   const typed = p.input.trim().length > 0;
   const shown = p.dictation.on && p.interim ? `${p.input ? `${p.input} ` : ""}${p.interim}` : p.input;
 
   const bar = (
     <form
+      ref={barRef}
       data-testid="agent-bar"
-      className={cn("pointer-events-auto flex items-center gap-2 rounded-[30px] bg-slate-50 p-1.5", !sheet && "shadow-[0_8px_24px_rgba(0,0,0,0.45)]")}
+      className={cn("pointer-events-auto flex shrink-0 items-center gap-2 rounded-[30px] bg-slate-50 p-1.5", !sheet && "shadow-[0_8px_24px_rgba(0,0,0,0.45)]")}
       onSubmit={(e) => { e.preventDefault(); p.onSend(p.input); }}
     >
       <input
@@ -344,53 +395,83 @@ export function AgentHome(p: AgentHomeProps) {
     </form>
   );
 
+  const content = (
+    <>
+      {orb.show ? (
+        <VoiceOrb transcript={orb.transcript} onStop={orb.stop} />
+      ) : answerOpen ? (
+        <section aria-label="Assistant answer" data-testid="agent-answers" className="relative flex min-h-0 flex-col">
+          {column ? null : (
+            <button type="button" data-testid="answer-grip" aria-label={level === 2 ? "Show less" : "Show more"} aria-expanded={level > 0}
+              onPointerDown={pull}
+              onClick={() => { if (swiped.current) swiped.current = false; else setLevel((l) => (l === 2 ? 0 : ((l + 1) as SheetLevel))); }}
+              className="-mt-3 mb-2 flex h-6 w-full touch-none items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 sm:hidden">
+              <span aria-hidden="true" className="h-1.5 w-10 rounded-full bg-slate-500/70" />
+            </button>
+          )}
+          {/* Its own row: laid over the answer, the X sat on the text once the question scrolled away (320px iPhone, 2026-10-25). */}
+          <Button
+            type="button"
+            variant="ghost"
+            aria-label={t("closeAnswer")}
+            // Solid, like the task screens' close, so it never reads as part of the text behind it.
+            className="-ml-2 -mt-2 h-11 w-11 self-start rounded-full border border-slate-400/45 bg-[#0b1220] p-0 text-slate-300 shadow-[0_4px_12px_rgba(0,0,0,.35)] hover:bg-slate-800 hover:text-white"
+            onClick={onCloseAnswer}
+          >
+            <X className="!h-5 !w-5" aria-hidden="true" />
+          </Button>
+          {/* A phone keeps most of the map in view: the answer scrolls inside a shorter box, pulled taller or shorter by its grip. */}
+          <div ref={scroller} className={cn("min-h-11 overflow-y-auto overscroll-contain", column ? "min-h-0" : `${PHONE_ANSWER_H[level]} sm:max-h-[min(44dvh,520px)]`)}>
+            {p.answer}
+          </div>
+        </section>
+      ) : (
+        p.idle
+      )}
+      {p.notice ? (
+        <p role="alert" data-testid="agent-notice" className="pointer-events-auto shrink-0 rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2 text-sm text-slate-100 backdrop-blur-md">
+          {p.notice}
+        </p>
+      ) : null}
+    </>
+  );
+
+  // One tree for both shapes, so the ask box keeps its cursor when the column opens.
   return (
     <div
       data-testid="agent-home"
-      className={cn("dark pointer-events-none fixed inset-x-0 bottom-0 z-[45] flex justify-center", sheet && "sm:justify-start sm:pl-3")}
+      data-layout={column ? "column" : undefined}
+      className={cn(
+        "dark pointer-events-none fixed z-[45] flex",
+        column
+          ? "bottom-4 left-[var(--edge)] top-[calc(var(--topbar-h,64px)+var(--sp-3))] w-[min(400px,44vw)] flex-col gap-3"
+          : "inset-x-0 bottom-0 justify-center",
+        !column && sheet && "sm:justify-start sm:pl-3",
+      )}
     >
+      {/* A map card (MapPanel) prints here; it leaves the answer at least half the column. */}
+      {column ? <div ref={setLeftSlot} data-testid="left-slot" className={cn("flex min-h-0 shrink flex-col empty:hidden", sheet && "max-h-[50%]")} /> : null}
       <div
         ref={stackRef}
         // An open answer or the orb is a map cover: the map keeps you and the answer's place beside it.
         data-map-cover={sheet ? "" : undefined}
         className={cn(
-          "pointer-events-none flex w-full flex-col sm:mb-4 sm:max-w-[480px]",
-          // An open answer docks to the left on wide screens, so the middle of the map stays clear.
-          sheet && "sm:max-w-[min(420px,44vw)]",
+          "pointer-events-none flex w-full flex-col",
+          column
+            ? "mt-auto min-h-0"
+            : cn(
+              "sm:mb-4 sm:max-w-[480px]",
+              // An open answer docks to the left on wide screens, so the middle of the map stays clear.
+              sheet && "max-h-[calc(100dvh-5rem)] rounded-t-[24px] border-t px-4 pt-4 sm:max-w-[min(420px,44vw)] sm:rounded-[24px] sm:border",
+              !sheet && "px-4",
+              p.lift ? "pb-[calc(env(safe-area-inset-bottom)+4.25rem)]" : "pb-[calc(env(safe-area-inset-bottom)+1.5rem)] sm:pb-4",
+            ),
           sheet
-            ? "pointer-events-auto max-h-[calc(100dvh-5rem)] gap-3.5 rounded-t-[24px] border-t border-[#263449] bg-[#0b1220]/80 px-4 pt-4 shadow-2xl backdrop-blur-xl sm:rounded-[24px] sm:border"
-            : "gap-3 px-4",
-          p.lift ? "pb-[calc(env(safe-area-inset-bottom)+4.25rem)]" : "pb-[calc(env(safe-area-inset-bottom)+1.5rem)] sm:pb-4",
+            ? cn("pointer-events-auto gap-3.5 border-[#263449] bg-[#0b1220]/80 shadow-2xl backdrop-blur-xl", column && "rounded-[24px] border p-4")
+            : "gap-3",
         )}
       >
-        {orb.show ? (
-          <VoiceOrb transcript={orb.transcript} onStop={orb.stop} />
-        ) : answerOpen ? (
-          <section aria-label="Assistant answer" data-testid="agent-answers" className="relative flex min-h-0 flex-col">
-            {/* Its own row: laid over the answer, the X sat on the text once the question scrolled away (320px iPhone, 2026-10-25). */}
-            <Button
-              type="button"
-              variant="ghost"
-              aria-label={t("closeAnswer")}
-              // Solid, like the task screens' close, so it never reads as part of the text behind it.
-              className="-ml-2 -mt-2 h-11 w-11 self-start rounded-full border border-slate-400/45 bg-[#0b1220] p-0 text-slate-300 shadow-[0_4px_12px_rgba(0,0,0,.35)] hover:bg-slate-800 hover:text-white"
-              onClick={onCloseAnswer}
-            >
-              <X className="!h-5 !w-5" aria-hidden="true" />
-            </Button>
-            {/* A phone keeps most of the map in view: the answer scrolls inside a shorter box. */}
-            <div ref={scroller} className="max-h-[30dvh] min-h-11 overflow-y-auto overscroll-contain sm:max-h-[min(44dvh,520px)]">
-              {p.answer}
-            </div>
-          </section>
-        ) : (
-          p.idle
-        )}
-        {p.notice ? (
-          <p role="alert" data-testid="agent-notice" className="pointer-events-auto rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2 text-sm text-slate-100 backdrop-blur-md">
-            {p.notice}
-          </p>
-        ) : null}
+        {content}
         {bar}
       </div>
     </div>
