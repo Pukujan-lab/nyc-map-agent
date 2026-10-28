@@ -33,6 +33,9 @@ import { useT } from "@/lib/i18n/appLang";
 import { usePanel } from "@/lib/store/PanelContext";
 import { setSelectedLine, useSelectedLine } from "@/lib/transit/selectedLine";
 import { whereYouAre } from "./where";
+import { dirStep, initialDir, justSurfaced, nextStationAhead, plannedExit, wrongDirectionLine, wrongExit } from "./wrongTrain";
+import { useDataView } from "@/lib/store/DataViewContext";
+import { speakQueued } from "@/lib/voice/tts";
 import { useBasemapReady } from "@/lib/map/basemapReady";
 
 type Mode = "idle" | "ride" | "which" | "station" | "calibrate" | "stairs" | "landmark" | "corner" | "walk";
@@ -259,6 +262,37 @@ export default function Underground() {
   const subwayTrip = !!trip?.legs.some((l) => l.kind === "ride" && (l.mode ?? "subway") === "subway");
   const nearby = useMemo(() => (sys && center && center.zoom >= 15 ? nearestStation(sys, center.at) : null), [sys, center]);
   const stops = useMemo(() => (sys && trip && subwayTrip ? tripStops(sys, trip) : []), [sys, trip, subwayTrip]);
+
+  // On a subway trip: the wrong direction, or coming up at another exit (then the walk is planned again from there).
+  const { setRoutePoint, setFollowingRoute } = useDataView();
+  const dir = useRef(initialDir);
+  const accuracies = useRef<Array<number | null>>([]);
+  const [tripWarn, setTripWarn] = useState<string | null>(null);
+  useEffect(() => { dir.current = initialDir; accuracies.current = []; setTripWarn(null); }, [trip?.id]);
+  useEffect(() => {
+    const c = shared.status === "on" ? shared.coords : null;
+    if (!sys || !trip || stops.length < 2 || !c) return;
+    const here: Pt = [c.lon, c.lat];
+    const acc = shared.accuracy ?? null;
+    accuracies.current = [...accuracies.current.slice(-20), acc];
+    const wasWrong = dir.current.wrong;
+    dir.current = dirStep(dir.current, stops[0].at, stops[stops.length - 1].at, here, acc);
+    if (dir.current.wrong && !wasWrong) {
+      const route = trip.legs.find((l) => l.kind === "ride" && (l.mode ?? "subway") === "subway")?.route;
+      const next = route && dir.current.travel !== null ? nextStationAhead(sys, route, here, dir.current.travel) : null;
+      setTripWarn(wrongDirectionLine(dir.current.travel, next?.name ?? null));
+    } else if (wasWrong && !dir.current.wrong) setTripWarn(null);
+    else if (dir.current.boarded && justSurfaced(accuracies.current) && metres(here, stops[stops.length - 1].at) < 600 && wrongExit(plannedExit(trip), here) !== null) {
+      setRoutePoint("start", { lon: c.lon, lat: c.lat });
+      setRoutePoint("end", { lon: trip.destination.at[0], lat: trip.destination.at[1] });
+      setFollowingRoute(true);
+      setTripWarn(`You came up at a different exit. New walk to ${trip.destination.label}.`);
+    }
+  }, [shared]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!tripWarn || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    speakQueued(window.speechSynthesis, tripWarn, () => {});
+  }, [tripWarn]);
 
   const persist = (s: PackStore | null) => {
     saveStore(s);
@@ -715,6 +749,19 @@ export default function Underground() {
   };
 
   if (home && chatOpen) return null;
+
+  if (tripWarn) {
+    return (
+      <section className={card} aria-label="Trip warning">
+        <div className="flex items-start gap-2">
+          <p className="min-w-0 flex-1 font-semibold" role="alert" data-testid="trip-warning">{tripWarn}</p>
+          <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0" aria-label="Dismiss" onClick={() => setTripWarn(null)}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      </section>
+    );
+  }
 
   // ---------- idle ----------
   if (mode === "idle") {
