@@ -258,7 +258,7 @@ const SIGN_WORDS: Record<string, string> = { BKLYN: "Brooklyn", JCT: "Jct", HTS:
 /** "GREENPOINT MANHATTAN AV via GRAHAM AV" → "Greenpoint Manhattan Av": where the bus is going, as a pole sign says it. */
 export function towards(raw: string): string {
   const place = raw.replace(/\s+via\s.*$/i, "").replace(/^(SELECT BUS|LIMITED|LTD)\s+/i, "").trim();
-  return place.split(/\s+/).map((w) => SIGN_WORDS[w.toUpperCase()] ?? (/^\d/.test(w) ? w.toLowerCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())).join(" ");
+  return place.split(/\s+/).map((w) => SIGN_WORDS[w.toUpperCase()] ?? (/^\d/.test(w) ? w.toLowerCase() : w.toLowerCase().replace(/(^|-)([a-z])/g, (_, h: string, c: string) => h + c.toUpperCase()))).join(" ");
 }
 
 /** Each stop's destination on one route, from its stop groupings (one group per direction). */
@@ -343,7 +343,7 @@ export async function GET(request: Request): Promise<Response> {
       // ~100 m grid so walkers on one block share a cached answer.
       const glat = Math.round(lat * 1000) / 1000;
       const glon = Math.round(lon * 1000) / 1000;
-      return json(await cached(`bus-stops:${glat},${glon}`, () => loadBusStops(busKey, glat, glon), 24 * 3600_000), { maxAge: 3600, browserMaxAge: 3600 });
+      return json(await cached(`bus-stops:v2:${glat},${glon}`, () => loadBusStops(busKey, glat, glon), 24 * 3600_000), { maxAge: 3600, browserMaxAge: 3600 });
     }
     if (system === "bus-arrivals") {
       if (!busKey) return json({ error: "bus_unavailable" }, { status: 404 });

@@ -103,6 +103,12 @@ export const tripBase = z.object({
   context: z.array(contextNote).default([]),
   /** Stations the trip's subway lines skip right now (service alerts, #253), with where they are. */
   skips: z.array(z.object({ route: z.string(), name: z.string(), at: lngLat, toward: z.string().nullable().default(null) })).default([]),
+  /**
+   * How that day's service changes hit this trip itself (owner, 2026-10-27: the 7's weekend skips never
+   * reached the Flushing plan): a skipped or closed boarding, transfer or get-off station, a suspended
+   * stretch it rides, a platform moved where it boards. `blocks` = the trip can't be made as planned.
+   */
+  impacts: z.array(z.object({ route: z.string(), text: z.string(), blocks: z.boolean() })).default([]),
   stubbed: z.array(z.string()).default([]),
   /** "otp" when OpenTripPlanner planned it, "fallback" for the built-in subway router. */
   planner: z.enum(["otp", "fallback"]).optional(),

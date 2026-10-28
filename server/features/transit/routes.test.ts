@@ -71,6 +71,7 @@ describe("bus-stops", () => {
   it("words a destination the way a pole sign does", () => {
     expect(towards("DOWNTOWN BKLYN FULTON MALL via 3 AV")).toBe("Downtown Brooklyn Fulton Mall");
     expect(towards("SELECT BUS EAST HARLEM 125 ST")).toBe("East Harlem 125 St");
+    expect(towards("7 TRAIN TO 74 ST-BROADWAY")).toBe("7 Train To 74 St-Broadway");
   });
 });
 

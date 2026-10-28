@@ -55,6 +55,10 @@ export function parseWhen(text: string, now: Date): string | null {
   if (!clock && /\bmorning\b/.test(s)) clock = [9, 0];
   if (!clock && /\bafternoon\b/.test(s)) clock = [15, 0];
   if (!clock && /\b(evening|tonight)\b/.test(s)) clock = [19, 0];
+  // "this weekend", "on the weekend": Saturday (today when it is the weekend already), mid-morning unless a time is named.
+  const weekend = /\bweek-?end\b/.test(s) && !/\bweekdays?\b/.test(s);
+  const inWeekend = weekday(today) === 6 || weekday(today) === 0;
+  if (!clock && weekend && !inWeekend) clock = [10, 0];
   const hm = clock ? `${pad(clock[0])}:${pad(clock[1])}` : nowLocal.slice(11, 16);
   /** Today if that time is still ahead, else the same time tomorrow. */
   const nextAt = (d: string) => (`${d}T${hm}` < nowLocal ? addDays(d, 1) : d);
@@ -66,6 +70,10 @@ export function parseWhen(text: string, now: Date): string | null {
   else if (/\bday after tomorrow\b/.test(s)) day = addDays(today, 2);
   else if (/\b(tomorrow|tmrw|tmr)\b/.test(s)) day = addDays(today, 1);
   else if (/\b(today|tonight|this (morning|afternoon|evening))\b/.test(s)) day = today;
+  else if (weekend) {
+    day = inWeekend ? today : addDays(today, 6 - weekday(today));
+    if (/\bnext\b/.test(s)) day = addDays(day, 7);
+  }
   else if (wd >= 0) {
     const ahead = (wd - weekday(today) + 7) % 7;
     // "Friday" on a Friday is today while that time is ahead; "next Friday" is always a week on.

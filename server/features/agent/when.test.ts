@@ -25,7 +25,14 @@ describe("parseWhen: the user's words in New York time", () => {
     expect(parseWhen(words, NOW)).toBe(local);
   });
 
-  it("now and a blank mean now", () => {
+  it("the weekend is the coming Saturday, or now when it is the weekend already", () => {
+    const tue = nyLocalToDate("2026-10-27T19:00");
+    expect(parseWhen("in the weekend", tue)).toBe("2026-10-31T10:00");
+    expect(parseWhen("this weekend at 2pm", tue)).toBe("2026-10-31T14:00");
+    expect(parseWhen("next weekend", tue)).toBe("2026-11-07T10:00");
+    expect(parseWhen("this weekend", NOW)).toBe("2026-10-24T14:30");
+  });
+    it("now and a blank mean now", () => {
     expect(parseWhen("now", NOW)).toBe("2026-10-24T14:30");
     expect(parseWhen("", NOW)).toBe("2026-10-24T14:30");
   });

@@ -91,7 +91,8 @@ export function stationChanges(alerts: TransitAlert[], sys: StaticSystem): Map<s
   for (const a of alerts) {
     for (const ch of a.changes ?? []) {
       const sm = sys.stopM[ch.route];
-      if (!sm) continue;
+      // A suspension names the ends of the gap, which still have service.
+      if (!sm || ch.kind === "suspended") continue;
       const ids = sys.stations.features.filter((f) => f.properties.id in sm && ch.names.some((n) => sameStation(n, f.properties.name))).map((f) => f.properties.id);
       if (ch.kind === "platform") { for (const id of ids) at(id).platform.push({ route: ch.route, alertId: a.id, notice: ch.notice }); continue; }
       const ends = routeEnds(sys, ch.route);

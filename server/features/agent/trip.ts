@@ -60,9 +60,15 @@ export async function portalFor(st: Station, ents: Entrance[], toward: LngLatTup
 export interface TripDeps { planner?: TransitPlanner; entrances?: StationEntrances; changes?: ServiceChange[] }
 
 const MIDTOWN: LngLatTuple = [-73.985, 40.758];
-/** Does a ride from → to head toward the alert's direction label ("Flushing", "Manhattan")? Unknown labels count as yes. */
-function headsToward(label: string, route: string, from: LngLatTuple, to: LngLatTuple, stations: Station[]): boolean {
-  const target = /manhattan/i.test(label) ? MIDTOWN : stations.find((s) => s.routes.includes(route) && s.name.toLowerCase().startsWith(label.toLowerCase()))?.at;
+/** "Queens-bound", "Brooklyn-bound": roughly where each borough's trains are heading. */
+const BOROUGH_AT: Record<string, LngLatTuple> = { manhattan: MIDTOWN, queens: [-73.83, 40.72], brooklyn: [-73.95, 40.65], bronx: [-73.87, 40.84] };
+/** The station list calls the Staten Island Railway "SIR"; the alert feed calls it "SI". */
+const servesRoute = (s: Station, route: string) => s.routes.includes(route) || (route === "SI" && s.routes.includes("SIR"));
+/** Does a ride from → to head toward the alert's direction label ("Flushing", "Manhattan", "Uptown")? Unknown labels count as yes. */
+export function headsToward(label: string, route: string, from: LngLatTuple, to: LngLatTuple, stations: Station[]): boolean {
+  if (/^uptown$/i.test(label)) return to[1] > from[1];
+  if (/^downtown$/i.test(label)) return to[1] < from[1];
+  const target = BOROUGH_AT[label.toLowerCase()] ?? stations.find((s) => servesRoute(s, route) && s.name.toLowerCase().startsWith(label.toLowerCase()))?.at;
   return target ? distM(to, target) < distM(from, target) : true;
 }
 /** Planner predicate: a station is avoided only for the route and direction an active skip names. */
@@ -72,6 +78,51 @@ export function avoidFor(changes: ServiceChange[], stations: Station[]): AvoidSt
 /** Platform-change notices that apply to boarding `route` at `st` heading from → to. */
 export function platformNotes(changes: ServiceChange[], st: Station, route: string, from: Station, to: Station, stations: Station[]): string[] {
   return changes.filter((c) => c.kind === "platform" && c.route === route.replace(/X$/, "") && c.names.some((n) => sameStation(n, st.name)) && (!c.toward || headsToward(c.toward, route, from.at, to.at, stations))).map((c) => c.notice);
+}
+
+/** The station on `route` nearest a point, if one is within 400 m (where a ride leg starts or ends). */
+function stationAt(stations: Station[], route: string, at: LngLatTuple | undefined, name?: string): Station | undefined {
+  const on = stations.filter((s) => servesRoute(s, route));
+  const named = name ? on.find((s) => sameStation(name, s.name)) : undefined;
+  if (named || !at) return named;
+  const near = on.reduce<Station | undefined>((b, s) => (!b || distM(s.at, at) < distM(b.at, at) ? s : b), undefined);
+  return near && distM(near.at, at) < 400 ? near : undefined;
+}
+/** Is a point on the stretch between two stations (a loose ellipse around the straight line)? */
+const between = (p: LngLatTuple, a: LngLatTuple, b: LngLatTuple) => distM(a, p) + distM(p, b) <= distM(a, b) * 1.15 + 300;
+
+/**
+ * What the service changes at departure do to this trip (owner, 2026-10-27: the planner sent a Flushing
+ * trip down the 7 without a word about its skips). Boarding, transferring or getting off where the train
+ * won't stop, or riding a suspended stretch, blocks the trip; a moved platform is a note.
+ */
+export function tripImpacts(t: TripCore, changes: ServiceChange[], stations: Station[]): Trip["impacts"] {
+  const out: Trip["impacts"] = [];
+  const add = (route: string, text: string, blocks: boolean) => { if (!out.some((o) => o.text === text)) out.push({ route, text, blocks }); };
+  for (const l of t.legs) {
+    if (l.kind !== "ride" || l.mode !== "subway") continue;
+    const route = l.route.replace(/X$/, "");
+    const from = stationAt(stations, route, l.coords[0], l.fromStop);
+    const to = stationAt(stations, route, l.coords[l.coords.length - 1], l.toStop);
+    if (!from || !to) continue;
+    const dir = (c: ServiceChange) => (c.toward ? `${c.toward}-bound ` : "");
+    for (const c of changes) {
+      if (c.route !== route || (c.toward && !headsToward(c.toward, route, from.at, to.at, stations))) continue;
+      const at = (st: Station) => c.names.some((n) => sameStation(n, st.name));
+      if (c.kind === "skip") {
+        if (at(from)) add(route, `The ${dir(c)}${route} won't stop at ${from.name}, so you can't board there.`, true);
+        if (at(to)) add(route, `The ${dir(c)}${route} won't stop at ${to.name}, so you can't get off there.`, true);
+      } else if (c.kind === "platform") {
+        if (at(from)) add(route, `At ${from.name}: ${c.notice}.`, false);
+      } else {
+        const [a, b] = c.names.map((n) => stationAt(stations, route, undefined, n));
+        if (!a || !b) continue;
+        const ridden = [from.at, ...l.stops.map((s) => s.at), to.at];
+        if (ridden.filter((p) => between(p, a.at, b.at)).length >= 2) add(route, `${c.notice}, and this ride uses that stretch.`, true);
+      }
+    }
+  }
+  return out;
 }
 
 /** Stations the trip's lines skip right now, placed on the map (a name no station on that line matches is left out). */
@@ -91,6 +142,9 @@ export function skippedStops(changes: ServiceChange[], stations: Station[], rout
   }
   return out;
 }
+
+/** Service changes in effect at a New York local time. */
+export const changesAt = (local: string) => safe(stationServiceChanges(Math.floor(nyLocalToDate(local).getTime() / 1000)), [] as ServiceChange[]);
 
 /** Active skips on a trip's lines, for planners that do not route around them (OTP). */
 export async function tripSkips(routes: string[], departLocal: string, deps: TripDeps = {}): Promise<Trip["skips"]> {
@@ -166,6 +220,7 @@ export async function buildTrip(
     exitAdvice,
     context: [],
     skips: skippedStops(changes, allStations, routes),
+    impacts: [],
     stubbed: plan ? stubbed : [],
     planner: "fallback",
     alternatives: [],
@@ -180,7 +235,7 @@ export function tripBrief(t: Trip) {
     planner: t.planner,
     summary: summary(t),
     totalMin: mins(t.departIso, t.arriveIso),
-    alternatives: t.alternatives.map((a) => ({ tripId: a.id, summary: summary(a), depart: a.departIso, arrive: a.arriveIso, totalMin: mins(a.departIso, a.arriveIso), arrivesLaterByMin: mins(t.arriveIso, a.arriveIso) })),
+    alternatives: t.alternatives.map((a) => ({ tripId: a.id, summary: summary(a), blocked: a.impacts.some((i) => i.blocks) || undefined, depart: a.departIso, arrive: a.arriveIso, totalMin: mins(a.departIso, a.arriveIso), arrivesLaterByMin: mins(t.arriveIso, a.arriveIso) })),
     tripId: t.id,
     depart: t.departIso,
     arrive: t.arriveIso,
@@ -188,6 +243,9 @@ export function tripBrief(t: Trip) {
     routes: t.routes,
     weather: t.weather,
     plannedWork: t.alerts,
+    /** Say these first: the day's changes hit this very trip (blocks = it can't be made as planned). */
+    affectsThisTrip: t.impacts.length ? t.impacts.map((i) => i.text) : undefined,
+    blocked: t.impacts.some((i) => i.blocks) || undefined,
     skippedStops: t.skips.length ? t.skips.map((s) => `${s.route}${s.toward ? ` (${s.toward}-bound)` : ""} skips ${s.name}`) : undefined,
     elevatorOutages: t.elevators,
     hazards: t.hazards,

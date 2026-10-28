@@ -66,6 +66,22 @@ for (const size of SIZES) {
       await expectLayout(page);
     });
 
+    // A trip the day's service changes break says so whole, on the card (owner, 2026-10-27: the 7's weekend work never reached the plan).
+    test("a trip the weekend's changes block", async ({ page }) => {
+      const blocked = { ...trip, departIso: "2026-11-14T10:00", arriveIso: "2026-11-14T10:40",
+        impacts: [{ route: "4", text: "The 4 won't stop at Grand Central-42 St, so you can't get off there.", blocks: true }] };
+      await open(page, [
+        { type: "command", command: { type: "showRoute", trip: blocked } },
+        { type: "command", command: { type: "openPanel", trip: blocked } },
+        { type: "text", text: "This way doesn't work on Saturday." },
+      ]);
+      await ask(page, "Plan a trip from Union Square to Grand Central this weekend");
+      const box = page.getByTestId("trip-impact");
+      await expect(box).toBeVisible();
+      await expect(box).toContainText("can't get off there");
+      await expectLayout(page);
+    });
+
     // "Use this route" on a train trip walks you to the station first, then shows your train (owner, 2026-10-27).
     test("a train trip walks to the station, then shows the train", async ({ page }) => {
       await open(page, [

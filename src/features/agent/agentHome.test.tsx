@@ -25,13 +25,14 @@ describe("chat-first home (#370)", () => {
     expect(html).not.toContain("<span>Sources</span>");
   });
 
-  it("puts Use my location right under a reply that asks for it, with no More", () => {
+  it("puts Use my location right under a reply that asks for it, keeps the map action, no More", () => {
     const html = renderToStaticMarkup(
       <AnswerCard question="Other ways?" text="Where are you starting from? Tap Use my location." busy={false} working={null} sources={<span>Sources</span>} primary={{ label: "Show it", run: noop }}
         location={<button type="button">Use my location</button>} followUps={[{ label: "What's nearby", run: noop }]} extra={<p>later</p>} />,
     );
     expect(html).toContain("Use my location");
-    expect(html).not.toContain("Show it");
+    // The map action stays (owner, 2026-10-27: a 7 answer showed nothing on the map).
+    expect(html.indexOf("Use my location</button>")).toBeLessThan(html.indexOf("Show it"));
     expect(html).not.toMatch(/>More/);
     // The button comes before anything else under the reply.
     expect(html.indexOf("Use my location</button>")).toBeLessThan(html.indexOf("later"));

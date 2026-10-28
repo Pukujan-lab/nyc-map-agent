@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { serviceChanges } from "../../../src/lib/transit/serviceChanges";
-import { avoidFor, platformNotes } from "./trip";
+import type { TripCore } from "../../../src/features/agent/schema";
+import { avoidFor, platformNotes, tripImpacts } from "./trip";
 import type { Station } from "./transit";
 
 const st = (name: string, lon: number): Station => ({ id: name, complexId: name, name, routes: ["7"], structure: "Elevated", at: [lon, 40.745] });
@@ -21,5 +22,19 @@ describe("trip planning around direction-aware skips", () => {
   it("adds the platform notice only for the moved direction at Woodside", () => {
     expect(platformNotes(changes, woodside, "7", woodside, flushing, all)).toEqual(["Flushing-bound trains board from the Manhattan-bound platform"]);
     expect(platformNotes(changes, woodside, "7", woodside, qbp, all)).toEqual([]);
+  });
+});
+
+describe("trip impacts of a suspended stretch", () => {
+  const s = (name: string, lon: number, lat: number): Station => ({ id: name, complexId: name, name, routes: ["7"], structure: "Subway", at: [lon, lat] });
+  const hy = s("34 St-Hudson Yards", -74.002, 40.7555), ts = s("Times Sq-42 St", -73.9871, 40.7553), gc = s("Grand Central-42 St", -73.9768, 40.7514), q = s("Queensboro Plaza", -73.9402, 40.7509), fl = s("Flushing-Main St", -73.8303, 40.7596);
+  const stations = [hy, ts, gc, q, fl];
+  const gap = serviceChanges({ id: "g", routes: ["7"], text: "No [7] between Queensboro Plaza, Queens and 34 St-Hudson Yards, Manhattan" });
+  const trip = (a: Station, b: Station) => ({ legs: [{ kind: "ride", mode: "subway", route: "7", label: "", coords: [a.at, b.at], durationS: 600, stops: [], underground: true, geometrySource: "straight-line", fromStop: a.name, toStop: b.name }] }) as unknown as TripCore;
+  it("blocks a ride inside the gap", () => {
+    expect(tripImpacts(trip(gc, ts), gap, stations)).toEqual([{ route: "7", text: "No 7 trains between Queensboro Plaza and 34 St-Hudson Yards, and this ride uses that stretch.", blocks: true }]);
+  });
+  it("leaves a ride that only reaches the gap's end", () => {
+    expect(tripImpacts(trip(fl, q), gap, stations)).toEqual([]);
   });
 });

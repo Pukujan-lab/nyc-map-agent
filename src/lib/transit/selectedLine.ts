@@ -12,14 +12,19 @@ export interface SelectedLine {
   train: string | null;
   /** A chosen trip's ride on this line: the panel shows the next trains at its boarding stop. */
   ride?: { from: [number, number]; to: [number, number] };
+  /**
+   * Opened from an answer about the line's trouble: the panel opens its first service change, so the
+   * skipped stations are ringed and framed without a hunt through the notices (owner, 2026-10-27).
+   */
+  trouble?: boolean;
 }
 
 let selected: SelectedLine | null = null;
 const subs = new Set<() => void>();
 
-export function setSelectedLine(route: string | null, train: string | null = null, ride?: SelectedLine["ride"]): void {
-  const next = route ? { route, train, ...(ride ? { ride } : {}) } : null;
-  if (next?.route === selected?.route && next?.train === selected?.train && next?.ride === selected?.ride) return;
+export function setSelectedLine(route: string | null, train: string | null = null, ride?: SelectedLine["ride"], trouble = false): void {
+  const next = route ? { route, train, ...(ride ? { ride } : {}), ...(trouble ? { trouble } : {}) } : null;
+  if (next?.route === selected?.route && next?.train === selected?.train && next?.ride === selected?.ride && next?.trouble === selected?.trouble) return;
   selected = next;
   subs.forEach((f) => f());
 }

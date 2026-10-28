@@ -25,7 +25,17 @@ export function TripPreview(p: {
   const { trip, state } = p;
   const t = useT();
   const minutes = Math.max(1, Math.round((Date.parse(trip.arriveIso) - Date.parse(trip.departIso)) / 60000));
-  const leave = new Date(trip.departIso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const departs = new Date(trip.departIso);
+  // A trip for another day says the day: "this weekend" read as today is how the 7's work got missed (owner, 2026-10-27).
+  const day = departs.toDateString() === new Date().toDateString() ? "" : departs.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+  const leave = `${day ? `${day}, ` : ""}${departs.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+  // What that day's changes do to this trip: shown whole, never cut off, and it opens the line.
+  const impact = trip.impacts[0];
+  const impactBox = impact ? <button type="button" data-testid="trip-impact" disabled={!p.onAlert} onClick={() => p.onAlert?.(impact.route)}
+    className={`task-panel flex w-full items-start gap-2 rounded-[14px] px-3 py-2 text-left text-[13px] leading-snug ${impact.blocks ? "border-red-500/60 text-red-100" : "border-amber-500/40 text-amber-100"}`}>
+    <TriangleAlert size={16} className="mt-0.5 shrink-0" aria-hidden />
+    <span>{impact.blocks ? <strong className="block">This way doesn't work {day || "today"}</strong> : null}{impact.text}{trip.impacts.length > 1 ? ` (+${trip.impacts.length - 1} more)` : ""}</span>
+  </button> : null;
   const alert = trip.alerts[0];
   // The line the notice names; the one you ride when it names several.
   const named = alert ? [...alert.matchAll(/\[([A-Z0-9]{1,3})\]/g)].map((m) => m[1]) : [];
@@ -79,11 +89,12 @@ export function TripPreview(p: {
         {playBtn("h-11 w-11")}
         <button type="button" className="flex min-h-11 min-w-0 flex-1 flex-col justify-center text-left" aria-expanded={level > 0} onClick={() => setLevel((l) => (l === 0 ? 1 : l))}>
           <span className="truncate text-[15px] font-bold" title={`${trip.origin.label} → ${trip.destination.label}`}>To {trip.destination.label}</span>
-          <span className="truncate text-xs text-amber-200">Leave {leave} · about {minutes} min</span>
+          <span className={`truncate text-xs ${impact?.blocks ? "text-red-300" : "text-amber-200"}`}>{impact ? (impact.blocks ? "Blocked · " : "Changes · ") : ""}Leave {leave} · about {minutes} min</span>
         </button>
         {close}
       </div>}>
       <div className="pull-sheet-body mt-2 flex flex-col gap-2.5">
+        {impactBox}
         {speeds}
         {rest}
         {notice}
@@ -102,6 +113,7 @@ export function TripPreview(p: {
         </div>
         {close}
       </div>
+      {impactBox}
       <div className="flex flex-wrap gap-2">
         {weather ? <span className="task-panel rounded-full px-3 py-2 text-[13px]">{weather}</span> : null}
         {notice}

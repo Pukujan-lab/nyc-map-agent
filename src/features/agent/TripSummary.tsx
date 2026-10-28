@@ -93,11 +93,14 @@ function OtherOptions({ trip, onSelect }: { trip: Trip; onSelect?: (t: TripCore)
         {trip.alternatives.map((a) => {
           const d = mins(trip.arriveIso, a.arriveIso);
           const rides = a.legs.filter((l): l is Extract<Leg, { kind: "ride" }> => l.kind === "ride");
+          const blocked = a.impacts?.some((i) => i.blocks);
           return (
-            <button key={a.id} type="button" onClick={() => onSelect?.(a)} className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-muted" aria-label={`Option arriving ${fmt(a.arriveIso)}`}>
+            <button key={a.id} type="button" onClick={() => onSelect?.(a)} className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-muted ${blocked ? "border-red-500/50" : ""}`}
+              aria-label={`Option arriving ${fmt(a.arriveIso)}${blocked ? ", doesn't work that day" : ""}`}>
               {rides.length ? rides.map((r, i) => <RouteBullet key={i} route={r.route} mode={r.mode} color={r.color} />) : t("walk")}
               <span>{fmt(a.departIso)}–{fmt(a.arriveIso)}</span>
               <span className="text-muted-foreground">{d === 0 ? t("sameTime") : d > 0 ? `+${d} min` : `${d} min`}</span>
+              {blocked ? <span className="font-semibold text-red-400">· blocked</span> : null}
             </button>
           );
         })}

@@ -92,9 +92,12 @@ export function layerAction(layer: LayerHelpId): MapAction {
   return { kind: "showLayer", id: `layer:${layer}`, label: `Turn on ${LAYER_HELP[layer]}`, layer };
 }
 
-/** "See the 7 trains live": opens the line with its trains, notices and Follow a train. */
-export function lineAction(route: string): MapAction {
-  return { kind: "showLine", id: `line:${route}`, label: `See the ${route} trains live`, route };
+/**
+ * "See the 7 trains live": opens the line with its trains, notices and Follow a train. With trouble on the
+ * line it opens on that trouble ("Show the 7 changes on the map"), skipped stations ringed.
+ */
+export function lineAction(route: string, trouble = false): MapAction {
+  return { kind: "showLine", id: `line:${route}`, label: trouble ? `Show the ${route} changes on the map` : `See the ${route} trains live`, route };
 }
 
 const dedupePoints = (ps: MapPoint[]) => [...new Map(ps.map((p) => [`${p.name}|${key(p.at)}`, p])).values()];
