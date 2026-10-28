@@ -58,6 +58,9 @@ test("a wide screen keeps status chips in one row at the top of the left side", 
   await page.goto("/?flags=contextClean");
   await page.waitForFunction(() => typeof (window as unknown as { __pushPanel?: unknown }).__pushPanel === "function");
   await page.evaluate(() => (window as unknown as { __pushPanel: (c: object) => void }).__pushPanel({ id: "restroom:test", title: "Bryant Park restroom", subtitle: "Public restroom" }));
+  // The clean-map chip comes up for an open place, and the row is drawn on wide screens.
+  await expect(page.getByTestId("context-clean")).toBeVisible();
+  await expect(page.getByTestId("left-chips")).toBeAttached();
   const chip = page.getByTestId("left-chips").getByTestId("context-clean");
   await expect(chip).toBeVisible();
   const box = (await chip.boundingBox())!;
