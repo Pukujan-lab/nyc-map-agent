@@ -1240,14 +1240,21 @@ export default function TransitLayer() {
     const sub = statics.find((s) => s.system === "subway");
     const shape = sub?.shapes[lineSel]?.c;
     if (!shape?.length) return;
+    // Street level always goes to the flat map on the line: its tilted view "contains" half the city,
+    // and framing it there left the line as a strip on the horizon (owner report, 2026-10-28).
+    const street = walkingRef.current;
     const b = map.getBounds();
-    if (shape.some((p) => b.contains(p))) return;
+    if (!street && shape.some((p) => b.contains(p))) return;
     const xs = shape.map((p) => p[0]), ys = shape.map((p) => p[1]);
     // Frame it once the line panel is open, between the panel and the chat bar. Fitting first let the
     // panel's padding slide in afterwards and push the line's far end under the chat bar (owner report, 2026-10-25).
     const t = window.setTimeout(() => {
       const chatBar = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--chat-bar-h"), 10) || 0;
-      map.fitBounds([[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]], { padding: framePadding(map, { top: 140, bottom: Math.max(140, chatBar + 32), left: 40, right: 40 }), duration: 800 });
+      const bounds: [[number, number], [number, number]] = [[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]];
+      const padding = framePadding(map, { top: 140, bottom: Math.max(140, chatBar + 32), left: 40, right: 40 });
+      // "Back to street view" then puts you back where you stood.
+      if (street) showView("map", null, null, { frame: { bounds, padding, maxZoom: 15 } });
+      else map.fitBounds(bounds, { padding, duration: 800, pitch: 0, bearing: 0 });
     }, 300);
     return () => window.clearTimeout(t);
   }, [map, lineSel, staticKey]); // eslint-disable-line react-hooks/exhaustive-deps

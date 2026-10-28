@@ -343,7 +343,8 @@ export default function AgentOverlay() {
     showTrip: ctx.showTrip,
     showRestroom: (r) => {
       handoffCamera();
-      setRestrooms(true);
+      // Off again when the answer closes, unless you had them on already.
+      if (!restrooms) { restroomsByAnswer.current = true; setRestrooms(true); }
       const m = getMapInstance();
       if (m) showPoints(m, [{ at: [r.lon, r.lat], name: formatStreetText(r.name) }], "#2563eb");
       else flyTo({ lon: r.lon, lat: r.lat, zoom: 17 });
