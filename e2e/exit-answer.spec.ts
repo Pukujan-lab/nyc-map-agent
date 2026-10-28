@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { expectLayout } from "./layout";
 import { mockNetwork } from "./mocks";
 
 const stream = (events: unknown[]) => events.map((e) => JSON.stringify(e)).join("\n") + "\n";
@@ -39,3 +40,40 @@ for (const [width, height] of [[375, 667], [320, 568]]) {
     await expect(page.locator('[data-testid="answer-card"]:not([data-compact])')).toBeVisible();
   });
 }
+
+test("walking away from the place after an exit answer says to turn around", async ({ page, context }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: exit[1], longitude: exit[0], accuracy: 8 });
+  await mockNetwork(page);
+  await page.route("**/api/agent", (r) => r.fulfill({ contentType: "application/x-ndjson", body: stream([
+    { type: "text", text: "Take the NE exit on West 34 Street. About 3 minutes on foot." },
+    { type: "actions", actions: [{
+      kind: "showExit", id: "exit:test", label: "Show the NE exit on West 34 Street exit", station: "34 St-Herald Sq",
+      exit: { at: exit, label: "NE exit on West 34 Street", elevatorOnly: false },
+      destination: { at: dest, label: "Empire State Building" },
+      path: [exit, [-73.987, 40.7492], dest], walkMin: 3,
+    }] },
+    { type: "done" },
+  ]) }));
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Restroom" })).toBeVisible({ timeout: 15_000 });
+  // Share location from Center on my location.
+  await page.getByTestId("locate-button").first().click();
+  await expect(page.getByTestId("locate-button").first()).toHaveAttribute("data-camera", "follow");
+  await page.getByLabel("Ask the assistant").fill("Which exit for the Empire State Building?");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  const card = page.locator('[data-testid="answer-card"][data-compact]');
+  await expect(card).toContainText("NE exit on West 34 Street");
+  await expect(page.getByTestId("wrong-way")).toHaveCount(0);
+  // Walk west, away from the Empire State Building to the east.
+  for (const lon of [-73.9883, -73.9886, -73.9889, -73.9892]) {
+    await context.setGeolocation({ latitude: exit[1], longitude: lon, accuracy: 8 });
+    await page.waitForTimeout(300);
+  }
+  await expect(page.getByTestId("wrong-way")).toHaveText("Turn around, Empire State Building is behind you");
+  // Walking back clears it.
+  await context.setGeolocation({ latitude: exit[1], longitude: exit[0], accuracy: 8 });
+  await expect(page.getByTestId("wrong-way")).toHaveCount(0);
+  await expectLayout(page);
+});
