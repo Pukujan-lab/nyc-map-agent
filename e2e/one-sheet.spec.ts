@@ -44,7 +44,7 @@ test("a phone's answer pulls up for more and down for more map", async ({ page }
   const box = page.getByTestId("agent-answers");
   const usual = (await box.boundingBox())!.height;
   await grip.click();
-  await expect.poll(async () => (await box.boundingBox())!.height).toBeGreaterThan(usual + 100);
+  await expect.poll(async () => (await box.boundingBox())!.height).toBeGreaterThan(usual + 80);
   await expect(grip).toHaveAttribute("aria-label", "Show less");
   await expectLayout(page);
   await grip.click();

@@ -220,7 +220,8 @@ interface AgentHomeProps {
 const PHONE_ANSWER_H: Record<SheetLevel, string> = {
   0: "max-h-[3.25rem]",
   1: "max-h-[30dvh]",
-  2: "max-h-[calc(100dvh-16rem)]",
+  // Up to just under the map buttons at the top right; never shorter than the usual box.
+  2: "max-h-[max(30dvh,calc(100dvh-30rem))]",
 };
 
 /**
@@ -276,6 +277,14 @@ export function AgentHome(p: AgentHomeProps) {
   useEffect(() => {
     if (busy) setLevel(1);
   }, [busy]);
+  // Pulled all the way up, Center on my location gives way, as it does for a full line sheet.
+  const tall = !column && answerOpen && level === 2;
+  useLayoutEffect(() => {
+    if (!tall) return;
+    const root = document.documentElement;
+    root.dataset.answerSheet = "full";
+    return () => { delete root.dataset.answerSheet; };
+  }, [tall]);
 
   // Escape stops the orb first, then closes the answer. Not while someone is
   // part-way through typing: the first Escape there is theirs, not the answer's.
