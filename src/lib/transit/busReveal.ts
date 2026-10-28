@@ -54,7 +54,9 @@ let tripRoutes: string[] | null = null;
 let shuttleRoutes: string[] | null = null;
 /** Alert id whose shuttle the person hid with Live buses off, until a different alert is focused. */
 let shuttleHold: string | null = null;
-let turnBusesOn: (() => void) | null = null;
+let busToggle: ((on: boolean) => boolean) | null = null;
+/** The trip, not the person, turned live buses on; closing the trip turns them back off. */
+let tripTurnedOn = false;
 type Pins = { trip: string[] | null; shuttle: string[] | null; watch?: StopWatch | null };
 let snap: Pins = { trip: null, shuttle: null, watch: null };
 const subs = new Set<() => void>();
@@ -69,16 +71,23 @@ export function setTripBuses(routes: string[]): void {
   publish();
 }
 
-/** The transit layer registers how a trip turns the bus layer on. Ask stays out of that feature. */
-export function registerBusToggle(fn: (() => void) | null): void {
-  turnBusesOn = fn;
+/** The transit layer registers how a trip turns the bus layer on or off (true when that changed it). Ask stays out of that feature. */
+export function registerBusToggle(fn: ((on: boolean) => boolean) | null): void {
+  busToggle = fn;
 }
 
 /** A trip names its buses and shows them. A trip with no bus clears the pin and leaves a chosen page alone. */
 export function revealTripBuses(trip: TripLike): void {
   const routes = busRoutesOfTrip(trip);
   setTripBuses(routes);
-  if (routes.length) turnBusesOn?.();
+  if (routes.length && busToggle?.(true)) tripTurnedOn = true;
+}
+
+/** A closed trip takes its buses with it: its pins, and the bus layer if the trip turned it on (owner, 2026-10-28). */
+export function clearTripBuses(): void {
+  setTripBuses([]);
+  if (tripTurnedOn) busToggle?.(false);
+  tripTurnedOn = false;
 }
 
 /** Returns false when this alert was explicitly hidden and the pin stays off. */
@@ -104,7 +113,7 @@ export function setShuttleBuses(alertId: string | null, routes: string[]): boole
 export function watchStopBuses(next: StopWatch): void {
   watch = { ...next, routes: next.routes.map((r) => r.toUpperCase()).slice(0, BUS_REVEAL_CAP) };
   publish();
-  turnBusesOn?.();
+  busToggle?.(true);
 }
 
 export function clearStopWatch(): void {

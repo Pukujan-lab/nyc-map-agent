@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { busRoutesOfTrip, busesInFocus, busesToShow, clearStopWatch, watchStopBuses, capPerLine, parseBusCap, parseBusLines, holdShuttle, registerBusToggle, revealTripBuses, setShuttleBuses, setTripBuses, shownVehicles } from "./busReveal";
+import { busRoutesOfTrip, busesInFocus, busesToShow, clearStopWatch, watchStopBuses, capPerLine, parseBusCap, parseBusLines, holdShuttle, clearTripBuses, registerBusToggle, revealTripBuses, setShuttleBuses, setTripBuses, shownVehicles } from "./busReveal";
 
 const leg = (route: string, mode: "bus" | "subway") => ({ kind: "ride", route, mode });
 
@@ -22,7 +22,7 @@ describe("which buses a trip reveals", () => {
 
   it("turns buses on for a bus trip and leaves a walking trip alone", () => {
     let calls = 0;
-    registerBusToggle(() => { calls += 1; });
+    registerBusToggle(() => { calls += 1; return true; });
     revealTripBuses(trip([["6", "subway"]]));
     expect(calls).toBe(0);
     expect(busesToShow(["M1"])).toEqual({ why: "page", routes: ["M1"] });
@@ -31,6 +31,21 @@ describe("which buses a trip reveals", () => {
     expect(busesToShow(["M1"])).toEqual({ why: "trip", routes: ["Q44+"] });
     registerBusToggle(null);
     setTripBuses([]);
+  });
+
+  it("closing a trip turns off the buses it turned on, and leaves buses the person had on", () => {
+    let busesOn = false;
+    registerBusToggle((want) => { if (busesOn === want) return false; busesOn = want; return true; });
+    revealTripBuses(trip([["Q32", "bus"]]));
+    expect(busesOn).toBe(true);
+    clearTripBuses();
+    expect(busesOn).toBe(false);
+    expect(busesToShow(["M1"]).why).toBe("page");
+    busesOn = true;
+    revealTripBuses(trip([["Q32", "bus"]]));
+    clearTripBuses();
+    expect(busesOn).toBe(true);
+    registerBusToggle(null);
   });
 
   it("lets a shuttle replace the page, and Live buses off keeps that shuttle hidden", () => {
@@ -109,7 +124,7 @@ describe("which buses are in focus", () => {
 describe("a bus stop's see-them-coming", () => {
   it("puts the stop's routes ahead of picked lines and a trip, turns buses on, and gives them back when closed", () => {
     let on = 0;
-    registerBusToggle(() => { on += 1; });
+    registerBusToggle(() => { on += 1; return true; });
     const at = { lon: -73.95, lat: 40.71 };
     watchStopBuses({ routes: ["b62"], at, panelId: "busstop:x" });
     expect(on).toBe(1);

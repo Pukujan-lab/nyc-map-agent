@@ -60,6 +60,24 @@ test("a card opened over a trip preview is not covered by it", async ({ page }) 
   await expectLayout(page);
 });
 
+// Owner, 2026-10-28: restroom pins stayed on the map after the answer was closed.
+test("closing a restroom answer takes its restrooms off the map", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockNetwork(page);
+  await page.route("**/api/agent", (r) => r.fulfill({ contentType: "application/x-ndjson", body: stream([
+    { type: "text", text: "Bryant Park is the closest open restroom." },
+    { type: "actions", actions: [{ kind: "showRestroom", id: "restroom:bp", label: "Show the nearest restroom", restroom: { name: "Bryant Park", lon: -73.9832, lat: 40.7536, distanceM: 420, hours: "8am-8pm" } }] },
+    { type: "done" },
+  ]) }));
+  await page.goto("/");
+  await ask(page, "Where is the nearest restroom?");
+  await expect(page.getByText("Bryant Park is the closest open restroom.")).toBeVisible();
+  await expect(page).toHaveURL(/restrooms=1/);
+  await page.getByRole("button", { name: "Close answer", exact: true }).click();
+  await expect(page).not.toHaveURL(/restrooms=1/);
+  await expectLayout(page);
+});
+
 test("answer follow-ups ask the agent even when extra map actions exist", async ({ page }) => {
   await mockNetwork(page);
   const questions: string[] = [];
