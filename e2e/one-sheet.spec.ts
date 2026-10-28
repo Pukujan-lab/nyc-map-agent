@@ -56,6 +56,7 @@ test("a wide screen keeps status chips in one row at the top of the left side", 
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockNetwork(page);
   await page.goto("/?flags=contextClean");
+  await page.waitForFunction(() => typeof (window as unknown as { __pushPanel?: unknown }).__pushPanel === "function");
   await page.evaluate(() => (window as unknown as { __pushPanel: (c: object) => void }).__pushPanel({ id: "restroom:test", title: "Bryant Park restroom", subtitle: "Public restroom" }));
   const chip = page.getByTestId("left-chips").getByTestId("context-clean");
   await expect(chip).toBeVisible();
