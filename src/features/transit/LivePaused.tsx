@@ -1,5 +1,7 @@
+import { createPortal } from "react-dom";
 import { Pause } from "lucide-react";
 import { useIdle } from "@/lib/idle";
+import { useLeftChips } from "@/lib/store/leftColumn";
 import { useLiveWanted } from "./hooks";
 
 /**
@@ -11,9 +13,9 @@ import { useLiveWanted } from "./hooks";
 export default function LivePaused() {
   const { idle, resume } = useIdle();
   const wanted = useLiveWanted();
+  const row = useLeftChips();
   if (!idle || !wanted) return null;
-  return (
-    <div className="pointer-events-none fixed inset-x-0 top-20 z-40 flex justify-center">
+  const chip = (
       <button
         type="button"
         onClick={resume}
@@ -22,6 +24,8 @@ export default function LivePaused() {
         <Pause className="h-3.5 w-3.5" aria-hidden />
         Live updates paused — tap to resume
       </button>
-    </div>
   );
+  // Wide screens: in the chip row at the top of the left side. Phones: centred under the top.
+  if (row) return createPortal(chip, row);
+  return <div className="pointer-events-none fixed inset-x-0 top-20 z-40 flex justify-center">{chip}</div>;
 }

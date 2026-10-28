@@ -16,9 +16,11 @@ interface LeftColumn {
   cards: readonly string[];
   /** An answer (or the voice orb) is open in the column. */
   answer: boolean;
+  /** The chip row at the top of the left side (buses, live paused, back to street). */
+  chips: HTMLElement | null;
 }
 
-let state: LeftColumn = { slot: null, cards: [], answer: false };
+let state: LeftColumn = { slot: null, cards: [], answer: false, chips: null };
 const subs = new Set<() => void>();
 
 function set(next: Partial<LeftColumn>) {
@@ -29,6 +31,7 @@ function set(next: Partial<LeftColumn>) {
 
 export const setLeftSlot = (slot: HTMLElement | null) => set({ slot });
 export const setLeftAnswer = (answer: boolean) => set({ answer });
+export const setLeftChips = (chips: HTMLElement | null) => set({ chips });
 
 /** Put a card on top of the stack (again, if it was under another). Pure, for tests. */
 export function pushCard(cards: readonly string[], id: string): readonly string[] {
@@ -52,4 +55,13 @@ export function useLeftCard(id: string, on: boolean): { slot: HTMLElement | null
   const slot = useLeftColumn((s) => s.slot);
   const top = useLeftColumn((s) => s.cards.at(-1) === id);
   return { slot: on ? slot : null, top };
+}
+
+/**
+ * Where a small status chip goes on wide screens: one row at the top of the left
+ * side, instead of floating over the middle of the map. Null on phones and before
+ * the row is drawn; the chip then keeps its own place.
+ */
+export function useLeftChips(): HTMLElement | null {
+  return useLeftColumn((s) => s.chips);
 }

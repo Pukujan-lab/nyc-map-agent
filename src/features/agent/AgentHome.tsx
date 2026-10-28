@@ -2,7 +2,7 @@ import { AlertCircle, ArrowUp, AudioLines, Check, ChevronDown, Loader2, Mic, X }
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
 import { Button } from "@/components/ui/button";
 import { nextLevel, swipeOf, type SheetLevel } from "@/components/sheetSwipe";
-import { setLeftAnswer, setLeftSlot, useLeftColumn } from "@/lib/store/leftColumn";
+import { setLeftAnswer, setLeftChips, setLeftSlot, useLeftColumn } from "@/lib/store/leftColumn";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/appLang";
@@ -436,8 +436,18 @@ export function AgentHome(p: AgentHomeProps) {
     </>
   );
 
+  // Status chips (buses, live paused, back to street) print in one row at the top of the left side.
+  const chips = !hidden && wide ? (
+    <div ref={setLeftChips} data-testid="left-chips" data-map-cover
+      className="pointer-events-none flex shrink-0 flex-wrap items-center gap-2 empty:hidden [&>*]:pointer-events-auto" />
+  ) : null;
+
   // One tree for both shapes, so the ask box keeps its cursor when the column opens.
   return (
+    <>
+    {column ? null : chips ? (
+      <div className="dark pointer-events-none fixed left-[var(--edge)] top-[calc(var(--topbar-h,64px)+var(--sp-3))] z-[45] w-[min(400px,44vw)]">{chips}</div>
+    ) : null}
     <div
       data-testid="agent-home"
       data-layout={column ? "column" : undefined}
@@ -449,6 +459,7 @@ export function AgentHome(p: AgentHomeProps) {
         !column && sheet && "sm:justify-start sm:pl-3",
       )}
     >
+      {column ? chips : null}
       {/* A map card (MapPanel) prints here; it leaves the answer at least half the column. */}
       {column ? <div ref={setLeftSlot} data-testid="left-slot" data-map-cover className={cn("flex min-h-0 shrink flex-col empty:hidden", sheet && "max-h-[50%]")} /> : null}
       <div
@@ -475,5 +486,6 @@ export function AgentHome(p: AgentHomeProps) {
         {bar}
       </div>
     </div>
+    </>
   );
 }

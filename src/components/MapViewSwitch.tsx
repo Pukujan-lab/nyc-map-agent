@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Marker, type Map as MapLibreMap } from "maplibre-gl";
 import { onMapInstance } from "@/lib/map/mapInstance";
 import { metresBetween } from "@/lib/map/walk";
 import { backToStreet, setStreetSpot, showView, useStreetSpot, type ViewName } from "@/lib/map/viewChange";
 import { useMapState } from "@/lib/store/MapStateContext";
+import { useLeftChips } from "@/lib/store/leftColumn";
 import { usePanel } from "@/lib/store/PanelContext";
 import { usePullSheetUp } from "@/lib/store/pullSheet";
 import { setFollowMode, useFollowMode, useFollowed, type FollowMode } from "@/lib/transit/follow";
@@ -116,12 +118,16 @@ export function MapViewSwitch() {
  * After street view: a "you" marker where you stood, pointing the way you
  * faced, and "Back to street view" to stand there again.
  */
+/** The dark pill both top chips wear, wherever they stand. */
+const CHIP = "flex items-center gap-1 rounded-full border border-[#263449] bg-[rgba(15,23,42,0.92)] p-1 text-[#f1f5f9] shadow-[0_6px_18px_rgba(0,0,0,0.35)]";
+
 export function BackToStreet() {
   const map = useMap();
   const { walking } = useMapState();
   const spot = useStreetSpot();
   const show = !walking && spot !== null;
   const place = usePlace();
+  const row = useLeftChips();
 
   useEffect(() => {
     if (!map || !show || !spot) return;
@@ -137,10 +143,10 @@ export function BackToStreet() {
   }, [map, show, spot]);
 
   if (!show) return null;
-  return (
+  const pill = (
     <div data-testid="back-to-street"
-      className={`pointer-events-auto absolute left-1/2 top-[calc(env(safe-area-inset-top)+var(--bt))] z-40 flex -translate-x-1/2 items-center gap-1 rounded-full border border-[#263449] bg-[rgba(15,23,42,0.92)] p-1 text-[#f1f5f9] shadow-[0_6px_18px_rgba(0,0,0,0.35)] sm:left-[var(--bl)] ${place.cls}`}
-      style={{ ["--bl" as string]: place.left, ["--bt" as string]: `${place.docked ? 72 : 16}px` }}>
+      className={row ? CHIP : `pointer-events-auto absolute left-1/2 top-[calc(env(safe-area-inset-top)+var(--bt))] z-40 -translate-x-1/2 sm:left-[var(--bl)] ${CHIP} ${place.cls}`}
+      style={row ? undefined : { ["--bl" as string]: place.left, ["--bt" as string]: `${place.docked ? 72 : 16}px` }}>
       <button type="button" onClick={backToStreet}
         className="h-9 whitespace-nowrap rounded-full bg-[#2563eb] px-4 text-[14px] font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]">
         Back to street view
@@ -149,6 +155,8 @@ export function BackToStreet() {
         className="flex h-9 w-9 items-center justify-center rounded-full text-[18px] leading-none text-[#a5b4cb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]">×</button>
     </div>
   );
+  // On wide screens it joins the chip row at the top of the left side.
+  return row ? createPortal(pill, row) : pill;
 }
 
 /**
@@ -163,15 +171,16 @@ export function BusesOff() {
   const { walking } = useMapState();
   const spot = useStreetSpot();
   const place = usePlace();
+  const row = useLeftChips();
   // Street view keeps its own controls up top; there the Layers menu still turns buses off.
   if (!buses?.active || walking) return null;
   const routes = buses.routes ?? [];
   const label = routes.length > 3 ? `${routes.slice(0, 3).join(", ")} +${routes.length - 3}` : routes.join(", ");
   const top = (place.docked ? 72 : 16) + (spot ? 52 : 0);
-  return (
+  const pill = (
     <div data-testid="buses-off"
-      className={`pointer-events-auto absolute left-4 top-[calc(env(safe-area-inset-top)+var(--bt))] z-40 flex max-w-[calc(100%-96px)] items-center gap-1 rounded-full sm:max-w-[calc(100%-32px)] sm:-translate-x-1/2 border border-[#263449] bg-[rgba(15,23,42,0.92)] py-1 pl-3.5 pr-1 text-[#f1f5f9] shadow-[0_6px_18px_rgba(0,0,0,0.35)] sm:left-[var(--bl)] ${place.cls}`}
-      style={{ ["--bl" as string]: place.left, ["--bt" as string]: `${top}px` }}>
+      className={row ? `${CHIP} min-w-0 max-w-full pl-3.5` : `pointer-events-auto absolute left-4 top-[calc(env(safe-area-inset-top)+var(--bt))] z-40 max-w-[calc(100%-96px)] sm:max-w-[calc(100%-32px)] sm:-translate-x-1/2 ${CHIP} pl-3.5 sm:left-[var(--bl)] ${place.cls}`}
+      style={row ? undefined : { ["--bl" as string]: place.left, ["--bt" as string]: `${top}px` }}>
       <span className="min-w-0 truncate text-[13px] font-semibold">Buses{label ? ` · ${label}` : ""}</span>
       <button type="button" onClick={buses.onToggle} aria-label="Turn live buses off"
         className="flex h-9 shrink-0 items-center gap-1 rounded-full px-3 text-[13px] font-semibold text-[#fca5a5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]">
@@ -179,4 +188,5 @@ export function BusesOff() {
       </button>
     </div>
   );
+  return row ? createPortal(pill, row) : pill;
 }
