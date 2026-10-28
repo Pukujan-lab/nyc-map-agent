@@ -1,4 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useFlag } from "@/lib/flags";
+import { useLeftCard } from "@/lib/store/leftColumn";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 import { Marker, type Map as MaplibreMap } from "maplibre-gl";
 import { X } from "lucide-react";
 import { lineColor } from "@/lib/transit/bullets";
@@ -118,7 +122,12 @@ export function LinePanel({ map, route, onFollow, trains = () => [] }: { map: Ma
   const [level, setLevel] = useState<SheetLevel>(1);
   useEffect(() => setLevel(1), [route]);
   const pickedNotice = notices.find((n) => n.id === picked) ?? null;
-  useNoticeRings(map, pickedNotice, panelEl, !wide);
+  // A desktop with the agent home: the line is a card in the one left column, not a panel on the right.
+  const home = useFlag("agentHome");
+  const desktop = useMediaQuery("(min-width: 1024px)");
+  const { slot, top } = useLeftCard(`line:${route}`, home && desktop);
+  // In the column it is a cover on the left, so a notice frames like the phone sheet does.
+  useNoticeRings(map, pickedNotice, panelEl, !wide || Boolean(slot));
   // The picked alert draws its affected stretch, skipped stops and detour on the map, the rest dimmed.
   const pickedAlert = pickedNotice?.alert ?? null;
   useEffect(() => {
@@ -141,7 +150,7 @@ export function LinePanel({ map, route, onFollow, trains = () => [] }: { map: Ma
   useEffect(() => { sendScreen({ type: "LINE", on: true }); return () => sendScreen({ type: "LINE", on: false }); }, []);
   const folded = useScreen((v) => v.line === "pill");
   const sheet = !wide && !folded;
-  useEffect(() => setPanelEl(panelRef.current), [sheet, level, folded]);
+  useEffect(() => setPanelEl(panelRef.current), [sheet, level, folded, slot, top]);
   const pillLabel = (
     <>
       <span className="flex h-8 w-8 items-center justify-center rounded-full text-[16px] font-bold" style={{ background: color, color: text }} aria-hidden>
@@ -241,6 +250,32 @@ export function LinePanel({ map, route, onFollow, trains = () => [] }: { map: Ma
       </PullSheet>
     );
   }
+  const card = (
+    // One card: the line and its close button head it, then the board, the notices and the actions,
+    // all on the same left edge (owner, 2026-10-27).
+    <div className="pointer-events-auto flex min-h-0 flex-col rounded-[22px] border border-[#263449] bg-[rgba(15,23,42,0.92)] shadow-[0_10px_30px_rgba(0,0,0,0.4)] backdrop-blur-[14px]">
+      <div className="flex items-center gap-2 py-2 pl-2.5 pr-2">
+        <div data-testid="line-pill" className="flex min-w-0 flex-1 items-center gap-2.5">{pillLabel}</div>
+        <button type="button" aria-label="Close line" onClick={() => setSelectedLine(null)}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#cbd5e1] hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]">
+          <X className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden />
+        </button>
+      </div>
+      <div ref={panelRef} data-testid="line-body" className="flex min-h-0 flex-col gap-2.5 border-t border-[rgba(148,163,184,0.16)] p-2.5">
+        {boardEl}
+        {dayEl}
+        {noticesEl(false)}
+        {noneEl}
+        {actionsEl}
+      </div>
+    </div>
+  );
+  if (slot) {
+    return createPortal(
+      <div data-testid="line-panel" className={`${top ? "flex" : "hidden"} min-h-0 flex-col font-[Inter,system-ui,sans-serif] text-[#f1f5f9]`}>{card}</div>,
+      slot,
+    );
+  }
   return (
     <div
       data-testid="line-panel"
@@ -260,24 +295,7 @@ export function LinePanel({ map, route, onFollow, trains = () => [] }: { map: Ma
           </button>
         </div>
       ) : (
-        // One card: the line and its close button head it, then the board, the notices and the actions,
-        // all on the same left edge (owner, 2026-10-27).
-        <div className="pointer-events-auto flex min-h-0 flex-col rounded-[22px] border border-[#263449] bg-[rgba(15,23,42,0.92)] shadow-[0_10px_30px_rgba(0,0,0,0.4)] backdrop-blur-[14px]">
-          <div className="flex items-center gap-2 py-2 pl-2.5 pr-2">
-            <div data-testid="line-pill" className="flex min-w-0 flex-1 items-center gap-2.5">{pillLabel}</div>
-            <button type="button" aria-label="Close line" onClick={() => setSelectedLine(null)}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#cbd5e1] hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]">
-              <X className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden />
-            </button>
-          </div>
-          <div ref={panelRef} data-testid="line-body" className="flex min-h-0 flex-col gap-2.5 border-t border-[rgba(148,163,184,0.16)] p-2.5">
-            {boardEl}
-            {dayEl}
-            {noticesEl(false)}
-            {noneEl}
-            {actionsEl}
-          </div>
-        </div>
+        card
       )}
     </div>
   );
