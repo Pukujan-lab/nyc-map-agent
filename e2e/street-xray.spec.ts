@@ -6,7 +6,8 @@ import { mockNetwork } from "./mocks";
  * Street view X-ray sees a short way ahead (150 m, in the cone you look along),
  * not the whole city's tunnels through every building.
  */
-for (const size of [{ width: 390, height: 844 }, { width: 1280, height: 800 }]) {
+// Desktop only: phones use the chat-first layout, where the old street controls are not shown.
+for (const size of [{ width: 1280, height: 800 }]) {
   test(`street view opens with X-ray on and keeps the layout at ${size.width}px`, async ({ page }) => {
     await page.setViewportSize(size);
     await mockNetwork(page);
