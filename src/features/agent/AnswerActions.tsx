@@ -1,5 +1,6 @@
 import { ArrowLeftRight, Ban, BellRing, Bus, DoorOpen, Layers, ListOrdered, MapPin, Route, TrainFront, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { RestroomPhoto } from "@/features/restrooms/RestroomPhoto";
 import { useT } from "@/lib/i18n/appLang";
 import { distanceText } from "./mapActions";
 import type { MapAction, RestroomSpot } from "./schema";
@@ -45,6 +46,7 @@ export function RestroomSpotDetails({ restroom }: { restroom: RestroomSpot }) {
           </div>
         ))}
       </dl>
+      <RestroomPhoto lon={restroom.lon} lat={restroom.lat} name={restroom.name} />
       <div className="mt-2 text-[10px] text-muted-foreground">NYC Open Data · Public Restrooms</div>
     </div>
   );
