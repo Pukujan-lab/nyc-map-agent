@@ -53,7 +53,7 @@ export function useWrongWay(target: { key: string; metres: number; accuracy: num
   const place = target?.place ?? "";
   useEffect(() => {
     if (!away || typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    speakQueued(window.speechSynthesis, turnAroundLine(place), () => {});
+    try { speakQueued(window.speechSynthesis, turnAroundLine(place), () => {}); } catch { /* no voice: the line still shows */ }
   }, [away]); // eslint-disable-line react-hooks/exhaustive-deps
   return away;
 }

@@ -61,15 +61,20 @@ test("walking away from the place after an exit answer says to turn around", asy
   // Share location from Center on my location.
   await page.getByTestId("locate-button").first().click();
   await expect(page.getByTestId("locate-button").first()).toHaveAttribute("data-camera", "follow");
+  // Wait until the shared location is drawn as your dot.
+  await expect.poll(() => page.evaluate(async () => {
+    const src = (window as unknown as { __map?: { getSource: (id: string) => { getData: () => Promise<{ features?: unknown[] }> } | undefined } }).__map?.getSource("you");
+    return (src ? await src.getData() : null)?.features?.length ?? 0;
+  }), { timeout: 15_000 }).toBe(1);
   await page.getByLabel("Ask the assistant").fill("Which exit for the Empire State Building?");
   await page.getByRole("button", { name: "Send", exact: true }).click();
   const card = page.locator('[data-testid="answer-card"][data-compact]');
   await expect(card).toContainText("NE exit on West 34 Street");
   await expect(page.getByTestId("wrong-way")).toHaveCount(0);
   // Walk west, away from the Empire State Building to the east.
-  for (const lon of [-73.9883, -73.9886, -73.9889, -73.9892]) {
+  for (const lon of [-73.9883, -73.9886, -73.9889, -73.9892, -73.9896, -73.99]) {
     await context.setGeolocation({ latitude: exit[1], longitude: lon, accuracy: 8 });
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(500);
   }
   await expect(page.getByTestId("wrong-way")).toHaveText("Turn around, Empire State Building is behind you");
   // Walking back clears it.
