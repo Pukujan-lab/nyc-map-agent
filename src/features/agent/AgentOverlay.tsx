@@ -35,6 +35,7 @@ import { usePanel } from "@/lib/store/PanelContext";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { cn } from "@/lib/utils";
 import { useSpeech } from "@/lib/voice/useSpeech";
+import { turnAroundLine, useWrongWay } from "@/lib/geo/wrongWay";
 import { spokenSummary } from "@/lib/voice/tts";
 import { executeCommand, type ExecutorContext } from "./executor";
 import { PLAYBACK_SPEEDS, langTag, type Leg, type MapAction, type PlaybackSpeed, type Trip, type TripMode } from "./schema";
@@ -556,6 +557,9 @@ export default function AgentOverlay() {
   // the exit and its walk draw at once, north up, framed above the small card with you when near.
   const exitAnswer = home ? (lastActions?.find((a): a is ExitAction => a.kind === "showExit") ?? null) : null;
   const heading = useHeading(exitAnswer !== null);
+  // Up on the street with an exit answer: warn when you walk away from the place.
+  const exitHere = exitAnswer && shared.status === "on" && shared.coords ? ([shared.coords.lon, shared.coords.lat] as [number, number]) : null;
+  const awayFromExit = useWrongWay(exitAnswer && exitHere ? { key: `${exitAnswer.station}|${exitAnswer.exit.label}`, metres: metres(exitHere, exitAnswer.destination.at), accuracy: shared.accuracy ?? null, place: exitAnswer.destination.label } : null);
   useEffect(() => {
     if (exitAnswer) void frameExit(exitAnswer);
   }, [exitAnswer]);
@@ -862,7 +866,9 @@ export default function AgentOverlay() {
             {tr(appLang, shared.status === "asking" ? "findingYou" : "useMyLocation")}
           </Button>
         ) : undefined}
-        compact={exitAnswer ? { hint: <CompassHint heading={heading} /> } : undefined}
+        compact={exitAnswer ? { hint: awayFromExit ? (
+          <p className="text-xs font-semibold leading-tight text-amber-300" role="alert" data-testid="wrong-way">{turnAroundLine(exitAnswer.destination.label)}</p>
+        ) : <CompassHint heading={heading} /> } : undefined}
         extra={
           <>
             {/* A blocked or failed location used to leave the button looking untouched (owner report, 2026-10-25). */}
