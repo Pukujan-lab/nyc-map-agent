@@ -37,3 +37,20 @@ for (const size of [{ width: 390, height: 844 }, { width: 1280, height: 800 }]) 
     await expectLayout(page);
   });
 }
+
+test("another feature turning the map keeps following you", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockNetwork(page);
+  await page.goto("/?sim=walk");
+  const locate = page.getByTestId("locate-button").first();
+  await expect.poll(() => youShown(page), { timeout: 15_000 }).toBe(1);
+  await expect(locate).toHaveAttribute("data-camera", "follow");
+  // The underground helper turns the map with the compass like this; you stay on screen.
+  await page.evaluate(() => (window as unknown as { __map: { easeTo: (o: object) => void } }).__map.easeTo({ bearing: 40, duration: 300 }));
+  await page.waitForTimeout(800);
+  await expect(locate).toHaveAttribute("data-camera", "follow");
+  // A move that leaves you off screen does stop it.
+  await page.evaluate(() => (window as unknown as { __map: { jumpTo: (o: object) => void } }).__map.jumpTo({ center: [-73.95, 40.8] }));
+  await expect(locate).toHaveAttribute("data-camera", "off");
+  await expectLayout(page);
+});
