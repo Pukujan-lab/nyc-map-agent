@@ -116,12 +116,22 @@ function streetEye(map: MaplibreMap): { lon: number; lat: number } {
   const c = map.getCenter();
   return { lon: c.lng, lat: c.lat };
 }
-/** The subway station drawn under a tap, if any: within a finger's width of it on screen. */
-function stationNear(map: MaplibreMap, at: { x: number; y: number }, sys: StaticSystem | undefined): { id: string; name: string; routes: string } | undefined {
+/** A station counts as under a tap only this close to the tapped ground, in metres. */
+const STATION_TAP_M = 120;
+/**
+ * The subway station drawn under a tap, if any: within a finger's width of it on
+ * screen and near the tapped ground. In a tilted street view a few pixels near
+ * the horizon span kilometres, so screen distance alone named Union Square at the UN.
+ */
+function stationNear(map: MaplibreMap, at: { x: number; y: number }, ground: { lon: number; lat: number }, sys: StaticSystem | undefined): { id: string; name: string; routes: string } | undefined {
   let best: { id: string; name: string; routes: string } | undefined;
   let bestD = 24;
+  const { width, height } = map.getCanvas().getBoundingClientRect();
   for (const f of sys?.stations.features ?? []) {
-    const p = map.project(f.geometry.coordinates as [number, number]);
+    const c = f.geometry.coordinates as [number, number];
+    if (metresBetween(ground, c) > STATION_TAP_M) continue;
+    const p = map.project(c);
+    if (p.x < 0 || p.y < 0 || p.x > width || p.y > height) continue;
     const d = Math.hypot(p.x - at.x, p.y - at.y);
     if (d < bestD) { bestD = d; best = { id: String(f.properties.id), name: String(f.properties.name), routes: String(f.properties.routes ?? "") }; }
   }
@@ -1100,6 +1110,19 @@ export default function TransitLayer() {
   const tapCycle = useRef(new TapCycle());
   const [choice, setChoice] = useState<{ at: [number, number]; choice: LineChoice } | null>(null);
   const closeChoice = useCallback(() => setChoice(null), []);
+  // A chooser belongs to the view it was asked in: entering or leaving street view closes it.
+  useEffect(() => setChoice(null), [walking]);
+  // ...and so does any camera move (an answer, a flight) that takes the tapped spot off screen.
+  useEffect(() => {
+    if (!map || !choice) return;
+    const check = () => {
+      const p = map.project(choice.at);
+      const { width, height } = map.getCanvas().getBoundingClientRect();
+      if (p.x < 0 || p.y < 0 || p.x > width || p.y > height) setChoice(null);
+    };
+    map.on("moveend", check);
+    return () => { map.off("moveend", check); };
+  }, [map, choice]);
   const subwayRef = useRef<StaticSystem | undefined>(undefined);
   subwayRef.current = statics.find((s) => s.system === "subway");
   // A train or bus starts Follow. Any other map click, including empty map, drops it in place.
@@ -1153,7 +1176,7 @@ export default function TransitLayer() {
           const pad = 8;
           const hits = lineLayers.length ? map.queryRenderedFeatures([[e.point.x - pad, e.point.y - pad], [e.point.x + pad, e.point.y + pad]], { layers: lineLayers }).filter((x) => x.properties?.system === "subway" && x.properties?.route) : [];
           // Where several lines meet, ask which one (src/features/transit/lineChoice.ts) instead of opening whichever is on top.
-          const station = hits.length ? stationNear(map, e.point, subwayRef.current) : undefined;
+          const station = hits.length ? stationNear(map, e.point, { lon: e.lngLat.lng, lat: e.lngLat.lat }, subwayRef.current) : undefined;
           const pick = lineChoice(hits.map((x) => String(x.properties.route)), station);
           if (typeof pick === "string") { setSelectedLine(pick); return; }
           if (pick) { setChoice({ at: [e.lngLat.lng, e.lngLat.lat], choice: pick }); return; }
