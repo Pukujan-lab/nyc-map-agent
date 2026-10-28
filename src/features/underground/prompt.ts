@@ -58,7 +58,9 @@ export function stationToAsk(s: PromptSignals): Station | null {
   // screen is being planned: asking then stacked the question over the trip card (layout check, 2026-10-27).
   const atBoarding = !!s.boarding && !!s.here && metres(s.here, s.boarding.at) <= VISIT_END_M;
   if (atBoarding && ok(s.boarding)) return s.boarding;
-  if (ok(s.nearStation) && (!s.online || accuracyWorsened(s.baselineAccuracy, s.accuracy))) return s.nearStation;
+  // The last good fix can be far behind you by now (a ride below ground): never ask about a station you left.
+  const nearHere = !s.here || !s.nearStation || metres(s.here, s.nearStation.at) <= VISIT_END_M;
+  if (nearHere && ok(s.nearStation) && (!s.online || accuracyWorsened(s.baselineAccuracy, s.accuracy))) return s.nearStation;
   return null;
 }
 
@@ -66,6 +68,14 @@ export function stationToAsk(s: PromptSignals): Station | null {
 export function endedVisits(asked: ReadonlyMap<string, Pt>, here: Pt | null): string[] {
   if (!here) return [];
   return [...asked].filter(([, at]) => metres(here, at) > VISIT_END_M).map(([id]) => id);
+}
+
+/**
+ * An unanswered "Are you in the station?" goes stale once you are far from that
+ * station (a ride or a walk carried you away): it should not still name 14 St at Grand Central.
+ */
+export function promptStale(ask: Station | null, here: Pt | null): boolean {
+  return !!ask && !!here && metres(here, ask.at) > VISIT_END_M;
 }
 
 /** The station a trip boards the subway at: the first enter leg followed by a subway ride. */
