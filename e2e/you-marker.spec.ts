@@ -55,6 +55,25 @@ test("another feature turning the map keeps following you", async ({ page }) => 
   await expectLayout(page);
 });
 
+test("walking points a cone the way you go, sized by how sure it is", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await mockNetwork(page);
+  await page.goto("/?sim=walk");
+  await expect.poll(() => youShown(page), { timeout: 15_000 }).toBe(1);
+  // Walking through the park gives a heading from movement: the middle cone.
+  await expect.poll(() => page.evaluate(async () => {
+    const src = (window as unknown as { __map?: MapHandle }).__map?.getSource("you");
+    const f = (src ? await src.getData() : null)?.features?.[0] as { properties?: { heading?: number; beam?: string } } | undefined;
+    return typeof f?.properties?.heading === "number" ? f.properties.beam : null;
+  }), { timeout: 20_000 }).toBe("you-beam");
+  const images = await page.evaluate(() => {
+    const m = (window as unknown as { __map: { hasImage: (id: string) => boolean } }).__map;
+    return ["you-beam-narrow", "you-beam", "you-beam-wide"].map((id) => m.hasImage(id));
+  });
+  expect(images).toEqual([true, true, true]);
+  await expectLayout(page);
+});
+
 test("the station question goes away once the pretend ride carries you off", async ({ page }) => {
   test.setTimeout(120_000);
   await page.setViewportSize({ width: 390, height: 844 });
