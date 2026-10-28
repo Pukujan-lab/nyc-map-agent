@@ -33,6 +33,18 @@ describe("entrance labels", () => {
     expect(entranceKind("Station House", false)).toBeNull();
   });
 
+  it("says when a stair is one way", () => {
+    expect(entranceKind("Stair", false, "out")).toBe("Stairs · exit only");
+    expect(entranceKind("Stair", false, "in")).toBe("Stairs · entry only");
+    expect(entranceKind("Elevator", false, "out")).toBe("Elevator · exit only");
+    expect(entranceKind("Elevator", true, "out")).toBe("Elevator · out of service");
+  });
+
+  it("from overhead, says what each entrance is and which corner", () => {
+    const fc = entranceLabels(sys, new Set(), [-73.9814, 40.7586], place, { max: 2, phone: false, overhead: true });
+    expect(fc.features.map((f) => f.properties.label)).toEqual(["Stairs\n6 Av & W 47 St · SE corner", "Elevator\n6 Av & W 47 St · NE corner"]);
+  });
+
   it("labels only the nearest entrances, one per corner and kind", () => {
     const fc = entranceLabels(sys, new Set(["D15"]), [-73.9814, 40.7586], place, { max: 2, phone: false });
     expect(fc.features.map((f) => f.properties.label)).toEqual([
