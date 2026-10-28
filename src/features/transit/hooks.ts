@@ -351,6 +351,16 @@ export function useAlerts(enabled: boolean): { data: AlertsBody | undefined } {
   return { data: enabled ? data : undefined };
 }
 
+/** Planned work in effect at any time in a chosen window (the line panel's "This weekend"); off when `day` is null. */
+export function useAlertsBetween(day: { from: number; to: number } | null): { data: AlertsBody | undefined; isLoading: boolean } {
+  const q = useQuery({
+    queryKey: ["transit", "alerts", day?.from, day?.to],
+    queryFn: () => getJson<AlertsBody>(`${API_BASE}/api/transit/alerts?from=${day!.from}&to=${day!.to}`),
+    enabled: Boolean(day), staleTime: 5 * 60_000, retry: 1,
+  });
+  return { data: day ? q.data : undefined, isLoading: Boolean(day) && q.isLoading };
+}
+
 /** Seconds clock that ticks every second, for countdowns between feed refreshes. */
 export function useNow(active = true): number {
   const [now, setNow] = useState(() => Date.now() / 1000);

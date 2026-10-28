@@ -96,7 +96,8 @@ export function layerAction(layer: LayerHelpId): MapAction {
  * "See the 7 trains live": opens the line with its trains, notices and Follow a train. With trouble on the
  * line it opens on that trouble ("Show the 7 changes on the map"), skipped stations ringed.
  */
-export function lineAction(route: string, trouble = false): MapAction {
+export function lineAction(route: string, trouble = false, day?: { from: number; to: number; label: string }): MapAction {
+  if (day) return { kind: "showLine", id: `line:${route}`, label: `Show the ${route} work ${day.label === "This weekend" ? "this weekend" : `on ${day.label}`}`, route, day };
   return { kind: "showLine", id: `line:${route}`, label: trouble ? `Show the ${route} changes on the map` : `See the ${route} trains live`, route };
 }
 

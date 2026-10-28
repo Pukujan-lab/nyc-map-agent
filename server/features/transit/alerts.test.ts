@@ -18,6 +18,9 @@ describe("MTA alert slimming", () => {
   });
   it("drops alerts outside their active period", () => {
     expect(slimAlert({ id: "x", alert: { active_period: [{ start: 500 }] } }, 100)).toBeNull();
+    // A window that reaches it (the line panel's "This weekend") keeps it.
+    expect(slimAlert({ id: "x", alert: { active_period: [{ start: 500, end: 900 }] } }, 100, 600)?.start).toBe(500);
+    expect(slimAlert({ id: "x", alert: { active_period: [{ start: 500, end: 900 }] } }, 950, 2000)).toBeNull();
   });
   it("parses reroute lines and closed stations from the prose", () => {
     const p = parseProse("[F] is rerouted via Court Sq [E] between Roosevelt Av, Queens and Canal St, then via the [A] to Jay St-MetroTech\nNo [F] service at 21 St-Queensbridge, Roosevelt Island, East Broadway and York St.", "F");

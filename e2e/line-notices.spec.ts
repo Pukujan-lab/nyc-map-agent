@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
+import { expectLayout } from "./layout";
 import { mockNetwork } from "./mocks";
 
 // The 2 line with one elevator outage at Times Sq-42 St (captured from /api/transit-live, trimmed).
@@ -73,3 +74,33 @@ test("escalators out at one station are one card, and the Lines list counts what
   await card.click();
   await expect(card).toContainText("mezzanine to 7 Av & 34 St (NE corner), both ways");
 });
+
+// Owner, 2026-10-27: on a weekday the 7's weekend work was nowhere on the map. "This weekend" shows it.
+for (const [width, height] of [[375, 667], [1280, 800]]) {
+  test(`the line panel shows this weekend's planned work at ${width}×${height}`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await mockNetwork(page);
+    await page.route("**/api/transit-live*", (r) => r.fulfill({ contentType: "application/json", body: liveNow() }));
+    await page.route("**/api/transit", (r) => r.fulfill({ contentType: "application/json", body: JSON.stringify({ bus: false }) }));
+    const asked: string[] = [];
+    await page.route("**/api/transit/alerts?from=*", async (r) => {
+      asked.push(r.request().url());
+      const now = Math.floor(Date.now() / 1000);
+      await r.fulfill({ contentType: "application/json", body: JSON.stringify({ at: now, outages: [], alerts: [{
+        id: "lmm:planned_work:wk2", kind: "planned", type: "Planned - Stops Skipped", reroute: true, agency: "MTASBWY", routes: ["2"], stops: [],
+        text: "In Manhattan, downtown [2] skips Christopher St-Stonewall and Houston St", description: "", start: now + 86_400, end: now + 2 * 86_400, period: "Sat and Sun",
+        changes: [], skipNames: ["Christopher St-Stonewall", "Houston St"] }] }) });
+    });
+    await page.goto("/");
+    await page.getByRole("button", { name: "My train" }).click({ timeout: 15_000 });
+    await page.getByRole("button", { name: /^7 Avenue Express/ }).first().click({ timeout: 15_000 });
+    await expect(page.getByTestId("line-panel")).toBeVisible();
+    const days = page.getByTestId("line-day");
+    await expect(days.getByRole("button", { name: "Now" })).toHaveAttribute("aria-pressed", "true");
+    await days.getByRole("button", { name: "This weekend" }).click();
+    await expect(days.getByRole("button", { name: "This weekend" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("[data-notice]", { hasText: "skips" })).toBeVisible();
+    expect(asked.length).toBeGreaterThan(0);
+    await expectLayout(page);
+  });
+}

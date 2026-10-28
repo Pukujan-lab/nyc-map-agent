@@ -16,7 +16,10 @@ describe("answer map actions", () => {
   it("a line button opens that line", () => {
     const c = ctx();
     expect(runMapAction({ kind: "showLine", id: "line:7", label: "See the 7 trains live", route: "7" }, c, routeColor)).toEqual({ ok: true, kind: "showLine" });
-    expect(c.showLine).toHaveBeenCalledWith("7");
+    expect(c.showLine).toHaveBeenCalledWith("7", undefined);
+    const day = { from: 1, to: 2, label: "This weekend" };
+    runMapAction({ kind: "showLine", id: "line:7", label: "Show the 7 work this weekend", route: "7", day }, c, routeColor);
+    expect(c.showLine).toHaveBeenLastCalledWith("7", day);
   });
 
   it("a restroom opens with its card details", () => {

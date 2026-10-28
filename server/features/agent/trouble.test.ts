@@ -51,6 +51,10 @@ const stations: Station[] = ROWS.map(([gtfsId, complexId, name, routes, lon, lat
 const entrances: StationEntrances = { stations: () => Promise.resolve(stations), entrances: () => Promise.resolve([]) };
 const stuckQ: LiveVehicle = { tripId: "143600_Q..S39R", route: "Q", stopId: "Q01S", stopped: true, ts: NOW_S - 371, remaining: 20, atOrigin: false };
 
+// Sunday-only work this weekend (NOW_S is just after midnight, Saturday 24 Oct, New York): Sunday 9:30 am to 5:30 pm.
+const sundayOnly7: FeedAlert = { id: "lmm:planned_work:sun7", alert: { active_period: [{ start: NOW_S + 33 * 3600, end: NOW_S + 41 * 3600 }], informed_entity: [{ route_id: "7" }],
+  header_text: { translation: [{ text: "In Queens, no [7] at Flushing-Main St", language: "en" }] }, "transit_realtime.mercury_alert": { alert_type: "Planned - Stops Skipped" } } };
+
 function lineStatus(followedTrain: string | null = null) {
   const offered: MapAction[] = [];
   const tools = makeTools({
@@ -58,13 +62,25 @@ function lineStatus(followedTrain: string | null = null) {
     emit: () => undefined,
     actions: (a) => offered.push(...a),
     followedTrain,
-    deps: { otp: null, entrances, alerts: () => Promise.resolve([]), alertEntities: () => Promise.resolve([delayNQ, gSuspended]), vehicles: () => Promise.resolve([stuckQ]), now: () => NOW_S * 1000 },
+    deps: { otp: null, entrances, alerts: () => Promise.resolve([]), alertEntities: () => Promise.resolve([delayNQ, gSuspended, sundayOnly7]), vehicles: () => Promise.resolve([stuckQ]), now: () => NOW_S * 1000 },
   });
-  const exec = tools.line_status.execute as unknown as (input: { lines: string[] }, o: unknown) => Promise<Record<string, unknown>>;
-  return { offered, run: (lines: string[]) => exec({ lines }, { toolCallId: "t", messages: [] }) };
+  const exec = tools.line_status.execute as unknown as (input: { lines: string[]; when?: string }, o: unknown) => Promise<Record<string, unknown>>;
+  return { offered, run: (lines: string[], when?: string) => exec({ lines, when }, { toolCallId: "t", messages: [] }) };
 }
 
 describe("line_status with MTA trouble", () => {
+  // Owner, 2026-10-27: asked on a weekday about the weekend, the 7's weekend work never showed.
+  it("looks across the whole weekend when asked about it, and opens the line on that weekend", async () => {
+    const { run, offered } = lineStatus();
+    expect((await run(["7"])).trouble).toEqual([]);
+    const out = await run(["7"], "this weekend");
+    expect((out.trouble as Array<{ line: string }>).map((t) => t.line)).toEqual(["7"]);
+    expect(out.checkedFor).toMatch(/^the weekend of Sat, Oct 24/);
+    const line = offered.filter((a) => a.kind === "showLine").at(-1);
+    expect(line && "day" in line ? line.day?.label : null).toBe("This weekend");
+    expect(line?.label).toBe("Show the 7 work this weekend");
+  });
+
   it("says what is wrong, where to board the shuttle, where to get the train back", async () => {
     const { run, offered } = lineStatus();
     const out = await run(["G"]);
