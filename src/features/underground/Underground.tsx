@@ -36,6 +36,7 @@ import { whereYouAre } from "./where";
 import { dirStep, initialDir, justSurfaced, nextStationAhead, plannedExit, wrongDirectionLine, wrongExit } from "./wrongTrain";
 import { useDataView } from "@/lib/store/DataViewContext";
 import { speakQueued } from "@/lib/voice/tts";
+import { useCssHeight } from "@/lib/useCssHeight";
 import { useBasemapReady } from "@/lib/map/basemapReady";
 
 type Mode = "idle" | "ride" | "which" | "station" | "calibrate" | "stairs" | "landmark" | "corner" | "walk";
@@ -268,6 +269,8 @@ export default function Underground() {
   const dir = useRef(initialDir);
   const accuracies = useRef<Array<number | null>>([]);
   const [tripWarn, setTripWarn] = useState<string | null>(null);
+  // The round map buttons step above the warning, as they do above other bottom cards.
+  const warnCard = useCssHeight("--task-bottom-h");
   useEffect(() => { dir.current = initialDir; accuracies.current = []; setTripWarn(null); }, [trip?.id]);
   useEffect(() => {
     const c = shared.status === "on" ? shared.coords : null;
@@ -752,7 +755,7 @@ export default function Underground() {
 
   if (tripWarn) {
     return (
-      <section className={card} aria-label="Trip warning">
+      <section ref={warnCard} className={card} aria-label="Trip warning">
         <div className="flex items-start gap-2">
           <p className="min-w-0 flex-1 font-semibold" role="alert" data-testid="trip-warning">{tripWarn}</p>
           <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0" aria-label="Dismiss" onClick={() => setTripWarn(null)}>

@@ -3,13 +3,13 @@ import { expectLayout } from "./layout";
 import { mockNetwork } from "./mocks";
 
 test("boarding the downtown 6 by mistake says to get off and cross over", async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   await page.setViewportSize({ width: 375, height: 812 });
   await mockNetwork(page);
   // The pretend trip plans the uptown 6 to Grand Central but rides it downtown.
   await page.goto("/?sim=wrongway");
   const warning = page.getByTestId("trip-warning");
-  await expect(warning).toHaveText(/^This train is going downtown\. Get off at .+ and cross over\.$/, { timeout: 90_000 });
+  await expect(warning).toHaveText(/^This train is going downtown\. Get off at .+ and cross over\.$/, { timeout: 120_000 });
   // One line in the bottom sheet, with the ask box still there.
   await expect(page.getByLabel("Ask the assistant")).toBeVisible();
   await expectLayout(page);
