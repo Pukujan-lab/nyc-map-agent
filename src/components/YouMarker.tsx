@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Map as MapLibreMap } from "maplibre-gl";
+import { headingSpread } from "@/lib/compass/heading";
 import { useHeading } from "@/lib/compass/useHeading";
 import { startSharing, useSharedLocation } from "@/lib/geo/sharedLocation";
 import { simRequested } from "@/lib/geo/simWalk";
@@ -33,7 +34,9 @@ const GUIDE_SOURCE = "nav-puck";
 export function YouMarker() {
   const shared = useSharedLocation();
   const on = shared.status === "on" && shared.coords !== null;
-  const heading = useHeading(on).heading;
+  const facing = useHeading(on);
+  const heading = facing.heading;
+  const spread = headingSpread(facing);
   const camera = useYouCamera();
   const [map, setMap] = useState<MapLibreMap | null>(null);
   useEffect(() => onMapInstance(setMap), []);
@@ -44,8 +47,8 @@ export function YouMarker() {
   const raf = useRef(0);
   const easingUntil = useRef(0);
   const foreign = useRef(false);
-  const live = useRef({ heading, accuracy: shared.accuracy ?? null, camera });
-  live.current = { heading, accuracy: shared.accuracy ?? null, camera };
+  const live = useRef({ heading, spread, accuracy: shared.accuracy ?? null, camera });
+  live.current = { heading, spread, accuracy: shared.accuracy ?? null, camera };
 
   // The pretend trip shares and follows on its own: nothing to tap.
   useEffect(() => {
@@ -61,7 +64,7 @@ export function YouMarker() {
     if (!m.getLayer("you-dot") && !tryInstall(m)) return;
     const at = shown.current;
     const guided = Boolean(m.getSource(GUIDE_SOURCE));
-    setYouLayer(m, guided ? null : at, live.current.heading, live.current.accuracy);
+    setYouLayer(m, guided ? null : at, live.current.heading, live.current.accuracy, live.current.spread);
     const mode = live.current.camera;
     if (!at || mode === "off" || foreign.current || performance.now() < easingUntil.current) return;
     m.jumpTo({ center: at, ...(mode === "turn" && live.current.heading !== null ? { bearing: live.current.heading } : {}) }, YOU_MOVE);
@@ -147,7 +150,7 @@ export function YouMarker() {
   // The cone turns, or the circle changes, between fixes.
   useEffect(() => {
     if (map) draw.current(map);
-  }, [map, heading, shared.accuracy]);
+  }, [map, heading, spread, shared.accuracy]);
 
   // Entering a mode eases there once; after that each frame keeps up.
   useEffect(() => {
