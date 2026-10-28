@@ -37,7 +37,8 @@ export function useTransitToggles() {
   const set = useCallback(
     (id: TransitLayerId, value: boolean) =>
       setParams((prev) => {
-        const next = new URLSearchParams(prev);
+        // From the address bar, not the last render, so a trip closing and an answer closing in one tap both stick.
+        const next = new URLSearchParams(typeof window === "undefined" ? prev : window.location.search);
         const cur = parseTransit(next.get("transit"));
         if (value) cur.add(id); else cur.delete(id);
         if (id === "bus" && !value) { next.delete("busPage"); next.delete("busLines"); next.delete("busNear"); }
@@ -68,7 +69,8 @@ export function useTransitToggles() {
   const setBusLines = useCallback(
     (lines: string[], opts?: { near?: boolean }) =>
       setParams((prev) => {
-        const next = new URLSearchParams(prev);
+        // From the address bar, not the last render, so a trip closing and an answer closing in one tap both stick.
+        const next = new URLSearchParams(typeof window === "undefined" ? prev : window.location.search);
         const cur = parseTransit(next.get("transit"));
         const clean = parseBusLines(lines.join(","));
         next.delete("busPage");

@@ -302,6 +302,8 @@ export default function TransitLayer() {
   const lineList = useMemo(() => (pickedLines.length ? pickedLines : routesForPage(busLines.data?.groups, busPage)), [pickedLines, busLines.data, busPage]);
   // `on` is a new Set every render. The boolean and the pin snapshot are what actually change.
   const busWanted = on.has("bus");
+  const busOnRef = useRef(busWanted);
+  busOnRef.current = busWanted;
   const show = useMemo(
     () => (busWanted ? busesToShow(lineList, pins) : BUS_OFF),
     [busWanted, lineList, pins],
@@ -681,7 +683,11 @@ export default function TransitLayer() {
     return () => setLinesControl(null);
   }, [enabled, openLines]);
   useEffect(() => {
-    registerBusToggle(() => set("bus", true));
+    registerBusToggle((want) => {
+      if (busOnRef.current === want) return false;
+      set("bus", want);
+      return true;
+    });
     return () => registerBusToggle(null);
   }, [set]);
 

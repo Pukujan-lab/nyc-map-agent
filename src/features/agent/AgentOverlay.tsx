@@ -29,7 +29,7 @@ import { setLineDay } from "@/lib/transit/lineDay";
 import { lineOf, setSelectedLine, useSelectedLine } from "@/lib/transit/selectedLine";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { publishActiveTrip } from "@/lib/transit/activeTrip";
-import { revealTripBuses } from "@/lib/transit/busReveal";
+import { clearTripBuses, revealTripBuses } from "@/lib/transit/busReveal";
 import { setFollowed } from "@/lib/transit/follow";
 import { usePanel } from "@/lib/store/PanelContext";
 import { useMediaQuery } from "@/lib/useMediaQuery";
@@ -142,7 +142,7 @@ const MODES: Array<{ id: TripMode; Icon: typeof Bus }> = [
 
 export default function AgentOverlay() {
   const { setRoutePoint, setFollowingRoute, followingRoute, clearRoute } = useDataView();
-  const { chatOpen, setChatOpen, flyTo, startWalk, stopWalk, chatSeed, clearSeed, setRestrooms, walking, streetViewOpen } = useMapState();
+  const { chatOpen, setChatOpen, flyTo, startWalk, stopWalk, chatSeed, clearSeed, restrooms, setRestrooms, walking, streetViewOpen } = useMapState();
   const { showPanel, closeAll, content: panelContent, minimized: panelMinimized, drawerOpen } = usePanel();
   // Agent-first home (#370): bottom chat bar, voice waveform, visible steps.
   const home = useFlag("agentHome");
@@ -289,6 +289,16 @@ export default function AgentOverlay() {
     const wide = window.innerWidth >= 640;
     m.fitBounds(f.bounds, { padding: framePadding(m, wide ? { top: 100, bottom: 120, left: 460, right: 100 } : { top: 110, bottom: Math.round(window.innerHeight * 0.55), left: 40, right: 40 }), maxZoom: 17, pitch: 0, bearing: 0, duration: 800 });
   };
+  /** A restroom answer turned the restroom layer on (the person had it off); closing the answer turns it back off. */
+  const restroomsByAnswer = useRef(false);
+  /** What an answer drew goes with it: its pins, and restrooms it turned on (owner, 2026-10-28: they stayed after closing). */
+  const clearAnswerMarks = () => {
+    if (restroomsByAnswer.current) { restroomsByAnswer.current = false; setRestrooms(false); }
+    const m = getMapInstance();
+    if (m && lastActions?.some((a) => a.kind === "showRestroom")) clearPoints(m);
+  };
+  const clearAnswerMarksRef = useRef(clearAnswerMarks);
+  clearAnswerMarksRef.current = clearAnswerMarks;
   /** Close the line panel and stop following, so a new trip or answer starts on a clean map. */
   const clearMapTask = () => {
     setSelectedLine(null);
@@ -375,7 +385,7 @@ export default function AgentOverlay() {
     setNotice(null);
     setInput("");
     // A new question replaces the last answer: its trip card, the line it opened, a follow.
-    if (home) { stopPlayer(); setTrip(null); clearMapTask(); }
+    if (home) { stopPlayer(); setTrip(null); clearTripBuses(); clearAnswerMarksRef.current(); clearMapTask(); }
     if (!askReq) setChatOpen(true);
     // A second tap of the same question, after Use my location, keeps the one user bubble.
     const continuing = messagesRef.current.some((m) => m.offerLocation);
@@ -563,7 +573,7 @@ export default function AgentOverlay() {
     // Every restroom the answer names, and the restroom layer on so the others nearby show too
     // (owner, 2026-10-27: asked near the Natural History Museum, only one pin appeared).
     const spots = (lastActions ?? []).flatMap((x) => (x.kind === "showRestroom" ? [x.restroom] : []));
-    setRestrooms(true);
+    if (!restrooms) { restroomsByAnswer.current = true; setRestrooms(true); }
     showPoints(m, spots.map((r) => ({ at: [r.lon, r.lat], name: formatStreetText(r.name) })), "#2563eb");
     const me = sharedCoords();
     const pts: Array<[number, number]> = [...spots.map((r): [number, number] => [r.lon, r.lat]), ...(me ? [[me.lon, me.lat] as [number, number]] : [])];
@@ -945,7 +955,7 @@ export default function AgentOverlay() {
           orb={{ show: handsFree && speech.listening && !dictating, transcript: speech.interim, stop: stopOrb }}
           notice={notice ?? speech.error}
           answerOpen={answerOpen}
-          onCloseAnswer={() => { stopAnswer(); setChatOpen(false); }}
+          onCloseAnswer={() => { stopAnswer(); setChatOpen(false); clearAnswerMarks(); }}
           answer={homeAnswer}
           idle={idle}
           // Task controls sit above the persistent chat bar.
@@ -958,7 +968,7 @@ export default function AgentOverlay() {
           trip={trip} state={player.state} speed={player.state.speed}
           onToggle={player.toggle} onSpeed={(s) => { setPrefSpeed(s); player.setSpeed(s); }}
           onAlert={(route) => setSelectedLine(route)}
-          onClose={() => { player.stop(); setTrip(null); }}
+          onClose={() => { player.stop(); setTrip(null); clearTripBuses(); }}
           onUse={() => {
             player.release();
             setTripStep(null);

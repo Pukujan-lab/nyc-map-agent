@@ -181,7 +181,8 @@ export function MapStateProvider({ children }: { children: ReactNode }) {
     (key: "layer" | "window" | "scale" | "style" | "city3d" | "restrooms" | "eco", value: string) => {
       setSearchParams(
         (previous) => {
-          const next = new URLSearchParams(previous);
+          // From the address bar, not the last render: two settings changed in one tap both stick (owner, 2026-10-28).
+          const next = new URLSearchParams(typeof window === "undefined" ? previous : window.location.search);
           next.set(key, value);
           return next;
         },
