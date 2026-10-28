@@ -294,8 +294,10 @@ export default function Underground() {
   }, [shared]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!tripWarn || typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    speakQueued(window.speechSynthesis, tripWarn, () => {});
+    try { speakQueued(window.speechSynthesis, tripWarn, () => {}); } catch { /* no voice: the line still shows */ }
   }, [tripWarn]);
+  // The warning owns the bottom of the map like the station view: the home's task row steps aside.
+  useEffect(() => setStationHelpVisible(mode !== "idle" || tripWarn !== null), [mode, tripWarn]);
 
   const persist = (s: PackStore | null) => {
     saveStore(s);
