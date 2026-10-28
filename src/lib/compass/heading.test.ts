@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { accuracyFromEvent, adaptiveAlpha, angleDiff, CALIBRATED_SWEEP_DEG, headingFromEvent, headingReducer, initialHeading, needsCalibration, smoothHeading, type HeadingEvent, type HeadingState } from "./heading";
+import { accuracyFromEvent, adaptiveAlpha, angleDiff, CALIBRATED_SWEEP_DEG, headingFromEvent, headingReducer, headingSpread, initialHeading, needsCalibration, smoothHeading, steadyOffset, type HeadingEvent, type HeadingState } from "./heading";
 
 const run = (events: HeadingEvent[], from: HeadingState = initialHeading) => events.reduce(headingReducer, from);
 
@@ -79,5 +79,47 @@ describe("calibration state", () => {
     const s = run([{ type: "compass", heading: 20, accuracyDeg: 5 }, { type: "move", heading: 200 }]);
     expect(s.source).toBe("compass");
     expect(s.heading).toBe(20);
+  });
+});
+
+describe("street lock and stairs", () => {
+  const compass = (h: number): HeadingEvent => ({ type: "compass", heading: h, accuracyDeg: 5 });
+  const move = (h: number): HeadingEvent => ({ type: "move", heading: h });
+
+  it("a compass bent by a steady 40 degrees is corrected after a few steps of walking", () => {
+    const s = run([compass(50), move(90), compass(52), move(92), compass(49), move(88), compass(51), move(91)]);
+    expect(s.offset).toBeGreaterThanOrEqual(38);
+    expect(s.offset).toBeLessThanOrEqual(42);
+    // Standing still afterwards, the corrected compass keeps pointing the true way.
+    const still = run([compass(10), compass(10), compass(10), compass(10), compass(10), compass(10)], s);
+    expect(Math.abs(angleDiff(still.heading!, 50))).toBeLessThanOrEqual(8);
+    expect(still.calibrate).toBe(false);
+  });
+
+  it("does not lock onto scattered walking (turning corners, wobbling GPS)", () => {
+    const s = run([compass(50), move(90), compass(50), move(200), compass(50), move(10), compass(50), move(300)]);
+    expect(s.offset).toBeNull();
+  });
+
+  it("finds the steady error across north", () => {
+    expect(Math.abs(steadyOffset([175, -178, 179, -176])!)).toBe(180);
+    expect(steadyOffset([10, 12])).toBeNull();
+  });
+
+  it("coming up a stair sets which way you face and calibrates the compass", () => {
+    const s = run([compass(100), { type: "stair", heading: 295 }]);
+    expect(s.heading).toBe(295);
+    expect(s.source).toBe("stair");
+    expect(s.offset).toBe(-165);
+    const turned = run([compass(110)], s);
+    expect(turned.heading).toBe(305);
+  });
+
+  it("opens the cone wider when the heading is less sure", () => {
+    expect(headingSpread(initialHeading)).toBeNull();
+    const locked = run([compass(50), move(90), compass(50), move(90), compass(50), move(90), compass(50), move(90)]);
+    const unsure = run([{ type: "compass", heading: 20, accuracyDeg: -1 }]);
+    expect(headingSpread(locked)).toBeLessThan(headingSpread(run([move(90)]))!);
+    expect(headingSpread(unsure)).toBeGreaterThan(headingSpread(run([move(90)]))!);
   });
 });

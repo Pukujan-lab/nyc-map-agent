@@ -1,6 +1,8 @@
 import "./nav.css";
 import "@/components/task-screens.css";
 import { useSharedLocation } from "@/lib/geo/sharedLocation";
+import { turnAroundLine, useWrongWay } from "@/lib/geo/wrongWay";
+import { metres } from "@/lib/map/mapRead";
 import { useFlag } from "@/lib/flags";
 import { loadGuideLandmarks, type GuideLandmark } from "@/lib/guide/landmarkGuide";
 import { nextCheckpoint } from "./checkpoints";
@@ -195,6 +197,10 @@ export default function RouteGuide() {
   // In street view the eye is below the screen; probe a little ahead along the heading.
   const probe = here && walking ? poseAlongRoute(route?.coordinates ?? [], along + 15) : here;
   const street = stepStreet || (map && active && probe ? roadNameAt(map, probe.lon, probe.lat) : "");
+  // Real walking only (not the street-view camera): warn when you head away from the next turn.
+  const accuracy = fix ? fix.accuracy : home && followingRoute ? shared.accuracy ?? null : null;
+  const awayFrom = active && !walking && progress && here ? progress.next.name || street : null;
+  const away = useWrongWay(awayFrom !== null && progress && here ? { key: String(progress.nextIndex), metres: metres([here.lon, here.lat], progress.next.location), accuracy, place: awayFrom } : null);
 
   // Draw the frame.
   useEffect(() => {
@@ -248,7 +254,7 @@ export default function RouteGuide() {
       <TurnIcon step={progress?.next ?? null} />
       {/* A few short lines at most, so on a small phone the walk still shows between this and the checkpoint card. */}
       <div className="min-w-0 flex-1"><h2 className="text-base font-bold leading-tight min-[380px]:text-xl">{checkpoint ? <span className="block text-xs font-semibold text-slate-300">Walk toward</span> : null}<span className="line-clamp-3 min-[380px]:line-clamp-2">{checkpoint ? checkpoint.landmark.name : progress?.instruction ?? "Follow the walking route"}</span></h2>
-        <p className="mt-0.5 truncate text-sm text-slate-300">{[progress && !checkpoint ? `In ${formatMetres(progress.metresToNext)}` : progress?.instruction, street, `${Math.max(1, Math.round(left / 80))} min left`].filter(Boolean).join(" · ")}</p></div>
+        {away ? <p className="mt-0.5 truncate text-sm font-semibold text-amber-300" role="alert" data-testid="wrong-way">{turnAroundLine(awayFrom ?? "")}</p> : <p className="mt-0.5 truncate text-sm text-slate-300">{[progress && !checkpoint ? `In ${formatMetres(progress.metresToNext)}` : progress?.instruction, street, `${Math.max(1, Math.round(left / 80))} min left`].filter(Boolean).join(" · ")}</p>}</div>
       {arFlag && progress ? (
         <Suspense fallback={null}>
           <LiveViewBeta
@@ -294,8 +300,8 @@ export default function RouteGuide() {
           <div className="flex items-center gap-3 rounded-lg border bg-background/90 p-3 shadow-lg backdrop-blur" role="status">
             <TurnIcon step={progress.next} />
             <div className="min-w-0">
-              <div className="truncate text-sm font-semibold text-foreground">
-                {progress.instruction}, {formatMetres(progress.metresToNext)}
+              <div className={`truncate text-sm font-semibold ${away ? "text-amber-600" : "text-foreground"}`} data-testid={away ? "wrong-way" : undefined}>
+                {away ? turnAroundLine(awayFrom ?? "") : `${progress.instruction}, ${formatMetres(progress.metresToNext)}`}
               </div>
               <div className="text-xs tabular-nums text-muted-foreground">{(left / MILE).toFixed(2)} mi to go</div>
             </div>

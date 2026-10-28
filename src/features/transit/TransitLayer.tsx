@@ -39,7 +39,7 @@ import { lineOf, setSelectedLine, useSelectedLine } from "@/lib/transit/selected
 import { useActiveTrip } from "@/lib/transit/activeTrip";
 // The line panel loads on the first line picked (own chunk), keeping the transit layers chunk in budget.
 const LinePanel = lazy(() => import("./LinePanel").then((m) => ({ default: m.LinePanel })));
-import { XRAY_VEIL_M, getStreetXray, setStreetXray, useStreetXray, xrayForFollow, xrayVeilDisc } from "@/lib/transit/streetXray";
+import { STREET_XRAY_M, XRAY_VEIL_M, getStreetXray, inStreetXray, setStreetXray, useStreetXray, xrayForFollow, xrayVeilDisc } from "@/lib/transit/streetXray";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 
 const stopFollow = () => setFollowed(null);
@@ -116,12 +116,22 @@ function streetEye(map: MaplibreMap): { lon: number; lat: number } {
   const c = map.getCenter();
   return { lon: c.lng, lat: c.lat };
 }
-/** The subway station drawn under a tap, if any: within a finger's width of it on screen. */
-function stationNear(map: MaplibreMap, at: { x: number; y: number }, sys: StaticSystem | undefined): { id: string; name: string; routes: string } | undefined {
+/** A station counts as under a tap only this close to the tapped ground, in metres. */
+const STATION_TAP_M = 120;
+/**
+ * The subway station drawn under a tap, if any: within a finger's width of it on
+ * screen and near the tapped ground. In a tilted street view a few pixels near
+ * the horizon span kilometres, so screen distance alone named Union Square at the UN.
+ */
+function stationNear(map: MaplibreMap, at: { x: number; y: number }, ground: { lon: number; lat: number }, sys: StaticSystem | undefined): { id: string; name: string; routes: string } | undefined {
   let best: { id: string; name: string; routes: string } | undefined;
   let bestD = 24;
+  const { width, height } = map.getCanvas().getBoundingClientRect();
   for (const f of sys?.stations.features ?? []) {
-    const p = map.project(f.geometry.coordinates as [number, number]);
+    const c = f.geometry.coordinates as [number, number];
+    if (metresBetween(ground, c) > STATION_TAP_M) continue;
+    const p = map.project(c);
+    if (p.x < 0 || p.y < 0 || p.x > width || p.y > height) continue;
     const d = Math.hypot(p.x - at.x, p.y - at.y);
     if (d < bestD) { bestD = d; best = { id: String(f.properties.id), name: String(f.properties.name), routes: String(f.properties.routes ?? "") }; }
   }
@@ -776,6 +786,7 @@ export default function TransitLayer() {
     const fc = vehicleCollection(list, f.alerted, f.theme, f.followedKey);
     // Street level keeps only the nearby trains' bullets, so you can tell which line is passing.
     const walker = f.walking ? streetEye(m) : null;
+    const bearing = m.getBearing();
     const near = walker ? { ...fc, features: fc.features.filter((x) => x.properties?.system === "subway" && x.geometry.type === "Point" && metresBetween(walker, x.geometry.coordinates) < STREET_TRAIN_M) } : fc;
     void src?.setData(f.hide ? EMPTY : near);
     // Street level empties the vehicle source of buses; the followed bus keeps its badge in its own source.
@@ -784,7 +795,7 @@ export default function TransitLayer() {
       v3d.current?.update(
         list
           // The followed (boarded) train always draws, whatever its grade.
-          .filter((v) => v.key === f.followedKey || f.xrayOn || v.grade !== "underground")
+          .filter((v) => v.key === f.followedKey || v.grade !== "underground" || (f.xrayOn && (!walker || inStreetXray(walker, bearing, v.lon, v.lat))))
           .map((v) => {
             const ghost = v.grade === "underground";
             return { lon: v.lon, lat: v.lat, bearing: v.bearing, z: ghost ? XRAY_DEPTH_M : v.z ?? 0, color: v.color, kind: v.system === "bus" ? "bus" : v.system === "subway" ? "subway" : "rail", livery: v.system === "bus" ? busLivery(v.route) : undefined, ghost };
@@ -1024,7 +1035,8 @@ export default function TransitLayer() {
       // Station names and the followed bus badge stay above that vehicle layer.
       paintAboveVehicles(map, v.layer.id);
       const e = streetEye(map);
-      v.setGroundVeil([e.lon, e.lat], XRAY_VEIL_M);
+      // Street view sees a short way ahead; higher views keep the wider patch.
+      v.setGroundVeil([e.lon, e.lat], walking ? STREET_XRAY_M : XRAY_VEIL_M);
     };
     sync();
     const late = window.setTimeout(sync, 1200); // the three layer loads on the first tilt
@@ -1100,6 +1112,19 @@ export default function TransitLayer() {
   const tapCycle = useRef(new TapCycle());
   const [choice, setChoice] = useState<{ at: [number, number]; choice: LineChoice } | null>(null);
   const closeChoice = useCallback(() => setChoice(null), []);
+  // A chooser belongs to the view it was asked in: entering or leaving street view closes it.
+  useEffect(() => setChoice(null), [walking]);
+  // ...and so does any camera move (an answer, a flight) that takes the tapped spot off screen.
+  useEffect(() => {
+    if (!map || !choice) return;
+    const check = () => {
+      const p = map.project(choice.at);
+      const { width, height } = map.getCanvas().getBoundingClientRect();
+      if (p.x < 0 || p.y < 0 || p.x > width || p.y > height) setChoice(null);
+    };
+    map.on("moveend", check);
+    return () => { map.off("moveend", check); };
+  }, [map, choice]);
   const subwayRef = useRef<StaticSystem | undefined>(undefined);
   subwayRef.current = statics.find((s) => s.system === "subway");
   // A train or bus starts Follow. Any other map click, including empty map, drops it in place.
@@ -1153,7 +1178,7 @@ export default function TransitLayer() {
           const pad = 8;
           const hits = lineLayers.length ? map.queryRenderedFeatures([[e.point.x - pad, e.point.y - pad], [e.point.x + pad, e.point.y + pad]], { layers: lineLayers }).filter((x) => x.properties?.system === "subway" && x.properties?.route) : [];
           // Where several lines meet, ask which one (src/features/transit/lineChoice.ts) instead of opening whichever is on top.
-          const station = hits.length ? stationNear(map, e.point, subwayRef.current) : undefined;
+          const station = hits.length ? stationNear(map, e.point, { lon: e.lngLat.lng, lat: e.lngLat.lat }, subwayRef.current) : undefined;
           const pick = lineChoice(hits.map((x) => String(x.properties.route)), station);
           if (typeof pick === "string") { setSelectedLine(pick); return; }
           if (pick) { setChoice({ at: [e.lngLat.lng, e.lngLat.lat], choice: pick }); return; }

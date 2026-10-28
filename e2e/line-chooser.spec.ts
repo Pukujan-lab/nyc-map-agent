@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
+import { expectLayout } from "./layout";
 import { mockNetwork } from "./mocks";
 
 // Myrtle Av on the J, M and Z: three lines share the track and the station.
@@ -86,4 +87,15 @@ test("on a phone the chooser docks above the chat bar, and the station opens its
   await chooser.getByRole("button", { name: "Myrtle Av station" }).click();
   await expect(chooser).toBeHidden();
   await expect(page.getByText("Myrtle Av").first()).toBeVisible();
+});
+
+test("the chooser closes once the map moves the tapped spot off screen", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  await tapMyrtle(page);
+  const chooser = page.getByTestId("line-chooser");
+  await expect(chooser).toBeVisible();
+  // A flight elsewhere (here, Midtown) must not leave Myrtle Av's lines on screen as if they were there.
+  await page.evaluate(() => (window as unknown as { __map: TestMap }).__map.jumpTo({ center: [-73.9855, 40.758], zoom: 15 }));
+  await expect(chooser).toBeHidden();
+  await expectLayout(page);
 });
