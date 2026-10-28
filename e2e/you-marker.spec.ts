@@ -73,3 +73,14 @@ test("walking points a cone the way you go, sized by how sure it is", async ({ p
   expect(images).toEqual([true, true, true]);
   await expectLayout(page);
 });
+
+test("the station question goes away once the pretend ride carries you off", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockNetwork(page);
+  await page.goto("/?sim=walk");
+  const question = page.getByText(/Are you in the station\?.*14 St-Union Sq/);
+  await expect(question).toBeVisible({ timeout: 45_000 });
+  await expect(question).toBeHidden({ timeout: 60_000 });
+  await expectLayout(page);
+});

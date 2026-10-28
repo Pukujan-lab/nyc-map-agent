@@ -78,6 +78,27 @@ test("closing a restroom answer takes its restrooms off the map", async ({ page 
   await expectLayout(page);
 });
 
+test("a restroom answer's map button leaves restrooms off once the answer closes", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockNetwork(page);
+  await page.route("**/api/agent", (r) => r.fulfill({ contentType: "application/x-ndjson", body: stream([
+    { type: "text", text: "Bryant Park is the closest open restroom." },
+    { type: "actions", actions: [{ kind: "showRestroom", id: "restroom:bp", label: "Show the nearest restroom", restroom: { name: "Bryant Park", lon: -73.9832, lat: 40.7536, distanceM: 420, hours: "8am-8pm" } }] },
+    { type: "done" },
+  ]) }));
+  await page.goto("/");
+  await ask(page, "Where is the nearest restroom?");
+  await expect(page.getByText("Bryant Park is the closest open restroom.")).toBeVisible();
+  const show = page.getByRole("button", { name: "Show the nearest restroom" });
+  if (await show.count()) await show.first().click();
+  await expect(page).toHaveURL(/restrooms=1/);
+  const close = page.getByRole("button", { name: "Close answer", exact: true });
+  if (await close.count()) await close.click();
+  else await page.keyboard.press("Escape");
+  await expect(page).not.toHaveURL(/restrooms=1/);
+  await expectLayout(page);
+});
+
 test("answer follow-ups ask the agent even when extra map actions exist", async ({ page }) => {
   await mockNetwork(page);
   const questions: string[] = [];

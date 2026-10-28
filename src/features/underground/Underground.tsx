@@ -26,7 +26,7 @@ import { canUndo, riding, stepGetOff, type GetOff, type GetOffEvent } from "./ge
 import { cacheStationTiles, probe, readMap, registerOfflineWorker, watchCompass, watchMotion } from "./offline";
 import { buildStore, loadStore, outageLabel, packFor, saveStore, tripStops, walkFromExit, type ExitPack, type PackExit, type PackStore } from "./pack";
 import { atChoices, estimate, fromLive, onMotionStop, startProgress, userAt, type Ask, type LiveTrip, type Progress } from "./progress";
-import { accuracyWorsened, boardingStation, endedVisits, loadDeclined, saveDeclined, stationAtEntrance, stationToAsk } from "./prompt";
+import { accuracyWorsened, boardingStation, endedVisits, loadDeclined, promptStale, saveDeclined, stationAtEntrance, stationToAsk } from "./prompt";
 import { enqueue, isConnected, markFailed, markSent, nextDue, type Queued } from "./queue";
 import { CalibrationStep, ExitPointer, PlatformMap } from "./steps";
 import { useT } from "@/lib/i18n/appLang";
@@ -370,6 +370,12 @@ export default function Underground() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shared, mode, sys]);
+  // Any fix will do here, even a poor one below ground: a stale question is worse than none.
+  const anyHere: Pt | null = shared.status === "on" && shared.coords ? [shared.coords.lon, shared.coords.lat] : null;
+  useEffect(() => {
+    if (promptStale(ask, anyHere)) setAsk(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shared, ask]);
   useEffect(() => {
     if (mode !== "idle" || ask) return;
     const st = stationToAsk({ nearStation, online, baselineAccuracy: baseline.current, accuracy, here, boarding: boardingStation(trip), asked: new Set(asked.current.keys()), declined });
