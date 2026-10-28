@@ -527,8 +527,21 @@ export function createVehicleLayer() {
       if (!renderer) return;
       camera.projectionMatrix = new THREE.Matrix4().fromArray(args.defaultProjectionData.mainMatrix as unknown as number[]).multiply(local);
       renderer.resetState();
-      if (veil.visible) renderer.clearDepth();
-      renderer.render(scene, camera);
+      if (!veil.visible) {
+        renderer.render(scene, camera);
+      } else {
+        // X-ray at street level: above-ground things (viaducts, elevated and street trains, buses)
+        // still hide behind buildings; only what is underground draws through, on a cleared depth buffer.
+        // One pass for everything drew the elevated track over the buildings in front of it.
+        const under: THREE.Object3D[] = [ghosts, veil, ...(xray ? [xray] : [])];
+        const shown = scene.children.filter((o) => o.visible);
+        for (const o of under) o.visible = false;
+        renderer.render(scene, camera);
+        renderer.clearDepth();
+        for (const o of shown) o.visible = under.includes(o);
+        renderer.render(scene, camera);
+        for (const o of shown) o.visible = true;
+      }
       renderer.resetState();
     },
   };

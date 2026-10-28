@@ -11,6 +11,12 @@
  *   for a real turn, so the arrow neither jitters nor lags.
  * - Without a compass, the heading comes from walking (two GPS fixes far
  *   enough apart).
+ * - Street lock: steel, grates and passing trains bend the compass by a steady
+ *   amount. When walking keeps disagreeing with it by about the same angle,
+ *   that angle becomes an offset added to every compass reading, so the
+ *   compass is right again once you stop, with no figure 8.
+ * - Coming up a subway stair: the stair's mapped way up says which way you face,
+ *   and calibrates the compass the same way.
  */
 
 export function normalizeDeg(d: number): number {
@@ -75,7 +81,12 @@ export const CALIBRATED_SWEEP_DEG = 60;
 /** GPS fixes this far apart give a walking heading. */
 export const MOVE_MIN_M = 8;
 
-export type HeadingSource = "compass" | "movement" | "none";
+export type HeadingSource = "compass" | "movement" | "stair" | "none";
+
+/** Walking samples that must agree before the street lock corrects the compass. */
+export const LOCK_SAMPLES = 4;
+/** How far those samples may scatter (degrees) and still count as one steady error. */
+export const LOCK_SCATTER_DEG = 20;
 
 export interface HeadingState {
   /** Smoothed degrees clockwise from north, or null when nothing is known yet. */
@@ -88,14 +99,39 @@ export interface HeadingState {
   lastRaw: number | null;
   /** The phone sent compass readings at some point; walking then never overrides it. */
   hasCompass: boolean;
+  /** Learned correction added to raw compass readings (street lock or stair), or null. */
+  offset: number | null;
+  /** Recent compass-vs-walking differences, newest last, toward the street lock. */
+  pending: number[];
 }
 
 export type HeadingEvent =
   | { type: "compass"; heading: number; accuracyDeg: number | null }
-  | { type: "move"; heading: number }
+  /** `learn: false` keeps the street lock out of it (a train ride, or vague GPS). */
+  | { type: "move"; heading: number; learn?: boolean }
+  | { type: "stair"; heading: number }
   | { type: "reset" };
 
-export const initialHeading: HeadingState = { heading: null, source: "none", calibrate: false, sweptDeg: 0, lastRaw: null, hasCompass: false };
+export const initialHeading: HeadingState = { heading: null, source: "none", calibrate: false, sweptDeg: 0, lastRaw: null, hasCompass: false, offset: null, pending: [] };
+
+/** The steady compass error in these differences, or null while they still scatter. */
+export function steadyOffset(diffs: number[]): number | null {
+  if (diffs.length < LOCK_SAMPLES) return null;
+  const recent = diffs.slice(-LOCK_SAMPLES);
+  const mean = recent.reduce((m, d, i) => (i === 0 ? d : m + angleDiff(m, d) / (i + 1)), 0);
+  return recent.every((d) => Math.abs(angleDiff(mean, d)) <= LOCK_SCATTER_DEG) ? Math.round(angleDiff(0, mean)) : null;
+}
+
+/**
+ * How wide the facing cone should open (degrees), from how sure the heading is;
+ * null when there is no heading. A wide cone is honest; a narrow wrong one sends people astray.
+ */
+export function headingSpread(s: HeadingState): number | null {
+  if (s.heading === null) return null;
+  if (s.source === "compass") return s.offset !== null ? 20 : s.calibrate ? 70 : 30;
+  if (s.source === "stair") return 40;
+  return 35;
+}
 
 /** True when the compass reading should not be trusted yet. */
 export function needsCalibration(accuracyDeg: number | null, sweptDeg: number): boolean {
@@ -107,19 +143,39 @@ export function headingReducer(s: HeadingState, e: HeadingEvent): HeadingState {
   switch (e.type) {
     case "compass": {
       const raw = normalizeDeg(e.heading);
+      if (s.offset !== null) {
+        // Street-locked: the learned offset stands in for calibration.
+        const prev = s.source === "compass" ? s.heading : null;
+        const fixed = normalizeDeg(raw + s.offset);
+        const heading = smoothHeading(prev, fixed, prev === null ? 1 : adaptiveAlpha(angleDiff(prev, fixed)));
+        return { ...s, heading, source: "compass", calibrate: false, lastRaw: raw, hasCompass: true };
+      }
       const sweptDeg = Math.min(360, s.sweptDeg + (s.lastRaw === null ? 0 : Math.abs(angleDiff(s.lastRaw, raw))));
       const calibrate = needsCalibration(e.accuracyDeg, sweptDeg);
       // While uncalibrated, a walking heading (if any) is the better guess; keep it.
       if (calibrate && s.source === "movement") return { ...s, calibrate, sweptDeg, lastRaw: raw, hasCompass: true };
       const prev = s.source === "compass" ? s.heading : null;
       const heading = smoothHeading(prev, raw, prev === null ? 1 : adaptiveAlpha(angleDiff(prev, raw)));
-      return { heading, source: "compass", calibrate, sweptDeg, lastRaw: raw, hasCompass: true };
+      return { ...s, heading, source: "compass", calibrate, sweptDeg, lastRaw: raw, hasCompass: true };
     }
     case "move": {
+      // Street lock: walking that keeps disagreeing with the compass by one steady angle corrects it.
+      if (s.hasCompass && s.lastRaw !== null && e.learn !== false) {
+        const pending = [...s.pending, angleDiff(s.lastRaw, e.heading)].slice(-LOCK_SAMPLES);
+        const offset = steadyOffset(pending);
+        if (offset !== null) return { ...s, pending, offset, heading: normalizeDeg(s.lastRaw + offset), source: "compass", calibrate: false };
+        s = { ...s, pending };
+      }
       // A calibrated compass wins over walking; an uncalibrated one does not.
       if (s.hasCompass && s.source === "compass" && !s.calibrate) return s;
       const prev = s.source === "movement" ? s.heading : null;
       return { ...s, heading: smoothHeading(prev, e.heading, 0.5), source: "movement" };
+    }
+    case "stair": {
+      // At the top of the stairs you face its way up; with a compass, that also calibrates it.
+      const heading = normalizeDeg(e.heading);
+      const offset = s.lastRaw !== null ? Math.round(angleDiff(s.lastRaw, heading)) : s.offset;
+      return { ...s, heading, source: "stair", calibrate: false, offset, pending: [] };
     }
     case "reset":
       return initialHeading;

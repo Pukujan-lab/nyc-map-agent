@@ -9,7 +9,7 @@ import { alongLabel, alongPlatform, describePrompt, landmarkLine, pickLandmarks,
 import { ageLabel, bearing, cornerOf, exitKind, octant, rankExits, stationEntrances, turnHint, type Pt, type SubwayStatic } from "./exits";
 import { meetPoint } from "./offline";
 import { buildStore, clipSketch, loadStore, outageLabel, packFor, saveStore, tripStations, tripStops } from "./pack";
-import { accuracyWorsened, boardingStation, endedVisits, stationAtEntrance, stationToAsk } from "./prompt";
+import { accuracyWorsened, boardingStation, endedVisits, promptStale, stationAtEntrance, stationToAsk } from "./prompt";
 import { backoffMs, enqueue, isConnected, markFailed, markSent, nextDue } from "./queue";
 import { CalibrationStep, ExitPointer, SAFETY_LINE } from "./steps";
 import { bboxAround, packTileUrls, tilesFor } from "./tiles";
@@ -264,6 +264,16 @@ describe('"Are you in the station?"', () => {
     expect(stationToAsk({ ...base, nearStation: near, online: false, asked: new Set(["631"]) })).toBeNull();
     expect(stationToAsk({ ...base, nearStation: near, online: false, declined: new Set(["631"]) })).toBeNull();
     expect(endedVisits(new Map([["631", ST]]), [-73.99, 40.75])).toEqual(["631"]);
+  });
+
+  it("drops the question once a ride carries you away, and does not ask about the station you left", () => {
+    const unionSq = { id: "635", name: "14 St-Union Sq", at: [-73.98995, 40.73467] as Pt };
+    const atGrandCentral: Pt = [-73.9768, 40.7518];
+    expect(promptStale(unionSq, [-73.9899, 40.7348])).toBe(false);
+    expect(promptStale(unionSq, atGrandCentral)).toBe(true);
+    expect(promptStale(null, atGrandCentral)).toBe(false);
+    expect(stationToAsk({ ...base, nearStation: unionSq, accuracy: 120, here: atGrandCentral })).toBeNull();
+    expect(stationToAsk({ ...base, nearStation: unionSq, accuracy: 120, here: unionSq.at })?.id).toBe("635");
   });
 });
 

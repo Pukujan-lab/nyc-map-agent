@@ -8,10 +8,19 @@ import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
  */
 const SRC = "you";
 export const YOU_LAYERS = ["you-accuracy", "you-beam", "you-dot"] as const;
-const BEAM = "you-beam";
+/** Cone images by half-width (degrees): the less sure the heading, the wider the cone. */
+const BEAMS = { "you-beam-narrow": 20, "you-beam": 30, "you-beam-wide": 55 } as const;
+type BeamName = keyof typeof BEAMS;
+
+/** The cone for a heading this many degrees unsure either way. */
+export function beamFor(spreadDeg: number | null): BeamName {
+  if (spreadDeg === null) return "you-beam";
+  if (spreadDeg <= 25) return "you-beam-narrow";
+  return spreadDeg <= 45 ? "you-beam" : "you-beam-wide";
+}
 
 /** A soft wedge pointing up (north before rotation): the way the phone faces. */
-function beamImage(): ImageData | null {
+function beamImage(halfDeg: number): ImageData | null {
   if (typeof document === "undefined") return null;
   const c = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
   if (!c) return null;
@@ -22,7 +31,8 @@ function beamImage(): ImageData | null {
   c.fillStyle = g;
   c.beginPath();
   c.moveTo(60, 60);
-  c.arc(60, 60, 58, -Math.PI / 2 - 0.5, -Math.PI / 2 + 0.5);
+  const half = (halfDeg * Math.PI) / 180;
+  c.arc(60, 60, 58, -Math.PI / 2 - half, -Math.PI / 2 + half);
   c.closePath();
   c.fill();
   return c.getImageData(0, 0, 120, 120);
@@ -37,10 +47,13 @@ export function installYouLayer(map: MapLibreMap): void {
   // Each piece only when missing, so a try during a style load can be finished later.
   if (map.getLayer("you-dot")) return;
   if (!map.getSource(SRC)) map.addSource(SRC, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-  const beam = beamImage();
-  if (beam && !map.hasImage(BEAM)) map.addImage(BEAM, beam, { pixelRatio: 2 });
+  for (const [name, half] of Object.entries(BEAMS)) {
+    if (map.hasImage(name)) continue;
+    const img = beamImage(half);
+    if (img) map.addImage(name, img, { pixelRatio: 2 });
+  }
   if (!map.getLayer("you-accuracy")) map.addLayer({ id: "you-accuracy", type: "circle", source: SRC, paint: { "circle-radius": 0, "circle-color": "#3b82f6", "circle-opacity": 0.12, "circle-stroke-color": "#3b82f6", "circle-stroke-opacity": 0.35, "circle-stroke-width": 1, "circle-pitch-alignment": "map" } });
-  if (!map.getLayer("you-beam")) map.addLayer({ id: "you-beam", type: "symbol", source: SRC, filter: ["has", "heading"], layout: { "icon-image": BEAM, "icon-rotate": ["get", "heading"], "icon-rotation-alignment": "map", "icon-allow-overlap": true, "icon-ignore-placement": true } });
+  if (!map.getLayer("you-beam")) map.addLayer({ id: "you-beam", type: "symbol", source: SRC, filter: ["has", "heading"], layout: { "icon-image": ["get", "beam"], "icon-rotate": ["get", "heading"], "icon-rotation-alignment": "map", "icon-allow-overlap": true, "icon-ignore-placement": true } });
   map.addLayer({ id: "you-dot", type: "circle", source: SRC, paint: { "circle-radius": 8, "circle-color": "#2563eb", "circle-stroke-color": "#ffffff", "circle-stroke-width": 3, "circle-pitch-alignment": "map" } });
 }
 
@@ -52,13 +65,13 @@ export function raiseYouLayer(map: MapLibreMap): void {
   for (const id of YOU_LAYERS) if (map.getLayer(id)) map.moveLayer(id);
 }
 
-/** Draw you at `at` (or hide the marker with null). */
-export function setYouLayer(map: MapLibreMap, at: [number, number] | null, heading: number | null, accuracyM: number | null): void {
+/** Draw you at `at` (or hide the marker with null); `spreadDeg` is how unsure the heading is. */
+export function setYouLayer(map: MapLibreMap, at: [number, number] | null, heading: number | null, accuracyM: number | null, spreadDeg: number | null = null): void {
   const src = map.getSource<GeoJSONSource>(SRC);
   if (!src) return;
   void src.setData({
     type: "FeatureCollection",
-    features: at ? [{ type: "Feature", properties: heading === null ? {} : { heading }, geometry: { type: "Point", coordinates: at } }] : [],
+    features: at ? [{ type: "Feature", properties: heading === null ? {} : { heading, beam: beamFor(spreadDeg) }, geometry: { type: "Point", coordinates: at } }] : [],
   });
   if (!at) return;
   // Metres to pixels doubles with each zoom level; below 6 m the dot itself says enough.
