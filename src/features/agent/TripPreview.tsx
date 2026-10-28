@@ -1,6 +1,8 @@
 import "@/components/task-screens.css";
 import { BellRing, Clock, MapPin, Pause, PartyPopper, Play, TriangleAlert, X } from "lucide-react";
 import { useState } from "react";
+import { createPortal } from "react-dom";
+import { useLeftCard } from "@/lib/store/leftColumn";
 import { toast } from "sonner";
 import { PullSheet } from "@/components/PullSheet";
 import type { SheetLevel } from "@/components/sheetSwipe";
@@ -43,6 +45,9 @@ export function TripPreview(p: {
   const w = trip.weather;
   const progress = state.status === "ended" ? 100 : state.segs.length ? state.seg / state.segs.length * 100 : 0;
   const wide = useMediaQuery("(min-width: 640px)");
+  // A desktop: the trip is a card in the one left column, with the ask box under it.
+  const desktop = useMediaQuery("(min-width: 1024px)");
+  const { slot, top } = useLeftCard(`trip:${trip.id}`, desktop);
   const [level, setLevel] = useState<SheetLevel>(1);
   const close = <button type="button" className="task-action task-close" aria-label="Close trip" onClick={p.onClose}><X size={18} /></button>;
   const playBtn = (size: string) => <button type="button" className={`task-action ${size} shrink-0 rounded-full p-0`} aria-label={state.playing ? "Pause preview" : "Play preview"} onClick={p.onToggle}>
@@ -101,6 +106,28 @@ export function TripPreview(p: {
         {weather ? <p className="text-[13px] text-slate-300">{weather}</p> : null}
       </div>
     </PullSheet>
+    {balloons}
+  </>;
+  if (slot) return <>
+    {createPortal(
+      <section aria-label="Trip preview" className={`task-panel ${top ? "flex" : "hidden"} min-h-0 flex-col gap-2.5 overflow-y-auto rounded-2xl p-3`}>
+        <div className="flex items-center gap-2" data-testid="trip-heading">
+          <Clock className="h-5 w-5 shrink-0" aria-hidden />
+          <div className="min-w-0 flex-1"><h2 className="text-[15px] font-semibold">{leave}</h2>
+            <p className="text-[13px] text-slate-300">{trip.origin.label} → {trip.destination.label} · about {minutes} min</p></div>
+          {close}
+        </div>
+        {impactBox}
+        {notice}
+        {weather ? <p className="text-[13px] text-slate-300">{weather}</p> : null}
+        <div className="flex items-center gap-2.5">
+          {playBtn("h-[52px] w-[52px]")}
+          {speeds}
+        </div>
+        {rest}
+      </section>,
+      slot,
+    )}
     {balloons}
   </>;
   return <>

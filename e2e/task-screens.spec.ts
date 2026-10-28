@@ -33,6 +33,13 @@ for (const width of [390, 1280]) {
     expect(panel).not.toBeNull();
     expect(bar).not.toBeNull();
     expect(panel!.y + panel!.height).toBeLessThan(bar!.y);
+    // A desktop: the trip is a card in the one left column, the ask box at its foot (owner, 2026-10-28).
+    if (width >= 1024) {
+      await expect(page.getByTestId("left-slot").getByRole("region", { name: "Trip preview" })).toBeVisible();
+      expect(panel!.x).toBeLessThan(40);
+      expect(bar!.x).toBeLessThan(40);
+      await expectLayout(page);
+    }
     await page.getByRole("button", { name: "Close trip", exact: true }).click();
     await expect(preview).toBeHidden();
     await expect(page.getByTestId("agent-bar")).toBeVisible();
