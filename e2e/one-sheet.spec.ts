@@ -51,3 +51,23 @@ test("a phone's answer pulls up for more and down for more map", async ({ page }
   await expect.poll(async () => (await box.boundingBox())!.height).toBeLessThan(usual);
   await expectLayout(page);
 });
+
+test("a wide screen keeps status chips in one row at the top of the left side", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockNetwork(page);
+  await page.goto("/?flags=contextClean");
+  await page.waitForFunction(() => typeof (window as unknown as { __pushPanel?: unknown }).__pushPanel === "function");
+  await page.evaluate(() => (window as unknown as { __pushPanel: (c: object) => void }).__pushPanel({ id: "restroom:test", title: "Bryant Park restroom", subtitle: "Public restroom" }));
+  // The clean-map chip comes up for an open place, and the row is drawn on wide screens.
+  await expect(page.getByTestId("context-clean")).toBeVisible();
+  await expect(page.getByTestId("left-chips")).toBeAttached();
+  const chip = page.getByTestId("left-chips").getByTestId("context-clean");
+  await expect(chip).toBeVisible();
+  const box = (await chip.boundingBox())!;
+  const card = (await page.getByTestId("left-slot").boundingBox())!;
+  // Top left, above the card, not floating over the middle of the map.
+  expect(box.x).toBeLessThan(40);
+  expect(box.y + box.height).toBeLessThanOrEqual(card.y);
+  expect(box.y).toBeLessThan(800 * 0.25);
+  await expectLayout(page);
+});
