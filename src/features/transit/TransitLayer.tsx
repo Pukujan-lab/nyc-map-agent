@@ -39,7 +39,7 @@ import { lineOf, setSelectedLine, useSelectedLine } from "@/lib/transit/selected
 import { useActiveTrip } from "@/lib/transit/activeTrip";
 // The line panel loads on the first line picked (own chunk), keeping the transit layers chunk in budget.
 const LinePanel = lazy(() => import("./LinePanel").then((m) => ({ default: m.LinePanel })));
-import { XRAY_VEIL_M, getStreetXray, setStreetXray, useStreetXray, xrayForFollow, xrayVeilDisc } from "@/lib/transit/streetXray";
+import { STREET_XRAY_M, XRAY_VEIL_M, getStreetXray, inStreetXray, setStreetXray, useStreetXray, xrayForFollow, xrayVeilDisc } from "@/lib/transit/streetXray";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 
 const stopFollow = () => setFollowed(null);
@@ -786,6 +786,7 @@ export default function TransitLayer() {
     const fc = vehicleCollection(list, f.alerted, f.theme, f.followedKey);
     // Street level keeps only the nearby trains' bullets, so you can tell which line is passing.
     const walker = f.walking ? streetEye(m) : null;
+    const bearing = m.getBearing();
     const near = walker ? { ...fc, features: fc.features.filter((x) => x.properties?.system === "subway" && x.geometry.type === "Point" && metresBetween(walker, x.geometry.coordinates) < STREET_TRAIN_M) } : fc;
     void src?.setData(f.hide ? EMPTY : near);
     // Street level empties the vehicle source of buses; the followed bus keeps its badge in its own source.
@@ -794,7 +795,7 @@ export default function TransitLayer() {
       v3d.current?.update(
         list
           // The followed (boarded) train always draws, whatever its grade.
-          .filter((v) => v.key === f.followedKey || f.xrayOn || v.grade !== "underground")
+          .filter((v) => v.key === f.followedKey || v.grade !== "underground" || (f.xrayOn && (!walker || inStreetXray(walker, bearing, v.lon, v.lat))))
           .map((v) => {
             const ghost = v.grade === "underground";
             return { lon: v.lon, lat: v.lat, bearing: v.bearing, z: ghost ? XRAY_DEPTH_M : v.z ?? 0, color: v.color, kind: v.system === "bus" ? "bus" : v.system === "subway" ? "subway" : "rail", livery: v.system === "bus" ? busLivery(v.route) : undefined, ghost };
@@ -1034,7 +1035,8 @@ export default function TransitLayer() {
       // Station names and the followed bus badge stay above that vehicle layer.
       paintAboveVehicles(map, v.layer.id);
       const e = streetEye(map);
-      v.setGroundVeil([e.lon, e.lat], XRAY_VEIL_M);
+      // Street view sees a short way ahead; higher views keep the wider patch.
+      v.setGroundVeil([e.lon, e.lat], walking ? STREET_XRAY_M : XRAY_VEIL_M);
     };
     sync();
     const late = window.setTimeout(sync, 1200); // the three layer loads on the first tilt
