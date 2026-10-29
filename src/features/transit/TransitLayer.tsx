@@ -423,10 +423,11 @@ export default function TransitLayer() {
     setFocus(!focus);
   }, [focus, anyOn, set, setFocus]);
   const opts = useMapOptions();
-  // Agent-first home (#370): a tapped or chosen line is shown alone, with its notices panel.
+  // A tapped or chosen line is shown alone, with its notices panel (#370). The old layout too: its Lines
+  // list picked a line and nothing happened (owner report, 2026-10-28).
   const home = useFlag("agentHome");
   const selected = useSelectedLine();
-  const lineSel = home && selected ? lineOf(selected.route) : null;
+  const lineSel = selected ? lineOf(selected.route) : null;
   const isoRoutes = useMemo(() => (lineSel ? [lineSel, `${lineSel}X`] : opts.routes), [lineSel, opts.routes]);
   // The lines of the trip on screen: their trains stay bright, the others fade.
   const activeTrip = useActiveTrip();
