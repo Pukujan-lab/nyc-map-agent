@@ -123,6 +123,25 @@ describe("POST /api/agent: fair use", () => {
   });
 });
 
+describe("POST /api/agent: plain questions skip the model", () => {
+  it("answers a plain line question from the live feed without calling the model", async () => {
+    const m = model();
+    const req = new Request("http://x/api/agent", { method: "POST", body: JSON.stringify({ messages: [{ role: "user", content: "How is the L train running right now?" }] }) });
+    const res = await POST(req, { model: m, deps: { alerts: () => Promise.resolve([]), alertEntities: () => Promise.resolve([]) } });
+    const events = (await res.text()).trim().split("\n").map((l) => streamEvent.parse(JSON.parse(l)));
+    expect(m.doStreamCalls.length).toBe(0);
+    expect(events.find((e) => e.type === "text")).toMatchObject({ text: expect.stringMatching(/no delays or changes on the L train/) as unknown });
+    expect(events.at(-1)).toMatchObject({ type: "done", model: "none" });
+  });
+
+  it("still asks the model when the question names more than a line", async () => {
+    const m = model();
+    const req = new Request("http://x/api/agent", { method: "POST", body: JSON.stringify({ messages: [{ role: "user", content: "is the L train running to Canarsie?" }] }) });
+    await (await POST(req, { model: m, deps: { alerts: () => Promise.resolve([]), alertEntities: () => Promise.resolve([]) } })).text();
+    expect(m.doStreamCalls.length).toBeGreaterThan(0);
+  });
+});
+
 describe("POST /api/agent: agent steps and language (#370)", () => {
   it("streams a step start and end for each tool, and keeps the old tool line", async () => {
     const events = await run({ messages: [{ role: "user", content: "street view here" }], location: { lon: -73.99, lat: 40.73 } });

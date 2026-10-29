@@ -12,7 +12,7 @@ import { isShortReply, makeTools, type ToolContext } from "./tools";
 import { toNyLocal } from "./trip";
 import { fallbackFetch, modelChain } from "./model-fallback";
 import { clientIp } from "../../lib/clientIp";
-import { answerWithoutModel } from "./noModel";
+import { answerWithoutModel, fastIntent } from "./noModel";
 import { budgetConfigFromEnv, createDailyBudget, createLimiter, limitConfigFromEnv, limitedResponse, noModelMessage } from "./fair-use";
 import { ActionCollector } from "./mapActions";
 import { contextLine, systemPrompt } from "./prompt";
@@ -77,14 +77,26 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
       const tools = makeTools({ location, now: clock, emit: (command) => send({ type: "command", command }), actions: (a) => actions.add(a), sources: audit.ledger, deps: opts.deps, followedTrain: context?.followedTrain ?? null, replying: isShortReply(messages), drive: resolveFlags({ env: process.env.VITE_FLAGS, advancedMode: false }).agentDrive });
       // Restrooms and line status still get a real answer with no model (#199).
       const lastAsked = messages.filter((m) => m.role === "user").at(-1)?.content ?? "";
-      const answerAlone = async (): Promise<boolean> => {
-        const text = await answerWithoutModel({ text: lastAsked, hasLocation: location !== null }, tools);
+      const answerAlone = async (fast = false): Promise<boolean> => {
+        const q = { text: lastAsked, hasLocation: location !== null };
+        const text = await answerWithoutModel(q, tools, fast ? fastIntent(lastAsked) : undefined);
         if (!text) return false;
         answerText = text;
+        audit.text(text);
         send({ type: "text", text });
         flushActions();
         return true;
       };
+      // A plain restroom or line question is answered from the app's own feeds first: instant, and
+      // no model to be slow or fail. Anything the matcher is unsure of still goes to the model.
+      if (budget.tier !== "none" && fastIntent(lastAsked) && (await answerAlone(true).catch(() => false))) {
+        const sources = audit.event();
+        if (sources) send(sources);
+        run.finish("done", { inputTokens: 0, outputTokens: 0 });
+        send({ type: "done", model: "none", usage: { inputTokens: 0, outputTokens: 0 } });
+        controller.close();
+        return;
+      }
       if (budget.tier === "none") {
         // Daily budget spent: answer without a model call so the chat still says something useful.
         if (!(await answerAlone())) send({ type: "text", text: noModelMessage(budget.resetAt) });

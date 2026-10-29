@@ -62,7 +62,7 @@ describe("freshness: data answers carry their source and age (#375)", () => {
   it("a restroom answer gets a sources line, and the tool result tells the model its source and age", async () => {
     const m = model("Bryant Park is 120 meters away, open 7am to 10pm.", { toolName: "nearest_restroom", input: { place: "here" } });
     const restrooms = () => { noteSource("restrooms", "2025-06-27T13:37:17Z"); return Promise.resolve([ROW]); };
-    const events = await ask(m, "nearest bathroom?", { restrooms });
+    const events = await ask(m, "nearest bathroom with a changing table?", { restrooms });
     const line = sourcesOf(events);
     expect(line?.sources).toHaveLength(1);
     expect(line?.sources[0]).toMatchObject({ id: "restrooms", label: "NYC public restrooms", asOf: "2025-06-27T13:37:17.000Z", stale: true });
