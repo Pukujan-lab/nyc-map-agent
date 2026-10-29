@@ -14,6 +14,8 @@
     /* Gap between the chrome and the screen edge; safe-area insets are added on top where they apply. */
     --edge: var(--sp-3);
     --topbar-h: 90px; /* search row 46 + gap 8 + chip row 36 */
+    /* FollowCard publishes its height plus a gap while a vehicle is followed; 0 otherwise. */
+    --follow-card-h: 0px;
     --background: 0 0% 100%;
     --foreground: 222 47% 11%;
     --card: 0 0% 100%;
@@ -103,6 +105,16 @@
   padding: 0 !important;
 }
 
+/* The credits toggle: a light chip that reads on the dark map, and an "x" while the credits are open,
+   so it is clear how to close them (owner, 2026-10-27). */
+.maplibregl-ctrl-attrib-button {
+  background-color: #f8fafc !important;
+  border-radius: 999px !important;
+}
+.maplibregl-ctrl-attrib.maplibregl-compact-show .maplibregl-ctrl-attrib-button {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M6.5 6.5l7 7M13.5 6.5l-7 7' stroke='%23111827' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") !important;
+}
+
 .deck-tooltip {
   background: rgba(9, 12, 20, 0.94) !important;
   border: 1px solid hsl(var(--border)) !important;
@@ -117,11 +129,12 @@
 }
 
 /* Narrow screens: the bottom dock spans the width, so the compact attribution
-   (and its "i" toggle) sits above it instead of underneath. */
+   (and its "i" toggle) sits above it instead of underneath. The home publishes
+   its height as --chat-bar-h; without it, the old 64px still clears the dock. */
 @media (max-width: 767px) {
   .maplibregl-ctrl-bottom-right,
   .maplibregl-ctrl-bottom-left {
-    bottom: 64px;
+    bottom: calc(var(--chat-bar-h, 56px) + 8px);
   }
   .maplibregl-ctrl-attrib-button {
     min-width: 24px;
@@ -134,6 +147,30 @@
   }
   .maplibregl-ctrl-attrib.maplibregl-compact-show {
     max-width: calc(100vw - 2 * var(--edge, 12px));
+  }
+}
+
+/* Phones: Center on my location owns the bottom right, so the map credits move
+   to the left and ride above a pull sheet (--pull-sheet-h) like it does. */
+@media (max-width: 639px) {
+  .maplibregl-ctrl-bottom-right {
+    left: 0;
+    right: auto;
+    bottom: calc(var(--chat-bar-h, 56px) + var(--pull-sheet-h, 0px) + 8px);
+  }
+  .maplibregl-ctrl-bottom-right .maplibregl-ctrl {
+    margin: 0 0 0 var(--edge, 12px) !important;
+  }
+  /* The "i" is pinned to the box's right: closed, the box is just the button; open, the text clears it. */
+  .maplibregl-ctrl-bottom-right .maplibregl-compact {
+    width: 24px;
+    padding: 0 !important;
+  }
+  .maplibregl-ctrl-bottom-right .maplibregl-compact.maplibregl-compact-show {
+    width: auto;
+    max-width: calc(100vw - var(--edge, 12px) - 76px);
+    box-sizing: border-box;
+    padding: 2px 30px 2px 8px !important;
   }
 }
 
@@ -300,4 +337,17 @@
 
 @media (min-width: 1024px) {
   :root { --edge: var(--sp-4); }
+}
+
+/* The line panel's notices show about one and a half at a time, so keep a scroll bar in view to say there are more. */
+.line-notices::-webkit-scrollbar {
+  width: 4px;
+}
+.line-notices::-webkit-scrollbar-thumb {
+  border-radius: 2px;
+  background: rgba(148, 163, 184, 0.55);
+}
+.line-notices::-webkit-scrollbar-track {
+  background: rgba(148, 163, 184, 0.12);
+  border-radius: 2px;
 }

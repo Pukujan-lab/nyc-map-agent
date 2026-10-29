@@ -1,3 +1,4 @@
+import { gapLeft, markAsked, QUESTION_GAP_MS, RETRY_WITHIN_S, waitFor } from "./askSpacing";
 import { streamEvent, type AgentRequest, type StreamEvent } from "./schema";
 
 /** Parse an NDJSON body into validated events; bad lines are dropped. */
@@ -30,11 +31,39 @@ export function friendlyError(status: number): string {
   return "The assistant is unavailable right now. Try again in a moment.";
 }
 
-export async function* askAgent(req: AgentRequest, signal?: AbortSignal): AsyncGenerator<StreamEvent> {
+/**
+ * Asks the agent. A question asked within the server's gap is held until the gap ends, and a
+ * short fair-use refusal is waited out and retried, so the person never sees "one moment between
+ * questions". onWait(true) while held, onWait(false) once it goes. Aborting the signal (a newer
+ * question) ends the wait and the answer.
+ */
+export async function* askAgent(req: AgentRequest, signal?: AbortSignal, onWait?: (waiting: boolean) => void): AsyncGenerator<StreamEvent> {
   const base = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
-  const res = await fetch(`${base}/api/agent`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(req), signal });
+  let res: Response | null = null;
+  for (let tries = 0; ; tries++) {
+    const left = gapLeft(Date.now());
+    if (left > 0) {
+      onWait?.(true);
+      if (!(await waitFor(left, signal))) return;
+    }
+    onWait?.(false);
+    markAsked();
+    res = await fetch(`${base}/api/agent`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(req), signal });
+    if (res.status !== 429 || tries >= 2) break;
+    const j = (await res.clone().json().catch(() => null)) as { retryAfterSeconds?: unknown } | null;
+    const after = typeof j?.retryAfterSeconds === "number" ? j.retryAfterSeconds : Number(res.headers.get("retry-after"));
+    if (!Number.isFinite(after) || after > RETRY_WITHIN_S) break;
+    // Another tab or device on the same address asked just now: wait the server's own time out.
+    markAsked(Date.now() + Math.max(1, after) * 1000 - QUESTION_GAP_MS);
+  }
   if (!res.ok || !res.body) {
-    yield { type: "error", message: friendlyError(res.status) };
+    // A long fair-use 429 carries its own wording (when the next question frees up); show that when present.
+    let message = friendlyError(res.status);
+    if (res.status === 429) {
+      const j = (await res.json().catch(() => null)) as { message?: unknown } | null;
+      if (typeof j?.message === "string" && j.message) message = j.message;
+    }
+    yield { type: "error", message };
     return;
   }
   yield* readEvents(res.body);

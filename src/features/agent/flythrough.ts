@@ -15,7 +15,8 @@ export interface Segment {
   realS: number;
   underground: boolean;
   route?: string;
-  callouts: Array<{ f: number; text: string }>;
+  /** quiet: shown on screen but not spoken (the stops in the middle of a ride). */
+  callouts: Array<{ f: number; text: string; quiet?: boolean }>;
 }
 export interface Pose { center: LngLatTuple; bearing: number; pitch: number; zoom: number }
 
@@ -57,19 +58,54 @@ function fractionOf(coords: LngLatTuple[], p: LngLatTuple): number {
   return best / total;
 }
 
+/** A callout before the legs are joined: placed by its point on the map, or at a fixed fraction. */
+type Mark = { f: number; text: string; quiet?: boolean; at?: LngLatTuple };
+type Draft = Omit<Segment, "callouts"> & { callouts: Mark[] };
+
+const nearestVertex = (coords: LngLatTuple[], p: LngLatTuple) =>
+  coords.reduce((best, c, i) => (dist(c, p) < dist(coords[best], p) ? i : best), 0);
+
+/**
+ * Make each part start where the last one ended, so the marker never jumps (owner report, 2026-10-26:
+ * "the guy just teleported from the exit to the middle of the station"). The planner's walks run to and
+ * from the station's stop point, not the entrance or exit we picked, and its rides start on the track,
+ * not at the station's middle. So a walk into a station stops at the entrance, a walk out starts at the
+ * exit, the stairs meet the train where it stops, and any other gap becomes a short straight step.
+ */
+function joinUp(segs: Draft[]): Draft[] {
+  for (let i = 1; i < segs.length; i++) {
+    const prev = segs[i - 1], cur = segs[i];
+    const end = prev.coords[prev.coords.length - 1];
+    if (prev.kind === "walk" && cur.kind === "descend") {
+      const portal = cur.coords[0];
+      prev.coords = [...prev.coords.slice(0, Math.max(1, nearestVertex(prev.coords, portal))), portal];
+    } else if (prev.kind === "ascend" && cur.kind === "walk") {
+      cur.coords = [end, ...cur.coords.slice(nearestVertex(cur.coords, end) + 1)];
+      if (cur.coords.length < 2) cur.coords.push(end);
+    } else if (prev.kind === "descend" && cur.kind === "ride") {
+      prev.coords = [prev.coords[0], cur.coords[0]];
+    } else if (prev.kind === "ride" && cur.kind === "ascend") {
+      cur.coords = [end, cur.coords[cur.coords.length - 1]];
+    } else if (dist(end, cur.coords[0]) > 3) {
+      cur.coords = [end, ...cur.coords];
+    }
+  }
+  return segs;
+}
+
 export function buildTimeline(trip: Trip): Segment[] {
-  const segs: Segment[] = [];
+  const segs: Draft[] = [];
   for (const leg of trip.legs) {
     if (leg.kind === "drive") {
-      segs.push({ kind: "drive", label: leg.label, coords: leg.coords, realS: leg.durationS, underground: false, callouts: leg.turns.map((t) => ({ f: fractionOf(leg.coords, t.at), text: t.text })) });
+      segs.push({ kind: "drive", label: leg.label, coords: leg.coords, realS: leg.durationS, underground: false, callouts: leg.turns.map((t) => ({ f: 0, at: t.at, text: t.text })) });
     } else if (leg.kind === "walk" || leg.kind === "transfer") {
-      segs.push({ kind: "walk", label: leg.label, coords: leg.coords, realS: leg.durationS, underground: leg.kind === "transfer", callouts: leg.turns.map((t) => ({ f: fractionOf(leg.coords, t.at), text: t.text })) });
+      segs.push({ kind: "walk", label: leg.label, coords: leg.coords, realS: leg.durationS, underground: leg.kind === "transfer", callouts: leg.turns.map((t) => ({ f: 0, at: t.at, text: t.text })) });
     } else if (leg.kind === "enter") {
       const p: LngLatTuple = [leg.portal.lon, leg.portal.lat];
       const s: LngLatTuple = [leg.station.lon, leg.station.lat];
       segs.push({ kind: "descend", label: leg.label, coords: [p, s], realS: 60, underground: true, callouts: [{ f: 0, text: leg.label }] });
     } else if (leg.kind === "ride") {
-      segs.push({ kind: "ride", label: leg.label, coords: leg.coords, realS: leg.durationS, underground: leg.underground, route: leg.route, callouts: [{ f: 0, text: leg.label }, ...leg.stops.map((s) => ({ f: fractionOf(leg.coords, s.at), text: s.text }))] });
+      segs.push({ kind: "ride", label: leg.label, coords: leg.coords, realS: leg.durationS, underground: leg.underground, route: leg.route, callouts: [{ f: 0, text: leg.label }, ...leg.stops.map((s, i) => ({ f: 0, at: s.at, text: s.text, quiet: !speakStop(i, leg.stops.length) }))] });
     } else {
       const p: LngLatTuple = [leg.portal.lon, leg.portal.lat];
       const s: LngLatTuple = [leg.station.lon, leg.station.lat];
@@ -77,15 +113,25 @@ export function buildTimeline(trip: Trip): Segment[] {
       segs.push({ kind: "ascend", label: leg.label, coords: [s, p], realS: 60, underground: true, callouts: [{ f: 0, text: `${leg.label}.${outage}` }] });
     }
   }
-  return segs.filter((s) => s.coords.length >= 2);
+  // Join the parts first, then place each callout on the line it ended up on.
+  return joinUp(segs.filter((s) => s.coords.length >= 2)).map((s) => ({
+    ...s,
+    callouts: s.callouts.map(({ at, ...c }) => (at ? { ...c, f: fractionOf(s.coords, at) } : c)),
+  }));
 }
+
+/** On foot (walks, stairs in and out) the preview runs this many times faster than a ride (owner, 2026-10-27: walking was "super duper slow"). */
+const FOOT_RATE = 4;
+const onFoot = (seg: Segment) => seg.kind === "walk" || seg.kind === "descend" || seg.kind === "ascend";
 
 /**
  * Wall-clock seconds for one leg. The ceiling and floor scale with the speed:
- * a flat 45s cap made 2x and 10x the same length on a subway ride.
+ * a flat 45s cap made 2x and 10x the same length on a subway ride. Walking moves little on the map,
+ * so it plays FOOT_RATE times faster and stops at 12s (at 10x) however long the walk is.
  */
 export function wallSeconds(seg: Segment, speed: number): number {
   const pace = 10 / speed;
+  if (onFoot(seg)) return Math.min(12 * pace, Math.max(1.5 * pace, seg.realS / (speed * FOOT_RATE)));
   return Math.min(45 * pace, Math.max(3 * pace, seg.realS / speed));
 }
 
@@ -104,9 +150,23 @@ export function poseAt(seg: Segment, f: number): Pose {
   }
 }
 
+/**
+ * On a ride, only the last two stops are spoken (your stop is next, then your
+ * stop); the ones in between still show on screen. Narrating every stop was
+ * noise once you are on the train (owner, 2026-10-24).
+ */
+export function speakStop(i: number, count: number): boolean {
+  return i >= count - 2;
+}
+
 /** The latest callout reached at fraction f. */
 export function calloutAt(seg: Segment, f: number): string {
-  let text = seg.label;
-  for (const c of seg.callouts) if (c.f <= f + 1e-6) text = c.text;
-  return text;
+  return calloutInfoAt(seg, f).text;
+}
+
+/** The latest callout reached at fraction f, and whether it should be spoken. */
+export function calloutInfoAt(seg: Segment, f: number): { text: string; quiet: boolean } {
+  let out = { text: seg.label, quiet: false };
+  for (const c of seg.callouts) if (c.f <= f + 1e-6) out = { text: c.text, quiet: Boolean(c.quiet) };
+  return out;
 }

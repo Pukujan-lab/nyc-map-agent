@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { GET, decodePolyline, loadBusStops } from "./routes";
+import { GET, decodePolyline, loadBusArrivals, loadBusStops, towards } from "./routes";
 
 describe("bus sheet endpoints", () => {
   afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
@@ -59,6 +59,33 @@ describe("bus-stops", () => {
     vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(
       new Response(JSON.stringify({ data: { list: [{ id: "MTA_1", name: "GRAND ST/ESSEX ST", lat: 40.718, lon: -73.988, direction: "W", routeIds: ["MTA NYCT_M14D+", "MTA NYCT_B39"] }], references: { routes: [{ id: "MTA NYCT_M14D+", shortName: "M14D-SBS" }, { id: "MTA NYCT_B39", shortName: "B39" }] } } })))));
     const { stops } = await loadBusStops("k", 40.718, -73.988);
-    expect(stops).toEqual([{ id: "MTA_1", name: "GRAND ST/ESSEX ST", lat: 40.718, lon: -73.988, dir: "W", routes: ["B39", "M14D-SBS"] }]);
+    expect(stops).toEqual([{ id: "MTA_1", name: "GRAND ST/ESSEX ST", lat: 40.718, lon: -73.988, dir: "W", routes: ["B39", "M14D-SBS"], heads: {} }]);
+  });
+  it("says where each route goes from the stop", async () => {
+    vi.stubGlobal("fetch", vi.fn((url: string) => Promise.resolve(new Response(JSON.stringify(url.includes("stops-for-route")
+      ? { data: { entry: { stopGroupings: [{ stopGroups: [{ name: { name: "GREENPOINT MANHATTAN AV via GRAHAM AV" }, stopIds: ["MTA_9"] }, { name: { name: "PROSPECT LEFFERTS GARDENS" }, stopIds: ["MTA_8"] }] }] } } }
+      : { data: { list: [{ id: "MTA_9", name: "NASSAU AV/MANHATTAN AV", lat: 40.7238, lon: -73.951, direction: "N", routeIds: ["MTA NYCT_B43X"] }], references: { routes: [{ id: "MTA NYCT_B43X", shortName: "B43" }] } } })))));
+    const { stops } = await loadBusStops("k", 40.7238, -73.951);
+    expect(stops[0].heads).toEqual({ B43: "Greenpoint Manhattan Av" });
+  });
+  it("words a destination the way a pole sign does", () => {
+    expect(towards("DOWNTOWN BKLYN FULTON MALL via 3 AV")).toBe("Downtown Brooklyn Fulton Mall");
+    expect(towards("SELECT BUS EAST HARLEM 125 ST")).toBe("East Harlem 125 St");
+    expect(towards("7 TRAIN TO 74 ST-BROADWAY")).toBe("7 Train To 74 St-Broadway");
+  });
+});
+
+describe("bus-arrivals", () => {
+  afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
+  it("rejects a malformed stop id", async () => {
+    vi.stubEnv("MTA_BUSTIME_KEY", "k");
+    expect((await GET(new Request("http://x/api/transit/bus-arrivals?stop=../x"))).status).toBe(400);
+  });
+  it("lists visits soonest first with route, headsign and distance", async () => {
+    const visit = (line: string, t: string) => ({ MonitoredVehicleJourney: { PublishedLineName: [line], DestinationName: ["JAMAICA"], VehicleRef: `MTA NYCT_${line}`, MonitoredCall: { ExpectedArrivalTime: t, Extensions: { Distances: { PresentableDistance: "2 stops away" } } } } });
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(JSON.stringify({ Siri: { ServiceDelivery: { StopMonitoringDelivery: [{ MonitoredStopVisit: [visit("Q6", "2026-01-01T00:10:00Z"), visit("Q8", "2026-01-01T00:05:00Z")] }] } } })))));
+    const { arrivals } = await loadBusArrivals("k", "MTA_1");
+    expect(arrivals.map((a) => a.route)).toEqual(["Q8", "Q6"]);
+    expect(arrivals[0]).toMatchObject({ destination: "JAMAICA", vehicle: "MTA NYCT_Q8", away: "2 stops away" });
   });
 });

@@ -7,7 +7,8 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import type { Context } from "hono";
 import { compress } from "hono/compress";
-import { AGENT_ROUTE, API_INFO, ROUTES, legacyAlias, toV1, toV1Route } from "./openapi";
+import { apiRateLimit } from "./lib/apiRateLimit";
+import { AGENT_ROUTE, STT_ROUTE, API_INFO, ROUTES, legacyAlias, toV1, toV1Route } from "./openapi";
 import * as aggregate from "../api/aggregate";
 import * as area from "../api/area/[block]";
 import * as areas from "../api/areas";
@@ -24,8 +25,10 @@ import * as ferry from "./features/ferry/routes";
 import * as traffic from "./features/traffic/routes";
 import * as parking from "./features/parking/routes";
 import * as agent from "./features/agent/routes";
+import { transcribe } from "./features/agent/stt";
 import * as transit from "./features/transit/routes";
 import * as transitSegments from "./features/transit/segments";
+import * as transitLive from "./features/transit/live";
 import * as transitBusSegments from "./features/transit/busSegments";
 import * as events from "./features/events/routes";
 import * as placeToilets from "./features/place-toilets/routes";
@@ -44,6 +47,7 @@ const routes: Array<[string, Handler]> = [
   ["/api/sources", sources],
   ["/api/street", street],
   ["/api/vehicle-models/:mode", vehicleModels],
+  ["/api/weather/hour", { GET: weather.GET_HOUR }],
   ["/api/weather", weather],
   ["/api/hazards", hazards],
   ["/api/ferry", ferry],
@@ -52,7 +56,9 @@ const routes: Array<[string, Handler]> = [
   ["/api/parking/near", { GET: parking.GET_NEAR }],
   ["/api/parking/rules", { GET: parking.GET_RULES }],
   ["/api/parking", parking],
+  ["/api/transit-segments/all", { GET: transitSegments.GET_ALL }],
   ["/api/transit-segments", transitSegments],
+  ["/api/transit-live", transitLive],
   ["/api/transit-bus-segments", transitBusSegments],
   ["/api/transit", transit],
   ["/api/transit/:system", transit],
@@ -74,6 +80,8 @@ export const app = new OpenAPIHono({
     }
   },
 });
+// Refresh spam and scripts get a 429 before any handler runs (#369).
+app.use("/api/*", apiRateLimit());
 // Rollups and boundaries are 0.2-2 MB of JSON; gzip cuts them ~5x.
 app.use("/api/*", async (c, next) => {
   // Tile ranges are already-compressed binary; gzip would break Content-Range.
@@ -107,6 +115,11 @@ const agentHandler = async (c: Context) => {
 };
 app.openapi(toV1Route(AGENT_ROUTE), agentHandler as never);
 app.openapi(legacyAlias(AGENT_ROUTE), agentHandler as never);
+
+// Speech-to-text fallback (multipart; the handler reads the form itself).
+const sttHandler = async (c: Context) => transcribe(await c.req.formData(), c.req.raw.headers);
+app.openapi(toV1Route(STT_ROUTE), sttHandler as never);
+app.openapi(legacyAlias(STT_ROUTE), sttHandler as never);
 
 const docConfig = { openapi: "3.1.0", info: API_INFO };
 app.doc31("/api/v1/openapi.json", docConfig);

@@ -7,7 +7,8 @@ type Rec = {
   onend: (() => void) | null;
 };
 
-export const WAKE = /\bhey,? map\b[,.!]?\s*/i;
+/** "Hey map" in each app language, so the phrase works with a non-English recognizer too. */
+export const WAKE = /(?:\bhey,? map\b|\boye,? mapa\b|\bh[eé]+,? (?:la )?carte\b|\bh[eé]+,? kat\b|\bэй,? карта|嘿[，,]?\s*地图|헤이[,]?\s*맵|হেই,?\s*ম্যাপ)[,，.!。！]?\s*/i;
 
 /** Strip the wake phrase; null when the phrase is absent. */
 export function afterWake(text: string): string | null {
@@ -18,8 +19,9 @@ export function afterWake(text: string): string | null {
 /**
  * Optional "Hey map": a continuous Web Speech recognizer that only reacts to
  * finals containing the phrase. Off unless enabled; paused while `paused`.
+ * `lang` is the recognizer's language (the app language's speech tag).
  */
-export function useWakePhrase(enabled: boolean, paused: boolean, onCommand: (text: string) => void) {
+export function useWakePhrase(enabled: boolean, paused: boolean, onCommand: (text: string) => void, lang = "en-US") {
   const cb = useRef(onCommand);
   cb.current = onCommand;
   useEffect(() => {
@@ -29,7 +31,7 @@ export function useWakePhrase(enabled: boolean, paused: boolean, onCommand: (tex
     const rec = new Ctor();
     rec.continuous = true;
     rec.interimResults = false;
-    rec.lang = "en-US";
+    rec.lang = lang;
     let alive = true;
     rec.onresult = (e) => {
       for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -42,5 +44,5 @@ export function useWakePhrase(enabled: boolean, paused: boolean, onCommand: (tex
     rec.onend = () => { if (alive) try { rec.start(); } catch { /* already started */ } };
     try { rec.start(); } catch { /* mic denied */ }
     return () => { alive = false; rec.onend = null; rec.stop(); };
-  }, [enabled, paused]);
+  }, [enabled, paused, lang]);
 }

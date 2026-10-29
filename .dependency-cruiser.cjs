@@ -2,7 +2,7 @@
 // Old paths that re-export a moved module; remove each once its importers move.
 const SHIMS = "^(src/lib/map/restrooms\\.ts|src/components/RestroomCard\\.tsx|api/restrooms\\.ts)$";
 // The one shared MapLibre custom layer allowed to use three.js (Alex-approved).
-const THREE_LAYER = "^src/lib/map/(streetSigns|threeLayer)\\.ts$";
+const THREE_LAYER = "^src/lib/map/((streetSigns|threeLayer)\\.ts|three/)";
 
 module.exports = {
   forbidden: [

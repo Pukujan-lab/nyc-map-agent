@@ -15,8 +15,20 @@ export function bindPreviewRelease(fn: (() => void) | null) {
   onLeavePreview = fn;
 }
 
+/** Boarded from street view: "Get off" puts you back on foot where the vehicle is (owner, 2026-10-27). */
+let onFoot = false;
+export function setBoardedOnFoot(on: boolean) {
+  onFoot = on;
+}
+export function useBoardedOnFoot(): boolean {
+  return useSyncExternalStore((f) => (subs.add(f), () => subs.delete(f)), () => onFoot);
+}
+
 export function setFollowed(key: string | null) {
-  // Drag and Esc release the camera where it is. The Stop button sets the flag first.
+  // Riding ends with the follow, however it ends.
+  if (key === null) onFoot = false;
+  // Drag, Esc, Show on map, Show map, and a non-vehicle map click release the camera where it is.
+  // The Stop button sets the flag first.
   if (key === null && !restoreOnStop) snap = null;
   // A new vehicle owns the camera, so a playing trip preview lets go without gliding home.
   if (key !== null && key !== followed) onLeavePreview?.();
@@ -63,8 +75,8 @@ export function useFollowed(): string | null {
 /** Non-hook read, for one-off snapshots such as the Ask context. */
 export const followedTrain = (): string | null => followed;
 
-/** Follow camera: behind, beside, above, or in the train's cab. */
-export type FollowMode = "chase" | "side" | "overhead" | "cab";
+/** Follow camera: a flat map view, behind, beside, above, or in the train's cab. */
+export type FollowMode = "map" | "chase" | "side" | "overhead" | "cab";
 let mode: FollowMode = "chase";
 const modeSubs = new Set<() => void>();
 export function setFollowMode(m: FollowMode) {
@@ -74,19 +86,72 @@ export function setFollowMode(m: FollowMode) {
 export function useFollowMode(): FollowMode {
   return useSyncExternalStore((f) => (modeSubs.add(f), () => modeSubs.delete(f)), () => mode);
 }
+/** Non-hook read, for the trip preview's frame loop. */
+export const followMode = (): FollowMode => mode;
+
+/**
+ * True while a trip preview is on the map. Its marker then takes the same follow
+ * cameras as a train (Map, Chase, Side, Overhead, Street), so a view picked from
+ * Change view stays put for the whole preview instead of resetting each leg.
+ */
+let previewing = false;
+const previewSubs = new Set<() => void>();
+export function setPreviewing(on: boolean) {
+  if (previewing === on) return;
+  previewing = on;
+  previewSubs.forEach((f) => f());
+}
+export function usePreviewing(): boolean {
+  return useSyncExternalStore((f) => (previewSubs.add(f), () => previewSubs.delete(f)), () => previewing);
+}
+
+/**
+ * Keeps the person's own zoom while a camera drives the map every frame: a
+ * zoom since the last frame becomes an offset on top of the camera's zoom.
+ */
+export class ZoomKeeper {
+  private offset = 0;
+  private last: number | null = null;
+  reset(): void { this.offset = 0; this.last = null; }
+  /** The zoom to set this frame, given the camera's own zoom and the map's current zoom. */
+  next(cameraZoom: number, mapZoom: number): number {
+    if (this.last !== null && Math.abs(mapZoom - this.last) > 0.01) this.offset = Math.max(-5, Math.min(4, this.offset + mapZoom - this.last));
+    this.last = cameraZoom + this.offset;
+    return this.last;
+  }
+}
 
 /**
  * Camera eye and look-at (metres east/north of the vehicle, and height) for a
  * follow mode; `bearing` is the vehicle's heading in degrees, `z` its height.
+ * Side and Chase stand well back so you can see what is around the train
+ * (owner, 2026-10-26: "a bit further"); a phone's narrow screen gets a higher,
+ * more top-down angle so the train stays clear of the card and the buttons.
  */
-export function followRig(m: FollowMode, bearing: number, z: number): { eye: [number, number, number]; look: [number, number, number] } {
+export function followRig(m: FollowMode, bearing: number, z: number, phone = false): { eye: [number, number, number]; look: [number, number, number] } {
   const r = (bearing * Math.PI) / 180, fx = Math.sin(r), fy = Math.cos(r); // forward
   const rx = fy, ry = -fx; // right-hand side
   const at = Math.max(z, 0);
   switch (m) {
-    case "side": return { eye: [rx * 70, ry * 70, at + 18], look: [0, 0, at] };
+    case "side": return phone
+      ? { eye: [rx * 150, ry * 150, at + 120], look: [fx * 30, fy * 30, at] }
+      : { eye: [rx * 170, ry * 170, at + 75], look: [fx * 40, fy * 40, at] };
     case "overhead": return { eye: [-fx * 20, -fy * 20, at + 320], look: [0, 0, at] };
     case "cab": return { eye: [fx * 9, fy * 9, at + 3.2], look: [fx * 120, fy * 120, at + 2] };
-    default: return { eye: [-fx * 70, -fy * 70, at + 28], look: [fx * 20, fy * 20, at] };
+    default: return phone
+      ? { eye: [-fx * 120, -fy * 120, at + 120], look: [fx * 20, fy * 20, at] }
+      : { eye: [-fx * 140, -fy * 140, at + 70], look: [fx * 30, fy * 30, at] };
   }
+}
+
+/** Where the followed vehicle is now (~2 Hz), for the follow mini map. */
+export type FollowPos = { lon: number; lat: number; bearing: number };
+let pos: FollowPos | null = null;
+const posSubs = new Set<() => void>();
+export function publishFollowPos(next: FollowPos | null) {
+  pos = next;
+  posSubs.forEach((f) => f());
+}
+export function useFollowPos(): FollowPos | null {
+  return useSyncExternalStore((f) => (posSubs.add(f), () => posSubs.delete(f)), () => pos);
 }

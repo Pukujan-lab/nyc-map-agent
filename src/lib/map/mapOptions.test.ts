@@ -10,9 +10,9 @@ describe("map options", () => {
     expect(readOptions({ getItem: () => null }).roads).toBe(true);
     expect(readOptions({ getItem: () => JSON.stringify({ roads: false }) }).roads).toBe(false);
   });
-  it("hides bus stops only when that choice is saved", () => {
-    expect(readOptions({ getItem: () => null }).busStops).toBe(true);
-    expect(readOptions({ getItem: () => JSON.stringify({ busStops: false }) }).busStops).toBe(false);
+  it("shows bus stops only when that choice is saved", () => {
+    expect(readOptions({ getItem: () => null }).busStops).toBe(false);
+    expect(readOptions({ getItem: () => JSON.stringify({ busStops: true }) }).busStops).toBe(true);
   });
   it("keeps 3D buildings only when chosen", () => {
     expect(readOptions({ getItem: () => JSON.stringify({ buildings: "3d" }) }).buildings).toBe("3d");

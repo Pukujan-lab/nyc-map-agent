@@ -161,3 +161,38 @@ function segHit(s: { ax: number; ay: number; bx: number; by: number }, t: { ax: 
   }
   return null;
 }
+
+/**
+ * Where a restroom kiosk stands (#295). The city records many restrooms at a
+ * point inside the building (a library, a park house), so a kiosk drawn there
+ * sits in the facade. This moves the point straight toward the nearest street
+ * centreline until it is `setback` metres from it: the pavement in front. A
+ * point already on the pavement, or with no street within `maxM`, stays put.
+ */
+export function onPavement(lines: Array<Array<[number, number]>>, lng: number, lat: number, setback = 7, maxM = 45): [number, number] {
+  const o = { lng, lat };
+  let best = maxM;
+  let foot: [number, number] | null = null;
+  for (const l of lines) {
+    for (let i = 1; i < l.length; i++) {
+      const a = toLocal(l[i - 1][0], l[i - 1][1], o);
+      const b = toLocal(l[i][0], l[i][1], o);
+      const dx = b[0] - a[0];
+      const dy = b[1] - a[1];
+      const l2 = dx * dx + dy * dy;
+      if (!l2) continue;
+      const t = Math.max(0, Math.min(1, -(a[0] * dx + a[1] * dy) / l2));
+      const f: [number, number] = [a[0] + t * dx, a[1] + t * dy];
+      const d = Math.hypot(f[0], f[1]);
+      if (d < best) {
+        best = d;
+        foot = f;
+      }
+    }
+  }
+  if (!foot || best <= setback + 2) return [lng, lat];
+  // Walk (best - setback) metres toward the street along the perpendicular.
+  const k = (best - setback) / best;
+  const kx = 111_320 * Math.cos((lat * Math.PI) / 180);
+  return [lng + (foot[0] * k) / kx, lat + (foot[1] * k) / 111_320];
+}

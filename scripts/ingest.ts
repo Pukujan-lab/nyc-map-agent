@@ -4,7 +4,9 @@
  * - noise / crashes: incremental append of new events into the existing
  *   public.nyc_311_noise / public.nyc_crashes tables (insert-only, ON CONFLICT DO NOTHING).
  * - grid sources: Socrata rolls rows up to the block grid per month (windowed)
- *   or once (inventories); we replace the affected months in raw.source_cells.
+ *   or once (inventories); we replace the affected months in raw.source_cells,
+ *   and again at a ~22 m grid in raw.source_fine_cells, which
+ *   scripts/build-aggregates.ts joins to real tax blocks (#120).
  * - geometry sources: rows are paged and reduced to one point each (same
  *   reduction the browser uses), then counted per block.
  * Events are capped at ~12 months (INGEST_MONTHS). Afterwards the marts refresh.
@@ -12,12 +14,13 @@
  *   pnpm ingest                 all sources
  *   pnpm ingest noise trees     only these ids
  */
-import { BLOCK_GRID_DEG } from "../src/lib/geo/blocks";
+import { BLOCK_GRID_DEG, FINE_GRID_DEG } from "../src/lib/geo/blocks";
 import { representativePoint } from "../src/lib/datasets/fetchSource";
 import { SOURCES, type GeometrySource, type GridSource, type SourceConfig } from "../src/lib/datasets/registry";
 import { octoQuery } from "../api/_lib/octo";
 import { collectEvents, upsertEvents } from "../server/features/events/ingest";
 import { collectPlaceToilets, replacePlaceToilets } from "../server/features/place-toilets/ingest";
+import { collectOsmToilets, replaceOsmToilets } from "../server/features/restrooms/osm";
 import { loadEnv } from "./env";
 
 const SOCRATA = "https://data.cityofnewyork.us/resource";
@@ -150,13 +153,13 @@ export function monthStarts(from: string, now = new Date()): string[] {
   return out;
 }
 
-async function gridCells(s: GridSource): Promise<Cell[]> {
+async function gridCells(s: GridSource, deg = BLOCK_GRID_DEG): Promise<Cell[]> {
   const col = (c: string) => (s.castNumber ? `${c}::number` : c);
   const measure = s.measure ?? "count";
   const value = measure === "count" ? "count(*)" : `sum(${measure.slice(4)}::number)`;
   const base = [`${s.lat} IS NOT NULL`, `${s.lon} IS NOT NULL`];
   if (s.where) base.push(s.where);
-  const select = `floor(${col(s.lat)} / ${BLOCK_GRID_DEG}) AS r, floor(${col(s.lon)} / ${BLOCK_GRID_DEG}) AS c, ${value} AS n`;
+  const select = `floor(${col(s.lat)} / ${deg}) AS r, floor(${col(s.lon)} / ${deg}) AS c, ${value} AS n`;
   const toCells = (rows: Row[], month: string | null): Cell[] =>
     rows
       .map((r) => ({ month, r: Number(r.r), c: Number(r.c), category: "", n: Number(r.n ?? 0) }))
@@ -177,7 +180,7 @@ async function gridCells(s: GridSource): Promise<Cell[]> {
   return cells;
 }
 
-async function geometryCells(s: GeometrySource): Promise<Cell[]> {
+async function geometryCells(s: GeometrySource, deg = BLOCK_GRID_DEG): Promise<Cell[]> {
   const where = [`${s.geom} IS NOT NULL`];
   if (s.dateField) where.push(`${s.dateField} >= '${since()}'`);
   if (s.where) where.push(s.where);
@@ -188,8 +191,8 @@ async function geometryCells(s: GeometrySource): Promise<Cell[]> {
   for (const row of rows) {
     const p = representativePoint(row[s.geom]);
     if (!p) continue;
-    const r = Math.floor(p[1] / BLOCK_GRID_DEG);
-    const c = Math.floor(p[0] / BLOCK_GRID_DEG);
+    const r = Math.floor(p[1] / deg);
+    const c = Math.floor(p[0] / deg);
     const key = `${r}:${c}`;
     const cell = cells.get(key) ?? { month: null, r, c, category: "", n: 0 };
     cell.n += 1;
@@ -212,7 +215,28 @@ async function ingestCells(s: GridSource | GeometrySource): Promise<number> {
     { source_id: "text", month: "date", r: "integer", c: "integer", category: "text", n: "double precision" },
     cells.map((c) => ({ ...c, source_id: s.id })),
   );
+  try {
+    await ingestFineCells(s);
+  } catch (err) {
+    // The tax-block counts fall back to the grid; never lose the grid over them.
+    console.warn(`${s.id}: fine grid skipped (${err instanceof Error ? err.message : String(err)})`);
+  }
   return cells.length;
+}
+
+async function ingestFineCells(s: GridSource | GeometrySource): Promise<void> {
+  const cells = s.kind === "grid" ? await gridCells(s, FINE_GRID_DEG) : await geometryCells(s, FINE_GRID_DEG);
+  await octoQuery(
+    s.dateField
+      ? "DELETE FROM raw.source_fine_cells WHERE source_id = $1 AND month >= $2::date"
+      : "DELETE FROM raw.source_fine_cells WHERE source_id = $1",
+    s.dateField ? [s.id, since().slice(0, 10)] : [s.id],
+  );
+  await insertJson(
+    "raw.source_fine_cells",
+    { source_id: "text", month: "date", fr: "integer", fc: "integer", category: "text", n: "double precision" },
+    cells.map((c) => ({ source_id: s.id, month: c.month, fr: c.r, fc: c.c, category: c.category, n: c.n })),
+  );
 }
 
 async function syncSources(): Promise<void> {
@@ -241,7 +265,8 @@ async function ingest(s: SourceConfig): Promise<number> {
 
 /** Public restrooms (i7jb-7jku): a small inventory, replaced whole into raw.restrooms. */
 async function ingestRestrooms(): Promise<number> {
-  const rows = await soqlAll<Row>("i7jb-7jku", { $where: "latitude IS NOT NULL", $order: "facility_name" });
+  // :updated_at is the row's last change at NYC Open Data, served as the record's asOf.
+  const rows = await soqlAll<Row>("i7jb-7jku", { $select: "*, :updated_at", $where: "latitude IS NOT NULL", $order: "facility_name" });
   const byName = new Map(rows.filter((r) => r.facility_name).map((r) => [r.facility_name, r]));
   await octoQuery("DELETE FROM raw.restrooms");
   await insertJson(
@@ -340,6 +365,29 @@ async function main() {
     } catch (err) {
       failed++;
       console.error(`place-toilets: FAILED ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  if (!only.length || only.includes("osm-toilets")) {
+    const started = new Date().toISOString();
+    try {
+      const post = async (url: string, body: URLSearchParams): Promise<unknown> => {
+        for (let attempt = 0; ; attempt++) {
+          const res = await fetch(url, { method: "POST", body, headers: { "User-Agent": "nyc-map-agent nightly ingest (nyc.design-bakery.com)" } });
+          if (res.ok) return res.json();
+          if (attempt >= 3 || (res.status < 500 && res.status !== 429)) throw new Error(`${new URL(url).host} ${res.status}`);
+          await new Promise((r) => setTimeout(r, 5000 * 2 ** attempt));
+        }
+      };
+      const { toilets, elements } = await collectOsmToilets(post);
+      await replaceOsmToilets(toilets, (sql, params) => octoQuery(sql, params));
+      console.log(`osm-toilets: ${toilets.length} kept of ${elements} OSM amenity=toilets (private, no and customers-only dropped)`);
+      await octoQuery(
+        "INSERT INTO core.ingest_runs (source_id, started_at, finished_at, rows, status) VALUES ('osm-toilets', $1, now(), $2, 'ok')",
+        [started, toilets.length],
+      );
+    } catch (err) {
+      failed++;
+      console.error(`osm-toilets: FAILED ${err instanceof Error ? err.message : String(err)}`);
     }
   }
   if (failed) process.exit(1);

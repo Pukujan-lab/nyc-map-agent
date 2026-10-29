@@ -1,7 +1,8 @@
 import { useCallback, useMemo, useState } from "react";
 import { ArrowLeft } from "lucide-react";
-import { usePanel, type PanelContent } from "@/lib/store/PanelContext";
+import { pushPanel, usePanel, type PanelContent } from "@/lib/store/PanelContext";
 import { alertGeometry, routeEnds, setAlertFocus } from "./alertFocus";
+import { setFollowed } from "./follow";
 import { otherDirection } from "@/lib/transit/serviceChanges";
 import { useTransitData, type TransitAlert } from "./hooks";
 
@@ -22,27 +23,41 @@ const plain = (s: string): string => s.replace(/\[([A-Z0-9]+)\]/g, "$1");
 
 const when = (t?: number) => (t ? new Date(t * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "");
 
+function alertPanel(a: TransitAlert, onBack: () => void): PanelContent {
+  return {
+    id: `transit:alert:${a.id}`,
+    title: `${a.routes.slice(0, 3).join(" ")} ${alertLabel(a).toLowerCase()}`.trim(),
+    subtitle: a.period || "Service alert",
+    peek: `${a.routes[0] ?? "Alert"} · ${alertLabel(a)}`,
+    details: <AlertCard alert={a} onBack={onBack} />,
+    onBack,
+  };
+}
+
+/** Open an alert from outside the panel (the follow card). The map flies to it. */
+export function presentAlert(a: TransitAlert): void {
+  const onBack = () => setAlertFocus(null);
+  setAlertFocus(a);
+  pushPanel(alertPanel(a, onBack));
+}
+
 /** Open an alert: the map flies to it (TransitLayer) and the panel shows its card; Back returns to what was open before. */
 function useOpenAlert(): (a: TransitAlert) => void {
-  const { content, showPanel } = usePanel();
+  const { content, showPanel, setSnap } = usePanel();
   return useCallback(
     (a: TransitAlert) => {
+      // In place, not Stop following: that ease would pull the camera off the alert.
+      setFollowed(null);
       const prev: PanelContent | null = content && !content.id.startsWith("transit:alert:") ? content : null;
       const back = () => {
         setAlertFocus(null);
         if (prev) window.setTimeout(() => showPanel(prev), 0);
       };
       setAlertFocus(a);
-      showPanel({
-        id: `transit:alert:${a.id}`,
-        title: `${a.routes.slice(0, 3).join(" ")} ${alertLabel(a).toLowerCase()}`.trim(),
-        subtitle: a.period || "Service alert",
-        peek: `${a.routes[0] ?? ""} · ${alertLabel(a)}`,
-        details: <AlertCard alert={a} onBack={back} />,
-        onBack: back,
-      });
+      showPanel(alertPanel(a, back));
+      setSnap("half");
     },
-    [content, showPanel],
+    [content, showPanel, setSnap],
   );
 }
 
@@ -55,6 +70,30 @@ export function AlertRow({ alert }: { alert: TransitAlert }) {
       <span className="mr-1 font-semibold">{alertLabel(alert)}</span>
       {plain(alert.text)}
       <span className="mt-0.5 block font-semibold underline underline-offset-2">Show on map</span>
+    </button>
+  );
+}
+
+/**
+ * A notice that touches this station, at the top of the station panel (#419). A suspension or skip reads in
+ * red so a skipped station says so when you tap it, not only when you open the line's notice. Tapping it
+ * opens the same alert view as the line panel.
+ */
+export function StationNotice({ alert }: { alert: TransitAlert }) {
+  const open = useOpenAlert();
+  const data = useTransitData(["subway"]);
+  const stops = /\bno\b|skip|suspend|bypass|not stop/i.test(`${alert.text} ${alert.type ?? ""}`);
+  const period = alert.period || [when(alert.start), alert.end ? when(alert.end) : ""].filter(Boolean).join(" – ");
+  return (
+    <button type="button" onClick={() => open(alert)} data-alert={alert.id} data-testid="station-notice"
+      className={`block w-full rounded-md border-2 px-2.5 py-2 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${stops ? "border-[#d4183d] bg-[#d4183d]/10" : "border-amber-500 bg-amber-500/10"}`}>
+      <span className="flex flex-wrap items-center gap-1.5">
+        {alert.routes.map((r) => <RouteBullet key={r} system="subway" route={r} data={data} />)}
+        <span className="text-xs font-semibold uppercase tracking-wide">{stops ? "Not stopping here" : alertLabel(alert)}</span>
+      </span>
+      <span className="mt-1 block font-medium leading-snug">{plain(alert.text)}</span>
+      {period ? <span className="mt-0.5 block text-xs text-muted-foreground">{period}</span> : null}
+      <span className="mt-1 block text-xs font-semibold underline underline-offset-2">Show on map</span>
     </button>
   );
 }

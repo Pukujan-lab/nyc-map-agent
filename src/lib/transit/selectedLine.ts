@@ -1,0 +1,39 @@
+import { useSyncExternalStore } from "react";
+
+/**
+ * The one subway line the person is looking at (agent-first home, #370):
+ * picked by tapping a line or a train, or by choosing it in More layers.
+ * The transit layer draws it (other lines dimmed, its station names and
+ * trains as bullets) and its notices panel. `train` is the tapped train's
+ * vehicle key, so "Follow a train" rides that one.
+ */
+export interface SelectedLine {
+  route: string;
+  train: string | null;
+  /** A chosen trip's ride on this line: the panel shows the next trains at its boarding stop. */
+  ride?: { from: [number, number]; to: [number, number] };
+  /**
+   * Opened from an answer about the line's trouble: the panel opens its first service change, so the
+   * skipped stations are ringed and framed without a hunt through the notices (owner, 2026-10-27).
+   */
+  trouble?: boolean;
+}
+
+let selected: SelectedLine | null = null;
+const subs = new Set<() => void>();
+
+export function setSelectedLine(route: string | null, train: string | null = null, ride?: SelectedLine["ride"], trouble = false): void {
+  const next = route ? { route, train, ...(ride ? { ride } : {}), ...(trouble ? { trouble } : {}) } : null;
+  if (next?.route === selected?.route && next?.train === selected?.train && next?.ride === selected?.ride && next?.trouble === selected?.trouble) return;
+  selected = next;
+  subs.forEach((f) => f());
+}
+
+export const getSelectedLine = (): SelectedLine | null => selected;
+
+export function useSelectedLine(): SelectedLine | null {
+  return useSyncExternalStore((f) => (subs.add(f), () => subs.delete(f)), () => selected, () => null);
+}
+
+/** A subway route as the map's features carry it ("6X" rides the 6's track and bullet). */
+export const lineOf = (route: string): string => route.replace(/X$/, "");

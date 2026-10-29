@@ -35,6 +35,7 @@ import {
   metresBetween,
 } from "@/lib/api/mapillary";
 import { formatCount, formatDate } from "@/lib/format";
+import { photoCamera } from "@/lib/map/photoGlide";
 import type { BlockDatum } from "@/lib/layers";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { cn } from "@/lib/utils";
@@ -80,7 +81,12 @@ export function StreetViewSheet({
   caption,
   isDesktop,
 }: StreetViewSheetProps) {
-  const { streetViewOpen, setStreetViewOpen } = useMapState();
+  const { streetViewOpen, setStreetViewOpen, flyTo } = useMapState();
+  // Read inside the viewer's event handler, which is bound once per photo.
+  const flyToRef = useRef(flyTo);
+  useEffect(() => {
+    flyToRef.current = flyTo;
+  }, [flyTo]);
   const open = streetViewOpen && block !== null;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -154,19 +160,23 @@ export function StreetViewSheet({
         instance.resize();
       });
 
+      let shown = 0;
       instance.on("image", () => {
         if (!cancelled) setReady(true);
+        // The first photo is the block the map already shows; after that the
+        // map glides along with each step, facing the photo's way (#10).
+        const glide = shown++ > 0;
 
         // Walking the sequence moves away from the block, and the footer says
         // so rather than pretending the photos still describe this square.
         const origin = { lon: image.lon, lat: image.lat };
-        void instance
-          .getPosition()
-          .then((position) => {
+        void Promise.all([instance.getPosition(), instance.getBearing()])
+          .then(([position, bearing]) => {
             if (cancelled) return;
             setDistanceFromBlock(
               metresBetween(origin, { lon: position.lng, lat: position.lat }),
             );
+            if (glide) flyToRef.current(photoCamera(position, bearing));
           })
           .catch(() => undefined);
       });

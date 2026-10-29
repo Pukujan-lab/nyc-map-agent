@@ -1,12 +1,14 @@
 /**
- * Tap targets for 3D street furniture (restroom kiosks), registered by the
+ * Tap targets for 3D street furniture (restroom kiosks, bus stop signs) and
+ * subway entrances, registered by the
  * three.js layer and hit-tested here in screen space without three.js, so the
  * click handlers can stay in the main chunk and in the feature modules.
  */
 import type { Map as MapLibreMap } from "maplibre-gl";
+import { cameraTransform } from "./cameraTransform";
 
 export interface PickTarget {
-  kind: "restroom" | "place";
+  kind: "restroom" | "place" | "busstop" | "entrance";
   id: string;
   lng: number;
   lat: number;
@@ -24,8 +26,7 @@ const EYE_M = 1.7;
  */
 export function eyeOrCenter(map: MapLibreMap): { lng: number; lat: number } {
   try {
-    const t = (map as unknown as { transform?: { getCameraLngLat?: () => { lng: number; lat: number } } }).transform;
-    const p = t?.getCameraLngLat?.();
+    const p = cameraTransform(map)?.getCameraLngLat();
     if (p && Number.isFinite(p.lng) && Number.isFinite(p.lat)) return { lng: p.lng, lat: p.lat };
   } catch {
     /* fall through */
@@ -33,10 +34,13 @@ export function eyeOrCenter(map: MapLibreMap): { lng: number; lat: number } {
   const c = map.getCenter();
   return { lng: c.lng, lat: c.lat };
 }
+/** One list per owner: the furniture layer and the transit layer each replace only their own. */
+const groups = new Map<string, PickTarget[]>();
 let targets: PickTarget[] = [];
 
-export function setPickTargets(t: PickTarget[]): void {
-  targets = t;
+export function setPickTargets(t: PickTarget[], group = "furniture"): void {
+  groups.set(group, t);
+  targets = [...groups.values()].flat();
 }
 
 /**
@@ -67,8 +71,8 @@ export function pickAt(map: MapLibreMap, x: number, y: number): PickTarget | nul
   return best;
 }
 
-/** Which restroom sets get 3D kiosks: mirrors the Restrooms toggle and its "Include shops & cafés" chip. */
-export const kioskSources = { restrooms: true, places: false };
+/** Shop and café restrooms get 3D kiosks with the "Include shops & cafés" chip; public restrooms always do. */
+export const kioskSources = { places: false };
 
 /** Street-level bus-stop poles. The Layers switch writes this; the furniture layer reads it. */
 let busStopsOn = true;

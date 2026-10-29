@@ -42,14 +42,14 @@ const Osm = z.object({
   elements: z.array(z.object({
     lat: z.number().optional(), lon: z.number().optional(),
     center: z.object({ lat: z.number(), lon: z.number() }).optional(),
-    tags: z.record(z.string()).optional(),
+    tags: z.record(z.string(), z.string()).optional(),
   })),
 });
 
 async function brands(b: z.infer<typeof BrandsQuery>): Promise<Brand[]> {
   let res: Response | null = null;
   for (const host of OVERPASS) {
-    res = await fetch(host, { method: "POST", headers: { ...UA, "content-type": "application/x-www-form-urlencoded" }, body: `data=${encodeURIComponent(brandsQuery(b))}`, signal: AbortSignal.timeout(25_000) }).catch(() => null);
+    res = await fetch(host, { method: "POST", headers: { ...UA, "content-type": "application/x-www-form-urlencoded" }, body: `data=${encodeURIComponent(brandsQuery(b))}`, signal: AbortSignal.timeout(8_000) }).catch(() => null);
     if (res?.ok) break;
   }
   if (!res?.ok) throw new Error(`overpass ${res?.status ?? "unreachable"}`);
@@ -78,10 +78,10 @@ export async function GET(request: Request): Promise<Response> {
 
 const Info = z.object({
   query: z.object({
-    pages: z.record(z.object({
+    pages: z.record(z.string(), z.object({
       imageinfo: z.array(z.object({
         thumburl: z.string().optional(),
-        extmetadata: z.record(z.object({ value: z.unknown() })).optional(),
+        extmetadata: z.record(z.string(), z.object({ value: z.unknown() })).optional(),
       })).optional(),
     })),
   }),
@@ -105,7 +105,11 @@ async function resolveLogo(qid: string): Promise<string | null> {
   const known = (await octoQuery<{ url: string | null }>("SELECT url FROM core.brand_logos WHERE qid = $1", [qid])).rows[0];
   if (known) return known.url;
   let url: string | null = null, file: string | null = null, license: string | null = null, artist: string | null = null;
-  file = logoFile(await getJson(`https://www.wikidata.org/wiki/Special:EntityData/${qid}.json`, UA, 10_000), qid);
+  // An id Wikidata does not know (deleted, or never existed) has no logo: 404, not an upstream error, and nothing stored.
+  const entity = await fetch(`https://www.wikidata.org/wiki/Special:EntityData/${qid}.json`, { headers: UA, signal: AbortSignal.timeout(10_000) });
+  if (entity.status === 404) return null;
+  if (!entity.ok) throw new Error(`www.wikidata.org returned ${entity.status}`);
+  file = logoFile(await entity.json(), qid);
   if (file) {
     const info = Info.parse(await getJson(`https://commons.wikimedia.org/w/api.php?${new URLSearchParams({ action: "query", format: "json", titles: `File:${file}`, prop: "imageinfo", iiprop: "url|extmetadata", iiurlwidth: "96" })}`, UA, 10_000));
     const ii = Object.values(info.query.pages)[0]?.imageinfo?.[0];
@@ -123,11 +127,26 @@ async function resolveLogo(qid: string): Promise<string | null> {
   return url;
 }
 
+/**
+ * Cells whose Overpass lookup just failed, and when. A street of signs asks the
+ * same cell a dozen times; without this each one waited on every Overpass host
+ * again until Cloudflare gave up (502 after ~50 s, owner's phone, 2026-10-27).
+ */
+const downCells = new Map<string, number>();
+const RETRY_MS = 10 * 60_000;
+
 /** The brand id for a sign: same name within 60 m among the cell's brand POIs. */
 async function qidFor(name: string, lon: number, lat: number): Promise<string | null> {
   const box = snapBbox({ west: lon - 0.003, south: lat - 0.003, east: lon + 0.003, north: lat + 0.003 });
-  const list = await cached(`brands:${box.west},${box.south},${box.east},${box.north}`, DAY, () => brands(box));
-  return matchBrand({ name, lon, lat }, list);
+  const key = `brands:${box.west},${box.south},${box.east},${box.north}`;
+  if (Date.now() - (downCells.get(key) ?? 0) < RETRY_MS) return null;
+  try {
+    return matchBrand({ name, lon, lat }, await cached(key, DAY, () => brands(box)));
+  } catch {
+    // No brand list right now: the sign shows its name, as with no logo.
+    downCells.set(key, Date.now());
+    return null;
+  }
 }
 
 export async function GET_LOGO(request: Request): Promise<Response> {

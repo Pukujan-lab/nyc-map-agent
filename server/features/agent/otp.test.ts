@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { decodePolyline, itineraryToTrip, rankItineraries, stopName, type OtpItinerary } from "./otp";
+import { serviceChanges } from "../../../src/lib/transit/serviceChanges";
 import { planTrip } from "./plan";
-import type { StationEntrances, TransitPlanner } from "./transit";
+import { tripBrief } from "./trip";
+import type { Station, StationEntrances, TransitPlanner } from "./transit";
 
 const noStations: StationEntrances = { stations: () => Promise.resolve([]), entrances: () => Promise.resolve([]) };
 const t = (h: string) => `2026-10-23T${h}:00-04:00`;
@@ -41,6 +43,12 @@ describe("OTP glue", () => {
     expect(rankItineraries([subIt, busIt, { ...busIt }]).map((i) => i.end)).toEqual([busIt.end, subIt.end]);
     expect(rankItineraries([sameArrival, busIt])[0]).toBe(busIt);
   });
+  it("keeps only the subway or the bus when asked, and puts the shortest walk first for least walking", () => {
+    expect(rankItineraries([subIt, busIt], 3, false, "subway")).toEqual([subIt]);
+    expect(rankItineraries([subIt, busIt], 3, false, "bus")).toEqual([busIt]);
+    const shortWalk = { ...subIt, walkDistance: 200 };
+    expect(rankItineraries([busIt, shortWalk], 3, false, "less-walking")[0]).toBe(shortWalk);
+  });
   it("maps a bus leg with bullet, stops and a final walk FROM the stop", async () => {
     const trip = await itineraryToTrip(busIt, { label: "Elmhurst Av", at: [-73.882, 40.742] }, { label: "Rockaway Beach", at: [-73.8197, 40.5833] }, noStations);
     const r = trip.legs.find((l) => l.kind === "ride");
@@ -64,5 +72,35 @@ describe("OTP glue", () => {
     const none: TransitPlanner = { plan: () => Promise.resolve(null) };
     const down = await planTrip(o, d, "2026-10-23T09:00", false, { otp: { plan: () => Promise.reject(new Error("down")) }, planner: none, entrances: noStations });
     expect(down.planner).toBe("fallback");
+  });
+  // Owner, 2026-10-27: a weekend Flushing trip went down the 7 with no word about the 7's work that day.
+  it("flags a trip whose get-off station the line skips that day, ranks it last and offers the bus", async () => {
+    const st7 = (name: string, lon: number, lat: number): Station => ({ id: name, complexId: name, name, routes: ["7"], structure: "Elevated", at: [lon, lat] });
+    const stations = [st7("Flushing-Main St", -73.8303, 40.7596), st7("Mets-Willets Point", -73.8456, 40.7546), st7("Junction Blvd", -73.8692, 40.7491), st7("Grand Central-42 St", -73.9768, 40.7514)];
+    const ents: StationEntrances = { stations: () => Promise.resolve(stations), entrances: () => Promise.resolve([]) };
+    const gc = pt("Grand Central-42 St", -73.9768, 40.7514, true), main = pt("Flushing-Main St", -73.8303, 40.7596, true);
+    const seven: OtpItinerary = { start: t("10:00"), end: t("10:40"), duration: 2400, numberOfTransfers: 0, walkDistance: 300, legs: [
+      walk(pt("Origin", -73.978, 40.752), gc, "10:00", "10:03"), ride("7", "SUBWAY", gc, main, "10:05", "10:38"), walk(main, pt("Destination", -73.83, 40.76), "10:38", "10:40")] };
+    const changes = serviceChanges({ id: "w", routes: ["7"], text: "In Queens, no [7] at Flushing-Main St" });
+    const asked: string[] = [];
+    const trip = await planTrip({ label: "A", at: [-73.978, 40.752] }, { label: "B", at: [-73.83, 40.76] }, "2026-11-14T10:00", false,
+      { otp: { plan: (_o, _d, _l, _a, prefer) => { asked.push(prefer ?? "fastest"); return Promise.resolve(prefer === "bus" ? [busIt] : [seven]); } }, entrances: ents, changes });
+    expect(asked).toEqual(["fastest", "bus"]);
+    expect(trip.routes).toEqual(["Q53+"]);
+    expect(trip.impacts).toEqual([{ route: "7", text: "Why not the 7: The 7 won't stop at Flushing-Main St, so you can't get off there.", blocks: false }]);
+    const [blocked] = trip.alternatives;
+    expect(blocked.routes).toEqual(["7"]);
+    expect(blocked.impacts).toEqual([{ route: "7", text: "The 7 won't stop at Flushing-Main St, so you can't get off there.", blocks: true }]);
+    expect(tripBrief(trip).alternatives[0].blocked).toBe(true);
+  });
+  it("says nothing when the day's changes miss the stations the trip uses", async () => {
+    const st7 = (name: string, lon: number): Station => ({ id: name, complexId: name, name, routes: ["7"], structure: "Elevated", at: [lon, 40.745] });
+    const ents: StationEntrances = { stations: () => Promise.resolve([st7("52 St", -73.912), st7("Queensboro Plaza", -73.94), st7("Junction Blvd", -73.8692)]), entrances: () => Promise.resolve([]) };
+    const qbp = pt("Queensboro Plaza", -73.94, 40.745, true), jb = pt("Junction Blvd", -73.8692, 40.745, true);
+    const it7: OtpItinerary = { start: t("10:00"), end: t("10:30"), duration: 1800, numberOfTransfers: 0, walkDistance: 0, legs: [ride("7", "SUBWAY", qbp, jb, "10:00", "10:30")] };
+    const changes = serviceChanges({ id: "s", routes: ["7"], text: "In Queens, Flushing-bound [7] skips 52 St and 69 St" });
+    const trip = await planTrip({ label: "A", at: [-73.94, 40.745] }, { label: "B", at: [-73.8692, 40.745] }, "2026-11-14T10:00", false, { otp: { plan: () => Promise.resolve([it7]) }, entrances: ents, changes });
+    expect(trip.impacts).toEqual([]);
+    expect(trip.skips.map((s) => s.name)).toEqual(["52 St"]);
   });
 });

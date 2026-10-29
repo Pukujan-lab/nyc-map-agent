@@ -29,7 +29,17 @@ export type AlertGeometry = {
   reroute: Array<{ route: string; coords: Pos[] }>;
   /** [[west, south], [east, north]] around everything above, or null. */
   bounds: [Pos, Pos] | null;
+  /** "No [M] between A and B": no trains run on `affected`, so it is drawn broken, not highlighted. */
+  suspended: boolean;
+  /** The two ends of a suspension, where a replacement shuttle picks people up. */
+  ends: Array<{ name: string; coord: Pos }>;
 };
+
+/** "No [M] between Myrtle Av (Broadway) and Delancey St-Essex St" -> the two end names. */
+export function suspendedBetween(text: string): [string, string] | null {
+  const m = /^No \[?[\w-]+\]? (?:trains? )?between (.+?) and (.+?)(?:\n|$)/i.exec(text.trim());
+  return m ? [m[1].trim(), m[2].trim()] : null;
+}
 
 /** Metres between two lon/lat points (equirectangular; fine at city scale). */
 function dist(a: Pos, b: Pos): number {
@@ -81,7 +91,8 @@ export function stationChanges(alerts: TransitAlert[], sys: StaticSystem): Map<s
   for (const a of alerts) {
     for (const ch of a.changes ?? []) {
       const sm = sys.stopM[ch.route];
-      if (!sm) continue;
+      // A suspension names the ends of the gap, which still have service.
+      if (!sm || ch.kind === "suspended") continue;
       const ids = sys.stations.features.filter((f) => f.properties.id in sm && ch.names.some((n) => sameStation(n, f.properties.name))).map((f) => f.properties.id);
       if (ch.kind === "platform") { for (const id of ids) at(id).platform.push({ route: ch.route, alertId: a.id, notice: ch.notice }); continue; }
       const ends = routeEnds(sys, ch.route);
@@ -129,11 +140,31 @@ export function reroutePath(sys: StaticSystem, via: string[], from: Pos, to: Pos
   return out;
 }
 
+/** Words of a station name worth matching ("61 St-Woodside" -> "61 st", "woodside"). */
+const nameParts = (name: string): string[] => name.toLowerCase().split(/[-/]/).map((x) => x.trim()).filter((x) => x.length >= 3 || /\d/.test(x));
+const hasPhrase = (text: string, part: string) => new RegExp(`(^|[^a-z0-9])${part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9]|$)`).test(text);
+
+/**
+ * Stations on `route` that the alert text names: every part of the station's
+ * name appears in the text, in any order ("Woodside-61 St" finds 61 St-Woodside).
+ */
+export function namedStations(text: string, sys: StaticSystem, route: string): string[] {
+  const sm = sys.stopM[route];
+  if (!sm || !text) return [];
+  const t = text.toLowerCase().replace(/\[([a-z0-9]+)\]/g, "$1");
+  return sys.stations.features
+    .filter((f) => f.properties.id in sm)
+    .filter((f) => { const parts = nameParts(f.properties.name); return parts.length > 0 && parts.every((p) => hasPhrase(t, p)); })
+    .map((f) => f.properties.id);
+}
+
 export function alertGeometry(a: TransitAlert, sys: StaticSystem): AlertGeometry {
-  const g: AlertGeometry = { affected: [], skipped: [], reroute: [], bounds: null };
+  const g: AlertGeometry = { affected: [], skipped: [], reroute: [], bounds: null, suspended: false, ends: [] };
   const byId = new Map(sys.stations.features.map((f) => [f.properties.id, f]));
   const seen = new Set<string>();
+  const between = suspendedBetween(a.text);
   for (const route of a.routes) {
+    if (between && suspension(g, sys, route, between)) continue;
     const shape = sys.shapes[route], sm = sys.stopM[route];
     if (!shape || !sm) continue;
     const c = shape.c as Pos[];
@@ -142,7 +173,10 @@ export function alertGeometry(a: TransitAlert, sys: StaticSystem): AlertGeometry
       const f = byId.get(id);
       if (f && !seen.has(id)) { seen.add(id); g.skipped.push({ id, name: f.properties.name, coord: f.geometry.coordinates as Pos }); }
     }
-    const ms = ids.map((id) => sm[id]).filter((m): m is number => m !== undefined);
+    // No skipped stops: the stations the alert names on this line ("no 7 at
+    // Flushing-Main St") frame it, so the map zooms in instead of showing the whole line.
+    const named = ids.length ? [] : namedStations(a.text, sys, route);
+    const ms = [...ids, ...named].map((id) => sm[id]).filter((m): m is number => m !== undefined);
     if (!ms.length) { g.affected.push({ route, coords: c }); continue; } // whole-line alert
     // Stretch from the stop before the first affected one to the stop after the last.
     const all = Object.values(sm).sort((x, y) => x - y);
@@ -165,6 +199,32 @@ export function alertGeometry(a: TransitAlert, sys: StaticSystem): AlertGeometry
     g.bounds = [[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]];
   }
   return g;
+}
+
+/**
+ * A suspension on one line: exactly the stretch between the two named ends, the
+ * stations strictly inside it skipped, the ends kept (trains still turn there).
+ * False when either end is not on this line, so the general rules apply.
+ */
+function suspension(g: AlertGeometry, sys: StaticSystem, route: string, [from, to]: [string, string]): boolean {
+  const shape = sys.shapes[route], sm = sys.stopM[route];
+  if (!shape || !sm) return false;
+  const on = sys.stations.features.filter((f) => f.properties.id in sm);
+  const find = (n: string) => on.find((f) => sameStation(n, f.properties.name));
+  const fa = find(from), fb = find(to);
+  if (!fa || !fb || fa === fb) return false;
+  const lo = Math.min(sm[fa.properties.id], sm[fb.properties.id]), hi = Math.max(sm[fa.properties.id], sm[fb.properties.id]);
+  const c = shape.c as Pos[];
+  const coords = c.filter((_, i) => shape.m[i] >= lo && shape.m[i] <= hi);
+  if (coords.length < 2) return false;
+  g.suspended = true;
+  g.affected.push({ route, coords });
+  for (const f of on) {
+    const m = sm[f.properties.id];
+    if (m > lo && m < hi && !g.skipped.some((s) => s.id === f.properties.id)) g.skipped.push({ id: f.properties.id, name: f.properties.name, coord: f.geometry.coordinates as Pos });
+  }
+  for (const f of [fa, fb]) if (!g.ends.some((e) => e.name === f.properties.name)) g.ends.push({ name: f.properties.name, coord: f.geometry.coordinates as Pos });
+  return true;
 }
 
 /** Line status for the Lines drawer badge. */

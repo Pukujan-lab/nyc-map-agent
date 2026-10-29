@@ -19,7 +19,7 @@ Then add it to `src/features/index.ts` and give it a flag in `src/lib/flags/regi
   Need something from another feature? Move it into `src/lib/` first (its own small PR).
 - Core (`src/lib`, `src/components`, `src/pages`) does not import `src/features/<name>/` except
   through `src/features/index.ts`, or a legacy shim listed in `.dependency-cruiser.cjs` `SHIMS`.
-- `three` only in the shared 3D custom layer (`src/lib/map/streetSigns.ts` / `threeLayer.ts`). deck.gl is banned.
+- `three` only in the shared 3D custom layer: `src/lib/map/three/` (one module per layer, `core.ts` holds the shared renderer), its entry `threeLayer.ts`, and `streetSigns.ts`. deck.gl is banned.
 
 ## Moving an existing feature (do it when nobody else is editing it)
 
@@ -36,7 +36,7 @@ Keep each move its own PR; rebase on main right before merging.
 | restrooms | moved (`src/features/restrooms`, `server/features/restrooms`, `ingest/restrooms`), shims at old paths | not under active edit |
 | directions | not moved | `src/lib/api/routing.ts` exports `LngLat`, used by core (`DataViewContext`, `geosearch`); first lift `LngLat` into `src/lib/geo`. `RoutePanel`/`AddressCombobox` are under active edit (#49) |
 | street signs | stays core | `streetSigns.ts` is the one shared three.js custom layer, not a feature; `build:sign-tiles` is part of the city-tiles pipeline |
-| transit | built in `src/features/transit`, `server/features/transit`; vehicles in shared `src/lib/map/threeLayer.ts` | — |
+| transit | built in `src/features/transit`, `server/features/transit`; vehicles in shared `src/lib/map/three/vehicles.ts` | — |
 | agent / smart mode (#84) | `src/features/agent` (+ `drive` sub-flag `agentDrive`), `server/features/agent` (+ `drive/`) | lazy overlay on the Ask button; transit planner and entrances are interfaces (`TransitPlanner`, `StationEntrances` in `server/features/agent/transit.ts`) stubbed on MTA open data until #56 lands |
 | places/schools/storefronts (#55, #67), real blocks (#50, #59), camera (#47), mobile panel (#66) | build new code directly in `src/features/<name>/` | in flight by other workers |
 | noise / crashes / data registry, city3d, street level, chat | not moved | core of `MapView` (1100+ lines, edited constantly); move layer installers out one at a time later |

@@ -1,0 +1,13 @@
+{
+  "name": "NYC Map Agent",
+  "short_name": "NYC Map",
+  "description": "Get around New York by asking: subway exits, restrooms, trips and subway notices, shown on the map.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}

@@ -1,23 +1,38 @@
 [
   {
-    "name": "app entry (index chunks)",
+    "name": "app entry (index chunks: the loader that waits for the first paint)",
     "path": ".size-build/assets/index-*.js",
-    "limit": "535 kB"
+    "limit": "12 kB"
+  },
+  {
+    "name": "app (boot chunk, loaded after the first paint)",
+    "path": ".size-build/assets/boot-*.js",
+    "limit": "276 kB"
+  },
+  {
+    "name": "map library (maplibre-gl, its own chunk so it stays cached across deploys)",
+    "path": ".size-build/assets/maplibre-*.js",
+    "limit": "255 kB"
   },
   {
     "name": "feature: restrooms (lazy)",
     "path": ".size-build/assets/restrooms-*.js",
-    "limit": "1.5 kB"
+    "limit": "2.7 kB"
   },
   {
     "name": "feature: agent (lazy overlay)",
     "path": ".size-build/assets/AgentOverlay-*.js",
-    "limit": "11 kB"
+    "limit": "27.5 kB"
+  },
+  {
+    "name": "lib: screen space (xstate, lazy)",
+    "path": ".size-build/assets/screenSpace-*.js",
+    "limit": "13.5 kB"
   },
   {
     "name": "feature: city3d (lazy)",
     "path": ".size-build/assets/city3d-*.js",
-    "limit": "2.6 kB"
+    "limit": "2.8 kB"
   },
   {
     "name": "feature: daylight (lazy)",
@@ -52,21 +67,26 @@
   {
     "name": "aggregate worker",
     "path": ".size-build/assets/aggregate.worker-*.js",
-    "limit": "18 kB"
+    "limit": "27 kB"
   },
   {
     "name": "feature: transit layers (lazy)",
     "path": ".size-build/assets/layers-*.js",
-    "limit": "19 kB"
+    "limit": "29 kB"
+  },
+  {
+    "name": "feature: line panel (lazy)",
+    "path": ".size-build/assets/LinePanel-*.js",
+    "limit": "6.5 kB"
   },
   {
     "name": "shared 3D layer: threeLayer + three (vehicles, hydrants, street signs, storefronts, street furniture; lazy)",
     "path": ".size-build/assets/threeLayer-*.js",
-    "limit": "134 kB"
+    "limit": "150 kB"
   },
   {
     "name": "all JS",
     "path": ".size-build/assets/*.js",
-    "limit": "945 kB"
+    "limit": "1100 kB"
   }
 ]

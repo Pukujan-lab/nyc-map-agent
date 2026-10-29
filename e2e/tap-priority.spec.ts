@@ -10,9 +10,11 @@ const DESKTOP = { width: 1440, height: 900 };
 async function open(page: Page) {
   await page.setViewportSize(DESKTOP);
   await mockNetwork(page);
-  await page.goto("/");
+  // Neighbourhood outlines arrive early; the crime and noise summaries load only with an analytics layer on.
+  const areas = page.waitForResponse((r) => r.url().includes("/api/areas"));
+  await page.goto("/?flags=-agentHome");
   await expect(page.locator("canvas.maplibregl-canvas").first()).toBeVisible();
-  await page.waitForResponse((r) => r.url().includes("/api/aggregate"));
+  await areas;
 }
 
 async function tapMap(page: Page, fx: number, fy: number) {

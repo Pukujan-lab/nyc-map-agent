@@ -1,6 +1,8 @@
 import { ArrowLeft } from "lucide-react";
-import { useFlags } from "@/lib/flags";
+import { useFlag, useFlags } from "@/lib/flags";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { useLeftCard, useLeftChips, useLeftColumn } from "@/lib/store/leftColumn";
 import { peekChipLabel } from "@/lib/store/panelSlot";
 import { Drawer } from "vaul";
 import { Button } from "@/components/ui/button";
@@ -12,11 +14,13 @@ import { PanelSearch, type PanelSearchHandle } from "./PanelSearch";
 import { FEATURES } from "@/features";
 import { LayersDrawer } from "./LayersDrawer";
 
-/** Mobile snap points: peek shows the summary only. */
-/** One row (title + number) plus the grab handle. */
-const PEEK = "92px";
-const SNAPS: Array<string | number> = [PEEK, 0.5, 1];
-const SNAP_BY_NAME: Record<SheetSnap, string | number> = { peek: PEEK, half: 0.5, full: 1 };
+/**
+ * Mobile peek snap: one row (title + number) plus the grab handle, raised by the
+ * home chat bar's height so the bar does not hide it.
+ */
+const peekAbove = (chatBar: number) => `${92 + chatBar}px`;
+/** The grab handle above the sheet's content: 8px margin and a 6px bar. */
+const SHEET_HANDLE = 14;
 const nameOf = (point: string | number | null): SheetSnap =>
   point === 1 ? "full" : point === 0.5 ? "half" : "peek";
 
@@ -109,6 +113,8 @@ export function MapPanel({
   onOpenSources: () => void;
 }) {
   const { walking, selectedNtaCode, selectedBlockKey } = useMapState();
+  // Agent-first home (#370): the chat bar replaces search, so there is no top bar.
+  const home = useFlag("agentHome");
   const {
     content, closePanel, snap, setSnap, setCollapsed,
     drawerOpen: layersOpen, setDrawerOpen: setLayersOpen, toggleDrawer,
@@ -136,19 +142,37 @@ export function MapPanel({
   if (walkStart.walking !== walking) setWalkStart({ walking, selection });
   const pickedAtStreet = selection !== walkStart.selection && !!(selectedNtaCode || selectedBlockKey);
   const panelHidden = walking && !content && !pickedAtStreet;
+  const chatBar = typeof document === "undefined" ? 0 : parseInt(getComputedStyle(document.documentElement).getPropertyValue("--chat-bar-h"), 10) || 0;
+  const peek = peekAbove(chatBar);
   const showSheet = !!(content || place) && !panelHidden && !layersOpen && !minimized;
   // The view controls sit in the map beside the desktop sheet or layers drawer,
   // and step out of the way when the phone sheet is half or full.
+  const leftBusy = useLeftColumn((s) => s.answer || s.cards.length > 0);
+  // The agent home draws one left column on wide screens; the card goes at its top.
+  // Another place or restroom is a new card on the stack, so Back returns to the line under it.
+  const inColumn = home && isDesktop && showSheet;
+  const row = useLeftChips();
+  const { slot, top: cardOnTop } = useLeftCard(`map:${content?.id ?? "place"}`, inColumn);
   useLayoutEffect(() => {
     const root = document.documentElement;
-    const leftColumn = isDesktop && (showSheet || layersOpen);
-    root.style.setProperty("--sheet-left", leftColumn ? "calc(var(--edge) + 360px)" : "0px");
+    const column = home && isDesktop && (showSheet || leftBusy);
+    const leftColumn = column || (isDesktop && layersOpen);
+    root.style.setProperty("--sheet-left", column ? "calc(var(--edge) + min(400px, 44vw))" : leftColumn ? "calc(var(--edge) + 360px)" : "0px");
     root.style.setProperty("--controls-display", !isDesktop && showSheet && (snap === "half" || snap === "full") ? "none" : "flex");
     return () => {
       root.style.removeProperty("--sheet-left");
       root.style.removeProperty("--controls-display");
     };
-  }, [isDesktop, showSheet, layersOpen, snap]);
+  }, [home, isDesktop, showSheet, leftBusy, layersOpen, snap]);
+  // No top bar, but the menu row (My day, layers…) sits top-left: the side sheet starts below it, or its
+  // title hides under the row (owner screenshot, 2026-10-25).
+  useLayoutEffect(() => {
+    if (!home) return;
+    const root = document.documentElement;
+    const row = document.querySelector<HTMLElement>("[data-testid='menu-row'] > *");
+    root.style.setProperty("--topbar-h", `${row ? Math.ceil(row.getBoundingClientRect().bottom) : 64}px`);
+    return () => { root.style.removeProperty("--topbar-h"); };
+  }, [home]);
   if (panelHidden) return null;
 
   const body = content ? (
@@ -193,29 +217,40 @@ export function MapPanel({
   const drawer = (
     <LayersDrawer open={layersOpen} onOpenChange={setLayersOpen} isDesktop={isDesktop} hudActive={modeActive} boundaries={boundaries} onOpenControls={onOpenControls} onOpenSources={onOpenSources} />
   );
-  const top = <TopBar boundaries={boundaries} status={status} onLayers={toggleDrawer} />;
+  const top = home ? null : <TopBar boundaries={boundaries} status={status} onLayers={toggleDrawer} />;
   // The minimized sheet: one labelled chip that restores on tap.
   const peekLabel = content ? peekChipLabel(content.title, content.peek) : "Place";
-  const chip = body && minimized && !layersOpen ? (
+  // On the wide home it joins the chip row at the top of the left side, clear of the ask box.
+  const peekRow = home && isDesktop ? row : null;
+  const peekChip = body && minimized && !layersOpen ? (
     <button
       type="button"
       data-testid="peek-chip"
       onClick={restore}
       aria-label={`Restore ${peekLabel}`}
-      className="absolute bottom-[calc(var(--edge)+env(safe-area-inset-bottom))] left-[var(--edge)] z-40 h-10 max-w-[calc(100%-var(--edge)*2-120px)] truncate rounded-full border border-primary bg-card px-[var(--sp-4)] text-[14px] font-semibold text-foreground shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:max-w-[340px]"
+      className={cn(
+        "h-10 truncate rounded-full border border-primary bg-card px-[var(--sp-4)] text-[14px] font-semibold text-foreground shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        peekRow ? "min-w-0 max-w-full" : "absolute bottom-[calc(var(--edge)+env(safe-area-inset-bottom))] left-[var(--edge)] z-40 max-w-[calc(100%-var(--edge)*2-120px)] lg:max-w-[340px]",
+      )}
     >
       {peekLabel}
     </button>
   ) : null;
+  const chip = peekChip && peekRow ? createPortal(peekChip, peekRow) : peekChip;
 
 
   if (isDesktop) {
     return (
       <>
-        <div className="absolute left-[var(--edge)] top-[var(--edge)] z-40 w-[clamp(360px,46vw,720px)]">{top}</div>
+        {top ? <div className="absolute left-[var(--edge)] top-[var(--edge)] z-40 w-[clamp(360px,46vw,720px)]">{top}</div> : null}
         {drawer}
         {chip}
-        {showSheet ? (
+        {inColumn && slot ? createPortal(
+          <div data-testid="details-sheet" className={cn("pointer-events-auto min-h-0 flex-col overflow-hidden rounded-[22px] border border-border bg-card text-card-foreground shadow-2xl", cardOnTop ? "flex" : "hidden")}>
+            {body}
+          </div>,
+          slot,
+        ) : showSheet ? (
           <div data-testid="details-sheet" className="absolute left-[var(--edge)] top-[calc(var(--edge)+var(--topbar-h)+var(--sp-3))] z-30 flex max-h-[calc(100%-var(--edge)*2-var(--topbar-h)-var(--sp-3))] w-[360px] flex-col overflow-hidden rounded-[22px] border border-border bg-card shadow-2xl">
             {body}
           </div>
@@ -226,15 +261,15 @@ export function MapPanel({
 
   return (
     <>
-      <div className="absolute z-30" style={{ top: "calc(env(safe-area-inset-top) + var(--edge))", left: "max(var(--edge), env(safe-area-inset-left))", right: "max(var(--edge), env(safe-area-inset-right))" }}>{top}</div>
+      {top ? <div className="absolute z-30" style={{ top: "calc(env(safe-area-inset-top) + var(--edge))", left: "max(var(--edge), env(safe-area-inset-left))", right: "max(var(--edge), env(safe-area-inset-right))" }}>{top}</div> : null}
       {drawer}
       {chip}
       {showSheet ? <Drawer.Root
         open
         modal={false}
         dismissible={false}
-        snapPoints={SNAPS}
-        activeSnapPoint={SNAP_BY_NAME[snap]}
+        snapPoints={[peek, 0.5, 1]}
+        activeSnapPoint={snap === "peek" ? peek : snap === "half" ? 0.5 : 1}
         setActiveSnapPoint={(point) => setSnap(nameOf(point))}
       >
         <Drawer.Portal>
@@ -245,8 +280,12 @@ export function MapPanel({
           >
             <Drawer.Title className="sr-only">Map panel</Drawer.Title>
             <div className="mx-auto mt-2 h-1.5 w-10 shrink-0 rounded-full bg-muted-foreground/40" />
+            {/* The sheet is 97% of the screen tall and slides down by half for "half", so its lower part is
+                off screen and the chat bar covers its bottom edge. The list only gets the part you can see, or its
+                last rows (the J, L and SI lines) can never scroll into view (owner report, 2026-10-25). */}
             <div
               className={cn("flex min-h-0 flex-1 flex-col", snap === "full" ? "overflow-y-auto" : "overflow-hidden")}
+              style={snap === "peek" ? undefined : { maxHeight: `calc(${snap === "half" ? 47 : 97}dvh - ${SHEET_HANDLE}px - var(--chat-bar-h, 0px))` }}
             >
               {body}
             </div>

@@ -6,15 +6,53 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
+    <title>NYC Map Agent: get around New York by asking</title>
     <meta
       name="description"
-      content="Ask anything about how loud or how dangerous a NYC street is and watch the answer appear on a 3D map."
+      content="A free chat and voice helper for getting around New York, in your own language. Which subway exit to take, the nearest open restroom, trip planning and plain-language subway notices, shown on the map. No app to install."
     />
-    <title>NYC Map Agent</title>
+    <link rel="canonical" href="https://nyc.design-bakery.com/" />
+    <meta name="theme-color" content="#0b1220" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- Link previews (iMessage, WhatsApp, Slack, X, LinkedIn): public/og-image.png, 1200×630, a real screen of the app. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="NYC Map Agent" />
+    <meta property="og:url" content="https://nyc.design-bakery.com/" />
+    <meta property="og:title" content="NYC Map Agent: get around New York by asking" />
+    <meta property="og:description" content="Chat or talk in your own language. Subway exits, restrooms, trips and subway notices, shown on the map." />
+    <meta property="og:image" content="https://nyc.design-bakery.com/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="A phone showing the map near 34 St-Herald Sq with the south exit on Broadway and the walk to the Empire State Building." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="NYC Map Agent: get around New York by asking" />
+    <meta name="twitter:description" content="Chat or talk in your own language. Subway exits, restrooms, trips and subway notices, shown on the map." />
+    <meta name="twitter:image" content="https://nyc.design-bakery.com/og-image.png" />
+    <script type="application/ld+json">
+      {"@context":"https://schema.org","@type":"WebApplication","name":"NYC Map Agent","url":"https://nyc.design-bakery.com/","description":"A chat and voice helper for getting around New York: subway exits, restrooms, trip planning and plain-language subway notices, shown on the map.","applicationCategory":"TravelApplication","operatingSystem":"Any (web browser)","inLanguage":["en","es","zh","ru","bn","ht","fr","ko"],"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"image":"https://nyc.design-bakery.com/og-image.png"}
+    </script>
+    <!-- The basemap's style and tile index (src/lib/map/basemap.ts) download while the app's script does,
+         rather than one after another once the map starts. -->
+    <link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin />
+    <link rel="preload" href="https://tiles.openfreemap.org/styles/liberty" as="fetch" crossorigin />
+    <link rel="preload" href="https://tiles.openfreemap.org/planet" as="fetch" crossorigin />
+    <style>
+      /* The first screen before the app's script has run (#368): map ground and the chat bar.
+         The real chat bar removes this one when it mounts and keeps anything typed into it. */
+      html, body { margin: 0; height: 100%; background: hsl(48 16% 94%); }
+      #shell-bar { position: fixed; z-index: 45; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom) + 1.5rem); display: flex; align-items: center; gap: 8px; padding: 6px; border-radius: 30px; background: #f8fafc; box-shadow: 0 8px 24px rgba(0, 0, 0, .45); }
+      #shell-ask { flex: 1; min-width: 0; height: 44px; padding: 0 0 0 12px; border: 0; background: transparent; font: 16px system-ui, -apple-system, sans-serif; color: #0f172a; outline: none; }
+      #shell-ask::placeholder { color: #64748b; }
+      #shell-mic { width: 44px; height: 44px; flex: none; display: grid; place-items: center; color: #475569; }
+      #shell-orb { width: 52px; height: 52px; flex: none; display: grid; place-items: center; border-radius: 50%; background: #2563eb; color: #fff; }
+      @media (min-width: 640px) { #shell-bar { left: 50%; right: auto; width: 468px; transform: translateX(-50%); bottom: 1rem; } }
+    </style>
   </head>
   <body>
     <div id="root"></div>
+    <div id="shell-bar"><input id="shell-ask" placeholder="Ask anything…" aria-label="Ask the assistant" enterkeyhint="send" autocomplete="off" /><span id="shell-mic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg></span><span id="shell-orb" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></svg></span></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

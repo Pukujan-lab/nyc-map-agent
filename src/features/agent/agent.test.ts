@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { executeCommand, type ExecutorContext } from "./executor";
-import { buildTimeline, calloutAt, poseAt, wallSeconds } from "./flythrough";
+import { buildTimeline, calloutAt, calloutInfoAt, poseAt, speakStop, wallSeconds } from "./flythrough";
 import { command, streamEvent, trip as tripSchema, type Trip } from "./schema";
 import { readEvents } from "./stream";
 import { afterWake } from "./useWakePhrase";
@@ -67,12 +67,31 @@ describe("flythrough timeline", () => {
   it("walk → descend → ride → ascend → walk", () => {
     expect(segs.map((s) => s.kind)).toEqual(["walk", "descend", "ride", "ascend", "walk"]);
   });
+  it("each part starts where the last one ended, so the marker never jumps", () => {
+    // The planner's walk out starts at the station's stop point, not at the exit: the marker used to jump back.
+    const out = tripSchema.parse({ ...sampleTrip, legs: sampleTrip.legs.map((l, i) => i === 4 && l.kind === "walk" ? { ...l, coords: [[-73.9768, 40.7518], [-73.9762, 40.7522], [-73.9772, 40.7527]] } : l) });
+    for (const t of [sampleTrip, out]) {
+      const s = buildTimeline(t);
+      for (let i = 1; i < s.length; i++) expect(s[i].coords[0]).toEqual(s[i - 1].coords[s[i - 1].coords.length - 1]);
+    }
+    // In at the entrance, and out from the exit.
+    expect(segs[0].coords.at(-1)).toEqual([-73.9901, 40.7345]);
+    expect(buildTimeline(out)[4].coords[0]).toEqual([-73.9762, 40.7522]);
+  });
   it("speeds up and stays watchable", () => {
     expect(wallSeconds(segs[2], 30)).toBe(14);
     expect(wallSeconds(segs[2], 10)).toBe(42);
     expect(wallSeconds(segs[2], 2)).toBe(210);
-    expect(wallSeconds(segs[0], 30)).toBe(4);
-    expect(wallSeconds(segs[4], 30)).toBe(2);
+    // On foot it runs four times faster than a ride.
+    expect(wallSeconds(segs[0], 10)).toBe(3);
+    expect(wallSeconds(segs[1], 10)).toBe(1.5);
+    expect(wallSeconds(segs[4], 30)).toBe(0.5);
+  });
+  it("a long walk stays short", () => {
+    const walk = { ...segs[0], realS: 1200 };
+    expect(wallSeconds(walk, 10)).toBe(12);
+    expect(wallSeconds(walk, 30)).toBe(4);
+    expect(wallSeconds(walk, 10)).toBeLessThan(wallSeconds({ ...segs[2], realS: 1200 }, 10) / 3);
   });
   it("keeps 2x, 10x and 30x apart on a long ride", () => {
     const ride = { ...segs[2], realS: 1800 };
@@ -91,6 +110,10 @@ describe("flythrough timeline", () => {
   it("calls out stops and the exit with its outage", () => {
     expect(calloutAt(segs[2], 0.9)).toBe("33 St");
     expect(calloutAt(segs[3], 0)).toContain("Elevator out");
+  });
+  it("speaks only the last two stops of a ride; the rest only show", () => {
+    expect([0, 1, 2, 3, 4].map((i) => speakStop(i, 5))).toEqual([false, false, false, true, true]);
+    expect(calloutInfoAt(segs[2], 0).quiet).toBe(false); // boarding is spoken
   });
 });
 

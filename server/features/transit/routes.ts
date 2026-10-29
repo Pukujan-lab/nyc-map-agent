@@ -11,6 +11,9 @@
  *   /api/transit/bus-trip?vehicle=&route= → one bus: headsign + upcoming stops with ETAs (SIRI)
  *   /api/transit/bus-route?route=        → one route's shape + stops, on demand (Bus Time OBA)
  *   /api/transit/bus-stops?lat=&lon=     → stops within ~300 m and the routes serving each (Bus Time OBA)
+ *   /api/transit/bus-arrivals?stop=MTA_308209 → next buses at one stop with ETAs (SIRI stop-monitoring)
+ *
+ * /api/transit-live (live.ts) batches the rail systems and alerts into one edge-cached response.
  */
 import GtfsRealtimeBindings from "gtfs-realtime-bindings";
 import { json } from "../../../api/_lib/http";
@@ -28,7 +31,7 @@ const FEEDS: Record<string, string[]> = {
 const TTL = 15_000;
 const cache = new Map<string, { at: number; body: Promise<unknown> }>();
 
-function cached(key: string, load: () => Promise<unknown>, ttl = TTL): Promise<unknown> {
+export function cached(key: string, load: () => Promise<unknown>, ttl = TTL): Promise<unknown> {
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < ttl) return hit.body;
   // Per-vehicle keys come and go; drop stale ones so the map cannot grow without bound.
@@ -58,40 +61,66 @@ export type TransitTrip = {
   origin?: boolean;
   /** Vehicle-reported current stop, if any. */
   at?: string;
+  /** Vehicle current_status: 0 INCOMING_AT, 1 STOPPED_AT, 2 IN_TRANSIT_TO. */
+  st?: number;
+  /** Vehicle position timestamp (unix seconds). */
+  vt?: number;
+  /** Stops the feed marks SKIPPED, in trip order; they are not in `stops`. */
+  skipped?: string[];
 };
+
+const { TripDescriptor, TripUpdate } = GtfsRealtimeBindings.transit_realtime;
+const TRIP_CANCELED = TripDescriptor.ScheduleRelationship.CANCELED;
+const STOP_SKIPPED = TripUpdate.StopTimeUpdate.ScheduleRelationship.SKIPPED;
 
 export async function loadTrips(system: string) {
   const feeds = await Promise.allSettled(FEEDS[system].map(decode));
+  if (feeds.every((f) => f.status === "rejected")) throw new Error(`all ${system} feeds failed`);
+  return slimTrips(feeds.flatMap((f) => (f.status === "fulfilled" ? [f.value] : [])), Date.now() / 1000);
+}
+
+/**
+ * Decoded GTFS-rt feeds to slim trips. Cancelled trips leave the map; stops the
+ * feed marks SKIPPED are dropped from the path (a train never dwells there) and
+ * listed in trip order; the vehicle's current_status and timestamp are kept so
+ * the map can tell a held train from a moving one. Pure, for fixture tests.
+ */
+export function slimTrips(feeds: Array<ReturnType<typeof FeedMessage.decode>>, now: number) {
   const trips: TransitTrip[] = [];
-  const now = Date.now() / 1000;
-  for (const f of feeds) {
-    if (f.status !== "fulfilled") continue;
-    const at = new Map<string, string>();
-    for (const e of f.value.entity) {
+  for (const feed of feeds) {
+    const at = new Map<string, { stop: string; st?: number; vt: number }>();
+    for (const e of feed.entity) {
       const v = e.vehicle;
-      if (v?.trip?.tripId && v.stopId) at.set(v.trip.tripId, v.stopId);
+      if (v?.trip?.tripId && v.stopId) at.set(v.trip.tripId, { stop: v.stopId, st: v.currentStatus ?? undefined, vt: num(v.timestamp) });
     }
-    for (const e of f.value.entity) {
+    for (const e of feed.entity) {
       const tu = e.tripUpdate;
-      if (!tu?.trip) continue;
+      if (!tu?.trip || tu.trip.scheduleRelationship === TRIP_CANCELED) continue;
       const stops: TransitTrip["stops"] = [];
+      const skipped: string[] = [];
       const updates = tu.stopTimeUpdate ?? [];
       for (const s of updates) {
+        if (s.scheduleRelationship === STOP_SKIPPED) { if (s.stopId) skipped.push(s.stopId); continue; }
         const a = num(s.arrival?.time), d = num(s.departure?.time);
         const t = a || d;
         if (!s.stopId || !t || t <= now - 600) continue;
         stops.push(a && d && d > a ? [s.stopId, a, d] : [s.stopId, t]);
       }
-      const origin = !!updates[0] && !num(updates[0].arrival?.time) && !!num(updates[0].departure?.time);
+      const first = updates.find((s) => s.scheduleRelationship !== STOP_SKIPPED);
+      const origin = !!first && !num(first.arrival?.time) && !!num(first.departure?.time);
       if (!stops.length) continue;
       const tripId = tu.trip.tripId ?? e.id;
       // NYCT trip ids carry the direction (..N / ..S); rail uses direction_id.
       const m = /\.\.?([NS])/.exec(tripId);
       const dir = tu.trip.directionId ?? (m ? (m[1] === "N" ? 0 : 1) : null);
-      trips.push({ id: tripId, route: tu.trip.routeId ?? "", dir, stops, at: at.get(tripId), ...(origin ? { origin } : {}) });
+      const v = at.get(tripId);
+      trips.push({
+        id: tripId, route: tu.trip.routeId ?? "", dir, stops, at: v?.stop,
+        ...(v?.st != null ? { st: v.st } : {}), ...(v?.vt ? { vt: v.vt } : {}),
+        ...(skipped.length ? { skipped } : {}), ...(origin ? { origin } : {}),
+      });
     }
   }
-  if (feeds.every((f) => f.status === "rejected")) throw new Error(`all ${system} feeds failed`);
   return { at: Math.round(now), trips };
 }
 
@@ -116,8 +145,20 @@ export async function loadBuses(key: string) {
   return { at: Math.round(Date.now() / 1000), buses };
 }
 
-async function loadAlerts() {
-  const get = (path: string) => fetch(`${MTA}${path}`, { signal: AbortSignal.timeout(10_000) }).then((r) => r.json());
+const getMta = (path: string) => fetch(`${MTA}${path}`, { signal: AbortSignal.timeout(10_000) }).then((r) => r.json());
+
+/**
+ * Service alerts in effect at any time from → to (epoch s): "this weekend" on a Tuesday (owner, 2026-10-27:
+ * the 7's weekend work was invisible on the map until it started). Outages are a right-now thing, so none.
+ */
+export async function loadAlertsBetween(from: number, to: number) {
+  const feed = await cached("alerts-feed", () => getMta("camsys%2Fall-alerts.json"), 5 * 60_000) as { entity?: MercuryAlert[] };
+  const alerts = (feed.entity ?? []).flatMap((e) => slimAlert(e, from, to) ?? []);
+  return { at: Math.round(Date.now() / 1000), from, to, alerts, outages: [] };
+}
+
+export async function loadAlerts() {
+  const get = getMta;
   const [alertsRes, eneRes, equipRes] = await Promise.allSettled([
     get("camsys%2Fall-alerts.json"),
     get("nyct%2Fnyct_ene.json"),
@@ -223,22 +264,73 @@ async function loadBusRoute(key: string, route: string) {
 
 type ObaStop = { id: string; name: string; lat: number; lon: number; direction?: string; routeIds?: string[] };
 type ObaRoute = { id: string; shortName?: string };
-/** Bus stops around a point with the route numbers that serve each, for the street-level pole signs. */
+type ObaStopGroup = { name?: string | { name?: string }; stopIds?: string[] };
+
+const SIGN_WORDS: Record<string, string> = { BKLYN: "Brooklyn", JCT: "Jct", HTS: "Hts", STA: "Sta", CTR: "Ctr", LIRR: "LIRR", SBS: "SBS", JFK: "JFK", LGA: "LGA" };
+/** "GREENPOINT MANHATTAN AV via GRAHAM AV" → "Greenpoint Manhattan Av": where the bus is going, as a pole sign says it. */
+export function towards(raw: string): string {
+  const place = raw.replace(/\s+via\s.*$/i, "").replace(/^(SELECT BUS|LIMITED|LTD)\s+/i, "").trim();
+  return place.split(/\s+/).map((w) => SIGN_WORDS[w.toUpperCase()] ?? (/^\d/.test(w) ? w.toLowerCase() : w.toLowerCase().replace(/(^|-)([a-z])/g, (_, h: string, c: string) => h + c.toUpperCase()))).join(" ");
+}
+
+/** Each stop's destination on one route, from its stop groupings (one group per direction). */
+async function routeHeadings(key: string, routeId: string): Promise<Record<string, string>> {
+  const r = await fetch(`${BUSTIME}where/stops-for-route/${encodeURIComponent(routeId)}.json?${new URLSearchParams({ key, includePolylines: "false", version: "2" })}`, { signal: AbortSignal.timeout(10_000) });
+  if (!r.ok) return {};
+  const d = (await r.json()) as { data?: { entry?: { stopGroupings?: Array<{ stopGroups?: ObaStopGroup[] }> } } };
+  const out: Record<string, string> = {};
+  for (const g of (d.data?.entry?.stopGroupings ?? []).flatMap((x) => x.stopGroups ?? [])) {
+    const name = typeof g.name === "string" ? g.name : g.name?.name;
+    if (name) for (const id of g.stopIds ?? []) out[id] ??= towards(name);
+  }
+  return out;
+}
+
+/**
+ * Bus stops around a point with the route numbers that serve each, for the street-level pole signs,
+ * and where each route's buses go from that stop (owner, 2026-10-27: "say which direction the buses are heading").
+ */
 export async function loadBusStops(key: string, lat: number, lon: number) {
   const qs = new URLSearchParams({ key, lat: String(lat), lon: String(lon), latSpan: "0.006", lonSpan: "0.008", version: "2" });
   const r = await fetch(`${BUSTIME}where/stops-for-location.json?${qs}`, { signal: AbortSignal.timeout(10_000) });
   if (!r.ok) throw new Error(`bus-stops upstream ${r.status}`);
   const d = (await r.json()) as { data?: { list?: ObaStop[]; references?: { routes?: ObaRoute[] } } };
   const names = new Map((d.data?.references?.routes ?? []).map((x) => [x.id, x.shortName ?? x.id.replace(/^[^_]*_/, "")]));
-  const stops = (d.data?.list ?? []).map((s) => ({
+  const list = d.data?.list ?? [];
+  const routeIds = [...new Set(list.flatMap((s) => s.routeIds ?? []))].slice(0, 24);
+  const heads = new Map(await Promise.all(routeIds.map(async (id) =>
+    [id, await (cached(`bus-heads:${id}`, () => routeHeadings(key, id), 24 * 3600_000) as Promise<Record<string, string>>).catch((): Record<string, string> => ({}))] as const)));
+  const short = (id: string) => names.get(id) ?? id.replace(/^[^_]*_/, "");
+  const stops = list.map((s) => ({
     id: s.id,
     name: s.name,
     lat: s.lat,
     lon: s.lon,
     dir: s.direction ?? "",
-    routes: [...new Set((s.routeIds ?? []).map((id) => names.get(id) ?? id.replace(/^[^_]*_/, "")))].sort((a, b) => a.localeCompare(b, "en", { numeric: true })),
+    routes: [...new Set((s.routeIds ?? []).map(short))].sort((a, b) => a.localeCompare(b, "en", { numeric: true })),
+    heads: Object.fromEntries((s.routeIds ?? []).flatMap((id) => { const to = heads.get(id)?.[s.id]; return to ? [[short(id), to]] : []; })),
   }));
   return { stops };
+}
+
+const STOP_RE = /^(MTA|MTABC)_\d{1,8}$/;
+type SiriVisit = { MonitoredVehicleJourney?: Record<string, unknown> & { MonitoredCall?: SiriCall } };
+/** Next buses at one stop (SIRI stop-monitoring), soonest first. */
+export async function loadBusArrivals(key: string, stop: string) {
+  const qs = new URLSearchParams({ key, MonitoringRef: stop, MaximumStopVisits: "12", StopMonitoringDetailLevel: "normal" });
+  const r = await fetch(`${BUSTIME}siri/stop-monitoring.json?${qs}`, { signal: AbortSignal.timeout(10_000) });
+  if (!r.ok) throw new Error(`bus-arrivals upstream ${r.status}`);
+  const d = (await r.json()) as { Siri?: { ServiceDelivery?: { StopMonitoringDelivery?: Array<{ MonitoredStopVisit?: SiriVisit[] }> } } };
+  const visits = d.Siri?.ServiceDelivery?.StopMonitoringDelivery?.[0]?.MonitoredStopVisit ?? [];
+  const arrivals = visits.flatMap((v) => {
+    const j = v.MonitoredVehicleJourney;
+    if (!j) return [];
+    const c = j.MonitoredCall;
+    const t = Date.parse(c?.ExpectedArrivalTime ?? c?.AimedArrivalTime ?? "");
+    return [{ route: first(j.PublishedLineName), destination: first(j.DestinationName), vehicle: first(j.VehicleRef), eta: Number.isFinite(t) ? Math.round(t / 1000) : null, away: c?.Extensions?.Distances?.PresentableDistance ?? "" }];
+  });
+  arrivals.sort((a, b) => (a.eta ?? Infinity) - (b.eta ?? Infinity));
+  return { arrivals };
 }
 
 export async function GET(request: Request): Promise<Response> {
@@ -263,7 +355,13 @@ export async function GET(request: Request): Promise<Response> {
       // ~100 m grid so walkers on one block share a cached answer.
       const glat = Math.round(lat * 1000) / 1000;
       const glon = Math.round(lon * 1000) / 1000;
-      return json(await cached(`bus-stops:${glat},${glon}`, () => loadBusStops(busKey, glat, glon), 24 * 3600_000), { maxAge: 3600, browserMaxAge: 3600 });
+      return json(await cached(`bus-stops:v2:${glat},${glon}`, () => loadBusStops(busKey, glat, glon), 24 * 3600_000), { maxAge: 3600, browserMaxAge: 3600 });
+    }
+    if (system === "bus-arrivals") {
+      if (!busKey) return json({ error: "bus_unavailable" }, { status: 404 });
+      const stop = new URL(request.url).searchParams.get("stop") ?? "";
+      if (!STOP_RE.test(stop)) return json({ error: "bad_stop" }, { status: 400 });
+      return json(await cached(`bus-arrivals:${stop}`, () => loadBusArrivals(busKey, stop)), { maxAge: 15, browserMaxAge: 10 });
     }
     if (system === "bus-trip" || system === "bus-route") {
       if (!busKey) return json({ error: "bus_unavailable" }, { status: 404 });
@@ -278,7 +376,17 @@ export async function GET(request: Request): Promise<Response> {
       if (!VEHICLE_RE.test(vehicle)) return json({ error: "bad_vehicle" }, { status: 400 });
       return json(await cached(`bus-trip:${vehicle}`, () => loadBusTrip(busKey, vehicle)), { maxAge: 15, browserMaxAge: 10 });
     }
-    if (system === "alerts") return json(await cached("alerts", loadAlerts), { maxAge: 60, browserMaxAge: 30 });
+    if (system === "alerts") {
+      const q = new URL(request.url).searchParams;
+      if (q.has("from")) {
+        // Whole hours, so riders asking about the same weekend share one cached answer.
+        const from = Math.floor(Number(q.get("from")) / 3600) * 3600, to = Math.ceil(Number(q.get("to")) / 3600) * 3600;
+        const now = Date.now() / 1000;
+        if (!(to > from && to - from <= 4 * 86_400 && to > now - 86_400 && from < now + 60 * 86_400)) return json({ error: "bad_window" }, { status: 400 });
+        return json(await cached(`alerts:${from}-${to}`, () => loadAlertsBetween(from, to), 5 * 60_000), { maxAge: 300, browserMaxAge: 120 });
+      }
+      return json(await cached("alerts", loadAlerts), { maxAge: 60, browserMaxAge: 30 });
+    }
     if (!(system in FEEDS)) return json({ error: "unknown_system" }, { status: 404 });
     return json(await cached(system, () => loadTrips(system)), { maxAge: 15, browserMaxAge: 10 });
   } catch (err) {

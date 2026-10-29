@@ -1,4 +1,4 @@
-import { command, type AgentCommand, type Trip } from "./schema";
+import { command, type AgentCommand, type PlaybackSpeed, type Trip } from "./schema";
 
 /** What the client can do for the agent. Injected, so the executor is pure. */
 export interface ExecutorContext {
@@ -6,7 +6,8 @@ export interface ExecutorContext {
   showTrip: (trip: Trip) => void;
   openTrip: (trip: Trip) => void;
   enterStreetView: (lon: number, lat: number) => void;
-  playFlythrough: (trip: Trip, speed: 2 | 10 | 30) => void;
+  /** Load the trip into the preview player. It waits for the person to press Play. */
+  playFlythrough: (trip: Trip, speed: PlaybackSpeed) => void;
   setTime: (iso: string) => void;
 }
 

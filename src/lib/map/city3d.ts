@@ -31,6 +31,11 @@ const STOREFRONT_M = 4.5;
 
 export const CITY3D_LAYERS = ["city3d-storefront", "city3d-walls", "city3d-roofs", "city3d-props", "city3d-bridges", "city3d-signs", "city3d-furniture", "city3d-hydrants", "city3d-landmarks", "city3d-storefront-signs"] as const;
 
+/** Source layers only three.js reads; an invisible style layer keeps them in overzoomed tiles. */
+export const KEEP_SOURCE_LAYERS = ["storefronts", "signs"] as const;
+/** Basemap source layers read at street level whose only style layers (labels) walking hides. */
+export const KEEP_BASEMAP_LAYERS = ["transportation_name"] as const;
+
 async function loadFacades(map: MapLibreMap): Promise<void> {
   await Promise.all(
     FACADES.map(async (name) => {
@@ -183,7 +188,10 @@ export async function installCity3d(map: MapLibreMap): Promise<void> {
     beforeId,
   );
   // Bridge decks, railings and piers (scripts/bridges.ts): visible from z14,
-  // since a bridge is a landmark from afar, unlike street props.
+  // since a bridge is a landmark from afar, unlike street props. Decks no
+  // higher than 8 m (overpasses, the BQE and other viaducts) get no piers in
+  // the tiles and cut off square at the ends, so from the street they read as
+  // grey slabs floating overhead; only piers and the tall spans are drawn.
   map.addLayer(
     {
       ...common,
@@ -191,6 +199,7 @@ export async function installCity3d(map: MapLibreMap): Promise<void> {
       type: "fill-extrusion",
       "source-layer": "bridges",
       minzoom: 14,
+      filter: ["any", ["==", ["get", "kind"], "pier"], [">", ["to-number", ["get", "height"]], 8.5]],
       paint: {
         "fill-extrusion-color": ["match", ["get", "kind"], "rail", "#b9bcc0", "pier", "#7b7e82", "#8e9196"],
         "fill-extrusion-base": ["get", "base"],
@@ -213,6 +222,40 @@ export async function installCity3d(map: MapLibreMap): Promise<void> {
     },
     beforeId,
   );
+  // Shop signboards and corner names are drawn by three.js, which reads them with
+  // querySourceFeatures. Past the tiles' z16 MapLibre slices each tile and keeps
+  // only the source layers a style layer uses, so without these the shops right
+  // in front of you dropped out of the data. Zero-radius circles: nothing draws.
+  for (const sourceLayer of KEEP_SOURCE_LAYERS) {
+    map.addLayer(
+      {
+        id: `city3d-keep-${sourceLayer}`,
+        type: "circle",
+        source: SOURCE,
+        "source-layer": sourceLayer,
+        minzoom: CITY3D_MIN_ZOOM,
+        paint: { "circle-radius": 0, "circle-opacity": 0, "circle-stroke-width": 0 },
+      },
+      beforeId,
+    );
+  }
+  // Walking hides the basemap's labels, the only style layers that use street
+  // names, so corner signs and exit corners lost them the same way.
+  if (map.getSource("openmaptiles")) {
+    for (const sourceLayer of KEEP_BASEMAP_LAYERS) {
+      map.addLayer(
+        {
+          id: `city3d-keep-${sourceLayer}`,
+          type: "circle",
+          source: "openmaptiles",
+          "source-layer": sourceLayer,
+          minzoom: CITY3D_MIN_ZOOM,
+          paint: { "circle-radius": 0, "circle-opacity": 0, "circle-stroke-width": 0 },
+        },
+        beforeId,
+      );
+    }
+  }
   // Corner street-name signs (three.js custom layer in this canvas); its own chunk.
   const { createStreetSignsLayer } = await import("./threeLayer");
   if (!map.getLayer("city3d-signs")) {
@@ -271,6 +314,12 @@ export function setSchoolIconsVisible(map: MapLibreMap, on: boolean): void {
     });
   }
   map.setLayoutProperty("city3d-schools", "visibility", on ? "visible" : "none");
+}
+
+/** School icons on their own: the tiles source only, no textured layers and no three.js. */
+export async function showSchoolIcons(map: MapLibreMap, on: boolean): Promise<void> {
+  if (on) await ensureSource(map);
+  setSchoolIconsVisible(map, on);
 }
 
 /** School name under a click: a school-faced building or a school icon. */

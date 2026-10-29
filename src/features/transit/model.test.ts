@@ -169,3 +169,65 @@ describe("x-ray", () => {
     expect(p.find((q) => q.kind === "shaft" && q.width > 1)?.color).toBe("#ef4444");
   });
 });
+
+import { boardingArrivals } from "./model";
+describe("boardingArrivals", () => {
+  const st = (id: string, name: string, lat: number) => ({ type: "Feature" as const, geometry: { type: "Point" as const, coordinates: [-73.95, lat] }, properties: { id, name, routes: "R" } });
+  const line = { ...sys, stations: { type: "FeatureCollection" as const, features: [st("A", "Forest Hills", 40.70), st("B", "Rego Park", 40.71), st("C", "Astoria", 40.72)] }, stopM: { R: { A: 0, B: 1000, C: 2000 } } } as StaticSystem;
+  const trip = (id: string, stops: Array<[string, number]>) => ({ id, route: "R", dir: null, stops });
+
+  it("keeps only trains at the boarding stop heading toward the stop you get off at", () => {
+    const live = { at: 0, trips: [
+      trip("toward-C", [["BN", 300], ["CN", 400]]),
+      trip("toward-A", [["BS", 200], ["AS", 300]]),
+      trip("later", [["AN", 500], ["BN", 600]]),
+      trip("gone", [["BN", -100], ["CN", 0]]),
+    ] };
+    const b = boardingArrivals(line, live, "R", [-73.95, 40.7101], [-73.95, 40.7199], 0)!;
+    expect(b).toEqual({ station: "B", name: "Rego Park", toward: "Astoria", times: [300, 600] });
+  });
+
+  it("has no boarding stop when both ends are the same station", () => {
+    expect(boardingArrivals(line, undefined, "R", [-73.95, 40.71], [-73.95, 40.7101], 0)).toBeNull();
+  });
+});
+
+describe("live feed status on the real subway build", () => {
+  const real = JSON.parse(readFileSync(new URL("../../../public/transit/subway.json", import.meta.url), "utf8")) as StaticSystem;
+  // MTA BDFM feed captured 2026-10-21 (server/features/transit/__fixtures__): F 094550 STOPPED_AT Bay Pkwy (F32S).
+  const NOW = 1792616621;
+  const bay = real.stations.features.find((f) => f.properties.id === "F32")!.geometry.coordinates;
+  it("never draws a train past the stop the vehicle still reports, even after its time passes", () => {
+    const t = { id: "094550_F..S", route: "F", dir: 1, stops: [["F32S", NOW - 120], ["F33S", NOW - 10], ["F34S", NOW + 100]] as Array<[string, number]>, at: "F32S", st: 1 };
+    const v = estimateTrain(real, t, NOW)!;
+    expect(v.stopped).toMatchObject({ kind: "at", stop: "F32S" });
+    expect(v.nextStop).toBe("F33S");
+    expect(Math.hypot(v.lon - bay[0], v.lat - bay[1])).toBeLessThan(0.003);
+    // Without the vehicle report it would already be past Bay Pkwy.
+    const free = estimateTrain(real, { ...t, at: undefined, st: undefined }, NOW)!;
+    expect(free.nextStop).toBe("F34S");
+  });
+  it("a train approaching its reported stop waits short of it, not past it", () => {
+    const t = { id: "094550_F..S", route: "F", dir: 1, stops: [["F32S", NOW - 300], ["F33S", NOW - 120], ["F34S", NOW + 100]] as Array<[string, number]>, at: "F33S", st: 2 };
+    const v = estimateTrain(real, t, NOW)!;
+    expect(v.stopped).toBeUndefined();
+    expect(v.nextStop).toBe("F33S");
+  });
+  // #419: 116 of 252 live trips reported their first remaining stop as the one they were travelling to.
+  it("a train travelling to its first remaining stop moves toward it instead of parking at it", () => {
+    const t = { id: "094550_F..S", route: "F", dir: 1, stops: [["F33S", NOW + 60], ["F34S", NOW + 200]] as Array<[string, number]>, at: "F33S", st: 2 };
+    const a = estimateTrain(real, t, NOW)!;
+    const b = estimateTrain(real, t, NOW + 30)!;
+    expect(a.stopped).toBeUndefined();
+    expect(a.nextStop).toBe("F33S");
+    expect(Math.hypot(b.lon - a.lon, b.lat - a.lat)).toBeGreaterThan(0); // it glides between updates
+  });
+  it("a late train still on the way waits short of its first remaining stop, not at it", () => {
+    const t = { id: "094550_F..S", route: "F", dir: 1, stops: [["F33S", NOW - 60], ["F34S", NOW + 200]] as Array<[string, number]>, at: "F33S", st: 2 };
+    const v = estimateTrain(real, t, NOW)!;
+    expect(v.stopped).toBeUndefined();
+    expect(v.nextStop).toBe("F33S");
+    const stop = real.stations.features.find((f) => f.properties.id === "F33")!.geometry.coordinates;
+    expect(Math.hypot(v.lon - stop[0], v.lat - stop[1])).toBeGreaterThan(0.0005);
+  });
+});

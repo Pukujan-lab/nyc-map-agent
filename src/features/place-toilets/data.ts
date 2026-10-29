@@ -1,3 +1,5 @@
+import { api } from "@/lib/api/client";
+
 /** One place as /api/v1/place-toilets serves it (server/features/place-toilets/schema.ts). */
 export interface PlaceToiletProps {
   id: string;
@@ -34,9 +36,9 @@ let cache: Promise<PlaceToiletFeature[]> | null = null;
 
 /** City-wide list, fetched once per page (≈1k points, cached by the CDN for an hour). */
 export function fetchPlaceToilets(): Promise<PlaceToiletFeature[]> {
-  cache ??= fetch("/api/v1/place-toilets")
-    .then((r) => (r.ok ? (r.json() as Promise<{ features?: PlaceToiletFeature[] }>) : { features: [] }))
-    .then((b) => b.features ?? [])
+  cache ??= api
+    .GET("/api/v1/place-toilets")
+    .then(({ data }) => (data?.features as PlaceToiletFeature[] | undefined) ?? [])
     .catch(() => {
       cache = null;
       return [];

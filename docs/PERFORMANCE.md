@@ -346,6 +346,67 @@ window.__bench = function (opts) {
 
 </details>
 
+## Check against the baseline (2026-10-25)
+
+**The first load asks for fewer things and uses far less memory, but the crime and noise
+summaries still download in the simple view.** This was one warm-cache load of the deployed
+site (main at `855d675`) in the desktop app's browser pane, 1024 × 768, on the same
+development Mac, with a load average near 5 (the baseline ran at 20–127). It is a spot check, not a new baseline: one run.
+
+| | Baseline (2026-10-23, warm, 1440 × 900) | Now (2026-10-25, warm, 1024 × 768) |
+|---|---|---|
+| Requests on first load | 63 | 45 |
+| Calls to our API in the first 20 s | not counted | 11, then 13 after 30 s |
+| Main script | 1,869 KB (540 KB compressed) | 1,984 KB (582 KB compressed) |
+| JavaScript heap after load | 199 MB | 71 MB |
+
+The 11 API calls were 4 to `/api/aggregate` (the crime and noise summaries), 2 to
+`/api/transit`, and one each to `/api/areas`, `/api/blocks`, `/api/transit-live`,
+`/api/transit-segments/all` and `/api/transit/alerts`. Pull request #434 stops the
+`/api/aggregate` calls unless an analytics layer is on, which removes the biggest download.
+Measure again once it is live.
+
+The main script grew by about 115 KB as the assistant gained features. Its size check in CI
+caps the assistant's own chunk at 24 KB, not the main script.
+
+Still not measured: the owner's phone and work computer, and a cold load on a phone network.
+Those are the open part of #362.
+
+## Emulated mid-range phone (2026-10-25)
+
+**On a phone-speed CPU and a slow 4G link, the map appears after about 5 seconds and the page
+is ready to use after about 9.** Most of the wait is the main script running, not the
+download: the main bundle alone spends 3.6 s on a CPU four times slower than the Mac's. This
+is the cold, empty-cache load on a phone network that the 2026-10-25 spot check was missing.
+
+| Score (out of 100) | First paint | Largest paint | Blocking time | Ready to use | Requests | Transferred | Script time | Main bundle script time |
+|---|---|---|---|---|---|---|---|---|
+| 42 | 5.1 s | 8.9 s | 0.9 s | 8.9 s | 55 | 1.30 MB | 4.2 s | 3.6 s |
+
+- **Device.** Lighthouse 13.5.0's mobile preset on the development Mac: a Moto G-sized screen,
+  CPU slowed 4×, 150 ms round trip and about 1.6 Mbps down, empty cache. Lighthouse simulates
+  the slowdown from one fast load, so the result depends less on how busy the Mac is.
+- **Build.** The live site at main `613d0ca`, after #448 stopped the 311 block counts on the
+  first screen and #449 moved to MapLibre 6.
+- **Runs.** Each number is the median of three loads. They vary: one earlier single run
+  measured 4.2 s of blocking time against this median of 0.9 s.
+- **Biggest downloads.** The main script (612 KB), the subway map file `transit/subway.json`
+  (228 KB), neighbourhood outlines from `/api/areas` (70 KB) and live trains from
+  `/api/transit-live` (61 KB).
+- **Not counted.** The map's tile worker fetches the vector tiles. Lighthouse lists those
+  requests but records 0 bytes for them, so 1.30 MB is a floor.
+
+Run it again with `npx tsx scripts/perf-throttled.ts [url] [runs]`. It needs a full Chromium
+and uses Playwright's own copy unless `CHROME_PATH` is set.
+
+An earlier attempt timed this with Playwright and Chrome's developer protocol directly. It
+reported 31 requests and 0.65 MB because neither sees the tile worker's requests. It also
+counted the main thread as 99.9% busy even without any slowdown, since in a headless browser
+the map's software drawing never stops. Those numbers were thrown away. Idle cost is better
+read from the frames-per-second and long-task table in [the baseline](#idle-minute-with-live-trains-on).
+
+The owner's real phone and work computer are still unmeasured.
+
 ## Fastest wins, in order (proposal)
 1. **Stop the transit re-render loop.** `TransitLayer` calls `setVehicles` about 15 times a second to animate trains, re-rendering the whole layer each time, and the console showed many "Maximum update depth exceeded" warnings. Move the animation out of React state.
 2. **Top view is flat 2D (decided).** Do not load the three.js layer or 3D buildings in Top.

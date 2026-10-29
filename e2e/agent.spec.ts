@@ -6,7 +6,7 @@ import { mockNetwork } from "./mocks";
 const trip = JSON.parse(readFileSync(new URL("./fixtures/agent-trip.json", import.meta.url), "utf8")) as Record<string, unknown>;
 const nd = (evs: unknown[]) => evs.map((e) => JSON.stringify(e)).join("\n") + "\n";
 
-test("smart mode: trip question draws the route, opens the trip card and plays the preview", async ({ page, context }) => {
+test("smart mode: trip question draws the route, opens the trip card and waits for Play", async ({ page, context }) => {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 40.7359, longitude: -73.9903 });
   await mockNetwork(page);
@@ -30,7 +30,8 @@ test("smart mode: trip question draws the route, opens the trip card and plays t
     });
   });
 
-  await page.goto("/");
+  // The classic Ask sheet (agentHome off) keeps its own coverage here.
+  await page.goto("/?flags=-agentHome");
   await expect(page.locator("canvas.maplibregl-canvas").first()).toBeVisible();
   // Location is shared only from a tap on My location; then the rail offers to stop.
   await page.getByRole("button", { name: "Layers & filters", exact: true }).click();
@@ -43,10 +44,19 @@ test("smart mode: trip question draws the route, opens the trip card and plays t
   await expect(page.getByText("Take the 4 and use the NW exit on E 41 St.")).toBeVisible();
   await expect(page.getByText(/Use the NW exit on E 41 St at Grand Central-42 St/).first()).toBeVisible();
 
+  // Asking for the trip draws it and offers Play; nothing plays on its own.
+  await expect(page.getByRole("region", { name: "Trip preview" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Play trip preview" })).toBeVisible();
+
   await page.getByLabel("Ask the assistant").fill("preview it");
   await page.getByRole("button", { name: "Send" }).click();
   const bar = page.getByRole("region", { name: "Trip preview" });
   await expect(bar).toBeVisible();
+  // Loaded at the agent's speed, paused until the person presses Play.
+  await expect(bar.getByRole("button", { name: "30x", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await bar.getByRole("button", { name: "Play preview" }).click();
+  await bar.getByRole("button", { name: "5x", exact: true }).click();
+  await expect(bar.getByRole("button", { name: "5x", exact: true })).toHaveAttribute("aria-pressed", "true");
   await bar.getByRole("button", { name: "2x", exact: true }).click();
   await expect(bar.getByRole("button", { name: "2x", exact: true })).toHaveAttribute("aria-pressed", "true");
   await bar.getByRole("button", { name: "Pause preview" }).click();
@@ -71,7 +81,8 @@ test("a question in the desktop search bar is asked inside Ask the map", async (
     });
   });
 
-  await page.goto("/");
+  // The classic Ask sheet (agentHome off) keeps its own coverage here.
+  await page.goto("/?flags=-agentHome");
   await expect(page.locator("canvas.maplibregl-canvas").first()).toBeVisible();
   const box = await page.getByTestId("topbar").boundingBox();
   expect(box?.width ?? 0).toBeGreaterThan(600);
@@ -103,7 +114,8 @@ test("a from-here question offers Use my location, then plans the trip", async (
     });
   });
 
-  await page.goto("/");
+  // The classic Ask sheet (agentHome off) keeps its own coverage here.
+  await page.goto("/?flags=-agentHome");
   await expect(page.locator("canvas.maplibregl-canvas").first()).toBeVisible();
   await page.getByRole("button", { name: "Ask", exact: true }).click();
   await page.getByLabel("Ask the assistant").fill("How will my trip be tomorrow from here to Grand Central at 9am?");

@@ -26,4 +26,15 @@ describe("blocksQuery", () => {
     expect(cd.sql).toContain("a.boro_cd::text AS area");
     expect(cd.sql).not.toContain("LEFT JOIN");
   });
+
+  it("reads real tax blocks at taxblock level (#120)", () => {
+    const { sql, params } = blocksQuery({ source: "trees", window: "12mo", level: "taxblock", categories: ["Oak"], borough: "staten island", nta: "SI0101" });
+    expect(sql).toContain("FROM marts.taxblock_month t");
+    expect(sql).toContain("t.block_id::text AS area");
+    expect(sql).toContain("t.category = ANY($3::text[])");
+    // Staten Island's tax blocks are 500000-599999.
+    expect(sql).toContain("t.block_id / 100000 = $4");
+    expect(sql).toContain("t.nta2020 = $5");
+    expect(params).toEqual(["trees", "12 months", ["Oak"], 5, "SI0101"]);
+  });
 });

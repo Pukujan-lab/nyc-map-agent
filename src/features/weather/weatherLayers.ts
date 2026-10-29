@@ -1,5 +1,6 @@
 import type { CustomLayerInterface, Map as MapLibreMap } from "maplibre-gl";
 import { getAmbient, setAmbient, subscribeAmbient, type WeatherKind } from "@/lib/ambient";
+import { api } from "@/lib/api/client";
 
 /**
  * Live weather: polls /api/weather for the map centre (server caches ~10 min
@@ -34,9 +35,8 @@ export function mount(map: MapLibreMap): () => void {
     if (!force && next === cell) return;
     cell = next;
     try {
-      const q = new URLSearchParams({ lat: lat.toFixed(3), lon: lng.toFixed(3) });
-      const res = await fetch(`/api/weather?${q}`);
-      if (res.ok) live = (await res.json()) as Live;
+      const { data } = await api.GET("/api/weather", { params: { query: { lat: Number(lat.toFixed(3)), lon: Number(lng.toFixed(3)) } } });
+      if (data) live = data as unknown as Live;
     } catch {
       /* keep the last condition */
     }

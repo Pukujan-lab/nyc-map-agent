@@ -4,13 +4,19 @@
  * feed snapshot can put the raw estimate behind where we already drew the
  * train. Within one trip, progress along the route never decreases. When the
  * raw estimate falls behind, the train slows down to reach the next stop at the
- * new ETA instead of snapping back. It never passes the next stop the feed
- * still lists until the feed drops it (confirmed departure). A new trip, a new
- * route or a large stop-list change (reroute) resets the state.
+ * new ETA instead of snapping back. When the raw estimate runs ahead instead
+ * (the train was held at a stop until the feed cleared it), the drawn train
+ * catches up at a train-like speed rather than jumping ahead. The caller names the stop the train may
+ * not pass yet. A new trip, a new route or a large stop-list change (reroute)
+ * resets the state.
  */
 
 /** Progress jump (m) behind the drawn train that counts as a reroute, not a late ETA. */
 export const REROUTE_M = 2000;
+/** Fastest a drawn train moves while catching up (m/s), about twice a subway's top speed. */
+export const CATCH_UP_MPS = 35;
+/** A forward gap this large is a data jump (new snapshot, reroute), drawn at once. */
+export const SNAP_AHEAD_M = 1500;
 /** Forget trips not seen for this long (s). */
 const STALE_S = 600;
 
@@ -23,7 +29,7 @@ export type ProgressInput = {
   forward: number;
   /** Raw estimated position along the shape (m). */
   m: number;
-  /** Position (m) of the next stop the feed still lists; the train may not pass it. */
+  /** Position (m) of the stop the train may not pass yet. */
   holdM?: number;
   /** Predicted arrival at that stop (unix s). */
   holdEta?: number;
@@ -48,6 +54,9 @@ export class ProgressTracker {
         const room = Math.max(0, cap - prev.p);
         p = prev.p + (Number.isFinite(room) ? room * Math.min(1, dt / left) : 0);
         p = Math.min(p, Math.max(cap, prev.p));
+      } else if (target - prev.p < SNAP_AHEAD_M) {
+        // Ahead of the drawn train, e.g. released after a hold: glide there, never jump.
+        p = Math.min(target, prev.p + CATCH_UP_MPS * Math.max(0, now - prev.t));
       }
       p = Math.max(p, prev.p);
     }

@@ -1,3 +1,5 @@
+import type { NamedLine } from "@/lib/map/streetPos";
+import { stairDescent } from "@/lib/map/stairs";
 import { defaultDwell, motionAt } from "./dwell";
 import type { ProgressTracker } from "./monotonic";
 import { blendStops, type SegmentLookup } from "./history";
@@ -14,6 +16,8 @@ export const SYSTEM_LABELS: Record<SystemId | "bus", string> = {
 export type Grade = "underground" | "grade" | "elevated";
 /** Viaduct deck height in metres; elevated trains ride on top of it. */
 export const VIADUCT_TOP = 8;
+/** How far short of its next stop a late train waits while the feed still says it is on the way (#419). */
+const APPROACH_HOLD_M = 150;
 
 export type RouteInfo = { name: string; short: string; color: string; text: string };
 export type StaticSystem = {
@@ -23,10 +27,12 @@ export type StaticSystem = {
   stations: GeoJSON.FeatureCollection<GeoJSON.Point, { id: string; name: string; routes: string }>;
   shapes: Record<string, { c: Array<[number, number]>; m: number[]; g: Grade[] }>;
   stopM: Record<string, Record<string, number>>;
-  entrances?: GeoJSON.FeatureCollection<GeoJSON.Point, { id: string; name: string; kind: string }>;
+  /** `up`: the bearing a stair climbs to the street, from OpenStreetMap's mapped steps (scripts/build-entrance-stairs.ts). */
+  entrances?: GeoJSON.FeatureCollection<GeoJSON.Point, { id: string; name: string; kind: string; up?: number; /** "in" entry only, "out" exit only. */ way?: "in" | "out" }>;
 };
 /** stops: [stop id, arrival time, realtime departure when later]; origin: first stop is the trip's origin. */
-export type LiveTrip = { id: string; route: string; dir: number | null; stops: Array<[string, number] | [string, number, number]>; at?: string; origin?: boolean };
+/** at: the stop the vehicle reports; st: its current_status (0 INCOMING_AT, 1 STOPPED_AT, 2 IN_TRANSIT_TO); vt: position time; skipped: SKIPPED stops (not in `stops`). */
+export type LiveTrip = { id: string; route: string; dir: number | null; stops: Array<[string, number] | [string, number, number]>; at?: string; st?: number; vt?: number; skipped?: string[]; origin?: boolean };
 export type LiveSystem = { at: number; trips: LiveTrip[] };
 export type Bus = { id: string; route: string; dir: number | null; lon: number; lat: number; bearing: number | null; next: string | null; t: number };
 
@@ -49,6 +55,8 @@ export type Vehicle = {
   eta?: number;
   /** Stopped at a station: dwelling, waiting at the origin, or arrived at the terminal. */
   stopped?: { kind: "at" | "departs" | "arrived"; stop: string; t: number };
+  /** Held per the live feed (src/lib/transit/holds.ts): since when, and at or before which stop. */
+  held?: { since: number; stop: string; stopped: boolean };
 };
 
 /** Subway platform ids are the station id plus N/S. */
@@ -100,20 +108,35 @@ export function estimateTrain(sys: StaticSystem, trip: LiveTrip, now: number, tr
   if (!pts.length) return null;
   if (pts[0].arr - now > 30 * 60) return null; // not running yet
   const names = stationNames(sys);
-  const mo = motionAt(pts, now, (p) => {
+  let mo = motionAt(pts, now, (p) => {
     const st = stationOf(sys.system, p.id);
     return sys.system === "subway" ? defaultDwell(st, names.get(st)) : 45;
   }, { origin: trip.origin });
   if (!mo) return null; // finished
+  // The feed has not cleared the stop the vehicle reports: never draw the train past it.
+  const atI = trip.at ? pts.findIndex((p) => p.id === trip.at) : -1;
+  // Still on the way to its first remaining stop (#419): keep it moving toward that stop, not parked at it.
+  const approaching = atI === 0 && trip.st !== 1 && mo.phase !== "origin";
+  if (approaching) {
+    if (!(mo.phase === "moving" && mo.i === 0 && mo.f === 0)) {
+      // Late against the timetable: hold just short of the stop until the feed says it arrived.
+      const fwd = pts.length > 1 ? Math.sign(pts[1].m - pts[0].m) || 1 : 1;
+      mo = { phase: "moving", i: 0, m: pts[0].m - fwd * Math.min(APPROACH_HOLD_M, Math.abs((pts[1]?.m ?? pts[0].m) - pts[0].m) / 2 || APPROACH_HOLD_M), f: 0 };
+    }
+  } else if (atI >= 0 && mo.phase !== "origin" && (mo.phase === "moving" ? mo.i >= atI : mo.i > atI)) {
+    mo = trip.st === 1 || atI === 0
+      ? { phase: "dwell", i: atI, m: pts[atI].m, departs: Math.max(now, pts[atI].dep ?? pts[atI].arr) }
+      : { phase: "moving", i: atI - 1, m: pts[atI].m, f: 1 };
+  }
   let m = mo.m;
-  const nextI = mo.phase === "moving" ? (mo.f === 0 && mo.i === 0 && now < pts[0].arr ? 0 : mo.i + 1) : mo.i;
+  const nextI = mo.phase === "moving" ? (approaching || (mo.f === 0 && mo.i === 0 && now < pts[0].arr) ? 0 : mo.i + 1) : mo.i;
   const next = pts[Math.min(nextI, pts.length - 1)];
   const onward = pts[Math.min(mo.i + 1, pts.length - 1)];
   const forward = Math.sign(onward.m - pts[mo.i].m) || Math.sign(pts[mo.i].m - (pts[mo.i - 1]?.m ?? pts[mo.i].m)) || 1;
   if (tracker && mo.phase !== "terminal") {
-    // Never pass the first stop the feed still lists (departure unconfirmed).
+    // After the dwell, roll toward the next station. Do not pass that station early.
     const tripFwd = Math.sign(pts[pts.length - 1].m - pts[0].m) || forward;
-    m = tracker.update({ key: `${sys.system}:${trip.id}`, route: trip.route, forward: tripFwd, m, holdM: livePts[0].m, holdEta: livePts[0].arr }, now);
+    m = tracker.update({ key: `${sys.system}:${trip.id}`, route: trip.route, forward: tripFwd, m, holdM: next.m, holdEta: next.arr }, now);
   }
   const stopped: Vehicle["stopped"] =
     mo.phase === "origin" ? { kind: "departs", stop: pts[0].id, t: mo.departs }
@@ -168,6 +191,47 @@ export function arrivalsAt(system: SystemId, live: LiveSystem | undefined, stati
   return [...groups.values()]
     .map((g) => ({ ...g, times: g.times.sort((a, b) => a - b).slice(0, 3) }))
     .sort((a, b) => a.route.localeCompare(b.route) || a.direction.localeCompare(b.direction));
+}
+
+export type Boarding = { station: string; name: string; toward: string | null; times: number[] };
+
+/**
+ * Next trains of one subway line at the stop where a trip boards, only those heading
+ * toward the stop where it gets off. Stations come from the line's own stops nearest
+ * the two points; direction from each train's neighbouring stop along the line.
+ */
+export function boardingArrivals(sys: StaticSystem, live: LiveSystem | undefined, route: string, from: [number, number], to: [number, number], now: number): Boarding | null {
+  const sm = sys.stopM[route];
+  if (!sm) return null;
+  const onLine = sys.stations.features.filter((f) => f.properties.id in sm);
+  const kx = Math.cos(from[1] * Math.PI / 180);
+  const nearest = (p: [number, number]) => onLine.reduce<(typeof onLine)[number] | null>((best, f) => {
+    const d = (g: (typeof onLine)[number]) => Math.hypot((g.geometry.coordinates[0] - p[0]) * kx, g.geometry.coordinates[1] - p[1]);
+    return !best || d(f) < d(best) ? f : best;
+  }, null);
+  const a = nearest(from), b = nearest(to);
+  if (!a || !b || a === b) return null;
+  const id = a.properties.id;
+  const way = Math.sign(sm[b.properties.id] - sm[id]);
+  const times: number[] = [];
+  const lasts = new Map<string, number>();
+  for (const trip of live?.trips ?? []) {
+    if (trip.route.replace(/X$/, "") !== route) continue;
+    const i = trip.stops.findIndex(([stop]) => stationOf(sys.system, stop) === id);
+    if (i < 0 || trip.stops[i][1] < now - 30) continue;
+    const next = trip.stops[i + 1], prev = trip.stops[i - 1];
+    const m = (s: string) => sm[stationOf(sys.system, s)];
+    const step = next && m(next[0]) !== undefined ? m(next[0]) - sm[id] : prev && m(prev[0]) !== undefined ? sm[id] - m(prev[0]) : 0;
+    if (Math.sign(step) !== way) continue;
+    times.push(trip.stops[i][1]);
+    const last = stationOf(sys.system, trip.stops[trip.stops.length - 1][0]);
+    lasts.set(last, (lasts.get(last) ?? 0) + 1);
+  }
+  // Where these trains end, as the platform signs say it; the line's far stop when none are running.
+  const ends = Object.entries(sm).sort((x, y) => x[1] - y[1]);
+  const end = [...lasts].sort((x, y) => y[1] - x[1])[0]?.[0] ?? (way > 0 ? ends[ends.length - 1]?.[0] : ends[0]?.[0]);
+  const toward = sys.stations.features.find((f) => f.properties.id === end)?.properties.name ?? null;
+  return { station: id, name: a.properties.name, toward, times: times.sort((x, y) => x - y).slice(0, 3) };
 }
 
 export const minutesUntil = (t: number, now: number) => Math.max(0, Math.floor((t - now) / 60));
@@ -460,9 +524,9 @@ export function viaductBays(sys: StaticSystem): Bay[] {
   return bays;
 }
 
-/** A street entrance for the 3D kit: faces its station (stairs descend toward the platform). */
-export type EntranceInstance = { lon: number; lat: number; bearing: number; kind: "stair" | "elevator"; out: boolean };
-export function entranceInstances(sys: StaticSystem, outStations: Set<string>, center: [number, number], radius = 300): EntranceInstance[] {
+/** A street entrance for the 3D kit; `bearing` is the way its stair goes down (src/lib/map/stairs.ts). */
+export type EntranceInstance = { lon: number; lat: number; bearing: number; kind: "stair" | "elevator"; out: boolean; id: string; name: string };
+export function entranceInstances(sys: StaticSystem, outStations: Set<string>, center: [number, number], radius = 300, lines: NamedLine[] = []): EntranceInstance[] {
   const st = new Map(sys.stations.features.map((f) => [String(f.properties.id), f.geometry.coordinates as [number, number]]));
   const kx = 111_320 * Math.cos((center[1] * Math.PI) / 180), out: EntranceInstance[] = [];
   for (const f of sys.entrances?.features ?? []) {
@@ -470,9 +534,9 @@ export function entranceInstances(sys: StaticSystem, outStations: Set<string>, c
     if (Math.hypot((lon - center[0]) * kx, (lat - center[1]) * 111_320) > radius) continue;
     if (!/stair|elevator|escalator/i.test(f.properties.kind)) continue; // easements, station houses, walkways: no kit
     const s = st.get(String(f.properties.id));
-    const bearing = s ? ((Math.atan2((s[0] - lon) * kx, (s[1] - lat) * 111_320) * 180) / Math.PI + 360) % 360 : 0;
+    const bearing = stairDescent([lon, lat], s ?? null, f.properties.up, lines);
     const elevator = /elevator/i.test(f.properties.kind);
-    out.push({ lon, lat, bearing, kind: elevator ? "elevator" : "stair", out: elevator && outStations.has(String(f.properties.id)) });
+    out.push({ lon, lat, bearing, kind: elevator ? "elevator" : "stair", out: elevator && outStations.has(String(f.properties.id)), id: String(f.properties.id), name: f.properties.name });
   }
   return out;
 }

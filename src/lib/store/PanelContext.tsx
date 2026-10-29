@@ -36,6 +36,8 @@ export interface PanelContent {
   /** Label for the minimized peek chip, e.g. "Q · 2 min". Defaults to title. */
   peek?: string;
   onBack?: () => void;
+  /** How high a phone sheet opens. A list worth reading (Lines) opens at half; most panels start at the peek. */
+  snap?: SheetSnap;
 }
 
 /** A quick-filter chip under the search bar. Features register their own. */
@@ -44,6 +46,13 @@ export interface PanelChip {
   label: string;
   active: boolean;
   onToggle: () => void;
+  /** Live buses only: the routes showing, a way to change them, routes near the map, and why nothing showed. */
+  routes?: string[];
+  setRoutes?: (routes: string[]) => void;
+  suggest?: () => Promise<string[]>;
+  /** Every bus route, for choosing by group instead of typing. */
+  catalog?: () => Promise<string[]>;
+  note?: string | null;
 }
 
 /** One search hit; `onSelect` is the feature's own action (fly, select…). */
@@ -103,6 +112,8 @@ const bus = new Set<(content: PanelContent) => void>();
 export function pushPanel(content: PanelContent): void {
   bus.forEach((show) => show(content));
 }
+// Handle for the browser tests (open a card the way a map tap does) in dev and the e2e build only; production compiles it away.
+if ((import.meta.env.DEV || import.meta.env.VITE_E2E) && typeof window !== "undefined") (window as unknown as { __pushPanel?: unknown }).__pushPanel = pushPanel;
 
 export function PanelProvider({ children }: { children: ReactNode }) {
   const { selectNta, selectBlock, selectedNtaCode, selectedBlockKey } = useMapState();
@@ -131,7 +142,7 @@ export function PanelProvider({ children }: { children: ReactNode }) {
       selectNta(null);
       setContent(next);
       setCollapsed(false);
-      setSnap("peek");
+      setSnap(next.snap ?? "peek");
       dispatch({ type: "showSheet" });
     },
     [selectNta],
@@ -292,11 +303,17 @@ export function usePanelChip(chip: PanelChip | null) {
   const label = chip?.label;
   const active = chip?.active;
   const onToggle = chip?.onToggle;
+  const routesKey = chip?.routes?.join(",");
+  const setRoutes = chip?.setRoutes;
+  const suggest = chip?.suggest;
+  const catalog = chip?.catalog;
+  const note = chip?.note;
   useEffect(() => {
     if (!id || !label || !onToggle) return;
-    register("chip", id, { id, label, active: !!active, onToggle });
+    const routes = routesKey === undefined ? undefined : routesKey ? routesKey.split(",") : [];
+    register("chip", id, { id, label, active: !!active, onToggle, routes, setRoutes, suggest, catalog, note });
     return () => register("chip", id, null);
-  }, [register, id, label, active, onToggle]);
+  }, [register, id, label, active, onToggle, routesKey, setRoutes, suggest, catalog, note]);
 }
 
 /** Register a search source (e.g. transit stations) while mounted. */

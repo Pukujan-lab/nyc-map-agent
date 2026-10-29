@@ -241,7 +241,7 @@ async function build(id: SystemId, osm: OsmWay[], work: string) {
 
   let entrances: GeoJSON.FeatureCollection | undefined;
   if (id === "subway") {
-    const res = await fetch("https://data.ny.gov/resource/i9wp-a4ja.json?$limit=5000&$select=gtfs_stop_id,stop_name,entrance_type,entrance_latitude,entrance_longitude");
+    const res = await fetch("https://data.ny.gov/resource/i9wp-a4ja.json?$limit=5000&$select=gtfs_stop_id,stop_name,entrance_type,entrance_latitude,entrance_longitude,entry_allowed,exit_allowed");
     const rows = (await res.json()) as Record<string, string>[];
     entrances = {
       type: "FeatureCollection",
@@ -249,7 +249,8 @@ async function build(id: SystemId, osm: OsmWay[], work: string) {
         .filter((e) => e.entrance_latitude && e.gtfs_stop_id)
         .map((e) => ({
           type: "Feature",
-          properties: { id: e.gtfs_stop_id, name: e.stop_name, kind: e.entrance_type },
+          // "in" / "out" for an entry-only or exit-only entrance; both ways is the norm and left out.
+          properties: { id: e.gtfs_stop_id, name: e.stop_name, kind: e.entrance_type, ...(e.entry_allowed === "YES" && e.exit_allowed !== "YES" ? { way: "in" } : e.exit_allowed === "YES" && e.entry_allowed !== "YES" ? { way: "out" } : {}) },
           geometry: { type: "Point", coordinates: [r5(Number(e.entrance_longitude)), r5(Number(e.entrance_latitude))] },
         })),
     };

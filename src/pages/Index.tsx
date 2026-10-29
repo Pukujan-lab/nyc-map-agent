@@ -1,4 +1,4 @@
-import { useFlag } from "@/lib/flags";
+import { useFlag, useFlags } from "@/lib/flags";
 import { useMemo, useState } from "react";
 import { CaveatsSheet } from "@/components/CaveatsSheet";
 import { DataSourcesDrawer } from "@/components/DataSourcesDrawer";
@@ -11,10 +11,12 @@ import { useDataView } from "@/lib/store/DataViewContext";
 import { ChatPanel } from "@/components/ChatPanel";
 import { FeatureOverlays, useChatReplaced } from "@/components/FeatureOverlays";
 import { ControlDrawer } from "@/components/ControlDrawer";
+import { ContextCleanChip } from "@/components/ContextCleanChip";
 import { useAreas } from "@/lib/geo/useAreas";
 import { useFilters } from "@/lib/datasets/useFilters";
 import { PlaceDetails } from "@/components/PlaceDetails";
 import { MapPanel } from "@/components/MapPanel";
+import { MenuRow } from "@/components/MenuRow";
 import { usePanel } from "@/lib/store/PanelContext";
 import { MapStatusChip } from "@/components/MapStatusChip";
 import { MapView } from "@/components/MapView";
@@ -26,6 +28,8 @@ import { buildMapModel } from "@/lib/layers";
 import { useMapState } from "@/lib/store/MapStateContext";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { windowBounds } from "@/lib/windows";
+
+const NO_SOURCES: string[] = [];
 
 export default function Index() {
   const {
@@ -41,7 +45,11 @@ export default function Index() {
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const { enabledSources, viewMode, routeStart, routeEnd } = useDataView();
   const isDesktop = useMediaQuery("(min-width: 1024px)");
-  const data = useMapData(windowId);
+  // Phones are chat-first: just the map, the chat and voice; menus are asked for in the chat (owner, 2026-10-25).
+  const wide = useMediaQuery("(min-width: 640px)");
+  const flags = useFlags();
+  const analytics = flags.noise || flags.crashes || flags.combined || flags.dataLayers;
+  const data = useMapData(windowId, analytics);
   const { label: windowLabel } = windowBounds(windowId);
   const crashWindowLabel = data.crashes
     ? windowBounds(data.crashes.windowId).label
@@ -49,7 +57,8 @@ export default function Index() {
 
   const { filters } = useFilters();
   const sourceState = useSourceCounts({
-    enabled: enabledSources,
+    // Per-source block counts only feed the analytics views; the simple map never draws them.
+    enabled: analytics ? enabledSources : NO_SOURCES,
     windowId,
     boundaries: data.boundaries,
     noise: data.noise,
@@ -61,6 +70,8 @@ export default function Index() {
   const route = routeQuery.data ?? null;
 
   const blockDensity = useFlag("blockDensity");
+  // Agent-first home (#370): every menu opens from the top-left menu row.
+  const agentHome = useFlag("agentHome");
   const model = useMemo(() => {
     // Every view re-scores a combined model, so every populated block (noise
     // or crash) exists to carry its detail through.
@@ -146,7 +157,7 @@ export default function Index() {
   }, [selectedBlock, layer, model.view]);
 
   const neighborhoods = useMemo(() => {
-    if (!data.boundaries || !data.noise) return [];
+    if (!data.boundaries) return [];
     return data.boundaries
       .map((boundary) => ({
         code: boundary.ntaCode,
@@ -155,7 +166,7 @@ export default function Index() {
         count: noiseByCode.get(boundary.ntaCode)?.count ?? 0,
       }))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
-  }, [data.boundaries, data.noise, noiseByCode]);
+  }, [data.boundaries, noiseByCode]);
 
   const detailSources = useMemo(() => {
     const sources = [];
@@ -223,6 +234,8 @@ export default function Index() {
         />
       )}
       <FeatureOverlays />
+      <ContextCleanChip />
+      {agentHome && wide ? <MenuRow onOpenDashboard={() => setControlsOpen(true)} onOpenSources={() => setSourcesOpen(true)} /> : null}
 
       <MapPanel
         isDesktop={isDesktop}

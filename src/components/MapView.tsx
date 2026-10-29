@@ -2,6 +2,8 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { buildStreetContext, closeAsk, openAsk } from "@/lib/agent/streetContext";
 import { followedTrain } from "@/lib/transit/follow";
 import { setMapInstance } from "@/lib/map/mapInstance";
+import { watchMapCovers } from "@/lib/map/mapCover";
+import { DirectionsFromHere } from "@/components/DirectionsFromHere";
 import { RestroomDetails } from "@/components/RestroomCard";
 import { usePanel, usePanelChip } from "@/lib/store/PanelContext";
 import { setAmbient } from "@/lib/ambient";
@@ -9,12 +11,19 @@ import { useFlags } from "@/lib/flags";
 import { useFeatureToggles } from "@/lib/featureToggles";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { MapCompass } from "./MapCompass";
+import { YouMarker } from "./YouMarker";
 import { ViewSwitcher } from "./ViewSwitcher";
-import { applyReadable } from "@/lib/map/readable";
-import { busStopIconOpacity, busStopTextOpacity } from "@/lib/map/busStops";
-import { applyPlaces, placesStale, usePlaces, withQuickPlaces } from "@/lib/map/places";
+import { applyReadable, hideShields } from "@/lib/map/readable";
+import { busStopAt, busStopIconOpacity, busStopTextOpacity } from "@/lib/map/busStops";
+import { applyPlaces, classesFor, placesStale, usePlaces, withQuickPlaces } from "@/lib/map/places";
+import { insetFilters } from "@/lib/map/miniStyle";
 import { useMapOptions } from "@/lib/map/mapOptions";
-import { applyBuildings, wantsFlatBuildings } from "@/lib/map/buildings";
+import { applyBuildings, cityDetail, mapLevel, wantsFlatBuildings } from "@/lib/map/buildings";
+import { focusLandmarks, guideLandmarkNamed, installLandmarkLabels, isLandmarkLayer, landmarkAt } from "@/lib/map/landmarkLabels";
+import { landmarkAt as landmarkModelAt } from "@/lib/map/landmarks";
+import { LandmarkDetails } from "@/components/LandmarkDetails";
+import { STREET_LEVEL_RANGE_M, describeGuide, pickGuideLandmarks } from "@/lib/guide/landmarkGuide";
+import { setWalkEye } from "@/lib/map/walkEye";
 import { applyMapTheme, buildingEdge, setThemeCoords, usePalette } from "@/lib/theme";
 import { sharedCoords } from "@/lib/geo/sharedLocation";
 
@@ -27,6 +36,8 @@ import MapLibreMap, {
 } from "react-map-gl/maplibre";
 import { LngLat, type GeoJSONSource } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import "@/lib/map/maplibreWorker";
+import { cameraTransform } from "@/lib/map/cameraTransform";
 import type { NtaBoundary } from "@/lib/api/nta";
 import { formatCount, formatPercent } from "@/lib/format";
 import { blockContaining, blockKey } from "@/lib/geo/blocks";
@@ -47,8 +58,11 @@ import {
   applyStreetPalette,
   loadStreetTextures,
   BASEMAP_STYLE_URL,
+  VECTOR_SOURCE,
   installDataLayers,
+  warmBasemapFonts,
 } from "@/lib/map/basemap";
+import { markBasemapReady } from "@/lib/map/basemapReady";
 import {
   blockSelectionToGeoJson,
   blocksToGeoJson,
@@ -60,6 +74,8 @@ import { BLOCK_FILL_LAYER, installBlockTiles, pushBlocks, setBlockFillVisible } 
 import { fetchNearestStreet, type WalkingRoute } from "@/lib/api/routing";
 import { useDataView } from "@/lib/store/DataViewContext";
 import type { CameraOptions, Map as MaplibreMapInstance } from "maplibre-gl";
+import { sendCamera } from "@/lib/map/cameraMode";
+import { setStreetSpot, showView, useViewRequest, type ViewRequest } from "@/lib/map/viewChange";
 import {
   approachBearing,
   clampLookPitch,
@@ -149,14 +165,18 @@ import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 import { WalkControls } from "./WalkControls";
 import { useQuickLayer } from "@/lib/quickLayers";
 import { QuickLayers } from "./QuickLayers";
+import { MapChrome } from "./MapChrome";
+import { BackToStreet, BusesOff, MapViewSwitch } from "./MapViewSwitch";
 import { StreetMiniMap } from "./StreetMiniMap";
 import { nearestCorner, type CornerSign } from "@/lib/map/corner";
-import { kioskSources, pickAt as pickFurniture } from "@/lib/map/streetPick";
+import { pickAt as pickFurniture } from "@/lib/map/streetPick";
 import { formatStreetPair, formatStreetText } from "@/lib/streetName";
 import { parseAt, streetLabel, streetPosition, type NamedLine } from "@/lib/map/streetPos";
 import { MAX_HEIGHT_M, pitchForHeight, STREET_LEVEL_M } from "@/lib/map/cameraHeight";
 import { hoverBlocked } from "@/lib/map/hover";
 import { FEATURES } from "@/features";
+import { hasMapillaryToken, MAPILLARY_TOKEN } from "@/lib/api/mapillary";
+import { showCoverage } from "@/lib/map/mapillaryCoverage";
 
 /**
  * How far the camera may tilt — MapLibre's own ceiling. Anything less and walk
@@ -175,7 +195,11 @@ const TILT_EPSILON = 5;
  * at `WALK_ZOOM`: a flat map at 21 shows ~50 m of ground, which is no map at
  * all. Only applied when the camera is tighter than this.
  */
-const WALK_EXIT_ZOOM = 15.5;
+/** Leaving street view: close enough to see the block you stood on, centred on you. */
+const WALK_EXIT_ZOOM = 16.5;
+/** The 3D view: tilted over the buildings around the spot. */
+const VIEW_3D_PITCH = 60;
+const VIEW_3D_ZOOM = 17;
 
 type Picked =
   | { kind: "neighborhood"; datum: NeighborhoodDatum }
@@ -207,6 +231,25 @@ function detailForBlock(datum: BlockDatum, layer: MapModel["layer"]): string {
     return `${formatCount(datum.injured)} injured · ${formatCount(datum.killed)} killed`;
   }
   return `${formatCount(datum.noiseCount)} noise · ${formatCount(datum.crashCount)} crashes`;
+}
+
+/**
+ * Phones: the credits start folded behind the "i" toggle; one tap shows them, as the licence asks.
+ * MapLibre unfolds them when the first credits arrive, which can be before or long after "load",
+ * so every source event checks until they have been folded once (the way a drag of the map does).
+ */
+let creditsFolded = false;
+function foldCredits(map: MaplibreMapInstance) {
+  if (creditsFolded || window.innerWidth >= 768) return;
+  const attrib = map.getContainer().querySelector(".maplibregl-ctrl-attrib");
+  if (!attrib?.classList.contains("maplibregl-compact")) return;
+  attrib.classList.remove("maplibregl-compact-show");
+  creditsFolded = true;
+}
+
+/** Any tap on the map folds the credits again; the "x" on the toggle does too. */
+function closeCredits(map: MaplibreMapInstance) {
+  map.getContainer().querySelector(".maplibregl-ctrl-attrib.maplibregl-compact-show")?.classList.remove("maplibregl-compact-show");
 }
 
 export function MapView({
@@ -253,6 +296,7 @@ export function MapView({
   const [corner, setCorner] = useState<string | null>(null);
   /** "Grand Street & Essex Street": street underfoot and nearest cross street, throttled. */
   const [streetHere, setStreetHere] = useState<string | null>(null);
+  /** The street alone and its borough, for the walk card's noise and crash dots. */
   const { showPanel, emptyMapTap, content: panelContent, minimized: panelMinimized, drawerOpen } = usePanel();
   // The hover card is a mouse affordance; on touch / narrow screens the sheet
   // already shows the same numbers.
@@ -262,17 +306,24 @@ export function MapView({
   const [schoolIcons, setSchoolIcons] = useState(false);
   const toggleSchools = useCallback(() => setSchoolIcons((on) => !on), []);
   const schoolsOn = useFlag("schools");
+  // Agent-first home (#370): round buttons at the top right replace the Layers menu and rotate buttons.
+  const agentHome = useFlag("agentHome");
   const analyticsFlags = useFlags();
   const analytics = analyticsFlags.noise || analyticsFlags.crashes || analyticsFlags.dataLayers;
-  const businesses = useQuickLayer("businesses");
+  // Businesses are off on the overview but on at street level, where shops are the landmarks.
+  const businessesPicked = useQuickLayer("businesses");
   const health = useQuickLayer("health");
   const parksPlaces = useQuickLayer("parksPlaces");
   const citibike = useQuickLayer("citibike");
-  const storefrontsOn = useFlag("storefronts") && businesses;
+  const storefrontsFlag = useFlag("storefronts");
   usePanelChip(schoolsOn ? { id: "schools", label: "Schools", active: schoolIcons, onToggle: toggleSchools } : null);
   const restroomsMod = useRef<typeof import("@/lib/map/restrooms") | null>(null);
   /** So leaving walk mode can restore the overhead camera exactly once. */
   const wasWalking = useRef(false);
+  /** The view asked for while leaving street view, framed once the walk lets go. */
+  const exitView = useRef<ViewRequest | null>(null);
+  /** True while the camera eases out of street view. */
+  const leaving = useRef(false);
   /** The walker's eye pose; the camera is derived from it every frame. */
   const eyeRef = useRef<Eye | null>(null);
   const getEye = useCallback(() => eyeRef.current, []);
@@ -298,7 +349,10 @@ export function MapView({
     selectedBlockKey,
     selectNta,
     selectBlock,
+    streetViewOpen,
   } = useMapState();
+  const businesses = businessesPicked || walking;
+  const storefrontsOn = storefrontsFlag && businesses;
   const reducedMotion = usePrefersReducedMotion();
   /** Held d-pad buttons. A ref, because it changes without needing a render. */
   const walkPad = useRef<WalkInput>(WALK_IDLE);
@@ -425,7 +479,6 @@ export function MapView({
   useEffect(() => {
     describeAtRef.current = describeAt;
   }, [describeAt]);
-
   /** The block grid, held in a ref for the same reason as `describeAt`. */
   const blocksRef = useRef(model.blocks);
   useEffect(() => {
@@ -469,18 +522,25 @@ export function MapView({
   const places = usePlaces();
   const opts = useMapOptions();
   const t = usePalette();
-  // Flat footprints at every level, including street view. 3D buildings is what
-  // extrudes the basemap and turns on the textured city. Ignoring Flat during a
-  // walk loaded that city under Simple streets too.
+  // At street level Flat keeps footprints flat; 3D buildings extrudes the
+  // basemap and turns on the textured city. Ignoring Flat during a walk loaded
+  // that city under Simple streets too.
   const flatBuildings = wantsFlatBuildings(opts.buildings);
+  // Top view is a flat 2D overview (#364). Tilted views are a simple block map;
+  // the detailed city above street level is an advanced, off-by-default flag (#363).
+  const detailedCity = useFlag("detailedCity");
+  const level = mapLevel(walking, tilted);
+  const { extrude, skyline: skylineOn, textured: texturedOn } = cityDetail({ level, flat: flatBuildings, eco, city3d, detailed: detailedCity });
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!map || !ready) return;
     applyMapTheme(map, t);
-    const streetLook = opts.roads ? (opts.streets === "simple" || transitFocus ? "simple" : "full") : "off";
+    // Street view always draws the roads you walk on, even with Hide roads set (owner, 2026-10-27).
+    const roads = opts.roads || walking;
+    const streetLook = roads ? (opts.streets === "simple" || transitFocus ? "simple" : "full") : "off";
     applyReadable(map, streetLook, { street: t.street, major: t.major, label: t.label_ });
     for (const l of map.getStyle()?.layers ?? []) {
-      if (/^highway-name-major$/.test(l.id)) map.setLayoutProperty(l.id, "visibility", opts.roads && opts.streetNames ? "visible" : "none");
+      if (/^highway-name-major$/.test(l.id)) map.setLayoutProperty(l.id, "visibility", roads && opts.streetNames ? "visible" : "none");
       // Transit-first open: neighbourhood / quarter names only with the analytics on.
       if (l.id === "label_other") map.setLayoutProperty(l.id, "visibility", analytics ? "visible" : "none");
       // Bus stop icons from zoom 15, names from 17. The Layers switch hides both.
@@ -495,35 +555,36 @@ export function MapView({
     // its POIs to the person's choice instead of the style's defaults.
     const keep = () => {
       if (placesStale(map, shownPlaces)) applyPlaces(map, shownPlaces);
+      hideShields(map);
       if (!analytics && map.getLayer("label_other") && map.getLayoutProperty("label_other", "visibility") !== "none") map.setLayoutProperty("label_other", "visibility", "none");
     };
     map.on("styledata", keep);
-    applyBuildings(map, flatBuildings, t.building, buildingEdge(t));
+    applyBuildings(map, !extrude, t.building, buildingEdge(t), flatBuildings);
+    // A few named landmarks so the light map still says where you are (#363).
+    installLandmarkLabels(map, t.dark ? "#f1f5f9" : "#1f2937", t.land);
     return () => {
       map.off("styledata", keep);
     };
-  }, [ready, styleEpoch, transitFocus, places, businesses, health, parksPlaces, citibike, opts, t, flatBuildings, analytics]);
+  }, [ready, styleEpoch, transitFocus, places, businesses, health, parksPlaces, citibike, opts, t, extrude, flatBuildings, analytics, walking]);
 
+  const loaded = useRef(false);
   const handleLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
-    if (!map) return;
+    if (!map || loaded.current) return;
+    loaded.current = true;
     installDataLayers(map);
     applyAtmosphere(map);
+    // "load" waits for the first tiles; onSourceData below covers browsers that never send it.
+    markBasemapReady();
     setMapInstance(map);
+    watchMapCovers(map);
     setStyleEpoch((epoch) => epoch + 1);
     setReady(true);
-    // Phones: the credits start folded behind the "i" toggle (MapLibre opens
-    // compact attribution on load); one tap shows them, as the licence asks.
-    if (window.innerWidth < 768) {
-      const attrib = map.getContainer().querySelector(".maplibregl-ctrl-attrib");
-      attrib?.classList.remove("maplibregl-compact-show");
-      attrib?.removeAttribute("open");
-    }
     const blockTiles = () =>
       void installBlockTiles(map).then((swapped) => swapped && setStyleEpoch((epoch) => epoch + 1));
     blockTiles();
-    // Dev-only handle for headless QA (camera placement, fps sampling).
-    if (import.meta.env.DEV) (window as unknown as { __map?: unknown }).__map = map;
+    // Handle for headless QA (camera placement, fps sampling) in dev and the e2e build only; production compiles it away.
+    if (import.meta.env.DEV || import.meta.env.VITE_E2E) (window as unknown as { __map?: unknown }).__map = map;
     // A style swap (the raster fallback) replaces every source, so the data
     // has to be re-attached and re-pushed.
     map.on("style.load", () => {
@@ -633,6 +694,7 @@ export function MapView({
 
   const handleClick = useCallback(
     (event: MapLayerMouseEvent) => {
+      closeCredits(event.target);
       // Picking a route endpoint takes priority over selecting an area.
       if (routePicking) {
         setRoutePoint(routePicking, { lon: event.lngLat.lng, lat: event.lngLat.lat });
@@ -649,30 +711,47 @@ export function MapView({
       };
       const transitIds = FEATURES.filter((f) => f.id === "transit").flatMap((f) => f.clickLayers ?? []);
       if (hitsAny(transitIds)) return;
+      // A bus-stop icon (basemap poi_transit, class "bus"): the transit feature
+      // opens its routes and next buses, so skip the area pick.
+      if (opts.busStops && analyticsFlags.transit && clicked && busStopAt(clicked, event.point)) return;
       // 3D restroom kiosks at street level: public ones open here, shop/café
       // ones are opened by the place-toilets feature's own click handler.
       const kiosk = walking ? pickFurniture(event.target, event.point.x, event.point.y) : null;
-      if (kiosk?.kind === "place") return;
+      // Shop restrooms, bus stop signs and subway entrances open from their own features.
+      if (kiosk && kiosk.kind !== "restroom") return;
       if (kiosk?.kind === "restroom") {
         const p = kiosk.props;
         const str = (k: string) => (typeof p[k] === "string" && p[k] ? p[k] : null);
         const name = str("name") ?? "Public restroom";
         showPanel({
-          id: `restroom:${name}`,
+          id: `restroom:${kiosk.lng.toFixed(5)},${kiosk.lat.toFixed(5)}`,
           title: name,
           subtitle: "Public restroom",
-          details: <RestroomDetails restroom={{ name, status: str("status"), hours: str("hours"), accessibility: str("accessibility"), operator: str("operator") }} />,
+          details: <RestroomDetails restroom={{ name, status: str("status"), hours: str("hours"), accessibility: str("accessibility"), operator: str("operator"), lon: kiosk.lng, lat: kiosk.lat, source: p.source === "openstreetmap" ? "openstreetmap" : "nyc-open-data", asOf: str("asOf") }} />,
         });
         return;
       }
       const hit = restroomsMod.current?.restroomAt(event.target, event.point.x, event.point.y);
       if (hit) {
         showPanel({
-          id: `restroom:${hit.name}`,
+          id: `restroom:${hit.lon.toFixed(5)},${hit.lat.toFixed(5)}`,
           title: formatStreetText(hit.name),
           subtitle: "Public restroom",
           details: <RestroomDetails restroom={hit} />,
         });
+        return;
+      }
+      // A landmark badge or name (#325): its picture, so someone can tell where they are.
+      const mark = clicked ? landmarkAt(clicked, event.point) : null;
+      if (mark) {
+        showPanel({ id: `landmark:${mark.id}`, title: mark.name, subtitle: `Landmark · ${mark.borough}`, details: <LandmarkDetails landmark={mark} /> });
+        return;
+      }
+      // The building itself from above (#311): a tap on a landmark model's footprint opens it too.
+      const model = walking ? undefined : landmarkModelAt(event.lngLat.lng, event.lngLat.lat);
+      const modelGuide = model ? guideLandmarkNamed(model.name) : null;
+      if (model && modelGuide) {
+        showPanel({ id: `landmark:${model.id}`, title: model.name, subtitle: `Landmark · ${modelGuide.borough}`, details: <LandmarkDetails landmark={modelGuide} /> });
         return;
       }
       const dir = city3d ? signsMod.current?.directoryAt(event.target, event.lngLat.lng, event.lngLat.lat) : null;
@@ -683,9 +762,12 @@ export function MapView({
           title: dir.name,
           subtitle: `Directory · ${shops.length} shops · © OpenStreetMap contributors`,
           details: (
-            <ul className="space-y-1 text-sm">
-              {shops.map((name) => <li key={name}>{name}</li>)}
-            </ul>
+            <div className="space-y-2">
+              <ul className="space-y-1 text-sm">
+                {shops.map((name) => <li key={name}>{name}</li>)}
+              </ul>
+              <DirectionsFromHere lon={dir.lng} lat={dir.lat} label={dir.name} />
+            </div>
           ),
         });
         return;
@@ -697,22 +779,48 @@ export function MapView({
       if (walking) {
         const hit = eyePick(event.target, event.point.x, event.point.y);
         if (hit?.kind === "landmark") {
-          showPanel({ id: `landmark:${hit.landmark.id}`, title: hit.landmark.name, subtitle: "Landmark" });
+          const guide = guideLandmarkNamed(hit.landmark.name);
+          showPanel({
+            id: `landmark:${hit.landmark.id}`,
+            title: hit.landmark.name,
+            subtitle: "Landmark",
+            details: guide ? <LandmarkDetails landmark={guide} /> : <DirectionsFromHere lon={hit.landmark.lon} lat={hit.landmark.lat} label={hit.landmark.name} />,
+          });
           return;
         }
         if (hit?.kind === "building") {
           if (typeof hit.props.school === "string" && hit.props.school) {
-            showPanel({ id: `school:${hit.props.school}`, title: hit.props.school, subtitle: "School · NYC DOE (LCGMS)" });
+            showPanel({
+              id: `school:${hit.props.school}`,
+              title: hit.props.school,
+              subtitle: "School · NYC DOE (LCGMS)",
+              details: <DirectionsFromHere lon={hit.lng} lat={hit.lat} label={hit.props.school} />,
+            });
             return;
           }
-          const shop = hit.props.store === 1 && hit.z < 4.5 ? signsMod.current?.storefrontAt(event.target, hit.lng, hit.lat) : null;
+          // Up to 7 m: the ground floor and the sign band above it.
+          const shop = hit.props.store === 1 && hit.z < 7 ? signsMod.current?.storefrontAt(event.target, hit.lng, hit.lat) : null;
           if (shop) {
             const shops = (shop.dir ?? "").split("|").filter(Boolean);
             showPanel({
               id: `storefront:${shop.lng},${shop.lat}:${shop.name}`,
               title: shop.name,
               subtitle: `${shop.cat ? `${shop.cat} · ` : ""}© OpenStreetMap contributors`,
-              details: shops.length ? <ul className="space-y-1 text-sm">{shops.map((name) => <li key={name}>{name}</li>)}</ul> : undefined,
+              details: (
+                <div className="space-y-2">
+                  {shops.length ? <ul className="space-y-1 text-sm">{shops.map((name) => <li key={name}>{name}</li>)}</ul> : null}
+                  {/* The real place: Google's street photos open at the shop, no key needed. */}
+                  <a
+                    className="inline-block text-sm font-medium underline underline-offset-2"
+                    href={`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${shop.lat},${shop.lng}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    See a real photo
+                  </a>
+                  <DirectionsFromHere lon={shop.lng} lat={shop.lat} label={shop.name} />
+                </div>
+              ),
             });
             return;
           }
@@ -725,7 +833,12 @@ export function MapView({
       }
       const school = city3dMod.current?.schoolAt(event.target, event.point.x, event.point.y);
       if (school) {
-        showPanel({ id: `school:${school}`, title: school, subtitle: "School · NYC DOE (LCGMS)" });
+        showPanel({
+          id: `school:${school}`,
+          title: school,
+          subtitle: "School · NYC DOE (LCGMS)",
+          details: <DirectionsFromHere lon={event.lngLat.lng} lat={event.lngLat.lat} />,
+        });
         return;
       }
       // Neighbourhood / block complaint picks are analytics: Advanced only.
@@ -741,7 +854,7 @@ export function MapView({
         selectNta(picked.datum.ntaCode);
       }
     },
-    [pickAt, selectBlock, selectNta, routePicking, setRoutePoint, showPanel, emptyMapTap, city3d, walking, analytics],
+    [opts.busStops, analyticsFlags.transit, pickAt, selectBlock, selectNta, routePicking, setRoutePoint, showPanel, emptyMapTap, city3d, walking, analytics],
   );
 
   const handleMoveEnd = useCallback(() => {
@@ -749,7 +862,7 @@ export function MapView({
     if (!map) return;
     // A walk is always pitched to the ceiling, so it would report the map as
     // "tilted" the whole time and light up the dock's 3D button.
-    if (walking) return;
+    if (walking || leaving.current) return;
     // Keep the toggle honest when the user tilts with the mouse or touch.
     setTilted(map.getPitch() > TILT_EPSILON);
   }, [walking, setTilted]);
@@ -761,10 +874,10 @@ export function MapView({
     if (!map) return;
     const showBlocks = scale === "blocks";
 
-    (map.getSource(SOURCE_IDS.neighborhoods) as GeoJSONSource | undefined)
+    void (map.getSource(SOURCE_IDS.neighborhoods) as GeoJSONSource | undefined)
       ?.setData(neighborhoodGeoJson);
     pushBlocks(map, model.blocks, blockGeoJson);
-    (map.getSource(SOURCE_IDS.boroughs) as GeoJSONSource | undefined)?.setData(
+    void (map.getSource(SOURCE_IDS.boroughs) as GeoJSONSource | undefined)?.setData(
       boroughGeoJson,
     );
 
@@ -850,8 +963,8 @@ export function MapView({
     // Unit + style: the classic glass columns cover blocks and neighborhoods;
     // everything else (filled areas, district/borough columns, heatmap) reads
     // from the areas / block-points sources.
-    (map.getSource(SOURCE_IDS.areas) as GeoJSONSource | undefined)?.setData(areaGeoJson);
-    (map.getSource(SOURCE_IDS.blockPoints) as GeoJSONSource | undefined)?.setData(blockPointGeoJson);
+    void (map.getSource(SOURCE_IDS.areas) as GeoJSONSource | undefined)?.setData(areaGeoJson);
+    void (map.getSource(SOURCE_IDS.blockPoints) as GeoJSONSource | undefined)?.setData(blockPointGeoJson);
     const coarse = scale === "districts" || scale === "boroughs";
     const classic = walking || (mapStyle === "columns" && !coarse);
     const vis = (on: boolean) => (on ? "visible" : "none");
@@ -910,6 +1023,15 @@ export function MapView({
   // their flag is on, remounted after a style reload, cleaned up otherwise.
   const flags = useFlags();
   const [toggledOn] = useFeatureToggles();
+  const inset = useMemo(() => insetFilters({
+    placeClasses: classesFor(withQuickPlaces(places, { businesses, health, parksPlaces, citibike })),
+    restrooms,
+    shops: toggledOn.has("restroomShops"),
+    parking: toggledOn.has("parking"),
+    events: toggledOn.has("events"),
+    ferry: toggledOn.has("ferry"),
+    schools: schoolIcons,
+  }), [places, businesses, health, parksPlaces, citibike, restrooms, toggledOn, schoolIcons]);
   const mountedKey = FEATURES.filter((f) => f.layers && flags[f.id] && (!f.chip || toggledOn.has(f.chip.id)))
     .map((f) => f.id)
     .join(",");
@@ -946,7 +1068,6 @@ export function MapView({
         restroomsMod.current = mod;
         if (restrooms) mod.installRestrooms(map);
         mod.setRestroomsVisible(map, restrooms);
-        kioskSources.restrooms = restrooms;
       })
       .catch((err) => console.warn("restrooms failed to load", err));
   }, [ready, styleEpoch, restrooms]);
@@ -958,18 +1079,24 @@ export function MapView({
     if (!map) return;
     let cancelled = false;
     let cleanup: (() => void) | null = null;
+    const skyline = skylineOn;
+    const city3dOn = texturedOn;
+    // Nothing to draw (Top view, flat buildings, no school icons) and nothing
+    // loaded yet: skip the chunk, so Top view requests no 3D code (#364).
+    if (!skyline && !city3dOn && !schoolIcons && !city3dMod.current) return;
     // Lazy chunk: users who never turn it on never download it.
-    const city3dOn = city3d && !flatBuildings;
     import("@/lib/map/city3d")
       .then(async (mod) => {
         const { installCity3d, setCity3dVisible, city3dCoversView } = mod;
         city3dMod.current = mod;
         // Distance skyline (z11-14): on unless low-power mode; tiny and plain colour.
-        if (!eco && !flatBuildings) await mod.installSkyline(map);
+        if (skyline) await mod.installSkyline(map);
         if (cancelled) return;
-        mod.setSkylineVisible(map, !eco && !flatBuildings);
-        if (!city3dOn && !schoolIcons) {
+        mod.setSkylineVisible(map, skyline);
+        if (!city3dOn) {
           setCity3dVisible(map, false);
+          // School icons need only the tiles source, not the three.js layers.
+          await mod.showSchoolIcons(map, schoolIcons);
           return;
         }
         await installCity3d(map);
@@ -982,10 +1109,6 @@ export function MapView({
         if (storefrontsOn && !map.getLayer(signs.STOREFRONT_LAYER)) map.addLayer(signs.createStorefrontLayer());
         // Quick Layers > Businesses off takes the sign bands away.
         if (!storefrontsOn && map.getLayer(signs.STOREFRONT_LAYER)) map.removeLayer(signs.STOREFRONT_LAYER);
-        if (!city3dOn) {
-          setCity3dVisible(map, false);
-          return;
-        }
         // Basemap buildings only step aside where textured tiles exist.
         let covered: boolean | null = null;
         const sync = () => {
@@ -1004,26 +1127,33 @@ export function MapView({
       cancelled = true;
       cleanup?.();
     };
-  }, [ready, styleEpoch, city3d, schoolIcons, storefrontsOn, eco, flatBuildings]);
+  }, [ready, styleEpoch, skylineOn, texturedOn, schoolIcons, storefrontsOn]);
 
   useEffect(() => {
     if (!ready) return;
     const map = mapRef.current?.getMap();
     if (!map) return;
-    (map.getSource(SOURCE_IDS.emphasis) as GeoJSONSource | undefined)?.setData(
+    void (map.getSource(SOURCE_IDS.emphasis) as GeoJSONSource | undefined)?.setData(
       emphasisGeoJson,
     );
-    (
+    void (
       map.getSource(SOURCE_IDS.blockSelection) as GeoJSONSource | undefined
     )?.setData(selectionGeoJson);
   }, [ready, styleEpoch, emphasisGeoJson, selectionGeoJson]);
+
+  // Where street photos exist, while the photo sheet is open (#10).
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!ready || !map || !streetViewOpen || !hasMapillaryToken) return;
+    return showCoverage(map, MAPILLARY_TOKEN);
+  }, [ready, styleEpoch, streetViewOpen]);
 
   useEffect(() => {
     if (!ready || !cameraTarget) return;
     const map = mapRef.current?.getMap();
     if (!map) return;
     // The camera keeps whatever tilt and bearing the user chose; only a
-    // `fly_to` that names a pitch changes it.
+    // target that names a pitch or bearing changes it.
     const pitch =
       typeof cameraTarget.pitch === "number"
         ? Math.min(Math.max(cameraTarget.pitch, 0), MAX_PITCH)
@@ -1032,10 +1162,12 @@ export function MapView({
       center: [cameraTarget.lon, cameraTarget.lat] as [number, number],
       zoom: cameraTarget.zoom ?? 13,
       pitch,
-      bearing: map.getBearing(),
+      bearing: cameraTarget.bearing ?? map.getBearing(),
     };
     if (reducedMotion) {
       map.jumpTo(camera);
+    } else if (cameraTarget.glide) {
+      map.easeTo({ ...camera, duration: 1400, essential: true });
     } else {
       map.flyTo({ ...camera, duration: 1200, essential: true });
     }
@@ -1048,7 +1180,8 @@ export function MapView({
     // Only act when the camera disagrees with the requested state, so a
     // `fly_to` that carries its own pitch is not snapped back afterwards.
     const isTilted = map.getPitch() > TILT_EPSILON;
-    if (tilted === isTilted) return;
+    // Leaving street view frames its own camera; the flag catches up when it lands.
+    if (tilted === isTilted || leaving.current) return;
     map.easeTo({
       pitch: tilted ? TILT_PITCH : 0,
       bearing: tilted ? map.getBearing() : 0,
@@ -1071,18 +1204,30 @@ export function MapView({
     // it stays pinned to the ground as usual.
     map.setCenterClampedToGround(!walking);
     applyStreetPalette(map, walking);
+    // Flat footprints are already the map option. Re-apply here: this effect
+    // runs after the city load, and the street texture arrives a moment later.
+    applyBuildings(map, flatBuildings, t.building, buildingEdge(t));
     // After the street palette, so time-of-day lighting re-tints on top of it.
     setAmbient({ walking });
     // The sidewalk texture arrives a moment later; repaint once it has.
-    if (walking) void loadStreetTextures(map).then(() => applyStreetPalette(map, true)).catch(() => {});
+    if (walking) {
+      void loadStreetTextures(map).then(() => {
+        applyStreetPalette(map, true);
+        applyBuildings(map, flatBuildings, t.building, buildingEdge(t));
+      }).catch(() => {});
+    }
     // At eye level basemap labels stand on the horizon and float in the sky,
-    // so they step aside while walking; our own route markers stay.
+    // so they step aside while walking; our own route markers and the
+    // landmarks (how you know where you are) stay. Restroom icons keep the
+    // filter's own visibility — street view still needs them.
     const own = new Set(Object.keys(SOURCE_IDS).map((k) => SOURCE_IDS[k as keyof typeof SOURCE_IDS] as string));
     for (const layer of map.getStyle().layers ?? []) {
-      if (layer.type !== "symbol" || own.has((layer as { source?: string }).source ?? "")) continue;
+      // Transit layers (station names + route bullets, #186) stand in the 3D scene and stay.
+      if (layer.type !== "symbol" || own.has((layer as { source?: string }).source ?? "") || layer.id.startsWith("transit-") || isLandmarkLayer(layer.id)) continue;
+      if (layer.id === "restrooms") continue;
       map.setLayoutProperty(layer.id, "visibility", walking ? "none" : "visible");
     }
-  }, [ready, walking, styleEpoch]);
+  }, [ready, walking, styleEpoch, flatBuildings, t]);
 
   // The location card names the nearest corner from the baked sign points.
   useEffect(() => {
@@ -1146,8 +1291,16 @@ export function MapView({
         lines = namedStreetLines(map);
         at = { lng: c.lng, lat: c.lat };
         placed = true;
+        // Only nearby landmarks on the street-level map, same cap as the header.
+        focusLandmarks(map, { lon: c.lng, lat: c.lat });
       }
-      const label = streetLabel(streetPosition(lines, c.lng, c.lat));
+      // Street, then the landmark you can see: "Grand St & Essex St · Empire State Building ahead".
+      const pos = streetPosition(lines, c.lng, c.lat);
+      const street = streetLabel(pos);
+      const guide = describeGuide(
+        pickGuideLandmarks({ lon: c.lng, lat: c.lat }, eye ? eye.bearing : map.getBearing(), { max: 1, maxDistanceM: STREET_LEVEL_RANGE_M }),
+      );
+      const label = [street, guide].filter(Boolean).join(" · ") || null;
       setStreetHere((prev) => (prev === label ? prev : label));
     };
     update();
@@ -1162,6 +1315,8 @@ export function MapView({
     return () => {
       window.clearInterval(id);
       map.off("sourcedata", onData);
+      // Leaving street level: the whole list again, thinned by zoom.
+      focusLandmarks(map, null);
     };
   }, [ready, walking]);
 
@@ -1189,13 +1344,17 @@ export function MapView({
 
     // Stand in the middle of the nearest street, facing along it: a block
     // centre or the map centre can be inside a building footprint.
-    const snapped = snapToStreet(target, streetLines(map), map.getBearing());
+    // A heading asked for (the view switch, going back) wins over the street's direction;
+    // going back to where you stood skips the snap altogether.
+    const heading = walkRequest?.heading;
+    const snapped = walkRequest?.exact ? null : snapToStreet(target, streetLines(map), heading ?? map.getBearing());
     const eye: Eye = snapped
-      ? { lon: snapped.lon, lat: snapped.lat, bearing: snapped.bearing, pitch: WALK_PITCH }
-      : { lon: target[0], lat: target[1], bearing: map.getBearing(), pitch: WALK_PITCH };
+      ? { lon: snapped.lon, lat: snapped.lat, bearing: heading ?? snapped.bearing, pitch: WALK_PITCH }
+      : { lon: target[0], lat: target[1], bearing: heading ?? map.getBearing(), pitch: WALK_PITCH };
     eyeRef.current = eye;
+    setWalkEye(eye);
     map.easeTo({ ...eyeCamera(map, eye), duration: reducedMotion ? 0 : 900 });
-    if (!snapped) {
+    if (!snapped && !walkRequest?.exact) {
       // No road tiles in view yet (e.g. entering from the citywide map): ask OSRM.
       const controller = new AbortController();
       fetchNearestStreet({ lon: target[0], lat: target[1] }, controller.signal)
@@ -1203,7 +1362,7 @@ export function MapView({
           if (!p || eyeRef.current !== eye) return;
           eye.lon = p.lon;
           eye.lat = p.lat;
-          const aligned = snapToStreet([p.lon, p.lat], streetLines(map), eye.bearing, 30);
+          const aligned = heading == null ? snapToStreet([p.lon, p.lat], streetLines(map), eye.bearing, 30) : null;
           if (aligned) eye.bearing = aligned.bearing;
           map.jumpTo(eyeCamera(map, eye));
         })
@@ -1226,17 +1385,77 @@ export function MapView({
     wasWalking.current = false;
     setWalkPlace(null);
     setTilted(false);
+    setWalkEye(null);
     const map = mapRef.current?.getMap();
     if (!map || !ready) return;
+    // Remember where you stood so the map can show you there and "Back to street view"
+    // can put you back, facing the same way.
+    const eye = eyeRef.current;
     eyeRef.current = null;
+    if (eye) setStreetSpot({ lon: eye.lon, lat: eye.lat, heading: eye.bearing });
+    // Leaving street view keeps the layers as they were: it used to turn restrooms on, and they then
+    // stayed on after a restroom answer was closed (owner, 2026-10-28). Shops were only on because you walked.
+    const asked = exitView.current;
+    exitView.current = null;
+    const at = asked?.place ?? (eye ? { lon: eye.lon, lat: eye.lat } : null);
+    const duration = reducedMotion ? 0 : 700;
+    // Mid-way, a "moveend" would still read the walk's pitch as a tilt, and the tilt
+    // effect would then flatten the map at the walk's zoom over the top of this.
+    leaving.current = !reducedMotion;
+    if (asked?.frame) {
+      map.fitBounds(asked.frame.bounds, { padding: asked.frame.padding ?? 40, maxZoom: asked.frame.maxZoom ?? WALK_EXIT_ZOOM, pitch: 0, bearing: 0, duration });
+    } else {
+      map.easeTo({
+        ...(at ? { center: [at.lon, at.lat] as [number, number] } : {}),
+        pitch: asked?.view === "3d" ? VIEW_3D_PITCH : 0,
+        bearing: asked?.view === "3d" ? (asked.heading ?? eye?.bearing ?? 0) : 0,
+        elevation: 0,
+        zoom: asked?.view === "3d" ? VIEW_3D_ZOOM : Math.min(map.getZoom(), WALK_EXIT_ZOOM),
+        duration,
+      });
+    }
+    if (leaving.current) {
+      map.once("moveend", () => {
+        leaving.current = false;
+        setTilted(map.getPitch() > TILT_EPSILON);
+      });
+    } else setTilted(map.getPitch() > TILT_EPSILON);
+  }, [walking, ready, reducedMotion, setTilted]);
+
+  // Map, 3D or Street from the view switch, the mini map or "Back to street view" (showView).
+  const viewRequest = useViewRequest();
+  useEffect(() => {
+    if (!viewRequest || !ready) return;
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    const here = eyeRef.current;
+    const c = map.getCenter();
+    if (viewRequest.view === "street") {
+      const place = viewRequest.place ?? (here ? { lon: here.lon, lat: here.lat } : { lon: c.lng, lat: c.lat });
+      startWalk({ ...place, heading: viewRequest.heading ?? (here?.bearing ?? map.getBearing()), exact: viewRequest.exact });
+      return;
+    }
+    if (walking) {
+      // Leaving street view: the exit effect frames it once the walk has let go of the camera.
+      exitView.current = viewRequest;
+      stopWalk();
+      return;
+    }
+    if (viewRequest.frame) {
+      map.fitBounds(viewRequest.frame.bounds, { padding: viewRequest.frame.padding ?? 40, maxZoom: viewRequest.frame.maxZoom ?? WALK_EXIT_ZOOM, pitch: 0, bearing: 0, duration: reducedMotion ? 0 : 700 });
+      return;
+    }
+    const at = viewRequest.place ?? { lon: c.lng, lat: c.lat };
     map.easeTo({
-      pitch: 0,
-      bearing: 0,
-      elevation: 0,
-      zoom: Math.min(map.getZoom(), WALK_EXIT_ZOOM),
+      center: [at.lon, at.lat],
+      pitch: viewRequest.view === "3d" ? VIEW_3D_PITCH : 0,
+      bearing: viewRequest.view === "3d" ? (viewRequest.heading ?? map.getBearing()) : 0,
+      zoom: viewRequest.view === "3d" ? Math.max(map.getZoom(), VIEW_3D_ZOOM - 1) : Math.min(map.getZoom(), WALK_EXIT_ZOOM),
       duration: reducedMotion ? 0 : 700,
     });
-  }, [walking, ready, reducedMotion, setTilted]);
+    // Only a new request moves the camera; `walking` is read as it is now.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewRequest, ready]);
 
   // The walk loop. Each frame moves the camera in ground metres along its own
   // bearing, so speed is constant at any zoom and the horizon stays level.
@@ -1287,25 +1506,30 @@ export function MapView({
     // Drag (mouse or one finger) looks around: across turns, up/down tilts the
     // head. Map panning is off while walking, so the drag is ours alone.
     let lookDirty = false;
-    let dragFrom: { x: number; y: number } | null = null;
+    let dragFrom: { x: number; y: number; id: number } | null = null;
     const canvas = map.getCanvas();
+    // With pan and pinch off, MapLibre drops its touch-action rule, so on a phone the browser took an
+    // up/down swipe as a page scroll instead of a look (owner report, 2026-10-27). The swipe is ours.
+    const touchAction = canvas.style.touchAction;
+    canvas.style.touchAction = "none";
     const onPointerDown = (event: PointerEvent) => {
-      if (event.button !== 0) return;
-      dragFrom = { x: event.clientX, y: event.clientY };
+      if (event.button !== 0 || dragFrom) return;
+      dragFrom = { x: event.clientX, y: event.clientY, id: event.pointerId };
     };
     const onPointerMove = (event: PointerEvent) => {
       const eye = eyeRef.current;
-      if (!dragFrom || !eye) return;
+      // One finger looks; a second finger landing must not make the view jump between them.
+      if (!dragFrom || !eye || event.pointerId !== dragFrom.id) return;
       const dx = event.clientX - dragFrom.x;
       const dy = event.clientY - dragFrom.y;
-      dragFrom = { x: event.clientX, y: event.clientY };
-      // Grab-the-world feel: drag left to turn right, drag up to look up (like street-view apps).
+      dragFrom = { x: event.clientX, y: event.clientY, id: dragFrom.id };
+      // Grab-the-world feel both ways: drag left to turn right, drag up to look down (owner, 2026-10-27).
       eye.bearing = (eye.bearing - dx * LOOK_DEG_PER_PX + 360) % 360;
-      eye.pitch = clampLookPitch(eye.pitch - dy * LOOK_DEG_PER_PX);
+      eye.pitch = clampLookPitch(eye.pitch + dy * LOOK_DEG_PER_PX);
       lookDirty = true;
     };
-    const onPointerUp = () => {
-      dragFrom = null;
+    const onPointerUp = (event: PointerEvent) => {
+      if (dragFrom?.id === event.pointerId) dragFrom = null;
     };
     canvas.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("pointermove", onPointerMove);
@@ -1369,6 +1593,7 @@ export function MapView({
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
+      canvas.style.touchAction = touchAction;
       canvas.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
@@ -1406,7 +1631,7 @@ export function MapView({
         geometry: { type: "Point", coordinates: [routeEnd.lon, routeEnd.lat] },
       });
     }
-    source.setData({ type: "FeatureCollection", features });
+    void source.setData({ type: "FeatureCollection", features });
   }, [ready, styleEpoch, route, routeStart, routeEnd]);
 
   // A crosshair cursor says "the next click drops a route point".
@@ -1427,10 +1652,12 @@ export function MapView({
         if (!walking) startWalk();
         return;
       }
+      // A view you picked: leaves the walk, and guidance stops re-tilting the camera.
+      sendCamera({ type: "view" });
       const apply = () => {
         // Stand the camera `heightM` up, behind the current centre along the
         // bearing, looking at the centre on the ground, the same way the eye camera does.
-        const pitch = pitchForHeight(heightM);
+        const pitch = navCommand.pitch ?? pitchForHeight(heightM);
         const bearing = map.getBearing();
         const center = map.getCenter();
         const back = Math.max(heightM * Math.tan((pitch * Math.PI) / 180), heightM * 0.01);
@@ -1444,11 +1671,9 @@ export function MapView({
         map.easeTo({ ...map.calculateCameraOptionsFromTo(eye, heightM, center, 0), duration: reducedMotion ? 0 : 900 });
         setTilted(pitch > 0);
       };
-      if (walking) {
-        // Leave the walk first; its exit animation would undo the jump.
-        stopWalk();
-        window.setTimeout(apply, reducedMotion ? 0 : 750);
-      } else apply();
+      // Leaving the walk animates out first; that exit would undo the jump.
+      if (walking) window.setTimeout(apply, reducedMotion ? 0 : 750);
+      else apply();
       return;
     }
     if (navCommand.type === "zoom-in") {
@@ -1460,8 +1685,13 @@ export function MapView({
       return;
     }
     if (navCommand.type === "north") {
-      map.easeTo({ bearing: 0, pitch: 0, duration });
-      setTilted(false);
+      sendCamera({ type: "view" });
+      const apply = () => {
+        map.easeTo({ bearing: 0, pitch: 0, duration });
+        setTilted(false);
+      };
+      if (walking) window.setTimeout(apply, reducedMotion ? 0 : 750);
+      else apply();
       return;
     }
     map.jumpTo({
@@ -1472,23 +1702,28 @@ export function MapView({
     });
     setTilted(false);
     // "Reset view" means the city, not the street you were standing on.
-    stopWalk();
+    sendCamera({ type: "reset" });
     // `walking` is read, not a trigger: only a new command moves the camera.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, navCommand, reducedMotion, setTilted, stopWalk, startWalk]);
+  }, [ready, navCommand, reducedMotion, setTilted, startWalk]);
 
   // The camera-height slider shows where the camera actually is.
   useEffect(() => {
     if (!ready) return;
     const map = mapRef.current?.getMap();
     if (!map) return;
-    const report = () => reportCameraHeight(map.transform.getCameraAltitude());
+    const report = () => {
+      const t = cameraTransform(map);
+      if (t) reportCameraHeight(t.getCameraAltitude());
+    };
     report();
     map.on("moveend", report);
     return () => {
       map.off("moveend", report);
     };
   }, [ready, reportCameraHeight]);
+
+  useEffect(warmBasemapFonts, []);
 
   // Eco mode: render at 1x instead of the device pixel ratio.
   useEffect(() => {
@@ -1528,6 +1763,13 @@ export function MapView({
         dragRotate={!walking}
         touchPitch={!walking}
         onLoad={handleLoad}
+        onSourceData={(e) => {
+          // "load" waits for a moment when every source is loaded at once, and the live trains refresh
+          // every few seconds, so on a slow device it may never come: the first basemap tiles run the same
+          // setup, or the quick buttons never get the map and panels never move the camera off the train.
+          if (e.sourceId === VECTOR_SOURCE && e.isSourceLoaded) { markBasemapReady(); handleLoad(); }
+          foldCredits(e.target);
+        }}
         onError={handleError}
         onMouseMove={handleMouseMove}
         onMoveStart={handleMoveStart}
@@ -1539,12 +1781,16 @@ export function MapView({
         <Suspense fallback={null}>
           {FEATURES.map((f) => (f.MapLayer ? <f.MapLayer key={f.id} /> : null))}
         </Suspense>
-        {walking ? null : <MapCompass />}
+        <YouMarker />
+        {walking || agentHome ? null : <MapCompass />}
         <ViewSwitcher />
       </MapLibreMap>
 
 
-      <QuickLayers />
+      {agentHome ? <MapChrome /> : <QuickLayers />}
+      {agentHome ? <MapViewSwitch /> : null}
+      {agentHome ? <BackToStreet /> : null}
+      {agentHome ? <BusesOff /> : null}
       {walking ? (
         <WalkControls
           place={walkPlace}
@@ -1566,7 +1812,7 @@ export function MapView({
         />
       ) : null}
       {walking && ready && mapRef.current ? (
-        <StreetMiniMap main={mapRef.current.getMap()} getEye={getEye} onExit={stopWalk} />
+        <StreetMiniMap main={mapRef.current.getMap()} getEye={getEye} onExit={stopWalk} onMap={() => showView("map")} filters={inset} />
       ) : null}
 
       {hover && !walking && canHover && !sheetOpen && analytics ? (

@@ -13,14 +13,19 @@ import { z } from "zod";
 import { octoQuery } from "../../../../api/_lib/octo";
 import type { LngLatTuple } from "../../../../src/features/agent/schema";
 import { distM } from "../transit";
+import { noteSource, type SourceId } from "../freshness";
+import { nyLocalToDate } from "../trip";
 
 export type Note = { kind: "slow" | "closure" | "advisory" | "event" | "toll" | "camera" | "crashes" | "parking"; text: string; at?: LngLatTuple };
 
 const SODA = "https://data.cityofnewyork.us/resource";
-async function soda<T>(id: string, q: Record<string, string>, schema: z.ZodType<T>): Promise<T[]> {
+/** A SODA query; with `source`, notes the dataset's last update (Socrata's last-modified header) as its age. */
+async function soda<T>(id: string, q: Record<string, string>, schema: z.ZodType<T>, source?: SourceId): Promise<T[]> {
   const res = await fetch(`${SODA}/${id}.json?${new URLSearchParams(q)}`, { signal: AbortSignal.timeout(12000) });
   if (!res.ok) throw new Error(`${id} ${res.status}`);
-  return z.array(schema).parse(await res.json());
+  const rows = z.array(schema).parse(await res.json());
+  if (source) noteSource(source, res.headers.get("x-soda2-truth-last-modified") ?? res.headers.get("last-modified"));
+  return rows;
 }
 
 function bbox(coords: LngLatTuple[], padDeg = 0.003) {
@@ -38,6 +43,8 @@ const nearRoute = (pts: LngLatTuple[], p: LngLatTuple, m: number) => pts.some((q
 export async function slowSegments(route: LngLatTuple[]): Promise<Note[]> {
   const rows = await soda("i4gi-tjb9", { $limit: "2000", $order: "data_as_of DESC", $where: "data_as_of > '" + new Date(Date.now() - 3600_000 * 6).toISOString().slice(0, 19) + "'" },
     z.object({ link_id: z.string(), speed: z.string(), link_points: z.string(), link_name: z.string(), data_as_of: z.string() }));
+  // Newest sensor reading (New York local time); no rows means no recent reading at all.
+  noteSource("traffic-speeds", rows[0] ? nyLocalToDate(rows[0].data_as_of.slice(0, 16)) : null);
   const pts = samples(route);
   const seen = new Set<string>();
   const out: Note[] = [];
@@ -57,7 +64,7 @@ export async function closures(route: LngLatTuple[], dayIso: string): Promise<No
   const b = bbox(route);
   const day = dayIso.slice(0, 10);
   const rows = await soda("i6b5-j7bu", { $limit: "500", $where: `work_start_date <= '${day}T23:59:59' AND work_end_date >= '${day}T00:00:00' AND within_box(the_geom, ${b.n}, ${b.w}, ${b.s}, ${b.e})` },
-    z.object({ onstreetname: z.string(), fromstreetname: z.string().optional(), tostreetname: z.string().optional(), purpose: z.string().optional(), the_geom: z.object({ coordinates: z.array(z.array(z.tuple([z.number(), z.number()]))) }) }));
+    z.object({ onstreetname: z.string(), fromstreetname: z.string().optional(), tostreetname: z.string().optional(), purpose: z.string().optional(), the_geom: z.object({ coordinates: z.array(z.array(z.tuple([z.number(), z.number()]))) }) }), "street-closures");
   const pts = samples(route);
   return rows
     .filter((r) => r.the_geom.coordinates.flat().some((p) => nearRoute(pts, p, 25)))
@@ -69,7 +76,7 @@ export async function closures(route: LngLatTuple[], dayIso: string): Promise<No
 export async function eventClosures(dayIso: string, streets: string[]): Promise<Note[]> {
   const day = dayIso.slice(0, 10);
   const rows = await soda("tvpp-9vvx", { $limit: "200", $where: `start_date_time <= '${day}T23:59:59' AND end_date_time >= '${day}T00:00:00' AND street_closure_type != 'N/A'` },
-    z.object({ event_name: z.string(), event_borough: z.string().optional(), event_location: z.string().optional(), street_closure_type: z.string().optional() }));
+    z.object({ event_name: z.string(), event_borough: z.string().optional(), event_location: z.string().optional(), street_closure_type: z.string().optional() }), "event-closures");
   const norm = (x: string) => x.toLowerCase().replace(/\b(street|st|avenue|ave|av|road|rd|boulevard|blvd)\b/g, "").replace(/(\d+)(st|nd|rd|th)\b/g, "$1").replace(/\b(east|e|west|w|north|n|south|s)\b/g, "").replace(/[^a-z0-9]/g, "");
   const keys = [...new Set(streets.map(norm).filter((k) => k.length >= 3))];
   if (!keys.length) return [];
@@ -84,6 +91,7 @@ export async function ny511(route: LngLatTuple[]): Promise<{ notes: Note[]; stub
   const res = await fetch(`https://511ny.org/api/getevents?format=json&key=${encodeURIComponent(key)}`, { signal: AbortSignal.timeout(12000) });
   if (!res.ok) return { notes: [], stub: `511NY returned ${res.status}.` };
   const rows = z.array(z.object({ Description: z.string().optional(), Latitude: z.number(), Longitude: z.number(), EventType: z.string().optional() })).parse(await res.json());
+  noteSource("ny511");
   const pts = samples(route);
   return { notes: rows.filter((r) => nearRoute(pts, [r.Longitude, r.Latitude], 150)).slice(0, 5).map((r) => ({ kind: "advisory" as const, text: `${r.EventType ?? "Event"}: ${r.Description ?? ""}`.slice(0, 200), at: [r.Longitude, r.Latitude] as LngLatTuple })) };
 }
@@ -125,6 +133,8 @@ export async function crashHotspots(route: LngLatTuple[]): Promise<Note[]> {
     [r, c],
     { rowLimit: 3 },
   );
+  // A 12-month window; the mart does not say its newest month here, so the age is unknown (the note says it lags).
+  noteSource("crashes", null);
   return rows.filter((x) => x.n >= 20).map((x) => ({ kind: "crashes" as const, text: `Crash hotspot: ${x.n} crashes in 12 months on a ~300 m stretch of the route`, at: [(x.c + 0.5) * 0.003, (x.r + 0.5) * 0.003] as LngLatTuple }));
 }
 

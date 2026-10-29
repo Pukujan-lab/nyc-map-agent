@@ -47,16 +47,22 @@ export function busRoutesOfTrip(trip: TripLike): string[] {
   return [...new Set(ids)].slice(0, BUS_REVEAL_CAP);
 }
 
+/** A bus stop's "see them coming": its routes in focus around the stop, until its card closes. */
+export type StopWatch = { routes: string[]; at: { lon: number; lat: number }; panelId: string };
+let watch: StopWatch | null = null;
 let tripRoutes: string[] | null = null;
 let shuttleRoutes: string[] | null = null;
 /** Alert id whose shuttle the person hid with Live buses off, until a different alert is focused. */
 let shuttleHold: string | null = null;
-let turnBusesOn: (() => void) | null = null;
-let snap = { trip: null as string[] | null, shuttle: null as string[] | null };
+let busToggle: ((on: boolean) => boolean) | null = null;
+/** The trip, not the person, turned live buses on; closing the trip turns them back off. */
+let tripTurnedOn = false;
+type Pins = { trip: string[] | null; shuttle: string[] | null; watch?: StopWatch | null };
+let snap: Pins = { trip: null, shuttle: null, watch: null };
 const subs = new Set<() => void>();
 
 function publish(): void {
-  snap = { trip: tripRoutes, shuttle: shuttleRoutes };
+  snap = { trip: tripRoutes, shuttle: shuttleRoutes, watch };
   subs.forEach((f) => f());
 }
 
@@ -65,16 +71,23 @@ export function setTripBuses(routes: string[]): void {
   publish();
 }
 
-/** The transit layer registers how a trip turns the bus layer on. Ask stays out of that feature. */
-export function registerBusToggle(fn: (() => void) | null): void {
-  turnBusesOn = fn;
+/** The transit layer registers how a trip turns the bus layer on or off (true when that changed it). Ask stays out of that feature. */
+export function registerBusToggle(fn: ((on: boolean) => boolean) | null): void {
+  busToggle = fn;
 }
 
 /** A trip names its buses and shows them. A trip with no bus clears the pin and leaves a chosen page alone. */
 export function revealTripBuses(trip: TripLike): void {
   const routes = busRoutesOfTrip(trip);
   setTripBuses(routes);
-  if (routes.length) turnBusesOn?.();
+  if (routes.length && busToggle?.(true)) tripTurnedOn = true;
+}
+
+/** A closed trip takes its buses with it: its pins, and the bus layer if the trip turned it on (owner, 2026-10-28). */
+export function clearTripBuses(): void {
+  setTripBuses([]);
+  if (tripTurnedOn) busToggle?.(false);
+  tripTurnedOn = false;
 }
 
 /** Returns false when this alert was explicitly hidden and the pin stays off. */
@@ -96,15 +109,29 @@ export function setShuttleBuses(alertId: string | null, routes: string[]): boole
   return true;
 }
 
-/** Live buses off: drop the trip pin and keep this alert's shuttle hidden. */
+/** Show a stop's routes coming in (owner, 2026-10-27: the button showed nothing). Turns Live buses on. */
+export function watchStopBuses(next: StopWatch): void {
+  watch = { ...next, routes: next.routes.map((r) => r.toUpperCase()).slice(0, BUS_REVEAL_CAP) };
+  publish();
+  busToggle?.(true);
+}
+
+export function clearStopWatch(): void {
+  if (!watch) return;
+  watch = null;
+  publish();
+}
+
+/** Live buses off: drop the trip and stop pins and keep this alert's shuttle hidden. */
 export function holdShuttle(alertId: string | null): void {
   shuttleHold = alertId;
   shuttleRoutes = null;
   tripRoutes = null;
+  watch = null;
   publish();
 }
 
-type BusShow = { why: "shuttle" | "trip" | "page" | "off"; routes: string[] };
+type BusShow = { why: "watch" | "shuttle" | "trip" | "page" | "off"; routes: string[] };
 
 /** Trains stay. Buses stay only while their route is one of the routes still on. */
 export function shownVehicles<T extends { system: string; route: string }>(vehicles: readonly T[], routes: readonly string[]): T[] {
@@ -113,14 +140,41 @@ export function shownVehicles<T extends { system: string; route: string }>(vehic
   return vehicles.filter((v) => v.system !== "bus" || allow.has(v.route.toUpperCase()));
 }
 
-/** Shuttle wins over a trip, and a trip wins over the corridor page. */
-export function busesToShow(pageRoutes: string[], pins: { trip: string[] | null; shuttle: string[] | null } = snap): BusShow {
+/** A watched stop (the latest thing asked for) wins, then a shuttle, then a trip, then the picked lines. */
+export function busesToShow(pageRoutes: string[], pins: Pins = snap): BusShow {
+  if (pins.watch?.routes.length) return { why: "watch", routes: pins.watch.routes };
   if (pins.shuttle?.length) return { why: "shuttle", routes: pins.shuttle };
   if (pins.trip?.length) return { why: "trip", routes: pins.trip };
   if (pageRoutes.length) return { why: "page", routes: pageRoutes.slice(0, BUS_REVEAL_CAP) };
   return { why: "off", routes: [] };
 }
 
-export function useBusPins(): { trip: string[] | null; shuttle: string[] | null } {
+export function useBusPins(): Pins {
   return useSyncExternalStore((f) => (subs.add(f), () => subs.delete(f)), () => snap, () => snap);
+}
+
+/** Out of focus, a bus shows only this close to you (or the map centre, or the bus you follow). */
+export const NEAR_BUS_RADIUS_M = 1200;
+
+const metres = (a: { lon: number; lat: number }, b: { lon: number; lat: number }) =>
+  Math.hypot((a.lon - b.lon) * 111_320 * Math.cos((a.lat * Math.PI) / 180), (a.lat - b.lat) * 111_320);
+
+/**
+ * Which buses draw (owner, 2026-10-27: buses stayed citywide after a follow).
+ * A bus is in focus when you follow it or picked its route: picked routes show up to
+ * `cap` per line nearest `near`. Routes that only came from a "buses near you" lookup
+ * are out of focus and show only within `radiusM` of `near`. While you follow a bus,
+ * every other bus is out of focus and `near` should be that bus.
+ */
+export function busesInFocus<T extends { id: string; route: string; lon: number; lat: number }>(
+  buses: readonly T[],
+  o: { routes: readonly string[]; nearOnly: boolean; cap: number; near: { lon: number; lat: number } | null; keep?: ReadonlySet<string>; radiusM?: number },
+): T[] {
+  const allow = new Set(o.routes.map((r) => r.toUpperCase()));
+  const radius = o.radiusM ?? NEAR_BUS_RADIUS_M;
+  const near = o.near;
+  const inRoutes = buses.filter((b) => allow.has(b.route.toUpperCase()));
+  const pool = o.nearOnly ? (near ? inRoutes.filter((b) => metres(near, b) <= radius) : []) : inRoutes;
+  const kept = new Set(capPerLine(pool, o.cap, near).map((b) => b.id));
+  return inRoutes.filter((b) => kept.has(b.id) || o.keep?.has(b.id));
 }

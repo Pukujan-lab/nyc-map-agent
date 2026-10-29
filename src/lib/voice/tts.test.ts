@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { chunkText, pickVoice, speakQueued, spokenSummary } from "./tts";
+import { chunkText, pickVoice, speakQueued, spokenSummary, voiceFor } from "./tts";
 import { isSpeech } from "./bargeIn";
 
 describe("chunkText", () => {
@@ -21,6 +21,11 @@ describe("spokenSummary", () => {
     expect(s.length).toBeLessThan(300);
     expect(s).toMatch(/details are on screen\.$/);
   });
+  it("does not end a Nepali answer in English", () => {
+    const s = spokenSummary("सबैभन्दा नजिकको शौचालय यहाँ छ। " + "थप विवरण यहाँ छ। ".repeat(30));
+    expect(s).not.toMatch(/details are on screen/);
+    expect(s.length).toBeLessThan(300);
+  });
   it("strips markdown", () => expect(spokenSummary("**Take** the [A](http://x) train.")).toBe("Take the A train."));
 });
 
@@ -28,6 +33,27 @@ describe("pickVoice", () => {
   it("prefers a natural en-US voice", () => {
     const v = [{ lang: "fr-FR", name: "Amelie" }, { lang: "en-US", name: "Fred" }, { lang: "en-US", name: "Google US English" }] as SpeechSynthesisVoice[];
     expect(pickVoice(v)?.name).toBe("Google US English");
+  });
+  it("picks a voice in the browser's language, region first (#370)", () => {
+    const v = [{ lang: "en-US", name: "Fred" }, { lang: "es-ES", name: "Monica" }, { lang: "es-MX", name: "Paulina" }] as SpeechSynthesisVoice[];
+    expect(pickVoice(v, "es-MX")?.name).toBe("Paulina");
+    expect(pickVoice(v, "es-US")?.name).toBe("Monica");
+    expect(pickVoice(v, "zh-CN")).toBeUndefined();
+  });
+});
+
+describe("voiceFor", () => {
+  const v = [{ lang: "en-US", name: "Samantha" }, { lang: "hi-IN", name: "Lekha" }, { lang: "es-ES", name: "Monica" }] as SpeechSynthesisVoice[];
+  const nepali = "तपाईं कहाँबाट हिँड्नुहुन्छ?";
+  it("reads a Nepali answer in a Hindi voice, not the English one", () => {
+    expect(voiceFor(v, nepali, "en-US")).toEqual({ voice: v[1], lang: "hi-IN" });
+  });
+  it("borrows the Hindi voice when Nepali was heard but no Nepali voice exists", () => {
+    expect(voiceFor(v, nepali, "ne")).toEqual({ voice: v[1], lang: "hi-IN" });
+  });
+  it("keeps the asked language when the text is in its letters", () => {
+    expect(voiceFor(v, "Toma el tren A.", "es-ES").voice?.name).toBe("Monica");
+    expect(voiceFor(v, "Take the A train.").voice?.name).toBe("Samantha");
   });
 });
 
