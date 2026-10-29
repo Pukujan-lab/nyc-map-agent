@@ -7,6 +7,9 @@
 #    minutes (default 360). Other projects' processes are never touched.
 # 2. Reports what ACS's dev_root_check.py would tidy in the dev root, when the
 #    ACS checkout is in the cache.
+# 3. Warns when the ACS boss seat in .coord/boss_claim.json is still "held" but
+#    its heartbeat is older than the lease. seat_protocol.py status prints OK
+#    in that case, so a seat abandoned days ago looks taken to the next agent.
 #
 # Usage: scripts/agent-hygiene.sh [--yes] [--quiet]
 #   without --yes it only lists what it would stop.
@@ -69,5 +72,28 @@ check="${ACS_CACHE_DIR:-$HOME/.cache/acs}/deps/agent-custom-setup/modules/coordi
 if [ -f "$check" ] && command -v python3 >/dev/null; then
   report=$({ python3 "$check" --dev-root "$(dirname "$main_root")" 2>/dev/null || true; } | python3 -c 'import json,sys; d=json.load(sys.stdin); print("clean" if d["ok"] else "%d item(s) outside the rule; run dev_root_check.py --clean to review" % len(d["findings"]))' 2>/dev/null || echo "check failed")
   say "agent-hygiene: dev root: $report"
+fi
+
+root=$(git rev-parse --show-toplevel 2>/dev/null || echo "$main_root")
+if [ -f "$root/.coord/boss_claim.json" ] && command -v python3 >/dev/null; then
+  seat=$(python3 - "$root/.coord" <<'PY' 2>/dev/null || true
+import json, sys
+from datetime import datetime, timezone
+from pathlib import Path
+coord = Path(sys.argv[1])
+claim = json.loads((coord / "boss_claim.json").read_text())
+try:
+    ttl = float(json.loads((coord / "assignment.json").read_text()).get("boss_failover", {}).get("lease_ttl_minutes", 30))
+except Exception:
+    ttl = 30.0
+beat = claim.get("last_heartbeat")
+if claim.get("status") == "held" and beat:
+    age = (datetime.now(timezone.utc) - datetime.fromisoformat(beat)).total_seconds() / 60
+    if age > ttl:
+        print(f"boss seat held by {claim.get('who_is_boss_now')} but its last heartbeat was {age / 60:.0f} h ago "
+              f"(lease {ttl:.0f} min); run .coord/bin/seat_protocol.py expire, then take-seat")
+PY
+)
+  [ -n "$seat" ] && say "agent-hygiene: $seat"
 fi
 exit 0
