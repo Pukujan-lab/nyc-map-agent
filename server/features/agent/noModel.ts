@@ -26,6 +26,31 @@ export function noModelIntent(text: string): NoModelIntent | null {
   return route ? { kind: "line", route: route.toUpperCase() } : null;
 }
 
+// Words a plain "where's the nearest restroom" or "is the 7 running" question is made of. A question
+// with any other word in it (a place, "on the way", "with a stroller") goes to the model.
+const RESTROOM_WORD = /^(rest ?rooms?|bathrooms?|toilets?|washrooms?)$/;
+const RESTROOM_FILLER = new Set(["where", "wheres", "where's", "is", "are", "the", "a", "an", "nearest", "closest", "public", "open", "now", "right", "that", "thats", "that's", "near", "me", "nearby", "around", "here", "i", "need", "find", "any", "to", "go", "can", "use", "please", "one"]);
+const ROUTE = /^([1-7]|[ABCDEFGJLMNQRWZ]|SIR)$/;
+const LINE_FILLER = new Set(["how", "hows", "how's", "is", "are", "the", "train", "trains", "line", "subway", "running", "doing", "right", "now", "today", "there", "any", "delays", "delay", "on", "status", "of", "service", "whats", "what's", "with"]);
+
+const words = (text: string) => text.replace(/[\u2018\u2019]/g, "'").replace(/[?!.,¿¡]/g, " ").split(/\s+/).filter(Boolean);
+
+/**
+ * A question the app answers on its own, before the model: plain English asks for the nearest
+ * restroom or one subway line's status, like the home buttons send. Exact and narrow on purpose:
+ * anything more goes to the model, which also answers in the asker's language.
+ */
+export function fastIntent(text: string): NoModelIntent | null {
+  const w = words(text);
+  if (!w.length || w.length > 14) return null;
+  const lower = w.map((x) => x.toLowerCase());
+  if (lower.some((x) => RESTROOM_WORD.test(x)) && lower.every((x) => RESTROOM_WORD.test(x) || RESTROOM_FILLER.has(x))) return { kind: "restroom" };
+  // Letters count in capitals only, so "is there a delay" has no A train in it.
+  const routes = w.filter((x) => ROUTE.test(x));
+  if (routes.length === 1 && w.every((x, i) => ROUTE.test(x) || LINE_FILLER.has(lower[i]))) return { kind: "line", route: routes[0] };
+  return null;
+}
+
 const call = { toolCallId: "no-model", messages: [] };
 /** Runs a tool the way the model would, outside a model step. */
 const run = <R>(t: { execute?: unknown }, input: unknown): Promise<R> =>
@@ -35,8 +60,7 @@ type RestroomResult = { restrooms: Array<{ name: string; distanceM: number; open
 type LineResult = { trouble: Array<{ summary: string }>; alerts: unknown[]; note?: string };
 
 /** The answer text, or null when the question is not one of these or the feed failed. */
-export async function answerWithoutModel(q: Question, tools: Tools): Promise<string | null> {
-  const intent = noModelIntent(q.text);
+export async function answerWithoutModel(q: Question, tools: Tools, intent: NoModelIntent | null = noModelIntent(q.text)): Promise<string | null> {
   if (!intent) return null;
   try {
     if (intent.kind === "restroom") {

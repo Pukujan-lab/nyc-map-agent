@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { answerWithoutModel, noModelIntent } from "./noModel";
+import { answerWithoutModel, fastIntent, noModelIntent } from "./noModel";
 import { makeTools } from "./tools";
 
 describe("noModelIntent", () => {
@@ -50,5 +50,33 @@ describe("answerWithoutModel", () => {
 
   it("returns null for other questions", async () => {
     expect(await answerWithoutModel({ text: "what's the weather", hasLocation: false }, tools(null))).toBeNull();
+  });
+});
+
+describe("fastIntent: answered before the model", () => {
+  it("takes the home buttons' plain English questions", async () => {
+    const { tr } = await import("../../../src/lib/i18n/appLang");
+    expect(fastIntent(tr("en", "askRestroom"))).toEqual({ kind: "restroom" });
+    expect(fastIntent(tr("en", "askLine").replace("{r}", "7"))).toEqual({ kind: "line", route: "7" });
+  });
+
+  it("takes short plain asks", () => {
+    expect(fastIntent("nearest bathroom")).toEqual({ kind: "restroom" });
+    expect(fastIntent("I need a toilet near me")).toEqual({ kind: "restroom" });
+    expect(fastIntent("Where’s the closest restroom?")).toEqual({ kind: "restroom" });
+    expect(fastIntent("is the A train running?")).toEqual({ kind: "line", route: "A" });
+    expect(fastIntent("any delays on the Q")).toEqual({ kind: "line", route: "Q" });
+    expect(fastIntent("L train status")).toEqual({ kind: "line", route: "L" });
+  });
+
+  it("leaves anything with more in it to the model", () => {
+    expect(fastIntent("nearest public restroom to Bryant Park")).toBeNull();
+    expect(fastIntent("I'm with a stroller and need a bathroom on the way to Penn")).toBeNull();
+    expect(fastIntent("is the 7 running to Flushing?")).toBeNull();
+    expect(fastIntent("is the N or the Q faster?")).toBeNull();
+    expect(fastIntent("is there a delay")).toBeNull();
+    expect(fastIntent("how do I get to the Met?")).toBeNull();
+    // Other languages: the model answers in the asker's language.
+    expect(fastIntent("¿Dónde hay un baño cerca?")).toBeNull();
   });
 });
