@@ -263,3 +263,22 @@ test("a question from the ask box in street view is asked from the street spot",
   await expect(page.getByRole("button", { name: "Use my location" })).toHaveCount(0);
   await expectLayout(page);
 });
+
+// Owner report, 2026-10-29: in street view, work wrenches, skip marks and elevator badges of far stations
+// stood in a row on the horizon. Like station names, they show only near where you stand.
+test("street view draws station markers only near you", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockNetwork(page);
+  await page.goto("/");
+  await page.waitForFunction(() => Boolean((window as unknown as { __map?: unknown }).__map), null, { timeout: 15_000 });
+  await page.getByTestId("map-view-switch").getByRole("radio", { name: "Street", exact: true }).click();
+  await expect(page.getByTestId("street-minimap")).toBeVisible({ timeout: 15_000 });
+  const near = (id: string) => page.evaluate((layer) => {
+    const m = (window as unknown as { __map: { getLayer(id: string): unknown; getFilter(id: string): unknown } }).__map;
+    return m.getLayer(layer) ? JSON.stringify(m.getFilter(layer)).includes("distance") : null;
+  }, id);
+  for (const id of ["transit-work", "transit-skip", "transit-access"]) {
+    await expect.poll(() => near(id), { timeout: 15_000, message: id }).not.toBe(false);
+  }
+  await expectLayout(page);
+});
