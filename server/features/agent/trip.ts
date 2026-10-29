@@ -234,6 +234,8 @@ export function tripBrief(t: Trip) {
   return {
     planner: t.planner,
     summary: summary(t),
+    /** Where the trip ends, as the place lookup found it. */
+    destination: t.destination.label,
     totalMin: mins(t.departIso, t.arriveIso),
     alternatives: t.alternatives.map((a) => ({ tripId: a.id, summary: summary(a), blocked: a.impacts.some((i) => i.blocks) || undefined, depart: a.departIso, arrive: a.arriveIso, totalMin: mins(a.departIso, a.arriveIso), arrivesLaterByMin: mins(t.arriveIso, a.arriveIso) })),
     tripId: t.id,

@@ -295,7 +295,7 @@ function allTools(ctx: ToolContext) {
         if (t) offer(tripActions(t));
         // On the yes the model looks the exit up again (only text reaches it), and then the walk should open.
         exitShown = !ctx.replying;
-        return { station: st.name, exit: exit.label, elevatorOnly: exit.elevatorOnly, outage: exit.outage, elevatorOutages: outages.slice(0, 3), walkFromExit: t ? await walkBrief(t) : null };
+        return { station: st.name, to: dest.label, exit: exit.label, elevatorOnly: exit.elevatorOnly, outage: exit.outage, elevatorOutages: outages.slice(0, 3), walkFromExit: t ? await walkBrief(t) : null };
       }),
     }),
     line_status: tool({
