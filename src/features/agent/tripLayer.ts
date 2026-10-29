@@ -1,6 +1,7 @@
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import type { LngLatTuple, MapPoint, Trip } from "./schema";
 import { getAppLang, tr } from "@/lib/i18n/appLang";
+import { walkEye } from "@/lib/map/walkEye";
 
 /** The planned trip as MapLibre line/circle layers on one GeoJSON source, plus a moving marker. */
 const SRC = "agent-trip";
@@ -90,6 +91,9 @@ export function showPoints(map: MapLibreMap, points: MapPoint[], color: string):
     map.addLayer({ id: `${POINTS}-label`, type: "symbol", source: POINTS, layout: { "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-anchor": "left", "text-offset": [1, 0], "text-optional": true, "text-max-width": 14 }, paint: { "text-color": "#111827", "text-halo-color": "#ffffff", "text-halo-width": 1.5 } });
   }
   void (map.getSource(POINTS) as GeoJSONSource).setData(pointsToGeoJson(points, color));
+  // In street view the camera stays at eye level: two restrooms fitted from above flew it
+  // off the street at 800×1000 (owner report, 2026-10-29). The pins and the mini map show them.
+  if (walkEye()) return;
   if (points.length === 1) { map.flyTo({ center: points[0].at, zoom: Math.max(map.getZoom(), 15), duration: 800 }); return; }
   const lons = points.map((p) => p.at[0]);
   const lats = points.map((p) => p.at[1]);
