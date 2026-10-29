@@ -89,7 +89,9 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
       };
       // A plain restroom or line question is answered from the app's own feeds first: instant, and
       // no model to be slow or fail. Anything the matcher is unsure of still goes to the model.
-      if (budget.tier !== "none" && fastIntent(lastAsked) && (await answerAlone(true).catch(() => false))) {
+      // Trips follow the mode chip; only the transit one is planned here.
+      const fast = fastIntent(lastAsked);
+      if (budget.tier !== "none" && fast && (fast.kind !== "trip" || parsed.data.mode === "transit") && (await answerAlone(true).catch(() => false))) {
         const sources = audit.event();
         if (sources) send(sources);
         run.finish("done", { inputTokens: 0, outputTokens: 0 });

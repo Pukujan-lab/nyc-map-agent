@@ -76,8 +76,32 @@ describe("fastIntent: answered before the model", () => {
     expect(fastIntent("is the 7 running to Flushing?")).toBeNull();
     expect(fastIntent("is the N or the Q faster?")).toBeNull();
     expect(fastIntent("is there a delay")).toBeNull();
-    expect(fastIntent("how do I get to the Met?")).toBeNull();
+    expect(fastIntent("what should I see at the Met?")).toBeNull();
     // Other languages: the model answers in the asker's language.
     expect(fastIntent("¿Dónde hay un baño cerca?")).toBeNull();
+  });
+});
+
+describe("fastIntent: exits and trips", () => {
+  it("takes a plain which-exit ask, with or without the station", () => {
+    expect(fastIntent("Which exit for the Met?")).toEqual({ kind: "exit", station: "here", to: "the Met" });
+    expect(fastIntent("which exit should I take at Herald Sq for Macy's")).toEqual({ kind: "exit", station: "Herald Sq", to: "Macy's" });
+    expect(fastIntent("what exit to Bryant Park from 42 St-Bryant Pk")).toEqual({ kind: "exit", station: "42 St-Bryant Pk", to: "Bryant Park" });
+  });
+
+  it("takes a plain trip ask, from here or from a named place", () => {
+    expect(fastIntent("How do I get to Grand Central?")).toEqual({ kind: "trip", from: "here", to: "Grand Central" });
+    expect(fastIntent("Plan a trip to the Brooklyn Museum")).toEqual({ kind: "trip", from: "here", to: "the Brooklyn Museum" });
+    expect(fastIntent("Plan a trip from Union Square to Grand Central")).toEqual({ kind: "trip", from: "Union Square", to: "Grand Central" });
+  });
+
+  it("leaves times, ways to travel and extra wishes to the model", () => {
+    expect(fastIntent("How do I get to Grand Central at 5pm?")).toBeNull();
+    expect(fastIntent("how do I get to JFK tomorrow")).toBeNull();
+    expect(fastIntent("how do I get to the Met by bus")).toBeNull();
+    expect(fastIntent("how do I get to Penn with a stroller")).toBeNull();
+    expect(fastIntent("how do I get to MoMA and then the park")).toBeNull();
+    expect(fastIntent("Which exit should I take at the nearest subway station?")).toBeNull();
+    expect(fastIntent("which exit has an elevator for the Met")).toBeNull();
   });
 });
