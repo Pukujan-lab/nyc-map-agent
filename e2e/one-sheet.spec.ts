@@ -69,6 +69,12 @@ test("a wide screen keeps status chips in one row at the top of the left side", 
   expect(box.x).toBeLessThan(40);
   expect(box.y + box.height).toBeLessThanOrEqual(card.y);
   expect(box.y).toBeLessThan(800 * 0.25);
+  // The card keeps the app's theme: only the answer and the ask box are dark.
+  const darkAbove = await page.getByTestId("details-sheet").evaluate((el) => {
+    const d = el.closest(".dark");
+    return d && d !== document.documentElement ? d.getAttribute("data-testid") ?? d.tagName : null;
+  });
+  expect(darkAbove).toBeNull();
   await expectLayout(page);
 });
 

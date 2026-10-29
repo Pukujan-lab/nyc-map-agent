@@ -446,13 +446,14 @@ export function AgentHome(p: AgentHomeProps) {
   return (
     <>
     {column ? null : chips ? (
-      <div className="dark pointer-events-none fixed left-[var(--edge)] top-[calc(var(--topbar-h,64px)+var(--sp-3))] z-[45] w-[min(400px,44vw)]">{chips}</div>
+      <div className="pointer-events-none fixed left-[var(--edge)] top-[calc(var(--topbar-h,64px)+var(--sp-3))] z-[45] w-[min(400px,44vw)]">{chips}</div>
     ) : null}
     <div
       data-testid="agent-home"
       data-layout={column ? "column" : undefined}
       className={cn(
-        "dark pointer-events-none fixed z-[45] flex",
+        // Only the answer and the ask box are dark; cards and chips above them keep the app's theme.
+        "pointer-events-none fixed z-[45] flex",
         column
           ? "bottom-4 left-[var(--edge)] top-[calc(var(--topbar-h,64px)+var(--sp-3))] w-[min(400px,44vw)] flex-col gap-3"
           : "inset-x-0 bottom-0 justify-center",
@@ -467,7 +468,7 @@ export function AgentHome(p: AgentHomeProps) {
         // An open answer or the orb is a map cover: the map keeps you and the answer's place beside it.
         data-map-cover={sheet ? "" : undefined}
         className={cn(
-          "pointer-events-none flex w-full flex-col",
+          "dark pointer-events-none flex w-full flex-col",
           column
             ? "mt-auto min-h-0"
             : cn(
