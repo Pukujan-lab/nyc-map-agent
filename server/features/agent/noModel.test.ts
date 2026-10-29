@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { answerWithoutModel, fastIntent, noModelIntent } from "./noModel";
+import { answerWithoutModel, clock, fastIntent, foundAsAsked, noModelIntent } from "./noModel";
 import { makeTools } from "./tools";
 
 describe("noModelIntent", () => {
@@ -84,14 +84,14 @@ describe("fastIntent: answered before the model", () => {
 
 describe("fastIntent: exits and trips", () => {
   it("takes a plain which-exit ask, with or without the station", () => {
-    expect(fastIntent("Which exit for the Met?")).toEqual({ kind: "exit", station: "here", to: "the Met" });
+    expect(fastIntent("Which exit for the Met?")).toEqual({ kind: "exit", station: "here", to: "Met" });
     expect(fastIntent("which exit should I take at Herald Sq for Macy's")).toEqual({ kind: "exit", station: "Herald Sq", to: "Macy's" });
     expect(fastIntent("what exit to Bryant Park from 42 St-Bryant Pk")).toEqual({ kind: "exit", station: "42 St-Bryant Pk", to: "Bryant Park" });
   });
 
   it("takes a plain trip ask, from here or from a named place", () => {
     expect(fastIntent("How do I get to Grand Central?")).toEqual({ kind: "trip", from: "here", to: "Grand Central" });
-    expect(fastIntent("Plan a trip to the Brooklyn Museum")).toEqual({ kind: "trip", from: "here", to: "the Brooklyn Museum" });
+    expect(fastIntent("Plan a trip to the Brooklyn Museum")).toEqual({ kind: "trip", from: "here", to: "Brooklyn Museum" });
     expect(fastIntent("Plan a trip from Union Square to Grand Central")).toEqual({ kind: "trip", from: "Union Square", to: "Grand Central" });
   });
 
@@ -103,5 +103,22 @@ describe("fastIntent: exits and trips", () => {
     expect(fastIntent("how do I get to MoMA and then the park")).toBeNull();
     expect(fastIntent("Which exit should I take at the nearest subway station?")).toBeNull();
     expect(fastIntent("which exit has an elevator for the Met")).toBeNull();
+  });
+});
+
+describe("fast trip checks", () => {
+  it("reads New York local time as it is", () => {
+    expect(clock("2026-10-28T22:43")).toBe("10:43 pm");
+    expect(clock("2026-10-28T00:05")).toBe("12:05 am");
+    expect(clock("2026-10-28T12:00")).toBe("12:00 pm");
+    expect(clock("soon")).toBeNull();
+  });
+
+  it("trusts a found place only when it carries the asked name", () => {
+    expect(foundAsAsked("Brooklyn Museum", "Brooklyn Museum, 200 Eastern Parkway")).toBe(true);
+    expect(foundAsAsked("Grand Central", "Grand Central Terminal, 89 E 42nd St")).toBe(true);
+    expect(foundAsAsked("Brooklyn Museum", "Spark Brooklyn Children's Museum Annex, 1 John Street, Dumbo")).toBe(false);
+    expect(foundAsAsked("Macy's", "Macy's Herald Square, 151 W 34th St")).toBe(true);
+    expect(foundAsAsked("Met", undefined)).toBe(false);
   });
 });

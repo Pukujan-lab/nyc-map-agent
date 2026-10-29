@@ -47,6 +47,11 @@ const EXIT_ASK = /^(?:which|what) (?:exit|way out)(?: should i (?:take|use))?(?:
 const TRIP_ASK = /^(?:how (?:do|can|should) (?:i|we) (?:get|go)|how to get|directions|plan a trip|take me|get me|route me|navigate)(?: from (?<from>.+?))? to (?<to>.+?)$/i;
 const NOT_PLAIN = /\b(?:at|by|before|after|around|tomorrow|tonight|today|now|morning|afternoon|evening|noon|midnight|am|pm|monday|tuesday|wednesday|thursday|friday|saturday|sunday|weekend|bus|buses|subway|train|walk|walking|drive|driving|car|bike|ferry|taxi|only|fast|fastest|quickest|cheapest|less|least|without|avoid|and|or|with|via|then|stroller|wheelchair|elevator|accessible)\b|\d{1,2}(?::\d{2})?\s*(?:am|pm)\b|[,;?]/i;
 const placeOk = (p: string | undefined): p is string => !!p && p.length >= 2 && p.length <= 48 && !NOT_PLAIN.test(p);
+// "the Brooklyn Museum" finds a children's museum annex; the name alone finds the museum.
+const bare = (p: string) => p.replace(/^the\s+/i, "");
+const norm = (p: string) => p.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+/** The place found carries the asked name, so the lookup did not land on some other place. */
+export const foundAsAsked = (asked: string, found: string | undefined) => !!found && norm(found.split(",")[0]).includes(norm(bare(asked)));
 
 /** The plain exit or trip ask, or null. English only, like the rest of the fast path. */
 function placeIntent(text: string): NoModelIntent | null {
@@ -54,12 +59,12 @@ function placeIntent(text: string): NoModelIntent | null {
   const e = EXIT_ASK.exec(t);
   if (e?.groups) {
     const station = e.groups.station ?? e.groups.station2;
-    if (placeOk(e.groups.to) && (station === undefined || placeOk(station))) return { kind: "exit", station: station ?? "here", to: e.groups.to };
+    if (placeOk(e.groups.to) && (station === undefined || placeOk(station))) return { kind: "exit", station: station ? bare(station) : "here", to: bare(e.groups.to) };
     return null;
   }
   const r = TRIP_ASK.exec(t);
   if (r?.groups && placeOk(r.groups.to) && (r.groups.from === undefined || placeOk(r.groups.from))) {
-    return { kind: "trip", from: r.groups.from ?? "here", to: r.groups.to };
+    return { kind: "trip", from: r.groups.from ? bare(r.groups.from) : "here", to: bare(r.groups.to) };
   }
   return null;
 }
@@ -94,14 +99,19 @@ const run = <R>(t: { execute?: unknown; inputSchema?: unknown }, input: unknown)
 const FAR_WALK_MIN = 30;
 
 type RestroomResult = { restrooms: Array<{ name: string; distanceM: number; openNow?: boolean | null; hours?: string | null }>; walkToNearest: { minutes: number } | null };
-type ExitResult = { station: string; exit: string; elevatorOnly: boolean; outage?: string | null; walkFromExit: { minutes: number } | null };
+type ExitResult = { station: string; to?: string; exit: string; elevatorOnly: boolean; outage?: string | null; walkFromExit: { minutes: number } | null };
 type TripResult = {
-  summary: string; totalMin: number; arrive: string; tripId: string; blocked?: boolean;
+  summary: string; destination?: string; totalMin: number; arrive: string; tripId: string; blocked?: boolean;
   affectsThisTrip?: string[]; exitAdvice?: string | null; elevatorOutages?: string[];
 };
 
-/** "6:40 pm" in New York. */
-const clock = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" }).toLowerCase();
+/** "6:40 pm" from a New York local time like "2026-10-28T18:40" (no zone: it is already New York's). */
+export const clock = (local: string) => {
+  const m = /T(\d{2}):(\d{2})/.exec(local);
+  if (!m) return null;
+  const h = Number(m[1]);
+  return `${h % 12 || 12}:${m[2]} ${h < 12 ? "am" : "pm"}`;
+};
 
 type LineResult = { trouble: Array<{ summary: string }>; alerts: unknown[]; note?: string };
 
@@ -123,7 +133,7 @@ export async function answerWithoutModel(q: Question, tools: Tools, intent: NoMo
     if (intent.kind === "exit") {
       if (intent.station === "here" && !q.hasLocation) return null;
       const r = await run<ExitResult>(tools.station_exit, { station: intent.station, to: intent.to });
-      if (!r.walkFromExit || r.walkFromExit.minutes > FAR_WALK_MIN) return null;
+      if (!r.walkFromExit || r.walkFromExit.minutes > FAR_WALK_MIN || !foundAsAsked(intent.to, r.to)) return null;
       const lift = r.elevatorOnly ? " It is elevator-only." : "";
       const out = r.outage ? ` Heads up: ${r.outage}.` : "";
       const walk = r.walkFromExit ? `, then about ${r.walkFromExit.minutes} min on foot` : "";
@@ -132,15 +142,17 @@ export async function answerWithoutModel(q: Question, tools: Tools, intent: NoMo
     if (intent.kind === "trip") {
       if (intent.from === "here" && !q.hasLocation) return null;
       const r = await run<TripResult>(tools.transit_plan, { from: intent.from, to: intent.to });
-      // A trip the day's changes break needs the model to weigh the alternatives.
-      if (r.blocked) return null;
+      // A trip the day's changes break needs the model to weigh the alternatives; a place found under
+      // another name may be the wrong place, and the model can ask.
+      const at = clock(r.arrive);
+      if (r.blocked || !at || !foundAsAsked(intent.to, r.destination)) return null;
       await run(tools.showRoute, { tripId: r.tripId });
       await run(tools.openPanel, { tripId: r.tripId });
       const first = r.affectsThisTrip?.length ? `${r.affectsThisTrip[0]} ` : "";
-      const rides = r.summary === "walk" ? "Walk there" : `Take the ${r.summary.replace(/ → /g, ", then the ")}`;
+      const rides = r.summary === "walk" ? "Walk there" : `Take the ${r.summary.replace(/ subway\b/g, " train").replace(/ → /g, ", then the ")}`;
       const exit = r.exitAdvice ? ` ${r.exitAdvice}` : "";
       const lift = r.elevatorOutages?.length ? ` Elevator out: ${r.elevatorOutages[0]}.` : "";
-      return `${first}${rides}: about ${r.totalMin} min, arriving around ${clock(r.arrive)}.${exit}${lift} Press Play on the card to preview it.`;
+      return `${first}${rides}: about ${r.totalMin} min, arriving around ${at}.${exit}${lift} Press Play on the card to preview it.`;
     }
     const r = await run<LineResult>(tools.line_status, { lines: [intent.route] });
     if (!r.trouble.length) return `The MTA lists no delays or changes on the ${intent.route} train right now.`;
