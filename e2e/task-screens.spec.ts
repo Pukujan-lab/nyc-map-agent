@@ -290,7 +290,11 @@ test("a restroom answer in street view on a tablet keeps the camera, pad and min
   await mockNetwork(page);
   await page.route("**/api/agent", (r) => r.fulfill({ contentType: "application/x-ndjson", body: stream([
     { type: "text", text: "Bryant Park is the closest open restroom." },
-    { type: "actions", actions: [{ kind: "showRestroom", id: "restroom:bp", label: "Show the nearest restroom", restroom: { name: "Bryant Park", lon: -73.9832, lat: 40.7536, distanceM: 420, hours: "8am-8pm" } }] },
+    // Two restrooms: one is flown to, more are fitted from above, and both left the street.
+    { type: "actions", actions: [
+      { kind: "showRestroom", id: "restroom:bp", label: "Show the nearest restroom", restroom: { name: "Bryant Park", lon: -73.9832, lat: 40.7536, distanceM: 420, hours: "8am-8pm" } },
+      { kind: "showRestroom", id: "restroom:nypl", label: "Show the library restroom", restroom: { name: "Library", lon: -73.9822, lat: 40.7532, distanceM: 520, hours: "10am-6pm" } },
+    ] },
     { type: "done" },
   ]) }));
   await page.goto("/");
@@ -299,10 +303,13 @@ test("a restroom answer in street view on a tablet keeps the camera, pad and min
   await expect(page.getByTestId("street-minimap")).toBeVisible({ timeout: 15_000 });
   const pitch = () => page.evaluate(() => (window as unknown as { __map: { getPitch(): number } }).__map.getPitch());
   await expect.poll(pitch, { timeout: 15_000 }).toBeGreaterThan(60);
+  const zoom = () => page.evaluate(() => (window as unknown as { __map: { getZoom(): number } }).__map.getZoom());
+  const eyeZoom = await zoom();
   await ask(page, "Where is the nearest restroom?");
   await expect(page.getByText("Bryant Park is the closest open restroom.")).toBeVisible();
   await page.waitForTimeout(1200);
   expect(await pitch()).toBeGreaterThan(60);
+  expect(Math.abs((await zoom()) - eyeZoom)).toBeLessThan(0.5);
   const pad = await page.getByRole("group", { name: "Street-level camera controls" }).boundingBox();
   const mini = await page.getByTestId("street-minimap").boundingBox();
   const sheet = await page.getByTestId("agent-answers").boundingBox();
