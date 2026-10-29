@@ -56,3 +56,30 @@ export function openAt(hours: string | null | undefined, now: Date): boolean | n
   }
   return inRange(text, t);
 }
+
+/**
+ * Today's hours as one short phrase ("8:00 am - 9:00 pm", "closed"), for an answer that should not
+ * read out the whole week. Reads per-day lines and day ranges ("Monday to Saturday: 7:30 am-9:30 pm;
+ * Sunday: 11:00 am-7:00 pm"). A list without days comes back as is when it is one short line; null otherwise.
+ */
+export function hoursToday(hours: string | null | undefined, now: Date): string | null {
+  if (!hours) return null;
+  const parts = hours.trim().split(/\n|;/).map((l) => l.trim()).filter(Boolean);
+  const day = nyClock(now).day;
+  let sawDays = false;
+  for (const part of parts) {
+    const m = /^([a-z]+)(?:\s*(?:to|through|-|–)\s*([a-z]+))?\s*:?\s*(.*)$/i.exec(part);
+    const from = m ? DAYS.indexOf(m[1].toLowerCase()) : -1;
+    if (!m || from < 0) continue;
+    sawDays = true;
+    const to = m[2] ? DAYS.indexOf(m[2].toLowerCase()) : from;
+    if (to < 0) continue;
+    // "Friday to Monday" runs over the weekend.
+    const covers = from <= to ? day >= from && day <= to : day >= from || day <= to;
+    if (!covers) continue;
+    const rest = m[3].trim();
+    return /closed/i.test(rest) ? "closed" : rest || null;
+  }
+  if (sawDays) return null;
+  return parts.length === 1 && parts[0].length <= 60 ? parts[0] : null;
+}

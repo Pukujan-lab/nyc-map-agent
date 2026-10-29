@@ -78,7 +78,7 @@ export async function POST(request: Request, opts: { model?: LanguageModel; deps
       // Restrooms and line status still get a real answer with no model (#199).
       const lastAsked = messages.filter((m) => m.role === "user").at(-1)?.content ?? "";
       const answerAlone = async (fast = false): Promise<boolean> => {
-        const q = { text: lastAsked, hasLocation: location !== null };
+        const q = { text: lastAsked, hasLocation: location !== null, now: clock };
         const text = await answerWithoutModel(q, tools, fast ? fastIntent(lastAsked) : undefined);
         if (!text) return false;
         answerText = text;

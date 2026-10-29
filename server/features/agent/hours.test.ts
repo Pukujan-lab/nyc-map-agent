@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { openAt } from "./hours";
+import { hoursToday, openAt } from "./hours";
 
 // Sunday 2026-10-25 in New York (EDT, UTC-4).
 const at = (hhmm: string) => new Date(`2026-10-25T${hhmm}:00-04:00`);
@@ -27,5 +27,26 @@ describe("openAt", () => {
     expect(openAt("Bathrooms are open from 7 a.m.-7 p.m., with a one-hour closure", at("08:00"))).toBe(true);
     expect(openAt("Open by permit", at("12:00"))).toBeNull();
     expect(openAt(null, at("12:00"))).toBeNull();
+  });
+});
+
+describe("hoursToday", () => {
+  const week = "Sunday: Closed \nMonday: 8:00 am - 9:00 pm \nTuesday: 8:00 am - 9:00 pm";
+  it("picks today's line from a week of hours", () => {
+    expect(hoursToday(week, at("12:00"))).toBe("closed");
+    expect(hoursToday(week, new Date("2026-10-26T12:00:00-04:00"))).toBe("8:00 am - 9:00 pm");
+  });
+
+  it("keeps one short line without days, and drops a long or unknown one", () => {
+    expect(hoursToday("8am-8pm", at("12:00"))).toBe("8am-8pm");
+    expect(hoursToday("Wednesday: 9am-5pm", at("12:00"))).toBeNull();
+    expect(hoursToday(null, at("12:00"))).toBeNull();
+  });
+
+  it("reads day ranges on one line", () => {
+    const line = "Monday to Saturday: 7:30 am-9:30 pm; Sunday: 11:00 am-7:00 pm";
+    expect(hoursToday(line, at("12:00"))).toBe("11:00 am-7:00 pm");
+    expect(hoursToday(line, new Date("2026-10-28T12:00:00-04:00"))).toBe("7:30 am-9:30 pm");
+    expect(hoursToday("Friday - Monday: 9am-5pm", at("12:00"))).toBe("9am-5pm");
   });
 });
