@@ -56,3 +56,18 @@ export function openAt(hours: string | null | undefined, now: Date): boolean | n
   }
   return inRange(text, t);
 }
+
+/**
+ * Today's hours as one short phrase ("8:00 am - 9:00 pm", "closed"), for an answer that should not
+ * read out the whole week. A list without days comes back as is when it is one short line; null otherwise.
+ */
+export function hoursToday(hours: string | null | undefined, now: Date): string | null {
+  if (!hours) return null;
+  const lines = hours.trim().split(/\n/).map((l) => l.trim()).filter(Boolean);
+  const perDay = lines.filter((l) => DAYS.some((d) => l.toLowerCase().startsWith(d)));
+  if (!perDay.length) return lines.length === 1 && lines[0].length <= 60 ? lines[0] : null;
+  const today = perDay.find((l) => l.toLowerCase().startsWith(DAYS[nyClock(now).day]));
+  if (!today) return null;
+  const rest = today.replace(/^[a-z]+\s*:?\s*/i, "").trim();
+  return /closed/i.test(rest) ? "closed" : rest || null;
+}

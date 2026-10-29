@@ -38,6 +38,7 @@ describe("answerWithoutModel", () => {
   it("names the nearest restroom and the walk", async () => {
     const text = await answerWithoutModel({ text: "nearest bathroom", hasLocation: true }, tools({ lon: -73.99, lat: 40.735 }));
     expect(text).toMatch(/Union Square Park, about 2 min on foot/);
+    expect(text).toMatch(/Open today 8am-8pm\./);
   });
 
   it("asks for the location when it has none", async () => {

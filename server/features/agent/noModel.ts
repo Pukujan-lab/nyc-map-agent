@@ -5,10 +5,11 @@
  * the same tool the model would call, so the buttons under the answer match.
  * Anything else gets null and the caller keeps its usual message.
  */
+import { hoursToday } from "./hours";
 import type { makeTools } from "./tools";
 
 type Tools = ReturnType<typeof makeTools>;
-type Question = { text: string; hasLocation: boolean };
+type Question = { text: string; hasLocation: boolean; now?: Date };
 
 // Also the words the Restroom button asks with in the app's other languages (French, Haitian Creole,
 // Russian, Chinese, Korean, Bengali); \b does not work next to those scripts, so they match on their own.
@@ -69,12 +70,18 @@ export async function answerWithoutModel(q: Question, tools: Tools, intent: NoMo
       const first = r.restrooms[0];
       if (!first) return "I couldn't find an open public restroom nearby. Turn on Restrooms in the Layers menu to see them on the map.";
       const walk = r.walkToNearest ? `, about ${r.walkToNearest.minutes} min on foot` : `, about ${first.distanceM} m away`;
-      const hours = first.hours ? ` Hours: ${first.hours}.` : "";
+      // Today's hours only; the card under the answer has the whole week.
+      const today = hoursToday(first.hours, q.now ?? new Date());
+      const hours = today === "closed" ? " It is closed today." : today ? ` Open today ${today}.` : "";
       return `The nearest public restroom is ${first.name}${walk}.${hours} Tap the button below to see the way.`;
     }
     const r = await run<LineResult>(tools.line_status, { lines: [intent.route] });
     if (!r.trouble.length) return `The MTA lists no delays or changes on the ${intent.route} train right now.`;
-    return `${r.trouble.slice(0, 3).map((t) => t.summary).join(" ")} The button below shows it on the map.`;
+    // The feed starts each notice with the line ("7: In Queens, …"); the question already named it.
+    const lead = new RegExp(`^${intent.route}\\s*:\\s*`);
+    const notes = [...new Set(r.trouble.map((t) => t.summary.replace(lead, "").trim()))].slice(0, 2);
+    const more = r.trouble.length > notes.length ? " There's more on the map." : "";
+    return `${notes.join(" ")}${more} The buttons below show it on the map.`;
   } catch {
     return null;
   }
