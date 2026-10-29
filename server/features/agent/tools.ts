@@ -2,7 +2,7 @@ import { tool } from "ai";
 import { findEvent, readPage } from "./webLookup";
 import { z } from "zod";
 import { command, LAYER_HELP_IDS, playbackSpeed, type AgentCommand, type LngLatTuple, type MapAction, type Trip } from "../../../src/features/agent/schema";
-import { elevatorStatus, geocode, hazardsAt, nearestRestrooms, publicRestrooms, routeWalk, serviceAlerts, subwayAlertEntities, subwayVehicles, troubleStations, weatherAt, type Place, type RestroomRow, type WalkResult } from "./services";
+import { elevatorOutages, elevatorStatus, geocode, lineOutages, hazardsAt, nearestRestrooms, publicRestrooms, routeWalk, serviceAlerts, subwayAlertEntities, subwayVehicles, troubleStations, weatherAt, type Place, type RestroomRow, type WalkResult } from "./services";
 import { exitActions, LAYER_HELP, layerAction, lineAction, placeActions, restroomActions, troubleActions, tripActions } from "./mapActions";
 import { buildDriveTrip } from "./drive/trip";
 import type { DriveRouter } from "./drive/router";
@@ -28,6 +28,7 @@ export interface ToolContext {
     /** MTA trouble inputs (#361), injectable for tests. */
     alertEntities?: () => Promise<FeedAlert[]>;
     vehicles?: (routes: string[]) => Promise<LiveVehicle[]>;
+    outages?: typeof elevatorOutages;
     now?: () => number;
     /** The guide landmarks, injectable for tests. */
     landmarks?: () => Promise<readonly GuideLandmark[]>;
@@ -312,10 +313,13 @@ function allTools(ctx: ToolContext) {
         const span = /\bweek-?end\b/i.test(asked ?? "") ? weekendWindow(nowS * 1000) : ahead ? dayWindow(nowS * 1000) : null;
         // Work that runs only Sunday, or only overnight, is still that weekend's: look across it.
         const times = span ? [...new Set([nowS, ...[2, 13, 25, 37, 49, 53].map((h) => span.from + h * 3600).filter((t) => t < span.to)])] : [nowS];
-        const [alertSets, feed] = await Promise.all([
+        const [alertSets, feed, outageRows] = await Promise.all([
           Promise.all(times.map((t) => (ctx.deps?.alerts ?? serviceAlerts)(routes, t))),
           safe((ctx.deps?.alertEntities ?? subwayAlertEntities)(), [] as FeedAlert[]),
+          // The line card lists these too; without them the answer said "no alerts" over a card with three.
+          ahead ? Promise.resolve([]) : safe((ctx.deps?.outages ?? elevatorOutages)(), []),
         ]);
+        const outages = lineOutages(outageRows, routes);
         const alerts = [...new Set(alertSets.flat())].slice(0, 6);
         // Stations only matter when an alert names one of these lines.
         const touched = feed.some((a) => a.alert.informed_entity?.some((e) => e.route_id && routes.includes(e.route_id)));
@@ -343,7 +347,8 @@ function allTools(ctx: ToolContext) {
           })),
           ...(stuck.length ? { trainsNotMoving: stuck.slice(0, 5).map((s) => ({ line: s.route, toward: s.toward, station: s.station.name, stoppedAtStation: s.stopped, minutesWithoutMoving: s.stoppedMin, ...(s.tripId === followed ? { isTheTrainTheUserFollows: true } : {}) })) } : {}),
           ...(followedSeen && !stuck.some((s) => s.tripId === followed) ? { followedTrain: "moving normally per the live feed" } : {}),
-          ...(alerts.length || troubles.length ? {} : { note: "The MTA feed has no active alerts for these lines." }),
+          ...(outages.length ? { elevatorEscalatorOutages: { stations: outages.length, list: outages.slice(0, 4) } } : {}),
+          ...(alerts.length || troubles.length ? {} : { note: outages.length ? "No delays or service changes; only the elevator and escalator outages above." : "The MTA feed has no active alerts for these lines." }),
         };
       }),
     }),
