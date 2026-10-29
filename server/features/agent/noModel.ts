@@ -79,7 +79,9 @@ export async function answerWithoutModel(q: Question, tools: Tools, intent: NoMo
     if (!r.trouble.length) return `The MTA lists no delays or changes on the ${intent.route} train right now.`;
     // The feed starts each notice with the line ("7: In Queens, …"); the question already named it.
     const lead = new RegExp(`^${intent.route}\\s*:\\s*`);
-    const notes = [...new Set(r.trouble.map((t) => t.summary.replace(lead, "").trim()))].slice(0, 2);
+    // First sentence of each: the rest (how to reach a skipped stop) is on the map and in the line card.
+    const first = (t: string) => t.replace(lead, "").trim().split(/(?<=[.!])\s+(?=[A-Z])/)[0];
+    const notes = [...new Set(r.trouble.map((t) => first(t.summary)))].slice(0, 2);
     const more = r.trouble.length > notes.length ? " There's more on the map." : "";
     return `${notes.join(" ")}${more} The buttons below show it on the map.`;
   } catch {

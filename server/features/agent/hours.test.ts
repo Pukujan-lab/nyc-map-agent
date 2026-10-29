@@ -42,4 +42,11 @@ describe("hoursToday", () => {
     expect(hoursToday("Wednesday: 9am-5pm", at("12:00"))).toBeNull();
     expect(hoursToday(null, at("12:00"))).toBeNull();
   });
+
+  it("reads day ranges on one line", () => {
+    const line = "Monday to Saturday: 7:30 am-9:30 pm; Sunday: 11:00 am-7:00 pm";
+    expect(hoursToday(line, at("12:00"))).toBe("11:00 am-7:00 pm");
+    expect(hoursToday(line, new Date("2026-10-28T12:00:00-04:00"))).toBe("7:30 am-9:30 pm");
+    expect(hoursToday("Friday - Monday: 9am-5pm", at("12:00"))).toBe("9am-5pm");
+  });
 });
