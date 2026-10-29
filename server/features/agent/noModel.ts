@@ -18,7 +18,11 @@ const RESTROOM = /\b(rest ?rooms?|bathrooms?|toilets?|toilettes?|washrooms?|loos
 // Letters are matched in capitals only, so "take a train" is not the A.
 const LINE = /\b(?:[Tt]he\s+)?([1-7]|[ABCDEFGJLMNQRWZ]|SIR)\s*(?:[Tt]rains?|[Ll]ines?|[Ss]ubway)\b|\b(?:[Ii]s|[Aa]re)\s+the\s+([1-7]|[ABCDEFGJLMNQRWZ])\b/;
 
-export type NoModelIntent = { kind: "restroom" } | { kind: "line"; route: string };
+export type NoModelIntent =
+  | { kind: "restroom" }
+  | { kind: "line"; route: string }
+  | { kind: "exit"; station: string; to: string }
+  | { kind: "trip"; from: string; to: string };
 
 export function noModelIntent(text: string): NoModelIntent | null {
   if (RESTROOM.test(text)) return { kind: "restroom" };
@@ -36,6 +40,30 @@ const LINE_FILLER = new Set(["how", "hows", "how's", "is", "are", "the", "train"
 
 const words = (text: string) => text.replace(/[\u2018\u2019]/g, "'").replace(/[?!.,¿¡]/g, " ").split(/\s+/).filter(Boolean);
 
+// "Which exit for the Met", "which exit at Herald Sq for Macy's", "how do I get to the Met",
+// "Plan a trip from Union Square to Grand Central". A place that carries a time, a way to travel or
+// a second wish ("at 5pm", "by bus", "and lunch") goes to the model, which reads those.
+const EXIT_ASK = /^(?:which|what) (?:exit|way out)(?: should i (?:take|use))?(?: (?:at|from) (?<station>.+?))? (?:for|to) (?<to>.+?)(?: (?:at|from) (?<station2>.+?))?$/i;
+const TRIP_ASK = /^(?:how (?:do|can|should) (?:i|we) (?:get|go)|how to get|directions|plan a trip|take me|get me|route me|navigate)(?: from (?<from>.+?))? to (?<to>.+?)$/i;
+const NOT_PLAIN = /\b(?:at|by|before|after|around|tomorrow|tonight|today|now|morning|afternoon|evening|noon|midnight|am|pm|monday|tuesday|wednesday|thursday|friday|saturday|sunday|weekend|bus|buses|subway|train|walk|walking|drive|driving|car|bike|ferry|taxi|only|fast|fastest|quickest|cheapest|less|least|without|avoid|and|or|with|via|then|stroller|wheelchair|elevator|accessible)\b|\d{1,2}(?::\d{2})?\s*(?:am|pm)\b|[,;?]/i;
+const placeOk = (p: string | undefined): p is string => !!p && p.length >= 2 && p.length <= 48 && !NOT_PLAIN.test(p);
+
+/** The plain exit or trip ask, or null. English only, like the rest of the fast path. */
+function placeIntent(text: string): NoModelIntent | null {
+  const t = text.replace(/[\u2018\u2019]/g, "'").trim().replace(/[?.!]+$/, "").replace(/\s+/g, " ");
+  const e = EXIT_ASK.exec(t);
+  if (e?.groups) {
+    const station = e.groups.station ?? e.groups.station2;
+    if (placeOk(e.groups.to) && (station === undefined || placeOk(station))) return { kind: "exit", station: station ?? "here", to: e.groups.to };
+    return null;
+  }
+  const r = TRIP_ASK.exec(t);
+  if (r?.groups && placeOk(r.groups.to) && (r.groups.from === undefined || placeOk(r.groups.from))) {
+    return { kind: "trip", from: r.groups.from ?? "here", to: r.groups.to };
+  }
+  return null;
+}
+
 /**
  * A question the app answers on its own, before the model: plain English asks for the nearest
  * restroom or one subway line's status, like the home buttons send. Exact and narrow on purpose:
@@ -49,7 +77,7 @@ export function fastIntent(text: string): NoModelIntent | null {
   // Letters count in capitals only, so "is there a delay" has no A train in it.
   const routes = w.filter((x) => ROUTE.test(x));
   if (routes.length === 1 && w.every((x, i) => ROUTE.test(x) || LINE_FILLER.has(lower[i]))) return { kind: "line", route: routes[0] };
-  return null;
+  return placeIntent(text);
 }
 
 const call = { toolCallId: "no-model", messages: [] };
@@ -58,6 +86,15 @@ const run = <R>(t: { execute?: unknown }, input: unknown): Promise<R> =>
   (t.execute as (input: unknown, options: typeof call) => Promise<R>)(input, call);
 
 type RestroomResult = { restrooms: Array<{ name: string; distanceM: number; openNow?: boolean | null; hours?: string | null }>; walkToNearest: { minutes: number } | null };
+type ExitResult = { station: string; exit: string; elevatorOnly: boolean; outage?: string | null; walkFromExit: { minutes: number } | null };
+type TripResult = {
+  summary: string; totalMin: number; arrive: string; tripId: string; blocked?: boolean;
+  affectsThisTrip?: string[]; exitAdvice?: string | null; elevatorOutages?: string[];
+};
+
+/** "6:40 pm" in New York. */
+const clock = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" }).toLowerCase();
+
 type LineResult = { trouble: Array<{ summary: string }>; alerts: unknown[]; note?: string };
 
 /** The answer text, or null when the question is not one of these or the feed failed. */
@@ -74,6 +111,27 @@ export async function answerWithoutModel(q: Question, tools: Tools, intent: NoMo
       const today = hoursToday(first.hours, q.now ?? new Date());
       const hours = today === "closed" ? " It is closed today." : today ? ` Open today ${today}.` : "";
       return `The nearest public restroom is ${first.name}${walk}.${hours} Tap the button below to see the way.`;
+    }
+    if (intent.kind === "exit") {
+      if (intent.station === "here" && !q.hasLocation) return null;
+      const r = await run<ExitResult>(tools.station_exit, { station: intent.station, to: intent.to });
+      const lift = r.elevatorOnly ? " It is elevator-only." : "";
+      const out = r.outage ? ` Heads up: ${r.outage}.` : "";
+      const walk = r.walkFromExit ? `, then about ${r.walkFromExit.minutes} min on foot` : "";
+      return `Use the ${r.exit} at ${r.station}${walk}.${lift}${out} Want to start?`;
+    }
+    if (intent.kind === "trip") {
+      if (intent.from === "here" && !q.hasLocation) return null;
+      const r = await run<TripResult>(tools.transit_plan, { from: intent.from, to: intent.to });
+      // A trip the day's changes break needs the model to weigh the alternatives.
+      if (r.blocked) return null;
+      await run(tools.showRoute, { tripId: r.tripId });
+      await run(tools.openPanel, { tripId: r.tripId });
+      const first = r.affectsThisTrip?.length ? `${r.affectsThisTrip[0]} ` : "";
+      const rides = r.summary === "walk" ? "Walk there" : `Take the ${r.summary.replace(/ → /g, ", then the ")}`;
+      const exit = r.exitAdvice ? ` ${r.exitAdvice}` : "";
+      const lift = r.elevatorOutages?.length ? ` Elevator out: ${r.elevatorOutages[0]}.` : "";
+      return `${first}${rides}: about ${r.totalMin} min, arriving around ${clock(r.arrive)}.${exit}${lift} Press Play on the card to preview it.`;
     }
     const r = await run<LineResult>(tools.line_status, { lines: [intent.route] });
     if (!r.trouble.length) return `The MTA lists no delays or changes on the ${intent.route} train right now.`;
