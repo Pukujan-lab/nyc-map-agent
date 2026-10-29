@@ -1,3 +1,4 @@
+import { useLeftColumn } from "@/lib/store/leftColumn";
 import { useFlag } from "@/lib/flags";
 import type { PointerEvent } from "react";
 import {
@@ -74,6 +75,8 @@ export function WalkControls({
   onAsk,
 }: WalkControlsProps) {
   const home = useFlag("agentHome");
+  // A wide screen's left column (an answer or a card) would cover the pad: it moves to the column's right.
+  const column = useLeftColumn((s) => s.slot !== null);
   const pad = (label: string, icon: typeof ChevronUp, input: WalkInput) => (
     <HoldButton
       label={label}
@@ -118,7 +121,9 @@ export function WalkControls({
         role="group"
         aria-label="Street-level camera controls"
         className="absolute left-3 z-30 grid grid-cols-3 grid-rows-3 gap-1 sm:left-6"
-        style={{ bottom: home ? "calc(var(--chat-bar-h, 96px) + var(--pull-sheet-h, 0px) + 12px)" : undefined }}
+        style={column
+          ? { left: "calc(var(--edge, 16px) + min(400px, 44vw) + 16px)", bottom: 24 }
+          : { bottom: home ? "calc(var(--chat-bar-h, 96px) + var(--pull-sheet-h, 0px) + 12px)" : undefined }}
       >
         <span />
         {pad("Walk forward", ChevronUp, {

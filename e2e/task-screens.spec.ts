@@ -219,3 +219,25 @@ test("the trip card asks again with the least walking", async ({ page }) => {
   await page.waitForTimeout(1000);
   expect(questions.length).toBe(2);
 });
+
+// Owner report, 2026-10-28: asking in street view threw the camera overhead under the street bar, and the
+// entrance labels, still allowed to overlap, piled on each other.
+test("asking in street view keeps the camera at eye level", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockNetwork(page);
+  await page.route("**/api/agent", (r) => r.fulfill({ contentType: "application/x-ndjson", body: stream([
+    { type: "text", text: "Bryant Park is the closest open restroom." }, { type: "done" },
+  ]) }));
+  await page.goto("/");
+  await page.waitForFunction(() => Boolean((window as unknown as { __map?: unknown }).__map), null, { timeout: 15_000 });
+  await page.getByTestId("map-view-switch").getByRole("radio", { name: "Street", exact: true }).click();
+  await expect(page.getByTestId("street-minimap")).toBeVisible({ timeout: 15_000 });
+  const pitch = () => page.evaluate(() => (window as unknown as { __map: { getPitch(): number } }).__map.getPitch());
+  await expect.poll(pitch, { timeout: 15_000 }).toBeGreaterThan(60);
+  await ask(page, "Where is the nearest restroom?");
+  await expect(page.getByText("Bryant Park is the closest open restroom.")).toBeVisible();
+  await page.waitForTimeout(1000);
+  expect(await pitch()).toBeGreaterThan(60);
+  await expect(page.getByTestId("street-minimap")).toBeVisible();
+  await expectLayout(page);
+});
