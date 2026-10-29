@@ -77,6 +77,9 @@ export function WalkControls({
   const home = useFlag("agentHome");
   // A wide screen's left column (an answer or a card) would cover the pad: it moves to the column's right.
   const column = useLeftColumn((s) => s.slot !== null);
+  // Below the column, an open answer sheet takes the left side and the ask box with it
+  // (800×1000: the pad rode --chat-bar-h up to the top left): it moves to the sheet's right.
+  const sheet = useLeftColumn((s) => s.sheet);
   const pad = (label: string, icon: typeof ChevronUp, input: WalkInput) => (
     <HoldButton
       label={label}
@@ -123,7 +126,9 @@ export function WalkControls({
         className="absolute left-3 z-30 grid grid-cols-3 grid-rows-3 gap-1 sm:left-6"
         style={column
           ? { left: "calc(var(--edge, 16px) + min(400px, 44vw) + 16px)", bottom: 24 }
-          : { bottom: home ? "calc(var(--chat-bar-h, 96px) + var(--pull-sheet-h, 0px) + 12px)" : undefined }}
+          : sheet
+            ? { left: "calc(12px + min(420px, 44vw) + 16px)", bottom: 24 }
+            : { bottom: home ? "calc(var(--chat-bar-h, 96px) + var(--pull-sheet-h, 0px) + 12px)" : undefined }}
       >
         <span />
         {pad("Walk forward", ChevronUp, {

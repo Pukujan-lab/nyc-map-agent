@@ -20,6 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { setAmbient } from "@/lib/ambient";
 import { useFlag } from "@/lib/flags";
 import { getMapInstance } from "@/lib/map/mapInstance";
+import { walkEye } from "@/lib/map/walkEye";
 import { useDataView } from "@/lib/store/DataViewContext";
 import { followTripRoute } from "@/lib/transit/routeFollow";
 import { setTripStep } from "@/lib/store/tripStep";
@@ -576,6 +577,8 @@ export default function AgentOverlay() {
     const spots = (lastActions ?? []).flatMap((x) => (x.kind === "showRestroom" ? [x.restroom] : []));
     if (!restrooms) { restroomsByAnswer.current = true; setRestrooms(true); }
     showPoints(m, spots.map((r) => ({ at: [r.lon, r.lat], name: formatStreetText(r.name) })), "#2563eb");
+    // In street view the camera stays at eye level; the pins and the mini map show the way.
+    if (walkEye()) return;
     const me = sharedCoords();
     const pts: Array<[number, number]> = [...spots.map((r): [number, number] => [r.lon, r.lat]), ...(me ? [[me.lon, me.lat] as [number, number]] : [])];
     // The answer covers the lower ~60% on phones and the left column on desktop; the quick bar the right edge.
