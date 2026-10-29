@@ -81,9 +81,17 @@ export function fastIntent(text: string): NoModelIntent | null {
 }
 
 const call = { toolCallId: "no-model", messages: [] };
-/** Runs a tool the way the model would, outside a model step. */
-const run = <R>(t: { execute?: unknown }, input: unknown): Promise<R> =>
-  (t.execute as (input: unknown, options: typeof call) => Promise<R>)(input, call);
+/**
+ * Runs a tool the way the model would, outside a model step. The input goes through the tool's own
+ * schema first, so its defaults apply (transit_plan's depart is "now" only after that).
+ */
+const run = <R>(t: { execute?: unknown; inputSchema?: unknown }, input: unknown): Promise<R> => {
+  const schema = t.inputSchema as { parse?: (v: unknown) => unknown } | undefined;
+  return (t.execute as (input: unknown, options: typeof call) => Promise<R>)(schema?.parse ? schema.parse(input) : input, call);
+};
+
+/** A walk from an exit longer than this means the place was found somewhere else; the model asks. */
+const FAR_WALK_MIN = 30;
 
 type RestroomResult = { restrooms: Array<{ name: string; distanceM: number; openNow?: boolean | null; hours?: string | null }>; walkToNearest: { minutes: number } | null };
 type ExitResult = { station: string; exit: string; elevatorOnly: boolean; outage?: string | null; walkFromExit: { minutes: number } | null };
@@ -115,6 +123,7 @@ export async function answerWithoutModel(q: Question, tools: Tools, intent: NoMo
     if (intent.kind === "exit") {
       if (intent.station === "here" && !q.hasLocation) return null;
       const r = await run<ExitResult>(tools.station_exit, { station: intent.station, to: intent.to });
+      if (!r.walkFromExit || r.walkFromExit.minutes > FAR_WALK_MIN) return null;
       const lift = r.elevatorOnly ? " It is elevator-only." : "";
       const out = r.outage ? ` Heads up: ${r.outage}.` : "";
       const walk = r.walkFromExit ? `, then about ${r.walkFromExit.minutes} min on foot` : "";
