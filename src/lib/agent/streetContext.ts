@@ -1,4 +1,6 @@
 import { useSyncExternalStore } from "react";
+import { walkEye } from "@/lib/map/walkEye";
+import { followedTrain } from "@/lib/transit/follow";
 
 /** The slice of the transit static data this needs (StationData satisfies it). */
 export interface StationData {
@@ -74,4 +76,10 @@ export function closeAsk() {
 }
 export function useAskRequest() {
   return useSyncExternalStore((f) => (subs.add(f), () => subs.delete(f)), () => request);
+}
+
+/** Street view's spot as the question's "here", or null when not in street view. */
+export function streetContextHere(heading: number | null): AskContext | null {
+  const eye = walkEye();
+  return eye ? buildStreetContext({ lon: eye.lon, lat: eye.lat, heading, followedTrain: followedTrain() }) : null;
 }

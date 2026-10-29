@@ -58,7 +58,7 @@ import { sharedCoords, startSharing, stopSharing, useSharedLocation } from "@/li
 import { usePlayer, type Speed } from "./usePlayer";
 import { useWakePhrase } from "./useWakePhrase";
 import { useHandsFree } from "./useHandsFree";
-import { closeAsk, useAskRequest } from "@/lib/agent/streetContext";
+import { closeAsk, streetContextHere, useAskRequest } from "@/lib/agent/streetContext";
 import { AgentHome, AnswerCard, WorkingPanel } from "./AgentHome";
 import { DailyCard, TaskButtons } from "./HomeTasks";
 
@@ -399,7 +399,10 @@ export default function AgentOverlay() {
     const history: Msg[] = continuing && lastUser?.content === q ? prior : [...prior, { id: crypto.randomUUID(), role: "user", content: q }];
     // Only a position the person chose to share; never asked for here. Street view already has a spot.
     const location = sharedCoords();
-    if (!askReq && !location && needsSharedOrigin(q)) {
+    // In street view the spot you stand on is "here", from the ask box too, not only the street bar's Ask:
+    // a restroom question there asked for Use my location (owner report, 2026-10-29).
+    const street = askReq?.context ?? streetContextHere(getMapInstance()?.getBearing() ?? null);
+    if (!street && !location && needsSharedOrigin(q)) {
       pendingQuestion.current = q;
       const reply: Msg = { id: crypto.randomUUID(), role: "assistant", content: ORIGIN_PROMPT, offerLocation: true };
       setMessages([...history, reply]);
@@ -432,7 +435,7 @@ export default function AgentOverlay() {
     try {
       const memory = home ? memorySummary() : null;
       const underNow = getUndergroundNow();
-      for await (const ev of askAgent({ messages: recentTurns(history), location, mode, now: new Date().toISOString(), ...(askReq ? { context: askReq.context } : {}), ...(home && askLang ? { lang: askLang } : {}), ...(memory ? { memory } : {}), ...(underNow ? { underground: underNow } : {}) }, ctl.signal, (w) => { if (abort.current === ctl) setWaiting(w); })) {
+      for await (const ev of askAgent({ messages: recentTurns(history), location, mode, now: new Date().toISOString(), ...(street ? { context: street } : {}), ...(home && askLang ? { lang: askLang } : {}), ...(memory ? { memory } : {}), ...(underNow ? { underground: underNow } : {}) }, ctl.signal, (w) => { if (abort.current === ctl) setWaiting(w); })) {
         // Closed or replaced: nothing more from this answer reaches the map, the card or the voice.
         if (ctl.signal.aborted) break;
         setSteps((s) => applyStep(s, ev));
@@ -468,7 +471,7 @@ export default function AgentOverlay() {
     const lineFirst = replyActions?.[0];
     if (!sawTrip && lineFirst?.kind === "showLine" && window.matchMedia("(min-width: 1024px)").matches) { setLineDay(lineFirst.day ?? null); setSelectedLine(lineOf(lineFirst.route), null, undefined, true); }
     // The model still asked for a start: put the same button on its reply.
-    const offersLocation = !askReq && !!spoken && !sharedCoords() && replyAsksForOrigin(spoken);
+    const offersLocation = !street && !!spoken && !sharedCoords() && replyAsksForOrigin(spoken);
     if (offersLocation) {
       pendingQuestion.current = q;
       setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, offerLocation: true } : x)));
