@@ -123,3 +123,21 @@ test("a desktop line card sits in the left column", async ({ page }) => {
   await expect(page.getByTestId("line-panel")).toHaveCount(0);
   await expect(page.getByTestId("agent-home")).not.toHaveAttribute("data-layout", "column");
 });
+
+// Owner report, 2026-10-28: in the old layout's street view, picking a line from the Lines list did nothing.
+test("the old layout's Lines list opens the picked line from street view", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockNetwork(page);
+  await page.route("**/api/transit-live*", (r) => r.fulfill({ contentType: "application/json", body: liveNow() }));
+  await page.route("**/api/transit", (r) => r.fulfill({ contentType: "application/json", body: JSON.stringify({ bus: false }) }));
+  await page.goto("/?flags=-agentHome");
+  await expect(page.locator("canvas.maplibregl-canvas").first()).toBeVisible();
+  await page.getByTestId("view-switcher").getByRole("button", { name: "Street", exact: true }).click();
+  await expect(page.getByTestId("street-minimap")).toBeVisible({ timeout: 15_000 });
+  await page.getByTestId("lines-button").click();
+  await page.getByRole("button", { name: /^7 Avenue Express/ }).first().click({ timeout: 15_000 });
+  await expect(page.getByTestId("line-panel")).toBeVisible({ timeout: 15_000 });
+  // Street level goes to the flat map on the line.
+  await expect(page.getByTestId("street-minimap")).toHaveCount(0, { timeout: 15_000 });
+  await expectLayout(page);
+});
