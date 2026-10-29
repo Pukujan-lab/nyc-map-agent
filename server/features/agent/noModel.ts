@@ -113,7 +113,7 @@ export const clock = (local: string) => {
   return `${h % 12 || 12}:${m[2]} ${h < 12 ? "am" : "pm"}`;
 };
 
-type LineResult = { trouble: Array<{ summary: string }>; alerts: unknown[]; note?: string };
+type LineResult = { trouble: Array<{ summary: string }>; alerts: unknown[]; note?: string; elevatorEscalatorOutages?: { stations: number; list: string[] } };
 
 /** The answer text, or null when the question is not one of these or the feed failed. */
 export async function answerWithoutModel(q: Question, tools: Tools, intent: NoModelIntent | null = noModelIntent(q.text)): Promise<string | null> {
@@ -155,14 +155,17 @@ export async function answerWithoutModel(q: Question, tools: Tools, intent: NoMo
       return `${first}${rides}: about ${r.totalMin} min, arriving around ${at}.${exit}${lift} Press Play on the card to preview it.`;
     }
     const r = await run<LineResult>(tools.line_status, { lines: [intent.route] });
-    if (!r.trouble.length) return `The MTA lists no delays or changes on the ${intent.route} train right now.`;
+    // The line card lists these, so the answer must not read as "all clear" over them.
+    const n = r.elevatorEscalatorOutages?.stations ?? 0;
+    const access = n === 1 ? ` ${r.elevatorEscalatorOutages!.list[0]}.` : n > 1 ? ` ${n} stations have an elevator or escalator out; they're on the line card.` : "";
+    if (!r.trouble.length) return `The MTA lists no delays or changes on the ${intent.route} train right now.${access}`;
     // The feed starts each notice with the line ("7: In Queens, …"); the question already named it.
     const lead = new RegExp(`^${intent.route}\\s*:\\s*`);
     // First sentence of each: the rest (how to reach a skipped stop) is on the map and in the line card.
     const first = (t: string) => t.replace(lead, "").trim().split(/(?<=[.!])\s+(?=[A-Z])/)[0];
     const notes = [...new Set(r.trouble.map((t) => first(t.summary)))].slice(0, 2);
     const more = r.trouble.length > notes.length ? " There's more on the map." : "";
-    return `${notes.join(" ")}${more} The buttons below show it on the map.`;
+    return `${notes.join(" ")}${more}${access} The buttons below show it on the map.`;
   } catch {
     return null;
   }

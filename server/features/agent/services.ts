@@ -177,6 +177,19 @@ export async function elevatorStatus(stationName: string): Promise<string[]> {
     .map((o) => `${o.equipmenttype === "EL" ? "Elevator" : "Escalator"} out at ${o.station} (${o.serving}) — ${o.reason}, back ${o.estimatedreturntoservice}`);
 }
 
+/** Stations on these lines with an elevator or escalator out now, one line each: what the line card lists (#370). */
+export function lineOutages(rows: Outage[], routes: string[]): string[] {
+  const byStation = new Map<string, Outage[]>();
+  for (const o of rows) {
+    if (o.isupcomingoutage === "Y" || !o.trainno.split("/").some((r) => routes.includes(r.toUpperCase()))) continue;
+    byStation.set(o.station, [...(byStation.get(o.station) ?? []), o]);
+  }
+  return [...byStation].map(([station, list]) => {
+    const kinds = [...new Set(list.map((o) => (o.equipmenttype === "EL" ? "elevator" : "escalator")))];
+    return `${kinds.join(" and ")} out at ${station}`.replace(/^./, (c) => c.toUpperCase());
+  });
+}
+
 /* ---------- nearest_restroom: NYC Open Data Public Restrooms (i7jb-7jku, keyless; the map's restroom layer reads the same rows via Octo) ---------- */
 const restroomRow = z.object({
   facility_name: z.string(),

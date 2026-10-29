@@ -32,8 +32,9 @@ describe("answerWithoutModel", () => {
   const walk = () => Promise.resolve({ coords: [[-73.99, 40.735], [-73.9905, 40.7362]] as [number, number][], distanceM: 140, durationS: 120, turns: [] });
   const tools = (location: { lon: number; lat: number } | null) => makeTools({
     location, emit: () => {},
-    deps: { restrooms: () => Promise.resolve([row]), walk, landmarks: () => Promise.resolve([]), alerts: () => Promise.resolve([]), alertEntities: () => Promise.resolve([]) },
+    deps: { restrooms: () => Promise.resolve([row]), walk, landmarks: () => Promise.resolve([]), alerts: () => Promise.resolve([]), alertEntities: () => Promise.resolve([]), outages: () => Promise.resolve(outages) },
   });
+  let outages: import("./services").Outage[] = [];
 
   it("names the nearest restroom and the walk", async () => {
     const text = await answerWithoutModel({ text: "nearest bathroom", hasLocation: true }, tools({ lon: -73.99, lat: 40.735 }));
@@ -47,6 +48,17 @@ describe("answerWithoutModel", () => {
 
   it("says a quiet line is quiet", async () => {
     expect(await answerWithoutModel({ text: "is the L train running", hasLocation: false }, tools(null))).toMatch(/no delays or changes on the L train/);
+  });
+
+  it("does not call a line clear over the elevator outages its card lists", async () => {
+    const out = (station: string, trainno: string, type = "EL", upcoming = "N") => ({ station, trainno, equipmenttype: type, serving: "street to mezzanine", outagedate: "", estimatedreturntoservice: "", reason: "Repair", isupcomingoutage: upcoming });
+    outages = [out("Myrtle Av", "J/M/Z"), out("Myrtle Av", "J/M/Z", "ES"), out("Forest Av", "M", "ES"), out("Essex St", "F/J/M/Z", "EL", "Y"), out("Court Sq", "G")];
+    const text = await answerWithoutModel({ text: "is the M train running", hasLocation: false }, tools(null));
+    outages = [out("Forest Av", "M", "ES")];
+    const one = await answerWithoutModel({ text: "is the M train running", hasLocation: false }, tools(null));
+    outages = [];
+    expect(text).toMatch(/no delays or changes on the M train right now\. 2 stations have an elevator or escalator out/);
+    expect(one).toMatch(/Escalator out at Forest Av\./);
   });
 
   it("returns null for other questions", async () => {
