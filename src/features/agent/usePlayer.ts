@@ -127,8 +127,11 @@ export function usePlayer(onCallout?: (text: string) => void) {
     dispatch({ type: "stop" });
   }, [clearLayers]);
   const stop = useCallback(() => {
+    // Only a preview moved the camera. Every new question calls this, and easing home without one
+    // threw street view overhead under the street bar, entrance labels piled up (owner report, 2026-10-28).
+    const playing = isActive(pbRef.current);
     release();
-    getMapInstance()?.easeTo({ pitch: 0, zoom: 14, bearing: 0, duration: 600 });
+    if (playing) getMapInstance()?.easeTo({ pitch: 0, zoom: 14, bearing: 0, duration: 600 });
   }, [release]);
   const toggle = useCallback(() => dispatch({ type: "toggle" }), []);
   const setSpeed = useCallback((speed: Speed) => dispatch({ type: "speed", speed }), []);

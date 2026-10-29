@@ -110,6 +110,8 @@ function metresBetween(a: { lon: number; lat: number }, b: number[]): number {
 const XRAY_DEPTH_M = -12;
 /** Where the walker stands: at street level the map centre sits at most ~10 m ahead of the eye. */
 const ENTRANCE_LABEL_ZOOM = 17;
+/** Street view's camera is at eye level from about this tilt; raised higher, the map reads as overhead. */
+const EYE_PITCH = 60;
 const EMPTY_FC: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 
 function streetEye(map: MaplibreMap): { lon: number; lat: number } {
@@ -959,6 +961,8 @@ export default function TransitLayer() {
   const outKey = work.access.features.map((f) => String(f.properties?.id)).sort().join(",");
   const outStations = useMemo(() => new Set(outKey ? outKey.split(",") : []), [outKey]);
   const [entrLabels, setEntrLabels] = useState<GeoJSON.FeatureCollection>(EMPTY_FC);
+  // Street labels may overlap only at eye level: raised overhead in street view, they stacked on each other.
+  const [eyeLevel, setEyeLevel] = useState(false);
   useEffect(() => {
     if (!map) return;
     const sync = () => {
@@ -973,9 +977,11 @@ export default function TransitLayer() {
       // Each nearby entrance's corner and kind.
       const phone = window.matchMedia("(max-width: 639px)").matches;
       // Overhead and close in, each nearby entrance says what it is, one-way or not, and its corner, not just "Stairs" (owner, 2026-10-27).
-      const close = !walking && map.getZoom() >= ENTRANCE_LABEL_ZOOM;
+      const eye = walking && map.getPitch() >= EYE_PITCH;
+      setEyeLevel(eye);
+      const close = !eye && map.getZoom() >= ENTRANCE_LABEL_ZOOM;
       setEntrLabels(!sub ? EMPTY_FC
-        : walking ? entranceLabels(sub, outStations, [c.lng, c.lat], (read ?? readMap(map)).placeAt, { max: phone ? 2 : 4, phone })
+        : eye ? entranceLabels(sub, outStations, [c.lng, c.lat], (read ?? readMap(map)).placeAt, { max: phone ? 2 : 4, phone })
         : close ? entranceLabels(sub, outStations, [c.lng, c.lat], readMap(map).placeAt, { max: phone ? 4 : 8, phone, radiusM: 300, overhead: true })
         : EMPTY_FC);
       // Over the 3D storefronts and kiosks, which are added after it and would hide it.
@@ -1391,7 +1397,7 @@ export default function TransitLayer() {
           filter={["all", ["==", ["get", "system"], "subway"], ...nearEye, ...(lineSel ? [["!", onLine]] : []), ["any", ["all", [">=", ["zoom"], 15], ["==", ["get", "labelled"], true]], ["all", [">=", ["zoom"], 14], ["==", ["get", "major"], true], ["==", ["get", "labelled"], true]], ["==", ["get", "id"], hoverStation], ["==", ["get", "id"], openStationId]]] as never}
           layout={{ "icon-image": ["get", "row"], "icon-size": walking ? 1.35 : ["interpolate", ["linear"], ["zoom"], 13, 0.8, 17, 1], "icon-anchor": "top",
             // At eye level the camera is nearly flat, so collision boxes squash together and would drop the name; only the walker's nearby stations draw, so let them overlap.
-            "text-allow-overlap": walking, "icon-allow-overlap": walking, "text-pitch-alignment": "viewport",
+            "text-allow-overlap": eyeLevel, "icon-allow-overlap": eyeLevel, "text-pitch-alignment": "viewport",
             "icon-offset": (three ? ["case", ["get", "raised"], ["literal", [0, -RAISED_LIFT_PX]], ["literal", [0, 6]]] : [0, 6]) as [number, number],
             "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": walking ? 15 : 11, "text-anchor": "bottom",
             "text-offset": (three ? ["case", ["get", "raised"], ["literal", [0, -RAISED_LIFT_EM]], ["literal", [0, -0.6]]] : [0, -0.6]) as [number, number], "text-max-width": 9,
@@ -1409,9 +1415,9 @@ export default function TransitLayer() {
         <Layer id="transit-entrance-label" type="symbol"
           layout={{ "text-field": ["get", "label"], "text-font": ["Noto Sans Bold"], "text-size": 14, "text-anchor": "bottom",
             // Above the stair's railing: a near stair stands tall on screen, a far one short.
-            "text-offset": walking ? ["interpolate", ["linear"], ["get", "d"], 5, ["literal", [0, -7]], 20, ["literal", [0, -4]], 60, ["literal", [0, -2]], 180, ["literal", [0, -1]]] as unknown as [number, number] : [0, -1.3],
+            "text-offset": eyeLevel ? ["interpolate", ["linear"], ["get", "d"], 5, ["literal", [0, -7]], 20, ["literal", [0, -4]], 60, ["literal", [0, -2]], 180, ["literal", [0, -1]]] as unknown as [number, number] : [0, -1.3],
             // Overhead the labels give way to each other; at street level the nearest few always show.
-            "text-max-width": 16, "text-line-height": 1.25, "text-pitch-alignment": "viewport", "text-allow-overlap": walking, "symbol-sort-key": ["get", "d"] }}
+            "text-max-width": 16, "text-line-height": 1.25, "text-pitch-alignment": "viewport", "text-allow-overlap": eyeLevel, "symbol-sort-key": ["get", "d"] }}
           paint={{ "text-color": "#ffffff", "text-halo-color": "rgba(14,23,38,0.95)", "text-halo-width": 3 }} />
       </Source>
       <Source id="transit-entrances" type="geojson" data={entrances}>
