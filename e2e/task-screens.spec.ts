@@ -282,3 +282,34 @@ test("street view draws station markers only near you", async ({ page }) => {
   }
   await expectLayout(page);
 });
+
+// Owner report, 2026-10-29: at 800×1000 in street view, a restroom answer flew the camera overhead, and as
+// the answer sheet opened the walk pad jumped to the top left and the mini map rode up under the street bar.
+test("a restroom answer in street view on a tablet keeps the camera, pad and mini map in place", async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 1000 });
+  await mockNetwork(page);
+  await page.route("**/api/agent", (r) => r.fulfill({ contentType: "application/x-ndjson", body: stream([
+    { type: "text", text: "Bryant Park is the closest open restroom." },
+    { type: "actions", actions: [{ kind: "showRestroom", id: "restroom:bp", label: "Show the nearest restroom", restroom: { name: "Bryant Park", lon: -73.9832, lat: 40.7536, distanceM: 420, hours: "8am-8pm" } }] },
+    { type: "done" },
+  ]) }));
+  await page.goto("/");
+  await page.waitForFunction(() => Boolean((window as unknown as { __map?: unknown }).__map), null, { timeout: 15_000 });
+  await page.getByTestId("map-view-switch").getByRole("radio", { name: "Street", exact: true }).click();
+  await expect(page.getByTestId("street-minimap")).toBeVisible({ timeout: 15_000 });
+  const pitch = () => page.evaluate(() => (window as unknown as { __map: { getPitch(): number } }).__map.getPitch());
+  await expect.poll(pitch, { timeout: 15_000 }).toBeGreaterThan(60);
+  await ask(page, "Where is the nearest restroom?");
+  await expect(page.getByText("Bryant Park is the closest open restroom.")).toBeVisible();
+  await page.waitForTimeout(1200);
+  expect(await pitch()).toBeGreaterThan(60);
+  const pad = await page.getByRole("group", { name: "Street-level camera controls" }).boundingBox();
+  const mini = await page.getByTestId("street-minimap").boundingBox();
+  const sheet = await page.getByTestId("agent-answers").boundingBox();
+  const bar = await page.getByTestId("walk-bar").boundingBox();
+  // Both stay in the lower part of the screen, clear of the sheet and the street bar.
+  expect(pad!.y).toBeGreaterThan(1000 / 2);
+  expect(pad!.x).toBeGreaterThanOrEqual(sheet!.x + sheet!.width);
+  expect(mini!.y).toBeGreaterThan(bar!.y + bar!.height + 100);
+  await expectLayout(page);
+});

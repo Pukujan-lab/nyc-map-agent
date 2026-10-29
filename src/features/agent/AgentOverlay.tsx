@@ -78,7 +78,7 @@ import { applyStep, statusLine, type AgentStep } from "./agentSteps";
 import { detectLang, speechTag, statusLang } from "./statusLines";
 import { getAppLang, setAskedLang, tr, useAppLang } from "@/lib/i18n/appLang";
 import { needsSharedOrigin, ORIGIN_PROMPT, replyAsksForOrigin } from "./needsOrigin";
-import { framePadding } from "@/lib/map/mapCover";
+import { framePadding, frameRestrooms } from "@/lib/map/mapCover";
 import { useOpenMenu } from "@/lib/store/openMenu";
 import { sendScreen, useScreen } from "@/lib/screen/screenSpace";
 import { getUndergroundNow, useUndergroundNow } from "@/lib/underground/whereNow";
@@ -577,12 +577,7 @@ export default function AgentOverlay() {
     if (!restrooms) { restroomsByAnswer.current = true; setRestrooms(true); }
     showPoints(m, spots.map((r) => ({ at: [r.lon, r.lat], name: formatStreetText(r.name) })), "#2563eb");
     const me = sharedCoords();
-    const pts: Array<[number, number]> = [...spots.map((r): [number, number] => [r.lon, r.lat]), ...(me ? [[me.lon, me.lat] as [number, number]] : [])];
-    // The answer covers the lower ~60% on phones and the left column on desktop; the quick bar the right edge.
-    const phone = window.innerWidth < 640;
-    const bottom = Math.round(window.innerHeight * (phone ? 0.62 : 0.2));
-    const lons = pts.map((p) => p[0]), lats = pts.map((p) => p[1]);
-    m.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: framePadding(m, { top: 110, bottom, left: phone ? 40 : Math.min(420, window.innerWidth * 0.44) + 48, right: phone ? 84 : 96 }), maxZoom: 16.5, duration: 900 });
+    frameRestrooms(m, [...spots.map((r): [number, number] => [r.lon, r.lat]), ...(me ? [[me.lon, me.lat] as [number, number]] : [])]);
   }, [lastActions, home]); // eslint-disable-line react-hooks/exhaustive-deps -- setRestrooms changes with the URL it writes; once per answer is enough
   // A trip planned between saved Home and Work becomes the daily card's usual line (kept on this device).
   useEffect(() => {

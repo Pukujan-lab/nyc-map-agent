@@ -16,11 +16,17 @@ interface LeftColumn {
   cards: readonly string[];
   /** An answer (or the voice orb) is open in the column. */
   answer: boolean;
+  /**
+   * An answer sheet is open on the left on a tablet or wider (640 px and up). Below
+   * the wide column it is not in `slot`, but it still takes the left side and the
+   * ask box with it, so the walk pad and the street mini map keep their own places.
+   */
+  sheet: boolean;
   /** The chip row at the top of the left side (buses, live paused, back to street). */
   chips: HTMLElement | null;
 }
 
-let state: LeftColumn = { slot: null, cards: [], answer: false, chips: null };
+let state: LeftColumn = { slot: null, cards: [], answer: false, sheet: false, chips: null };
 const subs = new Set<() => void>();
 
 function set(next: Partial<LeftColumn>) {
@@ -31,6 +37,7 @@ function set(next: Partial<LeftColumn>) {
 
 export const setLeftSlot = (slot: HTMLElement | null) => set({ slot });
 export const setLeftAnswer = (answer: boolean) => set({ answer });
+export const setLeftSheet = (sheet: boolean) => set({ sheet });
 export const setLeftChips = (chips: HTMLElement | null) => set({ chips });
 
 /** Put a card on top of the stack (again, if it was under another). Pure, for tests. */

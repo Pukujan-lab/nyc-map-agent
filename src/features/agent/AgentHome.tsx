@@ -2,7 +2,7 @@ import { AlertCircle, ArrowUp, AudioLines, Check, ChevronDown, Loader2, Mic, X }
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
 import { Button } from "@/components/ui/button";
 import { nextLevel, swipeOf, type SheetLevel } from "@/components/sheetSwipe";
-import { setLeftAnswer, setLeftChips, setLeftSlot, useLeftColumn } from "@/lib/store/leftColumn";
+import { setLeftAnswer, setLeftChips, setLeftSheet, setLeftSlot, useLeftColumn } from "@/lib/store/leftColumn";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/appLang";
@@ -240,12 +240,14 @@ export function AgentHome(p: AgentHomeProps) {
   const { orb, answerOpen, onCloseAnswer, hidden } = p;
   const sheet = orb.show || answerOpen;
   const wide = useMediaQuery("(min-width: 1024px)");
+  const tablet = useMediaQuery("(min-width: 640px)");
   const card = useLeftColumn((s) => s.cards.length > 0);
   const column = !hidden && wide && (sheet || card);
   useLayoutEffect(() => {
     setLeftAnswer(!hidden && wide && sheet);
-    return () => setLeftAnswer(false);
-  }, [hidden, wide, sheet]);
+    setLeftSheet(!hidden && tablet && sheet);
+    return () => { setLeftAnswer(false); setLeftSheet(false); };
+  }, [hidden, wide, tablet, sheet]);
 
   // A phone's answer box pulls up (more answer) and down (more map); each new question starts at the usual size.
   const [level, setLevel] = useState<SheetLevel>(1);

@@ -1,4 +1,5 @@
 import type { Map as MapLibreMap } from "maplibre-gl";
+import { walkEye } from "./walkEye";
 
 /** Pixels to keep clear on each edge of the map. */
 export interface Insets { top: number; bottom: number; left: number; right: number }
@@ -69,6 +70,19 @@ export function framePadding(map: MapLibreMap, want: Insets, margin = 16): Inset
     left: Math.max(margin, want.left - cover.left),
     right: Math.max(margin, want.right - cover.right),
   };
+}
+
+/**
+ * Frame a restroom answer's pins (and you), clear of the answer: it covers the lower
+ * ~60% on phones and the left column on desktop; the quick bar the right edge. In
+ * street view the camera stays at eye level; the pins and the mini map show the way.
+ */
+export function frameRestrooms(map: MapLibreMap, pts: Array<[number, number]>): void {
+  if (walkEye() || !pts.length) return;
+  const phone = window.innerWidth < 640;
+  const bottom = Math.round(window.innerHeight * (phone ? 0.62 : 0.2));
+  const lons = pts.map((p) => p[0]), lats = pts.map((p) => p[1]);
+  map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: framePadding(map, { top: 110, bottom, left: phone ? 40 : Math.min(420, window.innerWidth * 0.44) + 48, right: phone ? 84 : 96 }), maxZoom: 16.5, duration: 900 });
 }
 
 /**
