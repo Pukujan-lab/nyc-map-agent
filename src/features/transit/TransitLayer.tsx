@@ -1297,7 +1297,8 @@ export default function TransitLayer() {
 
   if (!enabled || (!rail.length && !busOn)) return null;
 
-  // Street level: a station name is useful only near the walker; far ones would stand on the horizon.
+  // Street level: a station name, work wrench, skip or elevator badge is useful only near the walker; far ones
+  // stood in a row on the horizon (owner report, 2026-10-29).
   const nearEye: unknown[] = walking && eyeAt ? [["<", ["distance", { type: "Point", coordinates: eyeAt }], STREET_LABEL_M]] : [];
   const brightRoutes = alertFocus ? alertFocus.routes : isoRoutes.length ? [...isoRoutes] : tripRoutes;
   const bright: unknown = ["in", ["get", "route"], ["literal", brightRoutes]];
@@ -1440,11 +1441,11 @@ export default function TransitLayer() {
         )}
       </Source>
       <Source id="transit-work-points" type="geojson" data={work.points}>
-        <Layer id="transit-work" type="symbol" minzoom={11} filter={(lineSel ? ["in", ` ${lineSel} `, ["get", "routes"]] : ["boolean", true]) as never}
+        <Layer id="transit-work" type="symbol" minzoom={11} filter={["all", lineSel ? ["in", ` ${lineSel} `, ["get", "routes"]] : ["boolean", true], ...nearEye] as never}
           layout={{ "icon-image": "transit-wrench", "icon-size": ["interpolate", ["linear"], ["zoom"], 11, 0.35, 16, 0.6], "icon-offset": [18, -18], "icon-allow-overlap": true }} />
       </Source>
       <Source id="transit-skips" type="geojson" data={work.skips}>
-        <Layer id="transit-skip" type="symbol" minzoom={11} filter={(lineSel ? ["in", ` ${lineSel} `, ["get", "skipRoutes"]] : ["boolean", true]) as never}
+        <Layer id="transit-skip" type="symbol" minzoom={11} filter={["all", lineSel ? ["in", ` ${lineSel} `, ["get", "skipRoutes"]] : ["boolean", true], ...nearEye] as never}
           layout={{ "icon-image": ["get", "icon"], "icon-size": ["interpolate", ["linear"], ["zoom"], 11, 0.5, 16, 0.9], "icon-allow-overlap": true, "icon-ignore-placement": true,
             "icon-offset": [18, -18],
             "text-field": ["step", ["zoom"], "", 13.5, ["get", "label"]], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-anchor": "left", "text-offset": [1.1, 0], "text-optional": true }}
@@ -1490,7 +1491,7 @@ export default function TransitLayer() {
         </>
       ) : null}
       <Source id="transit-access" type="geojson" data={work.access}>
-        <Layer id="transit-access" type="symbol" minzoom={14}
+        <Layer id="transit-access" type="symbol" minzoom={14} filter={["all", ["boolean", true], ...nearEye] as never}
           layout={{ "icon-image": "transit-access", "icon-size": ["interpolate", ["linear"], ["zoom"], 14, 0.45, 16, 0.6], "icon-offset": [-18, -18], "icon-allow-overlap": true }} />
       </Source>
       {/* Data is written by the hit-target timer, never from render. */}
