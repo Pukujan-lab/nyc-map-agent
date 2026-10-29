@@ -58,9 +58,7 @@ import { sharedCoords, startSharing, stopSharing, useSharedLocation } from "@/li
 import { usePlayer, type Speed } from "./usePlayer";
 import { useWakePhrase } from "./useWakePhrase";
 import { useHandsFree } from "./useHandsFree";
-import { buildStreetContext, closeAsk, useAskRequest } from "@/lib/agent/streetContext";
-import { walkEye } from "@/lib/map/walkEye";
-import { followedTrain } from "@/lib/transit/follow";
+import { closeAsk, streetContextHere, useAskRequest } from "@/lib/agent/streetContext";
 import { AgentHome, AnswerCard, WorkingPanel } from "./AgentHome";
 import { DailyCard, TaskButtons } from "./HomeTasks";
 
@@ -403,8 +401,7 @@ export default function AgentOverlay() {
     const location = sharedCoords();
     // In street view the spot you stand on is "here", from the ask box too, not only the street bar's Ask:
     // a restroom question there asked for Use my location (owner report, 2026-10-29).
-    const eye = walkEye();
-    const street = askReq?.context ?? (eye ? buildStreetContext({ lon: eye.lon, lat: eye.lat, heading: getMapInstance()?.getBearing() ?? null, followedTrain: followedTrain() }) : null);
+    const street = askReq?.context ?? streetContextHere(getMapInstance()?.getBearing() ?? null);
     if (!street && !location && needsSharedOrigin(q)) {
       pendingQuestion.current = q;
       const reply: Msg = { id: crypto.randomUUID(), role: "assistant", content: ORIGIN_PROMPT, offerLocation: true };
