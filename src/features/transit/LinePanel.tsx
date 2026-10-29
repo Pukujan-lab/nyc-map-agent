@@ -281,7 +281,8 @@ export function LinePanel({ map, route, onFollow, trains = () => [] }: { map: Ma
       data-testid="line-panel"
       data-map-cover
       className="pointer-events-none absolute left-4 right-4 z-[44] flex flex-col gap-3 font-[Inter,system-ui,sans-serif] text-[#f1f5f9] sm:left-auto sm:w-[360px] md:w-[380px] lg:w-[400px]"
-      style={{ top: "calc(env(safe-area-inset-top) + 16px)", maxHeight: "calc(100% - env(safe-area-inset-top) - var(--chat-bar-h, 0px) - 32px)" }}
+      // The old layout keeps its Layers button at the top right: the card starts below it.
+      style={{ top: `calc(env(safe-area-inset-top) + ${home ? 16 : 64}px)`, maxHeight: `calc(100% - env(safe-area-inset-top) - var(--chat-bar-h, 0px) - ${home ? 32 : 80}px)` }}
     >
       {folded ? (
         <div className="flex items-center justify-between">
