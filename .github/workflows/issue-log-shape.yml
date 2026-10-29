@@ -1,0 +1,33 @@
+name: Issue Log Shape
+
+# OIO's triage skips issue logs written as prose instead of the intake form's
+# `### <field label>` headings, with a green run and no label
+# (Pukujan/observational-issue-ops#62). This flags them so they get fixed.
+on:
+  issues:
+    types: [opened, edited, labeled, unlabeled]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  shape:
+    name: Flag issue logs triage cannot read
+    concurrency:
+      group: issue-log-shape-${{ github.event.issue.number || 'sweep' }}
+      cancel-in-progress: true
+    runs-on: [self-hosted, linux, x64, gravebuster]
+    timeout-minutes: 10
+    container: { image: "python:3.12-slim" }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Check issue shape
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/issue-log/issue_log_shape.py ${{ github.event_name == 'workflow_dispatch' && 'sweep' || 'ci' }}
+      - name: Clean workspace (persistent runner)
+        if: always()
+        run: find "$GITHUB_WORKSPACE" -mindepth 1 -delete || true
