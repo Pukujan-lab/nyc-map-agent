@@ -241,3 +241,25 @@ test("asking in street view keeps the camera at eye level", async ({ page }) => 
   await expect(page.getByTestId("street-minimap")).toBeVisible();
   await expectLayout(page);
 });
+
+// Owner report, 2026-10-29: in street view a restroom question from the ask box said "tap Use my location";
+// the spot you stand on is "here".
+test("a question from the ask box in street view is asked from the street spot", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockNetwork(page);
+  const bodies: Array<{ context?: { source?: string; lon?: number } }> = [];
+  await page.route("**/api/agent", (r) => {
+    bodies.push(r.request().postDataJSON() as { context?: { source?: string; lon?: number } });
+    return r.fulfill({ contentType: "application/x-ndjson", body: stream([{ type: "text", text: "Bryant Park is the closest open restroom." }, { type: "done" }]) });
+  });
+  await page.goto("/");
+  await page.waitForFunction(() => Boolean((window as unknown as { __map?: unknown }).__map), null, { timeout: 15_000 });
+  await page.getByTestId("map-view-switch").getByRole("radio", { name: "Street", exact: true }).click();
+  await expect(page.getByTestId("street-minimap")).toBeVisible({ timeout: 15_000 });
+  await ask(page, "Where is the nearest restroom?");
+  await expect(page.getByText("Bryant Park is the closest open restroom.")).toBeVisible();
+  expect(bodies[0].context?.source).toBe("street-view");
+  expect(typeof bodies[0].context?.lon).toBe("number");
+  await expect(page.getByRole("button", { name: "Use my location" })).toHaveCount(0);
+  await expectLayout(page);
+});
