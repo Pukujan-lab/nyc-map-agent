@@ -10,17 +10,17 @@
       "module": "multi-agent-hotload"
     },
     "content-generation-modules": {
-      "version": "0.5.12",
-      "commit": "100f3c3ff1f612f76ef11f713a7466778cd8aa00",
+      "version": "0.5.13",
+      "commit": "c47740d71ca68be6a782b24dd8f28b905c620506",
       "modules": 8
     },
     "observational-issue-ops": {
-      "version": "0.2.0",
-      "commit": "305adc5d09920d28e603a1b317108637cc30a624"
+      "version": "0.3.0",
+      "commit": "6a9a7cd67810debe0da76e847ac9897ebc281248"
     },
     "project-continuity-modules": {
       "version": "0.7.0",
-      "commit": "70dc17dcf96b99b9bf9308a774fdcfa0b70d3f6b",
+      "commit": "418f5591ebd9e548eb87d7e689654d0d6b3146e2",
       "cli": "0.7.0"
     }
   }
