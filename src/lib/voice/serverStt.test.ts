@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SPEECH_RMS, rms, shouldStop } from "./serverStt";
+import { SPEECH_RMS, nextFloor, rms, shouldStop, speechLevel } from "./serverStt";
 
 describe("recording one voice turn", () => {
   it("measures loudness", () => {
@@ -14,5 +14,29 @@ describe("recording one voice turn", () => {
     expect(shouldStop({ ...base, now: 5000, lastSpeech: null })).toBeNull();
     expect(shouldStop({ ...base, now: 6000, lastSpeech: null })).toBe("no-speech");
     expect(shouldStop({ ...base, now: 20_000, lastSpeech: 19_900 })).toBe("max");
+  });
+  it("raises the speech bar in a noisy room but never below the quiet-room bar", () => {
+    expect(speechLevel(0)).toBe(SPEECH_RMS);
+    expect(speechLevel(0.005)).toBe(SPEECH_RMS);
+    expect(speechLevel(0.05)).toBeGreaterThan(0.1);
+  });
+  it("learns steady noise so the recording can end, and still hears speech over it", () => {
+    let floor: number | null = null;
+    let lastSpeech: number | null = null;
+    // 3 s of steady street noise at 0.05 RMS: it must stop counting as speech.
+    for (let i = 0; i < 30; i += 1) {
+      const speech = floor !== null && 0.05 > speechLevel(floor);
+      if (speech) lastSpeech = i * 100;
+      floor = nextFloor(floor, 0.05, speech);
+    }
+    expect(lastSpeech).toBeNull();
+    // A voice well above the noise still crosses the bar; more of the same noise does not.
+    expect(0.2 > speechLevel(floor as number)).toBe(true);
+    expect(0.05 > speechLevel(floor as number)).toBe(false);
+  });
+  it("follows the background level down when the room gets quieter", () => {
+    let floor = 0.05;
+    for (let i = 0; i < 30; i += 1) floor = nextFloor(floor, 0.005, false);
+    expect(floor).toBeLessThan(0.01);
   });
 });
