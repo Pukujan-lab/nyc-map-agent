@@ -1,7 +1,7 @@
 {
   "schema": "server-management.project.v1",
   "project": "nyc-map-agent",
-  "repo": "https://github.com/Pukujan/nyc-map-agent",
+  "repo": "https://github.com/Pukujan-lab/nyc-map-agent",
   "owner": "Pukujan",
   "purpose": "NYC map application plus its continuous-deployment dashboard.",
   "deploy_path": "/srv/nyc-map-agent",

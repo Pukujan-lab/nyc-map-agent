@@ -19,7 +19,7 @@ script. The JavaScript heap (the memory the page's scripts use) sat between 150 
 
 These numbers come from a heavily overloaded shared machine with an emulated phone screen.
 Treat them as a rough before-picture, not as what the owner's phone does (see
-[Caveats](#caveats)). Issue [#362](https://github.com/Pukujan/nyc-map-agent/issues/362) asks for
+[Caveats](#caveats)). Issue [#362](https://github.com/Pukujan-lab/nyc-map-agent/issues/362) asks for
 the owner's own phone and work computer, and nobody has measured those yet.
 
 ### What was measured

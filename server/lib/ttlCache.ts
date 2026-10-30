@@ -12,7 +12,7 @@ export function cached<T>(key: string, ttlMs: number, load: () => Promise<T>): P
 }
 
 export const NWS_HEADERS = {
-  "user-agent": "nyc-map-agent (github.com/Pukujan/nyc-map-agent)",
+  "user-agent": "nyc-map-agent (github.com/Pukujan-lab/nyc-map-agent)",
   accept: "application/geo+json",
 };
 

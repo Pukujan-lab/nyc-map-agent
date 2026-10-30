@@ -16,7 +16,7 @@ Public hostname `nyc.design-bakery.com` is routed by the Cloudflare tunnel
 ```bash
 sudo mkdir -p /srv/nyc-map-agent/state
 sudo chown -R yoav:yoav /srv/nyc-map-agent
-git clone https://github.com/Pukujan/nyc-map-agent /srv/nyc-map-agent/app
+git clone https://github.com/Pukujan-lab/nyc-map-agent /srv/nyc-map-agent/app
 cp /srv/nyc-map-agent/app/deploy/.env.example /srv/nyc-map-agent/.env
 # fill in the values, then:
 chmod 600 /srv/nyc-map-agent/.env
@@ -57,8 +57,8 @@ runs `playwright install --with-deps`). To re-register after a rebuild:
 mkdir -p ~/actions-runner && cd ~/actions-runner
 curl -fsSL -o runner.tar.gz https://github.com/actions/runner/releases/download/v2.338.0/actions-runner-linux-x64-2.338.0.tar.gz
 tar xzf runner.tar.gz && rm runner.tar.gz
-./config.sh --unattended --replace --url https://github.com/Pukujan/nyc-map-agent \
-  --token "$(gh api -X POST repos/Pukujan/nyc-map-agent/actions/runners/registration-token --jq .token)" \
+./config.sh --unattended --replace --url https://github.com/Pukujan-lab/nyc-map-agent \
+  --token "$(gh api -X POST repos/Pukujan-lab/nyc-map-agent/actions/runners/registration-token --jq .token)" \
   --name gravebuster --labels self-hosted,linux,x64,gravebuster --work _work
 sudo ./svc.sh install yoav && sudo ./svc.sh start
 ```

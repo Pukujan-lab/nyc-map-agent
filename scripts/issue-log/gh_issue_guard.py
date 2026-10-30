@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import issue_log_shape as shape  # noqa: E402
 
-REPO = "pukujan/nyc-map-agent"
+REPO = "Pukujan-lab/nyc-map-agent"
 
 
 def body_of(args: list[str]) -> str | None:

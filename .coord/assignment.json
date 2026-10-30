@@ -48,7 +48,7 @@
       "mechanism": "claim_file",
       "interval_hint_minutes": 15,
       "claim_file_path": ".coord/boss_claim.json",
-      "issue_url": "https://github.com/Pukujan/nyc-map-agent/issues/156"
+      "issue_url": "https://github.com/Pukujan-lab/nyc-map-agent/issues/156"
     },
     "claim_queue": [],
     "standby": [],

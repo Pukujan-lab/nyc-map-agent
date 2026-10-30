@@ -17,7 +17,7 @@ import { brandsQuery, licenseOk, logoFile, matchBrand, QID, snapBbox } from "./l
  */
 // Public Overpass instances, tried in order (the main one sheds load with 429/502/504).
 const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
-const UA = { "user-agent": "nyc-map-agent (github.com/Pukujan/nyc-map-agent)" };
+const UA = { "user-agent": "nyc-map-agent (github.com/Pukujan-lab/nyc-map-agent)" };
 const DAY = 86_400_000;
 
 export const BrandsBox = z

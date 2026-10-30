@@ -14,7 +14,7 @@ import { cached, getJson } from "../../lib/ttlCache";
  */
 const SODA = "https://data.cityofnewyork.us/resource";
 const OVERPASS = "https://overpass-api.de/api/interpreter";
-const UA = { "user-agent": "nyc-map-agent (github.com/Pukujan/nyc-map-agent)" };
+const UA = { "user-agent": "nyc-map-agent (github.com/Pukujan-lab/nyc-map-agent)" };
 const STATE_PLANE = "+proj=lcc +lat_1=41.03333333333333 +lat_2=40.66666666666666 +lat_0=40.16666666666666 +lon_0=-74 +x_0=300000.0000000001 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=us-ft +no_defs";
 
 export interface Garage {
