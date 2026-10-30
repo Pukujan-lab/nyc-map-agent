@@ -44,9 +44,11 @@ services:
     image: ${OTP_IMAGE:-opentripplanner/opentripplanner:2.10.0}
     command: ["--load", "--serve"]
     restart: unless-stopped
-    # No env_file: OTP reads none of the app's secrets, so it gets none.
+    # No env_file: OTP gets only the one secret its router-config.json reads
+    # (live bus positions), not the rest of the app's.
     environment:
       JAVA_TOOL_OPTIONS: -Xmx7g -XX:+UseG1GC
+      MTA_BUSTIME_KEY: ${MTA_BUSTIME_KEY:-}
     mem_limit: 9g
     volumes:
       - ${OTP_GRAPH_DIR:-/srv/nyc-map-agent/otp/graph}:/var/opentripplanner
