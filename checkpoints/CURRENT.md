@@ -82,4 +82,4 @@ Deleted local branches are kept as `archive/<branch-name>` tags, so nothing was 
 
 ## Keeping this file current
 
-PCM is a protocol and a writing standard, not a background service: no workflow or hook updates this file, and the `continuity` command-line tool is not installed here. The agent that merges a piece of work updates "Completed recently", "In flight" and "Next" in the same pull request, as `AGENTS.md` now asks.
+PCM is a protocol and a writing standard, not a background service: no workflow or hook updates this file (the Checkpoint Reminder workflow only warns on a pull request that changes app code without touching it), and the `continuity` command-line tool is not installed here. The agent that merges a piece of work updates "Completed recently", "In flight" and "Next" in the same pull request, as `AGENTS.md` now asks.

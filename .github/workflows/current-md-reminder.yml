@@ -1,0 +1,39 @@
+name: Checkpoint Reminder
+
+# AGENTS.md asks the agent that merges a piece of work to update
+# checkpoints/CURRENT.md in the same pull request. Nothing enforced it, and the
+# file went 4 days stale. This only warns; it never fails the pull request.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  remind:
+    name: Warn when CURRENT.md is not updated
+    if: github.actor != 'github-actions[bot]' && !startsWith(github.head_ref, 'release-please--')
+    runs-on: [self-hosted, linux, x64, gravebuster]
+    timeout-minutes: 5
+    container: { image: "python:3.12-slim" }
+    steps:
+      - name: Compare changed files
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          python - <<'PY'
+          import json, os, urllib.request
+          req = urllib.request.Request(
+              f"https://api.github.com/repos/{os.environ['REPO']}/pulls/{os.environ['PR']}/files?per_page=100",
+              headers={"Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}", "Accept": "application/vnd.github+json"})
+          files = [f["filename"] for f in json.load(urllib.request.urlopen(req))]
+          code = [f for f in files if f.startswith(("src/", "server/", "e2e/"))]
+          if code and "checkpoints/CURRENT.md" not in files:
+              print(f"::warning title=CURRENT.md not updated::This pull request changes app code ({len(code)} files) but not checkpoints/CURRENT.md. AGENTS.md asks for Completed, In flight and Next to be updated in the same pull request.")
+          PY
+      - name: Clean workspace (persistent runner)
+        if: always()
+        run: find "$GITHUB_WORKSPACE" -mindepth 1 -delete || true
