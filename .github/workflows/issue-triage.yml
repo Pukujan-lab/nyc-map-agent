@@ -16,7 +16,7 @@ jobs:
       # A newer event on the same issue re-validates the whole issue, so a
       # queued/running older triage is superseded and can be dropped.
       cancel-in-progress: true
-    runs-on: [self-hosted, linux, x64, gravebuster]
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     container: { image: "python:3.12-slim" }
     steps:
