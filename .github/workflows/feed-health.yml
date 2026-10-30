@@ -8,7 +8,7 @@ permissions:
 concurrency: { group: feed-health, cancel-in-progress: true }
 jobs:
   ping:
-    runs-on: [self-hosted, linux, x64, gravebuster]
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     container: { image: node:22-bookworm }
     env:

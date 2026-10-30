@@ -9,7 +9,7 @@ permissions:
 concurrency: { group: transit-observe, cancel-in-progress: false }
 jobs:
   observe:
-    runs-on: [self-hosted, linux, x64, gravebuster]
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     container: { image: node:22-bookworm }
     env:

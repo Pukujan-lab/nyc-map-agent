@@ -13,7 +13,7 @@ permissions:
 concurrency: { group: ingest, cancel-in-progress: false }
 jobs:
   ingest:
-    runs-on: [self-hosted, linux, x64, gravebuster]
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     container: { image: node:22-bookworm }
     env:
