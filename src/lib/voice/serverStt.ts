@@ -8,6 +8,20 @@ const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
 
 /** Loudness above which a frame counts as speech (RMS of -1..1 samples). Pure, for tests. */
 export const SPEECH_RMS = 0.02;
+/** How far above the room's background level a frame must be to count as speech. */
+export const SPEECH_OVER_FLOOR = 2.5;
+/** Loudness a frame needs to count as speech, given the tracked background level. Pure, for tests. */
+export const speechLevel = (floor: number) => Math.max(SPEECH_RMS, floor * SPEECH_OVER_FLOOR);
+/**
+ * Next background-level estimate. It starts at the first frame, follows quiet
+ * frames closely, and creeps up slowly during loud ones, so steady noise (a
+ * platform, a train passing) is absorbed instead of counting as speech forever.
+ * Pure, for tests.
+ */
+export function nextFloor(floor: number | null, level: number, speech: boolean): number {
+  if (floor === null) return level;
+  return speech ? floor + (level - floor) * 0.01 : floor * 0.9 + level * 0.1;
+}
 export function rms(samples: ArrayLike<number>): number {
   let sum = 0;
   for (let i = 0; i < samples.length; i += 1) sum += samples[i] * samples[i];
@@ -59,6 +73,7 @@ export async function recordTurn(endMs: number, waitMs = 6000, maxMs = 20_000): 
   const buf = new Float32Array(analyser.fftSize);
   const started = performance.now();
   let lastSpeech: number | null = null;
+  let floor: number | null = null;
   let reason: StopReason = "stopped" as StopReason;
   let timer = 0;
   const finish = (why: StopReason) => {
@@ -78,7 +93,10 @@ export async function recordTurn(endMs: number, waitMs = 6000, maxMs = 20_000): 
   timer = window.setInterval(() => {
     analyser.getFloatTimeDomainData(buf);
     const now = performance.now();
-    if (rms(buf) > SPEECH_RMS) lastSpeech = now;
+    const level = rms(buf);
+    const speech = floor !== null && level > speechLevel(floor);
+    if (speech) lastSpeech = now;
+    floor = nextFloor(floor, level, speech);
     const why = shouldStop({ now, started, lastSpeech, endMs, waitMs, maxMs });
     if (why) finish(why);
   }, 100);
