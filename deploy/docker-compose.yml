@@ -44,9 +44,7 @@ services:
     image: ${OTP_IMAGE:-opentripplanner/opentripplanner:2.10.0}
     command: ["--load", "--serve"]
     restart: unless-stopped
-    env_file:
-      - path: ${CD_HOST_ENV_FILE:-/work/.env}
-        required: false
+    # No env_file: OTP reads none of the app's secrets, so it gets none.
     environment:
       JAVA_TOOL_OPTIONS: -Xmx7g -XX:+UseG1GC
     mem_limit: 9g
