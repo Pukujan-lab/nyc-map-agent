@@ -12,7 +12,7 @@ import { writeFileSync } from "node:fs";
 import type { GuideLandmarkFile } from "../src/lib/guide/landmarkTypes";
 import { BOROUGH_QIDS, INCLUDE, classify, commonsFile, normalize, pictureFromMeta, qid, resolveBoroughs, type PlaceHint, type WdRow } from "./landmark-guide-normalize";
 
-const UA = "nyc-map-agent-landmarks/1.0 (https://github.com/Pukujan/nyc-map-agent)";
+const UA = "nyc-map-agent-landmarks/1.0 (https://github.com/Pukujan-lab/nyc-map-agent)";
 const SPARQL = "https://query.wikidata.org/sparql";
 const COMMONS = "https://commons.wikimedia.org/w/api.php";
 const OUT = "src/lib/guide/landmarks.json";

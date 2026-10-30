@@ -15,7 +15,7 @@ import { noteSource } from "./freshness";
 import { cached } from "../../lib/ttlCache";
 import { openAt } from "./hours";
 
-const UA = { "User-Agent": "nyc-map-agent (github.com/Pukujan/nyc-map-agent)" };
+const UA = { "User-Agent": "nyc-map-agent (github.com/Pukujan-lab/nyc-map-agent)" };
 export const OSRM_FOOT_URL = (process.env.VITE_OSRM_URL ?? "https://routing.openstreetmap.de/routed-foot").replace(/\/$/, "");
 
 async function getJson(url: string, timeoutMs = 10000): Promise<unknown> {

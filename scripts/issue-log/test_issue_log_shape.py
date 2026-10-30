@@ -62,7 +62,7 @@ class Guard(unittest.TestCase):
         tmp = Path(self.id().replace(".", "_") + ".md")
         tmp.write_text(PROSE_LOG)
         try:
-            self.assertIsNotNone(guard.check(f"cd . && gh issue create --repo Pukujan/nyc-map-agent --body-file {tmp}"))
+            self.assertIsNotNone(guard.check(f"cd . && gh issue create --repo Pukujan-lab/nyc-map-agent --body-file {tmp}"))
         finally:
             tmp.unlink()
 

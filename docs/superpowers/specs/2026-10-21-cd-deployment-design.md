@@ -324,7 +324,7 @@ workflow run, so a red check on `main` is visible in GitHub.
 
 ## Bootstrap (manual, once)
 
-1. `git clone https://github.com/Pukujan/nyc-map-agent /srv/nyc-map-agent/app`
+1. `git clone https://github.com/Pukujan-lab/nyc-map-agent /srv/nyc-map-agent/app`
 2. Copy `.env` (app secrets) and `deploy/.env.example` → `/srv/nyc-map-agent/.env`,
    add the three `CD_*` values, `chmod 600`.
 3. `cd /srv/nyc-map-agent && docker compose -f app/deploy/docker-compose.yml -f app/deploy/docker-compose.edge.yml up -d`

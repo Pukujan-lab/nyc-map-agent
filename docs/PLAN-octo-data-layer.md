@@ -1,16 +1,16 @@
 # Plan: Octo data layer and a reusable registry-driven dashboard
 
-Tracking issue: [#13](https://github.com/Pukujan/nyc-map-agent/issues/13). Each workstream has its own issue. A PR closes an issue with `Closes #N` only when that work is complete and ready to merge.
+Tracking issue: [#13](https://github.com/Pukujan-lab/nyc-map-agent/issues/13). Each workstream has its own issue. A PR closes an issue with `Closes #N` only when that work is complete and ready to merge.
 
 ## Now
 
 | Issue | Workstream | Branch / PR |
 | --- | --- | --- |
-| [#2](https://github.com/Pukujan/nyc-map-agent/issues/2) | ACS multi-agent hotloader install | `chore/acs-hotload`, PR #14 |
-| [#3](https://github.com/Pukujan/nyc-map-agent/issues/3) | Octo data model: raw, core and marts schemas | `feat/octo-data-layer` |
-| [#4](https://github.com/Pukujan/nyc-map-agent/issues/4) | Migrations, versioning and nightly ingestion | `feat/octo-data-layer` |
-| [#5](https://github.com/Pukujan/nyc-map-agent/issues/5) | Server API: sources, blocks, area, street | `feat/octo-data-layer` |
-| [#6](https://github.com/Pukujan/nyc-map-agent/issues/6) | Registry-driven dashboard: unit and style dropdowns, filters, legends, guides | `feat/octo-data-layer` |
+| [#2](https://github.com/Pukujan-lab/nyc-map-agent/issues/2) | ACS multi-agent hotloader install | `chore/acs-hotload`, PR #14 |
+| [#3](https://github.com/Pukujan-lab/nyc-map-agent/issues/3) | Octo data model: raw, core and marts schemas | `feat/octo-data-layer` |
+| [#4](https://github.com/Pukujan-lab/nyc-map-agent/issues/4) | Migrations, versioning and nightly ingestion | `feat/octo-data-layer` |
+| [#5](https://github.com/Pukujan-lab/nyc-map-agent/issues/5) | Server API: sources, blocks, area, street | `feat/octo-data-layer` |
+| [#6](https://github.com/Pukujan-lab/nyc-map-agent/issues/6) | Registry-driven dashboard: unit and style dropdowns, filters, legends, guides | `feat/octo-data-layer` |
 
 ### Build order
 1. Model and schema (raw / core / marts) in Octo, mapping the existing `public.nyc_*` tables through views. No drops.
@@ -27,12 +27,12 @@ Tracking issue: [#13](https://github.com/Pukujan/nyc-map-agent/issues/13). Each 
 
 | Issue | Item |
 | --- | --- |
-| [#7](https://github.com/Pukujan/nyc-map-agent/issues/7) | Walk bubble with noise and accident levels (green, yellow, orange, red); tap to expand. Reads `marts.street_stats`. |
-| [#8](https://github.com/Pukujan/nyc-map-agent/issues/8) | Walk along a route with turn-by-turn steps and points of interest. |
-| [#9](https://github.com/Pukujan/nyc-map-agent/issues/9) | Two leftover overlaps on 390 px mobile. |
-| [#10](https://github.com/Pukujan/nyc-map-agent/issues/10) | Mapillary photo-sequence walk with block-by-block gliding, modeled on newbloomwon/neighborhoodpeas `lib/cameraChoreographer.ts` (STREET zoom 18.4, pitch 72); coverage tiles and thumbnail prefetch to fix slowness. |
-| [#11](https://github.com/Pukujan/nyc-map-agent/issues/11) | Self-hosted NYC 3D buildings as static 3D Tiles. No Google photorealistic tiles: cost, and the terms forbid caching and key pooling. |
-| [#12](https://github.com/Pukujan/nyc-map-agent/issues/12) | More filterable NYC datasets through the registry. |
+| [#7](https://github.com/Pukujan-lab/nyc-map-agent/issues/7) | Walk bubble with noise and accident levels (green, yellow, orange, red); tap to expand. Reads `marts.street_stats`. |
+| [#8](https://github.com/Pukujan-lab/nyc-map-agent/issues/8) | Walk along a route with turn-by-turn steps and points of interest. |
+| [#9](https://github.com/Pukujan-lab/nyc-map-agent/issues/9) | Two leftover overlaps on 390 px mobile. |
+| [#10](https://github.com/Pukujan-lab/nyc-map-agent/issues/10) | Mapillary photo-sequence walk with block-by-block gliding, modeled on newbloomwon/neighborhoodpeas `lib/cameraChoreographer.ts` (STREET zoom 18.4, pitch 72); coverage tiles and thumbnail prefetch to fix slowness. |
+| [#11](https://github.com/Pukujan-lab/nyc-map-agent/issues/11) | Self-hosted NYC 3D buildings as static 3D Tiles. No Google photorealistic tiles: cost, and the terms forbid caching and key pooling. |
+| [#12](https://github.com/Pukujan-lab/nyc-map-agent/issues/12) | More filterable NYC datasets through the registry. |
 
 ## Rules that apply
 - Prefer mature open-source libraries and thin glue over custom code; official SDKs over raw HTTP where one exists; pin versions; check license and maturity; justify each new dependency in the PR.

@@ -1,6 +1,6 @@
 # Roadmap and goals
 
-*Written 2026-10-23 from the owner's realignment conversation. "Exists" means present in the repo or in an open PR; nothing here has been verified as working for a real user unless it says so. PR and issue numbers refer to `Pukujan/nyc-map-agent`.*
+*Written 2026-10-23 from the owner's realignment conversation. "Exists" means present in the repo or in an open PR; nothing here has been verified as working for a real user unless it says so. PR and issue numbers refer to `Pukujan-lab/nyc-map-agent`.*
 
 ## Decisions, 2026-10-23 (owner)
 - **Simple, fast map is the default.** Plain colored block shapes (the repo already has real tax-block tiles), only the route and the data that answers the question, few labels, drawn by MapLibre alone. Reference: the owner's "Walk mode · live" mock with an "Agents working" panel (Planner, Data query, Search) as the loading state.

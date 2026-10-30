@@ -2404,7 +2404,7 @@ git commit -m "ci: deploy main to gravebuster after every check passes"
 {
   "schema": "server-management.project.v1",
   "project": "nyc-map-agent",
-  "repo": "https://github.com/Pukujan/nyc-map-agent",
+  "repo": "https://github.com/Pukujan-lab/nyc-map-agent",
   "owner": "Pukujan",
   "purpose": "NYC map application plus its continuous-deployment dashboard.",
   "deploy_path": "/srv/nyc-map-agent",
@@ -2445,7 +2445,7 @@ Public hostname `nyc.design-bakery.com` is routed by the Cloudflare tunnel
 ```bash
 sudo mkdir -p /srv/nyc-map-agent/state
 sudo chown -R yoav:yoav /srv/nyc-map-agent
-git clone https://github.com/Pukujan/nyc-map-agent /srv/nyc-map-agent/app
+git clone https://github.com/Pukujan-lab/nyc-map-agent /srv/nyc-map-agent/app
 cp /srv/nyc-map-agent/app/deploy/.env.example /srv/nyc-map-agent/.env
 # fill in the values, then:
 chmod 600 /srv/nyc-map-agent/.env
@@ -2521,7 +2521,7 @@ Expected: the live card updates, the health pill reads `healthy`.
 - [ ] **Step 3: Set the repository secret**
 
 ```bash
-gh secret set NYC_DEPLOY_TOKEN --repo Pukujan/nyc-map-agent
+gh secret set NYC_DEPLOY_TOKEN --repo Pukujan-lab/nyc-map-agent
 ```
 Paste the same value as `CD_DEPLOY_TOKEN` from `/srv/nyc-map-agent/.env`.
 
